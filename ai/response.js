@@ -49,9 +49,9 @@ function sprawdzSpojnoscLorePortal2(odpowiedz, pytanie) {
   if (!pytaOPrzejecie) return { ok: true, unsupported: [] };
 
   const maMechanizmTransferu = [
-    /transfer(?:ze|u)?\s+(?:rdzen|rdzeni|ciał|ciała)/i,
+    /transfer(?:ze|u|y)?\s+(?:rdzen(?:ia|i|em)?|rdzeni|ciał(?:a|o|em)?)/i,
     /transfer(?:ze|u)?[^.!?]{0,120}\bwheatley\b[^.!?]{0,120}\bglados\b/i,
-    /\bwheatley\b[^.!?]{0,180}(?:został|zostaje|została|znalazł|znalazl|znajduje się|znajduje sie)[^.!?]{0,120}(?:w\s+)?ciał[ae]\s+glados\b/i,
+    /\bwheatley\b[^.!?]{0,180}(?:został|zostaje|została|znalazł|znalazl|znajduje się|znajduje sie)[^.!?]{0,120}(?:w\s+)?ciel(?:e|a|u)?\s+glados\b/i,
     /\bwheatley\b[^.!?]{0,160}(?:przejął|otrzymał)\s+(?:ciało|body)\s+glados/i,
     /zamian(?:a|ę|ie)\s+ciał[^.!?]{0,120}\bwheatley\b/i,
   ].some(re => re.test(a));
