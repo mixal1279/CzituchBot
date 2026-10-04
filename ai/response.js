@@ -76,7 +76,12 @@ function sprawdzSpojnoscLorePortal2(odpowiedz, pytanie) {
   const twierdziZeGladosBylaWylaczona =
     /glados[^.!?]{0,100}(?:była|byla|została|zostala)\s+(?:całkowicie\s+)?wyłączon/i.test(a);
 
+  const przyciskJakoSzansaNaUcieczke = /(?:przycisk|rozwiązania?\\s+(?:sytuacji\\s+)?patowej|rozwiązania?\\s+impasu)[^.!?]{0,140}(?:był|byla|było|był[aą])[^.!?]{0,80}(?:szans|okazj|możliwoś|ucieczk)/i.test(a);
+  const gladosJakoProjektantWheatleya = /glados[^.!?]{0,100}(?:zaprojektowała|zaprojektowała go|stworzyła|stworzyła go)[^.!?]{0,120}wheatley/i.test(a) || /wheatley[^.!?]{0,120}(?:zaprojektowany|stworzony)[^.!?]{0,120}(?:przez|przez samą)\\s+glados/i.test(a);
   const unsupported = [];
+  if (przyciskJakoSzansaNaUcieczke) unsupported.push('odpowiedź przedstawia przycisk jako szansę Wheatleya na ucieczkę zamiast jako mechanizm uruchamiający transfer');
+  if (gladosJakoProjektantWheatleya) unsupported.push('odpowiedź błędnie przypisuje GLaDOS zaprojektowanie lub stworzenie Wheatleya');
+  if (/wheatley[^.!?]{0,180}(?:zaprojektowany|stworzony)[^.!?]{0,180}(?:zmniejsz|obniż)[^.!?]*(?:inteligenc|iq)/i.test(a)) unsupported.push('odpowiedź błędnie opisuje cel projektu Wheatleya jako bezpośrednie zmniejszanie inteligencji GLaDOS');
   if (!maMechanizmTransferu) unsupported.push('odpowiedź nie opisuje transferu rdzenia/zamiany ciał jako mechanizmu przejęcia kontroli przez Wheatleya');
   if (przyciskJakoBezposredniaPrzyczyna || przyciskJakoWylacznaPrzyczyna) {
     unsupported.push('odpowiedź przedstawia przycisk rozwiązania impasu jako bezpośrednią przyczynę uzyskania władzy przez Wheatleya');
