@@ -59,6 +59,7 @@ function detectEntity(p) {
     ['The Witcher', /\b(?:wiedźmin|wiedzmin|witcher|geralt|ciri)\b/i],
     ['Cyberpunk 2077', /\b(?:cyberpunk|night city|johnny silverhand)\b/i],
     ['Red Dead Redemption', /\b(?:red dead|rdr2|arthur morgan)\b/i],
+    ['Portal 2', /\b(?:portal\s*2|wheatley|glados|aperture science)\b/i],
     ['YouTube', /\b(?:youtube|youtuber|kanał|kanal|subskryb)\b/i],
     ['Twitch', /\btwitch\b/i],
     ['Kick', /\bkick\b/i],
