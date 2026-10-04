@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const { classifyAIRequest } = require('../ai/router');
 const { czyPytanieOLore } = require('../ai/lore');
 const { przygotujHistorieDoModelu } = require('../ai/policy');
-const { sprawdzTwardeFaktyOdpowiedzi, sprawdzZgodnoscKontekstuGry, sprawdzFormatOdpowiedzi } = require('../ai/response');
+const { sprawdzTwardeFaktyOdpowiedzi, sprawdzSpojnoscLorePortal2, sprawdzZgodnoscKontekstuGry, sprawdzFormatOdpowiedzi } = require('../ai/response');
 const { normalizujWynikWalidatora } = require('../ai/validator');
 
 const policy = (q, recipe) => recipe(q) ? 'minecraft_recipe' : /pogoda/i.test(q) ? 'weather' : /ile trwa/i.test(q) ? 'hltb' : /dzisiaj|najnowsz/i.test(q) ? 'web_fact' : 'conversation';
@@ -46,6 +46,18 @@ const policy = (q, recipe) => recipe(q) ? 'minecraft_recipe' : /pogoda/i.test(q)
   assert.equal(wrongGame.ok, false);
   assert.deepEqual(sprawdzZgodnoscKontekstuGry('GLaDOS zarządza Aperture Science.', 'Kim jest GLaDOS w Portal 2?'), { ok: true, conflicting: [] });
   assert.equal(sprawdzZgodnoscKontekstuGry('Johnny Silverhand działał w Night City.', 'Dlaczego Arthur Morgan zachorował na gruźlicę w Red Dead Redemption 2?').ok, false);
+  const wheatleyBad = sprawdzTwardeFaktyOdpowiedzi(
+    'Wheatley przejął kontrolę, bo Chell wcisnęła przycisk rozwiązania impasu. GLaDOS była wyłączona, a on zrobił to, by zmniejszyć jej inteligencję.',
+    '[SOURCE 1] Wheatley przejął ciało GLaDOS po zamianie ciał.',
+    'Dlaczego Wheatley przejął kontrolę nad Aperture Science w Portal 2?'
+  );
+  assert.equal(wheatleyBad.ok, false);
+  const wheatleyGood = sprawdzTwardeFaktyOdpowiedzi(
+    'Wheatley przejął kontrolę po zamianie ciał z GLaDOS i uzyskał dostęp do systemów Aperture.',
+    '[SOURCE 1] Wheatley przejął ciało GLaDOS po zamianie ciał i uzyskał dostęp do systemów Aperture.',
+    'Dlaczego Wheatley przejął kontrolę nad Aperture Science w Portal 2?'
+  );
+  assert.equal(wheatleyGood.ok, true);
 }
 
 {
