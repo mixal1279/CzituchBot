@@ -43,6 +43,7 @@ function sprawdzSpojnoscLorePortal2(odpowiedz, pytanie) {
   const a = String(odpowiedz || '').toLocaleLowerCase('pl-PL');
   const portal = /\bportal\s*2\b|\bwheatley\b|\bglados\b|\bchell\b|\baperture\s+science\b/i.test(q);
   if (!portal) return { ok: true, unsupported: [] };
+
   const pytaOPrzejecie = /\bwheatley\b/i.test(q)
     && /(?:^|[^\p{L}])(?:przejął|przejęła|przejęcie|przej[aą]ł|kontrolę|władzę|wladze)(?=$|[^\p{L}])/iu.test(q);
   if (!pytaOPrzejecie) return { ok: true, unsupported: [] };
@@ -58,21 +59,41 @@ function sprawdzSpojnoscLorePortal2(odpowiedz, pytanie) {
   const przyciskJakoBezposredniaPrzyczyna =
     /(?:przejął|przejąć|przej[aą]ł|zdobył|uzyskał|dostał|otrzymał)[^.!?]{0,180}(?:bo|ponieważ|dlatego|dzięki|przez)[^.!?]*(?:przycisk|rozwiązania?\s+(?:sytuacji\s+)?patowej|rozwiązania?\s+impasu)/i.test(a)
     || /(?:przycisk|rozwiązania?\s+(?:sytuacji\s+)?patowej|rozwiązania?\s+impasu)[^.!?]{0,180}(?:oddał|dał|zapewnił|dała|zapewniła|przekazał|przekazała)[^.!?]*(?:władz|kontrol)/i.test(a);
+
+  const przyciskJakoWylacznaPrzyczyna =
+    /(?:przycisk|rozwiązania?\s+(?:sytuacji\s+)?patowej|rozwiązania?\s+impasu)[^.!?]{0,120}(?:przejęcia|przejęcie|przejął|uzyskania\s+władzy|dania\s+władzy)/i.test(a);
+
   const przyciskJakoSzansaNaUcieczke =
     /(?:przycisk|rozwiązania?\s+(?:sytuacji\s+)?patowej|rozwiązania?\s+impasu)[^.!?]{0,180}(?:był|była|było|był[aą])[^.!?]{0,100}(?:szans|okazj|możliwoś|ucieczk)/i.test(a);
+
   const gladosJakoProjektantWheatleya =
     /glados[^.!?]{0,160}(?:zaprojektowała|stworzyła)[^.!?]{0,160}(?:wheatley|niestabil|zmniejsz|obniż)/i.test(a)
     || /wheatley[^.!?]{0,120}(?:zaprojektowany|stworzony)[^.!?]{0,120}(?:przez|przez samą)\s+glados/i.test(a);
+
+  const celProjektuJakoZmniejszenieGlados =
+    /wheatley[^.!?]{0,180}(?:zaprojektowany|stworzony)[^.!?]{0,180}(?:zmniejsz|obniż|obniz)[^.!?]*(?:inteligenc|iq)/i.test(a)
+    || /(?:zaprojektowany|stworzony)[^.!?]{0,180}(?:po to|aby|żeby|by)[^.!?]{0,100}(?:zmniejsz|obniż|obniz)[^.!?]*(?:inteligenc|iq)[^.!?]{0,120}\bwheatley\b/i.test(a);
+
   const przypisujeObnizenieJakoPrzyczyne =
     /(?:przejął|przejąć|przej[aą]ł|kontrolę|władzę)[^.!?]{0,180}(?:zmniejsz|obniż|obniz)[^.!?]*(?:inteligenc|iq)/i.test(a)
     || /(?:zmniejsz|obniż|obniz)[^.!?]*(?:inteligenc|iq)[^.!?]{0,180}(?:przejął|przejąć|kontrolę|władzę)/i.test(a);
 
+  const rdzenJakoPrzyczynaPrzejecia =
+    /(?:przejął|przejąć|przej[aą]ł|kontrolę|władzę)[^.!?]{0,180}(?:bezsensown|bezsensu|osłabić|osłabienie|zmniejsz|obniż)[^.!?]*(?:rdze|inteligenc)/i.test(a);
+
+  const twierdziZeGladosBylaWylaczona =
+    /glados[^.!?]{0,100}(?:była|byla|została|zostala)\s+(?:całkowicie\s+)?wyłączon/i.test(a);
+
   const unsupported = [];
   if (przyciskJakoSzansaNaUcieczke) unsupported.push('przycisk rozwiązania impasu błędnie przedstawiono jako szansę Wheatleya na ucieczkę');
   if (gladosJakoProjektantWheatleya) unsupported.push('GLaDOS błędnie przypisano zaprojektowanie lub stworzenie Wheatleya');
-  if (przypisujeObnizenieJakoPrzyczyne) unsupported.push('obniżenie inteligencji GLaDOS błędnie przedstawiono jako przyczynę przejęcia kontroli');
+  if (celProjektuJakoZmniejszenieGlados) unsupported.push('cel projektu Wheatleya błędnie opisano jako bezpośrednie zmniejszanie inteligencji GLaDOS');
   if (!maMechanizmTransferu) unsupported.push('brak opisu transferu rdzenia/zamiany ciał jako mechanizmu przejęcia kontroli');
-  if (przyciskJakoBezposredniaPrzyczyna) unsupported.push('przycisk rozwiązania impasu błędnie przedstawiono jako bezpośrednią przyczynę uzyskania władzy');
+  if (przyciskJakoBezposredniaPrzyczyna || przyciskJakoWylacznaPrzyczyna) unsupported.push('przycisk rozwiązania impasu błędnie przedstawiono jako bezpośrednią przyczynę uzyskania władzy');
+  if (przypisujeObnizenieJakoPrzyczyne) unsupported.push('obniżenie inteligencji GLaDOS błędnie przedstawiono jako przyczynę przejęcia kontroli');
+  if (rdzenJakoPrzyczynaPrzejecia) unsupported.push('przeznaczenie rdzenia Wheatleya błędnie przedstawiono jako przyczynę przejęcia kontroli');
+  if (twierdziZeGladosBylaWylaczona) unsupported.push('GLaDOS błędnie opisana jako całkowicie wyłączona');
+
   return { ok: unsupported.length === 0, unsupported };
 }
 
