@@ -1,6 +1,9 @@
 'use strict';
 
 const WEB_CATEGORIES = new Set(['weather', 'hltb', 'youtube', 'web_fact']);
+const { czyPytanieOLore } = require('./lore');
+const { czyPytanieOGameplay } = require('./gameplay');
+
 const SOURCE_TYPES = {
   weather: 'weather_api',
   hltb: 'hltb',
@@ -16,8 +19,10 @@ function classifyAIRequest(pytanie, policyCategory, recipeDetector = () => false
   const entity = detectEntity(p);
   const freshness = detectFreshness(p);
   const needsWeb = WEB_CATEGORIES.has(category);
-  const needsFreshData = freshness !== 'evergreen';
-  const sourceType = SOURCE_TYPES[category] || (needsWeb ? 'web_search' : 'none');
+  const needsFreshData = freshness === 'live' || freshness === 'recent';
+  const lore = czyPytanieOLore(text);
+  const gameplay = czyPytanieOGameplay(text);
+  const sourceType = lore ? 'game_lore' : gameplay ? 'gameplay_guide' : (SOURCE_TYPES[category] || (needsWeb ? 'web_search' : 'none'));
 
   // Confidence describes routing confidence, not factual confidence.
   let confidence = 0.65;
@@ -33,6 +38,8 @@ function classifyAIRequest(pytanie, policyCategory, recipeDetector = () => false
     needs_fresh_data: needsFreshData,
     freshness,
     source_type: sourceType,
+    is_lore: lore,
+    is_gameplay: gameplay,
     confidence,
     query: text,
   };

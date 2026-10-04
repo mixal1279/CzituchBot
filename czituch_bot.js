@@ -65,6 +65,7 @@ const { czyPytanieOLore, dodajGameLoreDomenę, wytnijAtrybucjeGameLore, GAMELORE
 const { czyPytanieOGameplay, dodajGameFAQsDomenę, wytnijAtrybucjeGameFAQs, GAMEFAQS_DOMAIN } = require('./ai/gameplay');
 const { przygotujHistorieDoModelu, opakujDaneReferencyjne } = AI_POLICY;
 const { classifyAIRequest } = require('./ai/router');
+const { sprawdzTwardeFaktyOdpowiedzi, sprawdzFormatOdpowiedzi } = require('./ai/response');
 const { Firestore } = require('@google-cloud/firestore');
 
 // =============================================
@@ -193,6 +194,33 @@ function okreslKategorieAI(pytanie) {
 
 function wyznaczRoutingAI(pytanie) {
   return classifyAIRequest(pytanie, AI_POLICY.okreslKategorieAI, czyPytanieOReceptureMC);
+}
+
+function zastosujDeterministyczneGuards(walidacja, odpowiedz, dane) {
+  if (!walidacja || walidacja.status !== 'accepted') return walidacja;
+  const format = sprawdzFormatOdpowiedzi(odpowiedz);
+  if (!format.ok) {
+    return {
+      ...walidacja,
+      status: 'rejected', ok: false, valid: false,
+      supported: false, complete: false, hallucination: true,
+      confidence: Math.min(Number(walidacja.confidence) || 0, 0.5),
+      unsupported_claims: [...(walidacja.unsupported_claims || [])],
+      reason: `odpowiedź nie spełnia kontraktu formatu: ${format.reason}`,
+    };
+  }
+  const twardeFakty = sprawdzTwardeFaktyOdpowiedzi(odpowiedz, dane);
+  if (!twardeFakty.ok) {
+    return {
+      ...walidacja,
+      status: 'rejected', ok: false, valid: false,
+      supported: false, complete: false, hallucination: true,
+      confidence: Math.min(Number(walidacja.confidence) || 0, 0.5),
+      unsupported_claims: [...new Set([...(walidacja.unsupported_claims || []), ...twardeFakty.unsupported])],
+      reason: 'odpowiedź zawiera twarde dane, których nie ma w materiale referencyjnym',
+    };
+  }
+  return walidacja;
 }
 
 function czyPytanieWymagaPewnychDanych(kategoria) {
@@ -2119,17 +2147,10 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
       };
     }
     if (walidacja.status === 'accepted') {
-      const twardeFakty = sprawdzTwardeFaktyOdpowiedzi(odp, daneDoWalidacji);
-      if (!twardeFakty.ok) {
-        console.warn(`[AI][${requestId}] deterministic fact guard rejected: ${JSON.stringify(twardeFakty.unsupported)}`);
-        walidacja = {
-          ...walidacja,
-          status: 'rejected', ok: false, valid: false, supported: false,
-          complete: false, hallucination: true,
-          confidence: Math.min(Number(walidacja.confidence) || 0, 0.5),
-          unsupported_claims: [...new Set([...(walidacja.unsupported_claims || []), ...twardeFakty.unsupported])],
-          reason: 'odpowiedź zawiera twarde dane, których nie ma w materiale referencyjnym',
-        };
+      const beforeGuard = walidacja;
+      walidacja = zastosujDeterministyczneGuards(walidacja, odp, daneDoWalidacji);
+      if (walidacja.status !== beforeGuard.status) {
+        console.warn(`[AI][${requestId}] deterministic response guard rejected: ${JSON.stringify(walidacja.unsupported_claims || [])}`);
       }
     }
     if (walidacja.status === 'rejected') {
@@ -2158,6 +2179,9 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
         if (nowaOdp) {
           odp = nowaOdp;
           walidacja = await walidujOdpowiedzAI(jestAI_Billy ? 'billy' : jestAI_EdzzI ? 'edzzi' : 'angie', pytanie, odp, daneDoWalidacji, historiaRozmowy, requestId, aiState, metadaneRequestu);
+          if (walidacja.status === 'accepted') {
+            walidacja = zastosujDeterministyczneGuards(walidacja, odp, daneDoWalidacji);
+          }
           if (walidacja.status === 'accepted' && daneDoWalidacji && AI_POLICY.czyOdpowiedzToJednoznacznaOdmowa(odp)) {
             walidacja = { ...walidacja, status: 'rejected', ok: false, complete: false, reason: 'regeneracja nadal jest odmową mimo danych' };
           }
