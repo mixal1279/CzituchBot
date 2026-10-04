@@ -10,9 +10,6 @@ function normalizujTokenLiczbowy(token) {
 
 function wyodrebnijTwardeTokeny(tekst) {
   const input = String(tekst || '');
-  // Celowo nie sprawdzamy gołych liczb: modele mogą użyć numeracji zdań,
-  // „2 zdania”, wersji językowej itp. Interesują nas tylko liczby niosące
-  // informację faktograficzną: lata, procenty, waluty i jednostki.
   return [...new Set(
     (input.match(/(?:\b(?:19|20)\d{2}\b|\b\d+(?:[.,]\d+)?\s*%|\b\d+(?:[.,]\d+)?\s*(?:zł|pln|usd|eur|gb|mb|tb|hz|fps|°c|stopni|godzin(?:y|ę)?|minut(?:y|ę)?|lat(?:a|)|km|m|kg|g)\b)/giu) || [])
       .map(normalizujTokenLiczbowy)
@@ -47,25 +44,43 @@ function sprawdzSpojnoscLorePortal2(odpowiedz, pytanie) {
   const portal = /\bportal\s*2\b|\bwheatley\b|\bglados\b|\bchell\b|\baperture\s+science\b/i.test(q);
   if (!portal) return { ok: true, unsupported: [] };
 
-  const pytaOPrzejecie = /\b(?:przejął|przej[aą]ł|przejęła|przejęcie|kontrolę|władzę|wladze)\b/i.test(q)
-    && /\bwheatley\b/i.test(q);
+  const pytaOPrzejecie = /\bwheatley\b/i.test(q)
+    && /\b(?:przejął|przejęła|przejęcie|przej[aą]ł|kontrolę|władzę|wladze)\b/i.test(q);
   if (!pytaOPrzejecie) return { ok: true, unsupported: [] };
 
-  const maZamianeCial = /zamian(?:a|ę)|zamianie|zamienił(?:a|y)?\s+ciał|ciał(?:a|o)\s+glados|zamian[aey]\s+ciał/i.test(a);
+  // Kluczowy fakt przyczynowy: transfer rdzenia doprowadził do umieszczenia
+  // Wheatleya w ciele GLaDOS. Sam Stalemate Resolution Button jedynie uruchamia
+  // transfer; nie "daje" Wheatleyowi władzy jako odrębna przyczyna.
+  const maMechanizmTransferu = [
+    /transfer(?:ze|u)?\s+(?:rdzen|rdzeni|ciał|ciała)/i,
+    /transfer(?:ze|u)?[^.!?]{0,120}\bwheatley\b[^.!?]{0,120}\bglados\b/i,
+    /\bwheatley\b[^.!?]{0,160}(?:został|zostaje|została)\s+(?:umieszczon|podłączon|przeniesion)[^.!?]{0,100}\bglados\b/i,
+    /\bwheatley\b[^.!?]{0,160}(?:przejął|otrzymał)\s+(?:ciało|body)\s+glados/i,
+    /zamian(?:a|ę|ie)\s+ciał[^.!?]{0,120}\bwheatley\b/i,
+  ].some(re => re.test(a));
+
+  const przyciskJakoBezposredniaPrzyczyna =
+    /(?:przejął|przejąć|przej[aą]ł|zdobył|uzyskał|dostał|otrzymał)[^.!?]{0,180}(?:bo|ponieważ|dlatego|dzięki|przez)[^.!?]*(?:przycisk|rozwiązania?\s+(?:sytuacji\s+)?patowej|rozwiązania?\s+impasu)/i.test(a)
+    || /(?:przycisk|rozwiązania?\s+(?:sytuacji\s+)?patowej|rozwiązania?\s+impasu)[^.!?]{0,180}(?:oddał|dał|zapewnił|dała|zapewniła|przekazał|przekazała)[^.!?]*(?:władz|kontrol)/i.test(a);
+
+  const przyciskJakoWylacznaPrzyczyna =
+    /(?:przycisk|rozwiązania?\s+(?:sytuacji\s+)?patowej|rozwiązania?\s+impasu)[^.!?]{0,100}(?:przejęcia|przejęcie|przejął|uzyskania\s+władzy|dania\s+władzy)/i.test(a);
+
   const przypisujeObnizenieJakoPrzyczyne =
     /(?:przejął|przejąć|przej[aą]ł|kontrolę|władzę)[^.!?]{0,180}(?:zmniejsz|obniż|obniz)[^.!?]*(?:inteligenc|iq)/i.test(a)
     || /(?:zmniejsz|obniż|obniz)[^.!?]*(?:inteligenc|iq)[^.!?]{0,180}(?:przejął|przejąć|kontrolę|władzę)/i.test(a);
-  const przyciskJakoBezposredniaPrzyczyna =
-    /(?:przejął|przejąć|przej[aą]ł|zdobył|uzyskał)[^.!?]{0,120}(?:bo|ponieważ|dlatego|dzięki)[^.!?]*(?:przycisk|rozwiązania?\s+(?:sytuacji\s+)?patowej|rozwiązania?\s+impasu)/i.test(a)
-    || /(?:przycisk|rozwiązania?\s+(?:sytuacji\s+)?patowej|rozwiązania?\s+impasu)[^.!?]{0,120}(?:oddał|dał|zapewnił|dała|zapewniła)[^.!?]*(?:władz|kontrol)/i.test(a);
+
   const rdzenJakoPrzyczynaPrzejecia =
     /(?:przejął|przejąć|przej[aą]ł|kontrolę|władzę)[^.!?]{0,180}(?:bezsensown|bezsensu|osłabić|osłabienie|zmniejsz|obniż)[^.!?]*(?:rdze|inteligenc)/i.test(a);
+
   const twierdziZeGladosBylaWylaczona =
-    /glados[^.!?]{0,80}(?:była|byla|została|zostala)\s+(?:całkowicie\s+)?wyłączon/i.test(a);
+    /glados[^.!?]{0,100}(?:była|byla|została|zostala)\s+(?:całkowicie\s+)?wyłączon/i.test(a);
 
   const unsupported = [];
-  if (!maZamianeCial) unsupported.push('odpowiedź nie potwierdza kluczowej zamiany ciał podczas przejęcia kontroli przez Wheatleya');
-  if (przyciskJakoBezposredniaPrzyczyna) unsupported.push('odpowiedź przedstawia przycisk rozwiązania impasu jako bezpośrednią przyczynę przejęcia kontroli');
+  if (!maMechanizmTransferu) unsupported.push('odpowiedź nie opisuje transferu rdzenia/zamiany ciał jako mechanizmu przejęcia kontroli przez Wheatleya');
+  if (przyciskJakoBezposredniaPrzyczyna || przyciskJakoWylacznaPrzyczyna) {
+    unsupported.push('odpowiedź przedstawia przycisk rozwiązania impasu jako bezpośrednią przyczynę uzyskania władzy przez Wheatleya');
+  }
   if (przypisujeObnizenieJakoPrzyczyne) unsupported.push('odpowiedź miesza późniejsze obniżenie inteligencji GLaDOS z przyczyną przejęcia kontroli');
   if (rdzenJakoPrzyczynaPrzejecia) unsupported.push('odpowiedź miesza przeznaczenie rdzenia Wheatleya z przyczyną przejęcia kontroli');
   if (twierdziZeGladosBylaWylaczona) unsupported.push('odpowiedź upraszcza stan GLaDOS jako całkowite wyłączenie');
@@ -75,8 +90,6 @@ function sprawdzSpojnoscLorePortal2(odpowiedz, pytanie) {
 
 function sprawdzTwardeFaktyOdpowiedzi(odpowiedz, dane, pytanie = '') {
   const questionTokens = new Set(wyodrebnijTwardeTokeny(pytanie));
-  // Liczby obecne już w pytaniu mogą być częścią nazwy encji (np. Cyberpunk 2077).
-  // Validator semantyczny nadal sprawdza zgodność całej odpowiedzi z pytaniem i źródłami.
   const answerTokens = wyodrebnijTwardeTokeny(odpowiedz).filter(token => !questionTokens.has(token));
   const refs = String(dane || '').toLocaleLowerCase('pl-PL').replace(/,/g, '.');
   const unsupported = answerTokens.filter(token => !refs.includes(token));
@@ -96,14 +109,9 @@ function sprawdzFormatOdpowiedzi(odpowiedz, { maxZdania = 2, maxZnakow = 900 } =
   if (!text) return { ok: false, reason: 'pusta odpowiedź' };
   if (text.length > maxZnakow) return { ok: false, reason: 'odpowiedź jest zbyt długa' };
   if (/https?:\/\//i.test(text)) return { ok: false, reason: 'odpowiedź zawiera URL' };
-
-  // Liczymy tylko interpunkcję kończącą zdanie; kropka w liczbie 2.5
-  // nie może zostać potraktowana jako koniec zdania.
   const normalized = text.replace(/\b(?:np|itp|itd|tj|tzn)\./gi, '§');
   const sentenceCount = (normalized.match(/[.!?]+(?=\s|$)/g) || []).length;
-  if (sentenceCount > maxZdania) {
-    return { ok: false, reason: `odpowiedź ma więcej niż ${maxZdania} zdania` };
-  }
+  if (sentenceCount > maxZdania) return { ok: false, reason: `odpowiedź ma więcej niż ${maxZdania} zdania` };
   return { ok: true, reason: 'format poprawny' };
 }
 
