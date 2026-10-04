@@ -1,0 +1,31 @@
+name: AI regression tests
+
+on:
+  push:
+    paths:
+      - 'ai/**'
+      - 'test/**'
+      - 'package.json'
+      - 'czituch_bot.js'
+      - '.github/workflows/ai-tests.yml'
+  pull_request:
+    paths:
+      - 'ai/**'
+      - 'test/**'
+      - 'package.json'
+      - 'czituch_bot.js'
+      - '.github/workflows/ai-tests.yml'
+
+jobs:
+  ai-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: node --test test/ai.test.js
+      - run: node --check ai/router.js
+      - run: node --check ai/response.js
+      - run: node --check ai/validator.js
+      - run: node --check ai/policy.js
