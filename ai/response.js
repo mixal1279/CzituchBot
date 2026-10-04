@@ -45,7 +45,7 @@ function sprawdzSpojnoscLorePortal2(odpowiedz, pytanie) {
   if (!portal) return { ok: true, unsupported: [] };
 
   const pytaOPrzejecie = /\bwheatley\b/i.test(q)
-    && /\b(?:przejął|przejęła|przejęcie|przej[aą]ł|kontrolę|władzę|wladze)\b/i.test(q);
+    && /(?:^|[^\p{L}])(?:przejął|przejęła|przejęcie|przej[aą]ł|kontrolę|władzę|wladze)(?=$|[^\p{L}])/iu.test(q);
   if (!pytaOPrzejecie) return { ok: true, unsupported: [] };
 
   // Kluczowy fakt przyczynowy: transfer rdzenia doprowadził do umieszczenia
