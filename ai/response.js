@@ -32,11 +32,11 @@ function sprawdzFormatOdpowiedzi(odpowiedz, { maxZdania = 2, maxZnakow = 900 } =
   if (text.length > maxZnakow) return { ok: false, reason: 'odpowiedź jest zbyt długa' };
   if (/https?:\/\//i.test(text)) return { ok: false, reason: 'odpowiedź zawiera URL' };
 
-  // Nie traktujemy skrótów typu „np.”/„itd.” jako końca zdania.
-  const sentences = text
-    .replace(/\b(?:np|itp|itd|tj|tzn)\./gi, '$&')
-    .match(/[^.!?]*(?:[.!?]+|$)/g)?.map(s => s.trim()).filter(Boolean) || [];
-  if (sentences.length > maxZdania) {
+  // Liczymy tylko interpunkcję kończącą zdanie; kropka w liczbie 2.5
+  // nie może zostać potraktowana jako koniec zdania.
+  const normalized = text.replace(/\b(?:np|itp|itd|tj|tzn)\./gi, '§');
+  const sentenceCount = (normalized.match(/[.!?]+(?=\\s|$)/g) || []).length;
+  if (sentenceCount > maxZdania) {
     return { ok: false, reason: `odpowiedź ma więcej niż ${maxZdania} zdania` };
   }
   return { ok: true, reason: 'format poprawny' };
