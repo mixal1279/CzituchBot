@@ -41,6 +41,29 @@ function sprawdzZgodnoscKontekstuGry(odpowiedz, pytanie) {
   return { ok: conflicting.length === 0, conflicting };
 }
 
+function sprawdzSpojnoscLorePortal2(odpowiedz, pytanie) {
+  const q = String(pytanie || '').toLocaleLowerCase('pl-PL');
+  const a = String(odpowiedz || '').toLocaleLowerCase('pl-PL');
+  const portal = /\\bportal\\s*2\\b|\\bwheatley\\b|\\bglados\\b|\\bchell\\b|\\baperture\\s+science\\b/i.test(q);
+  if (!portal) return { ok: true, unsupported: [] };
+
+  const pytaOPrzejecie = /\\b(?:przejął|przej[aą]ł|przejęła|przejęcie|kontrolę|władzę|wladze)\\b/i.test(q)
+    && /\\bwheatley\\b/i.test(q);
+  if (!pytaOPrzejecie) return { ok: true, unsupported: [] };
+
+  const maZamianeCial = /zamian(?:a|ę)|zamianie|zamienił(?:a|y)?\\s+ciał|ciał(?:a|o)\\s+glados|ciał(?:a|o)\\s+gla+d+os|zamian[aey]\\s+ciał/i.test(a);
+  const przypisujeObnizenieJakoPrzyczyne = /(?:przejął|przejąć|przej[aą]ł|kontrolę|władzę)[^.!?]{0,180}(?:zmniejsz|obniż|obniz)[^.!?]*(?:inteligenc|iq)/i.test(a)
+    || /(?:zmniejsz|obniż|obniz)[^.!?]*(?:inteligenc|iq)[^.!?]{0,180}(?:przejął|przejąć|kontrolę|władzę)/i.test(a);
+  const twierdziZeGladosBylaWylaczona = /glados[^.!?]{0,80}(?:była|byla|została|zostala)\\s+(?:całkowicie\\s+)?wyłączon/i.test(a);
+
+  const unsupported = [];
+  if (!maZamianeCial) unsupported.push('odpowiedź nie potwierdza kluczowej zamiany ciał podczas przejęcia kontroli przez Wheatleya');
+  if (przypisujeObnizenieJakoPrzyczyne) unsupported.push('odpowiedź miesza późniejsze obniżenie inteligencji GLaDOS z przyczyną przejęcia kontroli');
+  if (twierdziZeGladosBylaWylaczona) unsupported.push('odpowiedź upraszcza stan GLaDOS jako całkowite wyłączenie');
+
+  return { ok: unsupported.length === 0, unsupported };
+}
+
 function sprawdzTwardeFaktyOdpowiedzi(odpowiedz, dane, pytanie = '') {
   const questionTokens = new Set(wyodrebnijTwardeTokeny(pytanie));
   // Liczby obecne już w pytaniu mogą być częścią nazwy encji (np. Cyberpunk 2077).
@@ -50,9 +73,10 @@ function sprawdzTwardeFaktyOdpowiedzi(odpowiedz, dane, pytanie = '') {
   const unsupported = answerTokens.filter(token => !refs.includes(token));
   const contextCheck = sprawdzZgodnoscKontekstuGry(odpowiedz, pytanie);
   const contextUnsupported = contextCheck.conflicting.map(name => `odpowiedź wprowadza inną grę/uniwersum: ${name}`);
+  const loreCheck = sprawdzSpojnoscLorePortal2(odpowiedz, pytanie);
   return {
-    ok: unsupported.length === 0 && contextCheck.ok,
-    unsupported: [...unsupported, ...contextUnsupported].slice(0, 8),
+    ok: unsupported.length === 0 && contextCheck.ok && loreCheck.ok,
+    unsupported: [...unsupported, ...contextUnsupported, ...loreCheck.unsupported].slice(0, 8),
     checked: answerTokens,
     conflictingGames: contextCheck.conflicting,
   };
@@ -78,6 +102,7 @@ module.exports = {
   normalizujTokenLiczbowy,
   wyodrebnijTwardeTokeny,
   sprawdzTwardeFaktyOdpowiedzi,
+  sprawdzSpojnoscLorePortal2,
   sprawdzZgodnoscKontekstuGry,
   sprawdzFormatOdpowiedzi,
 };
