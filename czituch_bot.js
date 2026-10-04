@@ -64,6 +64,7 @@ const { normalizujZapytanieTavily } = AI_POLICY;
 const { czyPytanieOLore, dodajGameLoreDomenę, wytnijAtrybucjeGameLore, GAMELORE_DOMAIN } = require('./ai/lore');
 const { czyPytanieOGameplay, dodajGameFAQsDomenę, wytnijAtrybucjeGameFAQs, GAMEFAQS_DOMAIN } = require('./ai/gameplay');
 const { przygotujHistorieDoModelu, opakujDaneReferencyjne } = AI_POLICY;
+const { classifyAIRequest } = require('./ai/router');
 const { Firestore } = require('@google-cloud/firestore');
 
 // =============================================
@@ -188,6 +189,10 @@ function pobierzDaneRecepturyMC(pytanie) {
 
 function okreslKategorieAI(pytanie) {
   return AI_POLICY.okreslKategorieAI(pytanie, czyPytanieOReceptureMC);
+}
+
+function wyznaczRoutingAI(pytanie) {
+  return classifyAIRequest(pytanie, AI_POLICY.okreslKategorieAI, czyPytanieOReceptureMC);
 }
 
 function czyPytanieWymagaPewnychDanych(kategoria) {
@@ -1582,8 +1587,9 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
   };
   console.log(`[AI][${requestId}] start kategoria=pending persona=${aiProfile}`);
 
-  const kategoriaAI = okreslKategorieAI(pytanie);
-  console.log(`[AI][${requestId}] kategoria=${kategoriaAI}`);
+  const routingAI = wyznaczRoutingAI(pytanie);
+  const kategoriaAI = routingAI.intent;
+  console.log(`[AI][${requestId}] routing=${JSON.stringify({ intent: routingAI.intent, entity: routingAI.entity, needs_web: routingAI.needs_web, freshness: routingAI.freshness, source_type: routingAI.source_type, confidence: routingAI.confidence })}`);
   console.log(`[AI] kategoria=${kategoriaAI} nick=${nick}`);
   const jestRecepturaMC = czyPytanieOReceptureMC(pytanie);
   const daneRecepturyMC = pobierzDaneRecepturyMC(pytanie);
@@ -1600,7 +1606,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
   // Conversation/common-sense jest ścieżką bez Tavily. Nie wystarczy jednak
   // samo „brak pytania o fakty”, bo wcześniejsza heurystyka długości pytania
   // odpalała wyszukiwanie dla praktycznie każdego zdania.
-  const czyWyszukac = kategoriaAI !== 'conversation'
+  const czyWyszukac = routingAI.needs_web
     && (pytanie.split(/\s+/).length >= 2 || czyPytaOFakty)
     && !/^(co myślisz|powiedz (mi )?(żart|coś)|jak się masz|opowiedz)/i.test(pytanie);
 
