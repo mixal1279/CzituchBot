@@ -131,3 +131,13 @@ console.log('AI regression tests: OK');
   assert.match(source, /generujOdpowiedz\(max_tokens, promptRetry, 'soft validation retry', true\)/);
   assert.match(source, /weakRetrieval && wynik\.text\.length < 1200/);
 }
+
+{
+  const r = sprawdzZgodnoscKontekstuGry('Kris przemierza Harran.', 'Gdzie jest największa ilość łupów w Dying Light: The Beast?');
+  assert.equal(r.ok, true);
+  const bad = sprawdzZgodnoscKontekstuGry('Arthur Morgan przemierza Harran.', 'Gdzie jest największa ilość łupów w Dying Light: The Beast?');
+  assert.equal(bad.ok, false);
+}
+
+
+console.log('AI regression tests: OK');
