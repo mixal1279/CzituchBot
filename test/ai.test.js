@@ -95,6 +95,7 @@ const policy = (q, recipe) => recipe(q) ? 'minecraft_recipe' : /pogoda/i.test(q)
   assert.equal(sprawdzFormatOdpowiedzi('Sprawdź https://example.com').ok, false);
 }
 
+assert.match(require('fs').readFileSync(require('path').join(__dirname, '..', 'czituch_bot.js'), 'utf8'), /generujOdpowiedz\(max_tokens, promptRetry, 'soft validation retry', true\)/);
 console.log('AI regression tests: OK');
 
 {
