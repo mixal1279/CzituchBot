@@ -3,7 +3,7 @@
 const assert = require('node:assert/strict');
 const { classifyAIRequest } = require('../ai/router');
 const { przygotujHistorieDoModelu } = require('../ai/policy');
-const { sprawdzTwardeFaktyOdpowiedzi, sprawdzFormatOdpowiedzi } = require('../ai/response');
+const { sprawdzTwardeFaktyOdpowiedzi, sprawdzZgodnoscKontekstuGry, sprawdzFormatOdpowiedzi } = require('../ai/response');
 const { normalizujWynikWalidatora } = require('../ai/validator');
 
 const policy = (q, recipe) => recipe(q) ? 'minecraft_recipe' : /pogoda/i.test(q) ? 'weather' : /ile trwa/i.test(q) ? 'hltb' : /dzisiaj|najnowsz/i.test(q) ? 'web_fact' : 'conversation';
@@ -34,6 +34,10 @@ const policy = (q, recipe) => recipe(q) ? 'minecraft_recipe' : /pogoda/i.test(q)
   assert.equal(good.ok, true);
   const bad = sprawdzTwardeFaktyOdpowiedzi('Cyberpunk 2077 wydano w 2021 roku.', '[SOURCE 1] Wydano w 2020 roku.', 'Kiedy wydano Cyberpunka 2077?');
   assert.equal(bad.ok, false);
+  const wrongGame = sprawdzTwardeFaktyOdpowiedzi('Arasaka zaatakowała Night City.', '[SOURCE 1] Arthur Morgan mieszkał w Saint Denis.', 'Dlaczego Dutch zdradził Arthura w Red Dead Redemption 2?');
+  assert.equal(wrongGame.ok, false);
+  assert.deepEqual(sprawdzZgodnoscKontekstuGry('GLaDOS zarządza Aperture Science.', 'Kim jest GLaDOS w Portal 2?'), { ok: true, conflicting: [] });
+  assert.equal(sprawdzZgodnoscKontekstuGry('Johnny Silverhand działał w Night City.', 'Dlaczego Arthur Morgan zachorował na gruźlicę w Red Dead Redemption 2?').ok, false);
 }
 
 {
