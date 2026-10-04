@@ -1667,7 +1667,7 @@ function wykonajAIWHistorii(historia, zadanie) {
 async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn, opcje = {}) {
   AI_METRYKI.requests++;
   const { temperature = 0.5, max_tokens = 200, tavilyOptions = {}, aiProfile = 'generic' } = opcje;
-  systemPrompt = `${systemPrompt}\n\nLIMIT ODPOWIEDZI: maksymalnie 60 słów i 2 krótkie zdania. Zawsze zakończ pełne zdanie; nie urywaj odpowiedzi.`;
+  systemPrompt = `${systemPrompt}\n\nLIMIT ODPOWIEDZI: maksymalnie 60 słów i 2 krótkie zdania. Zawsze zakończ pełne zdanie; nie urywaj odpowiedzi.\n\nNie umieszczaj w odpowiedzi nazw źródeł, atrybucji, etykiet „Źródło:” ani URL-i. Źródła są wyłącznie wewnętrznym materiałem RAG i walidacji.`;
   const jestAI_Billy = aiProfile === 'billy' || systemPrompt === AI_SYSTEM_PROMPT_BILLY;
   const jestAI_EdzzI = aiProfile === 'edzzi' || systemPrompt === AI_SYSTEM_PROMPT_EDZZI;
   const jestAI_Angie = aiProfile === 'angie' || systemPrompt === AI_SYSTEM_PROMPT_ANGIE;
@@ -2247,8 +2247,19 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
     return wynikPusty('openrouter', KONFIGURACJA.openrouterGeneratorModel, openrouter.ucieta ? 'OpenRouter response truncated' : openrouter.error);
   }
 
+function oczyscOdpowiedzPrzedWalidacja(tekst) {
+  return String(tekst || '')
+    .split(/\r?\n/)
+    .filter(line => !/https?:\/\/|www\./i.test(line))
+    .filter(line => !/^(?:📚\s*)?Źródło(?: poradnika)?\s*:/i.test(line))
+    .join('\n')
+    .replace(/\[[^\]]*\]\(https?:\/\/[^)]+\)/gi, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
   let wynikGeneracji = await generujOdpowiedz(max_tokens, systemPrompt);
-  let odp = ograniczDoPelnychZdanAI(usunMarkeryWewnetrzneAI(filtrBezpieczenstwa(wynikGeneracji.tekst)));
+  let odp = oczyscOdpowiedzPrzedWalidacja(ograniczDoPelnychZdanAI(usunMarkeryWewnetrzneAI(filtrBezpieczenstwa(wynikGeneracji.tekst))));
   if (!odp) { console.log(`[AI][${requestId}] final status=unavailable — brak odpowiedzi`); zalogujPodsumowanieAI('unavailable'); return; }
   console.log(`[AI][${requestId}] generator=${wynikGeneracji.provider}/${wynikGeneracji.model} liczba prób 120B=${liczbaProb120b}`);
 
@@ -2307,7 +2318,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
       if (retry.tekst) {
         const nowaOdp = usunMarkeryWewnetrzneAI(filtrBezpieczenstwa(retry.tekst));
         if (nowaOdp) {
-          odp = nowaOdp;
+          odp = oczyscOdpowiedzPrzedWalidacja(nowaOdp);
           walidacja = await walidujOdpowiedzAI(jestAI_Billy ? 'billy' : jestAI_EdzzI ? 'edzzi' : 'angie', pytanie, odp, daneDoWalidacji, historiaRozmowy, requestId, aiState, metadaneRequestu);
           if (walidacja.status === 'accepted') {
             walidacja = zastosujDeterministyczneGuards(walidacja, odp, daneDoWalidacji, pytanie);
