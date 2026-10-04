@@ -2324,14 +2324,16 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
     if (status === 'unavailable') return 'Chwilowo nie mogę potwierdzić tej informacji, więc nie będę zgadywać.';
     let finalText = ograniczDoPelnychZdanAI(usunMarkeryWewnetrzneAI(filtrBezpieczenstwa(tekst)));
     if (!finalText) return '';
-    if (daneDoWalidacji && pytanieOLore) {
-      const a = wytnijAtrybucjeGameLore(daneDoWalidacji);
-      if (a) finalText += `\n📚 Źródło: ${a.name} — ${a.title} (${a.url})`;
-    }
-    if (daneDoWalidacji && pytanieOGameplay) {
-      const a = wytnijAtrybucjeGameFAQs(daneDoWalidacji);
-      if (a) finalText += `\n🎮 Źródło poradnika: ${a.name} — ${a.title} (${a.url})`;
-    }
+    // Źródła pozostają wewnętrznym materiałem RAG/validatora. Nie wysyłamy
+    // użytkownikowi nazw źródeł, atrybucji ani linków.
+    finalText = finalText
+      .split(/\r?\n/)
+      .filter(line => !/https?:\/\/|www\./i.test(line))
+      .filter(line => !/^(?:📚\s*)?Źródło(?: poradnika)?\s*:/i.test(line))
+      .join('\n')
+      .replace(/\[[^\]]*\]\(https?:\/\/[^)]+\)/gi, '')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
     return finalText;
   };
   odp = finalizeResponse(odp, aiState.finalStatus);
