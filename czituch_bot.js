@@ -1501,7 +1501,7 @@ async function walidujOdpowiedzOpenRouter(persona, pytanie, odpowiedz, dane, req
     if (!content && message?.refusal) {
       console.warn(`[AI][${requestId}] OpenRouter validator refusal: ${String(message.refusal).slice(0, 300)}`);
     }
-    const normalized = normalizujWynikWalidatora(parsed, data?.model || KONFIGURACJA.openrouterValidatorModel, 'openrouter', wyodrebnijIdentyfikatoryZrodel(dane));
+    const normalized = normalizujWynikWalidatora(parsed, data?.model || KONFIGURACJA.openrouterValidatorModel, 'openrouter', wyodrebnijIdentyfikatoryZrodel(dane), dane);
     if (!normalized) {
       console.warn(`[AI][${requestId}] OpenRouter validator zwrócił JSON poza kontraktem (raw=${content.slice(0, 700)})`);
       throw new Error('niepoprawna struktura JSON fallbacku');
