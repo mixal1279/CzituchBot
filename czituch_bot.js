@@ -948,6 +948,15 @@ function formatHltbGodziny(h) {
 }
 
 // Dice coefficient — wybiera najlepsze dopasowanie spośród wyników wyszukiwania HLTB.
+function normalizujTytulHLTB(tekst) {
+  return String(tekst || '')
+    .toLocaleLowerCase('pl-PL')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function podobienstwoDiceHLTB(a, b) {
   a = a.toLowerCase(); b = b.toLowerCase();
   if (a === b) return 1;
@@ -966,6 +975,27 @@ function podobienstwoDiceHLTB(a, b) {
   return (2 * wspolne) / (a.length + b.length - 2);
 }
 
+
+function ocenaDopasowaniaTytuluHLTB(query, candidate) {
+  const a = normalizujTytulHLTB(query);
+  const b = normalizujTytulHLTB(candidate);
+  if (!a || !b) return 0;
+  if (a === b) return 1;
+  if ((b.includes(a) || a.includes(b)) && Math.min(a.length, b.length) / Math.max(a.length, b.length) >= 0.55) return 0.9;
+
+  const dice = podobienstwoDiceHLTB(a, b);
+  const aTokens = new Set(a.split(' ').filter(Boolean));
+  const bTokens = new Set(b.split(' ').filter(Boolean));
+  const intersection = [...aTokens].filter(t => bTokens.has(t)).length;
+  const union = new Set([...aTokens, ...bTokens]).size;
+  const tokenOverlap = union ? intersection / union : 0;
+
+  return Math.max(dice, tokenOverlap * 0.9);
+}
+
+function czyDobreDopasowanieTytuluHLTB(query, candidate, minScore = 0.58) {
+  return ocenaDopasowaniaTytuluHLTB(query, candidate) >= minScore;
+}
 async function szukajHLTBBleed(gameName, retried = false) {
   const { token, hpKey, hpVal, cookie } = await pobierzTokenHLTBBleed();
   const agent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
@@ -1028,9 +1058,9 @@ async function znajdzSteamAppIdPoNazwie(nazwaGry) {
     const data = await res.json();
     const gry = Array.isArray(data?.items) ? data.items : [];
     if (!gry.length) return null;
-    const ocenione = gry.map(g => ({ g, score: podobienstwoDiceHLTB(nazwaGry, g.name || '') }));
+    const ocenione = gry.map(g => ({ g, score: ocenaDopasowaniaTytuluHLTB(nazwaGry, g.name || '') }));
     ocenione.sort((a, b) => b.score - a.score);
-    const najlepsza = ocenione[0];    if (!najlepsza || najlepsza.score <= 0.3 || !najlepsza.g.id) return null;
+    const najlepsza = ocenione[0];    if (!najlepsza || najlepsza.score < 0.58 || !najlepsza.g.id) return null;
     console.log(`[Steam] AppID dla "${nazwaGry}": ${najlepsza.g.id} — "${najlepsza.g.name}" (score: ${najlepsza.score.toFixed(2)})`);
     return { appId: najlepsza.g.id, nazwa: najlepsza.g.name };
   } catch (err) {
@@ -1102,12 +1132,12 @@ async function pobierzCzasHLTB(nazwaGry) {
       const data = await szukajHLTBBleed(wariant);
       if (!data || !data.data || data.data.length === 0) continue;
 
-      const ocenione = data.data.map(g => ({ g, score: podobienstwoDiceHLTB(wariant, g.game_name || '') }));
+      const ocenione = data.data.map(g => ({ g, score: ocenaDopasowaniaTytuluHLTB(wariant, g.game_name || '') }));
       ocenione.sort((a, b) => b.score - a.score);
       const najlepsza = ocenione[0];
       console.log(`[HLTB] Bleed Search "${wariant}" → "${najlepsza.g.game_name}" (score: ${najlepsza.score.toFixed(2)})`);
 
-      if (najlepsza.score > 0.3) {
+      if (czyDobreDopasowanieTytuluHLTB(wariant, najlepsza.g.game_name || '', 0.58)) {
         const g = najlepsza.g;
         const glownyWatek = g.comp_main ? g.comp_main / 3600 : null;
         const glownyExtra = g.comp_plus ? g.comp_plus / 3600 : null;
