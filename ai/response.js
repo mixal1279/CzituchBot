@@ -24,6 +24,7 @@ const KONTEKSTY_GIER_AI = [
   { name: 'The Last of Us', patterns: [/\bthe\s+last\s+of\s+us\b/i, /\btlou\b/i, /\bjoel\s+miller\b/i, /\bellie\b/i] },
   { name: 'Minecraft', patterns: [/\bminecraft\b/i, /\bcreeper\b/i, /\bnether\b/i, /\bend(?:er)?\s+dragon\b/i] },
   { name: 'The Witcher', patterns: [/\bwied[źz]min\b/i, /\bwitcher\b/i, /\bgeralt\b/i, /\bciri\b/i] },
+  { name: 'Dying Light', patterns: [/\bdying\s*light(?:\s*:\s*|\s+)the\s+beast\b/i, /\bdying\s+light\b/i] },
 ];
 
 function wykryjKontekstyGierAI(tekst) {
