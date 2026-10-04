@@ -1409,7 +1409,7 @@ Zwróć WYŁĄCZNIE JSON: {"valid":true/false,"reason":"krótki powód","unsuppo
         console.warn(`[AI][${requestId}] ${model}: niepoprawny JSON validatora (raw=${content.slice(0, 300)})`);
         return { status: 'unavailable', ok: false, technicalError: true, provider: 'gemini', model, unsupported_claims: [], reason: `${model}: niepoprawny JSON validatora` };
       }
-      const normalized = normalizujWynikWalidatora(parsed, model, 'gemini', wyodrebnijIdentyfikatoryZrodel(dane));
+      const normalized = normalizujWynikWalidatora(parsed, model, 'gemini', wyodrebnijIdentyfikatoryZrodel(dane), dane);
       if (!normalized) {
         console.warn(`[AI][${requestId}] ${model}: niepoprawna struktura validatora (raw=${content.slice(0, 300)})`);
         return { status: 'unavailable', ok: false, technicalError: true, provider: 'gemini', model, unsupported_claims: [], reason: `${model}: niepoprawna struktura validatora` };
