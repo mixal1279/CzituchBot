@@ -2292,7 +2292,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
           odp = nowaOdp;
           walidacja = await walidujOdpowiedzAI(jestAI_Billy ? 'billy' : jestAI_EdzzI ? 'edzzi' : 'angie', pytanie, odp, daneDoWalidacji, historiaRozmowy, requestId, aiState, metadaneRequestu);
           if (walidacja.status === 'accepted') {
-            walidacja = zastosujDeterministyczneGuards(walidacja, odp, daneDoWalidacji);
+            walidacja = zastosujDeterministyczneGuards(walidacja, odp, daneDoWalidacji, pytanie);
           }
           if (walidacja.status === 'accepted' && daneDoWalidacji && AI_POLICY.czyOdpowiedzToJednoznacznaOdmowa(odp)) {
             walidacja = { ...walidacja, status: 'rejected', ok: false, complete: false, reason: 'regeneracja nadal jest odmową mimo danych' };
