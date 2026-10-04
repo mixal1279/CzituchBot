@@ -1887,8 +1887,10 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
   if (!pogodaKontekst && !hltbKontekst && !infoKanalu && czyWyszukac && pytaniaAtomoweTavily.length && aiState.tavilySearches < aiState.maxWyszukanTavily && !budzetPrzekroczony()) {
     const materialyTavily = [];
     let sourceOffset = 0;
-    for (const query of pytaniaAtomoweTavily.slice(0, aiState.maxWyszukanTavily)) {
-      if (aiState.tavilySearches >= aiState.maxWyszukanTavily || budzetPrzekroczony()) break;
+    const kolejkaTavily = [...pytaniaAtomoweTavily.slice(0, aiState.maxWyszukanTavily)];
+    let indexZapytania = 0;
+    while (indexZapytania < kolejkaTavily.length && aiState.tavilySearches < aiState.maxWyszukanTavily && !budzetPrzekroczony()) {
+      const query = kolejkaTavily[indexZapytania++];
       aiState.tavilySearches++;
       console.log(`[Tavily] 🔍 Query: "${query}" | Domeny: ${JSON.stringify(domenySpecjalistyczne)}`);
       const wynik = await szukajTavily(query, {
@@ -1905,6 +1907,21 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
       if (wynik?.text) {
         materialyTavily.push(wynik.text);
         sourceOffset += (wynik.text.match(/\[SOURCE \d+\]/g) || []).length;
+      }
+
+      // Jeśli pojedyncze wyszukanie dało bardzo mało materiału, wykorzystujemy drugi
+      // slot Tavily na semantycznie szersze zapytanie zamiast generować z ubogiego RAG.
+      const weakRetrieval = !wynik?.text
+        || wynik.text.length < 1200
+        || (wynik.text.match(/\[SOURCE \d+\]/g) || []).length < 2;
+      if (weakRetrieval && kolejkaTavily.length === 1 && aiState.tavilySearches < aiState.maxWyszukanTavily) {
+        const fallbackQuery = /dying\s*light/i.test(pytanie)
+          ? 'Dying Light The Beast loot locations guide wiki'
+          : `${pytanie} guide wiki`;
+        if (!kolejkaTavily.includes(fallbackQuery)) {
+          kolejkaTavily.push(fallbackQuery);
+          console.log(`[Tavily] 🔁 Słaby retrieval — dodatkowe zapytanie: "${fallbackQuery}"`);
+        }
       }
     }
     wynikSzukania = materialyTavily.join('\n---\n');
