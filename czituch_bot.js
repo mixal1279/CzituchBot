@@ -2020,7 +2020,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
     aiState.tavilySearches++;
     const uzupelnienie = await szukajTavily(queryUzupelniajace, {
       domains: domenyUzupelniajace,
-      time_range: zakresTavilyDlaPytania(pytanie, tavilyOptions.time_range || 'past_year'),
+      time_range: zakresTavilyDlaPytania(pytanie, routingAI.freshness === 'evergreen' ? null : (tavilyOptions.time_range || 'past_year')),
       _skipRewrite: true,
       sourceStartIndex,
       returnMeta: true,
