@@ -1914,7 +1914,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
       const weakRetrieval = !wynik?.text
         || wynik.text.length < 1200
         || (wynik.text.match(/\[SOURCE \d+\]/g) || []).length < 2;
-      if (weakRetrieval && kolejkaTavily.length === 1 && aiState.tavilySearches < aiState.maxWyszukanTavily) {
+      if (weakRetrieval && wynik.text.length < 1200 && (wynik.text.match(/\[(?:SOURCE|REFERENCE) [^\]]+\]/g) || []).length < 2 && kolejkaTavily.length === 1 && aiState.tavilySearches < aiState.maxWyszukanTavily) {
         const fallbackQuery = /dying\s*light/i.test(pytanie)
           ? 'Dying Light The Beast loot locations guide wiki'
           : `${pytanie} guide wiki`;
@@ -2303,7 +2303,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
       const promptRetry = `${systemPrompt}\n\n[SOFT VALIDATION FEEDBACK]\n${feedback}`;
       // Dokładnie jeden cykl retry po odrzuceniu walidacji. Fallbacki providerów
       // pozostają wewnątrz jednego cyklu generacji i nie uruchamiamy kolejnego retry.
-      const retry = await generujOdpowiedz(max_tokens, promptRetry, 'soft validation retry', false);
+      const retry = await generujOdpowiedz(max_tokens, promptRetry, 'soft validation retry', true);
       if (retry.tekst) {
         const nowaOdp = usunMarkeryWewnetrzneAI(filtrBezpieczenstwa(retry.tekst));
         if (nowaOdp) {
