@@ -7,6 +7,7 @@ const VALIDATOR_JSON_SCHEMA = {
   properties: {
     valid: { type: 'boolean' },
     reason: { type: 'string' },
+    confidence: { type: 'number', minimum: 0, maximum: 1 },
     unsupported_claims: { type: 'array', items: { type: 'string' } },
     // Pola zachowane dla kompatybilności z istniejącym pipeline'em.
     ok: { type: 'boolean' },
@@ -14,6 +15,7 @@ const VALIDATOR_JSON_SCHEMA = {
     relevant: { type: 'boolean' },
     complete: { type: 'boolean' },
     hallucination: { type: 'boolean' },
+    confidence: { type: 'number', minimum: 0, maximum: 1 },
     claims: {
       type: 'array',
       items: {
@@ -115,7 +117,14 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
     ? validFromModel === true && unsupported.length === 0
     : claims.every(c => c.supported) && !unknownSourceClaim && unsupported.length === 0;
 
+  const claimCoverage = claims.length ? claims.filter(c => c.supported).length / claims.length : (validFromModel ? 0.75 : 0);
+  const confidence = Math.max(0, Math.min(1,
+    typeof wynik.confidence === 'number' ? wynik.confidence :
+    claimCoverage * (maStarePola ? (wynik.complete === true ? 1 : 0.75) : 0.9)
+  ));
+
   const accepted = validFromModel === true
+    && confidence >= 0.75
     && claimContractOk
     && (!maStarePola || (
       wynik.supported === true
@@ -146,10 +155,23 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
     relevant: typeof wynik.relevant === 'boolean' ? wynik.relevant : accepted,
     complete: typeof wynik.complete === 'boolean' ? wynik.complete : accepted,
     hallucination: typeof wynik.hallucination === 'boolean' ? wynik.hallucination : !accepted,
+    confidence,
     claims,
     unsupported_claims: unsupported,
     reason: (typeof wynik.reason === 'string' ? wynik.reason.trim().slice(0, 500) : '') || (accepted ? 'odpowiedź jest ugruntowana w danych' : 'odpowiedź zawiera niepotwierdzone twierdzenia'),
   };
+}
+
+// Deterministyczny bezpiecznik dla twardych danych. Nie próbuje zastępować
+// semantycznego fact-checkera; wykrywa natomiast liczby, lata, procenty i kwoty,
+// które pojawiły się w odpowiedzi, ale nie występują w materiale referencyjnym.
+function sprawdzTwardeFaktyOdpowiedzi(odpowiedz, dane) {
+  const answer = String(odpowiedz || '').toLocaleLowerCase('pl-PL');
+  const refs = String(dane || '').toLocaleLowerCase('pl-PL');
+  const tokens = answer.match(/(?:\\b(?:19|20)\\d{2}\\b|\\b\\d+(?:[.,]\\d+)?%|\\b\\d+(?:[.,]\\d+)?\\s*(?:zł|pln|usd|eur|gb|mb|tb|hz|fps|°c|stopni)\\b|\\b\\d+(?:[.,]\\d+)?\\b)/gi) || [];
+  const unique = [...new Set(tokens.map(v => v.trim()))];
+  const unsupported = unique.filter(token => !refs.includes(token));
+  return { ok: unsupported.length === 0, unsupported: unsupported.slice(0, 8) };
 }
 
 module.exports = {
@@ -157,4 +179,5 @@ module.exports = {
   wytnijJsonWalidatora,
   normalizujWynikWalidatora,
   wyodrebnijIdentyfikatoryZrodel,
+  sprawdzTwardeFaktyOdpowiedzi,
 };

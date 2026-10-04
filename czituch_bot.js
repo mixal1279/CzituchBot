@@ -1239,7 +1239,7 @@ function czyPytanieBillyFaktograficzne(pytanie, kategoriaAI) {
     || ['fact', 'youtube'].includes(kategoriaAI);
 }
 
-const { VALIDATOR_JSON_SCHEMA, wytnijJsonWalidatora, normalizujWynikWalidatora, wyodrebnijIdentyfikatoryZrodel } = AI_VALIDATOR;
+const { VALIDATOR_JSON_SCHEMA, wytnijJsonWalidatora, normalizujWynikWalidatora, wyodrebnijIdentyfikatoryZrodel, sprawdzTwardeFaktyOdpowiedzi } = AI_VALIDATOR;
 
 async function walidujOdpowiedzGeminiModel(model, persona, pytanie, odpowiedz, dane, historiaRozmowy = [], requestId = '-', requestState = null, requestMeta = null) {
   if (!dane) return { status: 'unavailable', ok: false, technicalError: true, provider: 'gemini', model, unsupported_claims: [], reason: 'brak danych referencyjnych' };
@@ -1380,8 +1380,8 @@ async function walidujOdpowiedzOpenRouter(persona, pytanie, odpowiedz, dane, req
 }
 
 async function walidujOdpowiedzAI(persona, pytanie, odpowiedz, dane, historiaRozmowy = [], requestId = '-', requestState = null, requestMeta = null) {
-  if (!dane || !KONFIGURACJA.geminiKey) {
-    return { status: 'unavailable', ok: false, technicalError: true, provider: 'gemini', model: null, unsupported_claims: [], reason: !dane ? 'brak danych referencyjnych' : 'brak GEMINI_API_KEY' };
+  if (!dane) {
+    return { status: 'unavailable', ok: false, technicalError: true, provider: 'gemini', model: null, unsupported_claims: [], reason: 'brak danych referencyjnych' };
   }
   const budzetValidatoraPrzekroczony = () => requestState
     && Date.now() - requestState.startedAt >= requestState.maxCzasMs;
@@ -1390,7 +1390,7 @@ async function walidujOdpowiedzAI(persona, pytanie, odpowiedz, dane, historiaRoz
   }
   // Jeden stabilny model wystarcza do prostego JSON fact-checkera i nie
   // zużywa potrójnie darmowego limitu Gemini przy każdym pytaniu.
-  const models = Date.now() < geminiValidatorCooldownUntil ? [] : ['gemini-3.5-flash-lite'];
+  const models = KONFIGURACJA.geminiKey && Date.now() >= geminiValidatorCooldownUntil ? ['gemini-3.5-flash-lite'] : [];
   if (!models.length) console.warn(`[AI][${requestId}] Gemini validator w cooldownie — używam fallbacku OpenRouter`);
   let last = null;
   for (let i = 0; i < models.length; i++) {
@@ -1417,6 +1417,8 @@ async function walidujOdpowiedzAI(persona, pytanie, odpowiedz, dane, historiaRoz
     requestState.validatory++;
     requestState.validatorResults.push({ model: KONFIGURACJA.openrouterValidatorModel, status: 'fallback', complete: false });
   }
+  // Brak Gemini nie jest błędem logicznym: OpenRouter jest pełnoprawnym
+  // fallbackiem validatora, a nie tylko ratunkiem po błędzie sieciowym Gemini.
   const fallback = await walidujOdpowiedzOpenRouter(persona, pytanie, odpowiedz, dane, requestId, requestState, requestMeta);
   if (fallback.status === 'accepted' || fallback.status === 'rejected') return fallback;
   return { ...(last || {}), status: 'unavailable', ok: false, technicalError: true, unsupported_claims: [], reason: 'Gemini i fallback validatora są technicznie niedostępne' };
@@ -2110,8 +2112,22 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
         reason: 'odpowiedź odmawia mimo dostępnych danych referencyjnych',
       };
     }
+    if (walidacja.status === 'accepted') {
+      const twardeFakty = sprawdzTwardeFaktyOdpowiedzi(odp, daneDoWalidacji);
+      if (!twardeFakty.ok) {
+        console.warn(`[AI][${requestId}] deterministic fact guard rejected: ${JSON.stringify(twardeFakty.unsupported)}`);
+        walidacja = {
+          ...walidacja,
+          status: 'rejected', ok: false, valid: false, supported: false,
+          complete: false, hallucination: true,
+          confidence: Math.min(Number(walidacja.confidence) || 0, 0.5),
+          unsupported_claims: [...new Set([...(walidacja.unsupported_claims || []), ...twardeFakty.unsupported])],
+          reason: 'odpowiedź zawiera twarde dane, których nie ma w materiale referencyjnym',
+        };
+      }
+    }
     if (walidacja.status === 'rejected') {
-      console.log(`[AI][${requestId}] validator rejected; reason=${JSON.stringify(walidacja.reason || '')} claims=${JSON.stringify(walidacja.unsupported_claims || [])}`);
+      console.log(`[AI][${requestId}] validator rejected; reason=${JSON.stringify(walidacja.reason || '')} confidence=${walidacja.confidence ?? 'n/a'} claims=${JSON.stringify(walidacja.unsupported_claims || [])}`);
       const odmowaMimoDanych = AI_POLICY.czyOdpowiedzToJednoznacznaOdmowa(odp);
       // Przy odmowie bez unsupported_claims źródła już istnieją; dodatkowe Tavily
       // tylko powiększa kontekst i może pogorszyć regenerację.
