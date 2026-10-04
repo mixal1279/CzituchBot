@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict');
 const { classifyAIRequest } = require('../ai/router');
+const { czyPytanieOLore } = require('../ai/lore');
 const { przygotujHistorieDoModelu } = require('../ai/policy');
 const { sprawdzTwardeFaktyOdpowiedzi, sprawdzZgodnoscKontekstuGry, sprawdzFormatOdpowiedzi } = require('../ai/response');
 const { normalizujWynikWalidatora } = require('../ai/validator');
@@ -21,6 +22,13 @@ const policy = (q, recipe) => recipe(q) ? 'minecraft_recipe' : /pogoda/i.test(q)
   assert.equal(r.freshness, 'historical');
   assert.equal(r.needs_fresh_data, false);
   assert.equal(r.entity, 'Cyberpunk 2077');
+}
+
+{
+  const r = classifyAIRequest('Dlaczego Wheatley przejął kontrolę nad Aperture Science w Portal 2?', policy);
+  assert.equal(r.entity, 'Portal 2');
+  assert.equal(r.freshness, 'evergreen');
+  assert.equal(czyPytanieOLore('Dlaczego Wheatley przejął kontrolę nad Aperture Science w Portal 2?'), true);
 }
 
 {
