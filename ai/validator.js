@@ -1,4 +1,6 @@
-const { sprawdzTwardeFaktyOdpowiedzi } = require('./response');\n\n'use strict';
+'use strict';
+
+const { sprawdzTwardeFaktyOdpowiedzi } = require('./response');
 
 // Kontrakt walidatora jest celowo mały: generator potrzebuje tylko jasnego
 // werdyktu i konkretnej informacji zwrotnej do jednego retry.
@@ -162,7 +164,8 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
   };
 }
 
-// Deterministyczny bezpiecznik przeniesiony do osobnego modułu.\n
+
+
 module.exports = {
   VALIDATOR_JSON_SCHEMA,
   wytnijJsonWalidatora,
