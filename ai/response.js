@@ -35,7 +35,7 @@ function sprawdzFormatOdpowiedzi(odpowiedz, { maxZdania = 2, maxZnakow = 900 } =
   // Liczymy tylko interpunkcję kończącą zdanie; kropka w liczbie 2.5
   // nie może zostać potraktowana jako koniec zdania.
   const normalized = text.replace(/\b(?:np|itp|itd|tj|tzn)\./gi, '§');
-  const sentenceCount = (normalized.match(/[.!?]+(?=\\s|$)/g) || []).length;
+  const sentenceCount = (normalized.match(/[.!?]+(?=\s|$)/g) || []).length;
   if (sentenceCount > maxZdania) {
     return { ok: false, reason: `odpowiedź ma więcej niż ${maxZdania} zdania` };
   }
