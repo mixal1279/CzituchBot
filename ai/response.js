@@ -60,11 +60,11 @@ function sprawdzSpojnoscLorePortal2(odpowiedz, pytanie) {
   ].some(re => re.test(a));
 
   const przyciskJakoBezposredniaPrzyczyna =
-    /(?:przejął|przejąć|przej[aą]ł|zdobył|uzyskał|dostał|otrzymał)[^.!?]{0,180}(?:bo|ponieważ|dlatego|dzięki|przez)[^.!?]*(?:przycisk|rozwiązania?\s+(?:sytuacji\s+)?patowej|rozwiązania?\s+impasu)/i.test(a)
-    || /(?:przycisk|rozwiązania?\s+(?:sytuacji\s+)?patowej|rozwiązania?\s+impasu)[^.!?]{0,180}(?:oddał|dał|zapewnił|dała|zapewniła|przekazał|przekazała)[^.!?]*(?:władz|kontrol)/i.test(a);
+    /(?:przejął|przejąć|przej[aą]ł|zdobył|uzyskał|dostał|otrzymał)[^.!?]{0,180}(?:bo|ponieważ|dlatego|dzięki|przez)[^.!?]*(?:przycisk|rozwiązania?\s+(?:sytuacji\s+)?patowej|rozwiązania?\s+(?:sytuacji\s+)?impasu|rozwiązania?\s+impasu)/i.test(a)
+    || /(?:przycisk|rozwiązania?\s+(?:sytuacji\s+)?patowej|rozwiązania?\s+(?:sytuacji\s+)?impasu|rozwiązania?\s+impasu)[^.!?]{0,180}(?:oddał|dał|zapewnił|dała|zapewniła|przekazał|przekazała)[^.!?]*(?:władz|kontrol)/i.test(a);
 
   const przyciskJakoWylacznaPrzyczyna =
-    /(?:przycisk|rozwiązania?\s+(?:sytuacji\s+)?patowej|rozwiązania?\s+impasu)[^.!?]{0,100}(?:przejęcia|przejęcie|przejął|uzyskania\s+władzy|dania\s+władzy)/i.test(a);
+    /(?:przycisk|rozwiązania?\s+(?:sytuacji\s+)?patowej|rozwiązania?\s+(?:sytuacji\s+)?impasu|rozwiązania?\s+impasu)[^.!?]{0,100}(?:przejęcia|przejęcie|przejął|uzyskania\s+władzy|dania\s+władzy)/i.test(a);
 
   const przypisujeObnizenieJakoPrzyczyne =
     /(?:przejął|przejąć|przej[aą]ł|kontrolę|władzę)[^.!?]{0,180}(?:zmniejsz|obniż|obniz)[^.!?]*(?:inteligenc|iq)/i.test(a)
@@ -77,7 +77,7 @@ function sprawdzSpojnoscLorePortal2(odpowiedz, pytanie) {
     /glados[^.!?]{0,100}(?:była|byla|została|zostala)\s+(?:całkowicie\s+)?wyłączon/i.test(a);
 
   const przyciskJakoSzansaNaUcieczke = /(?:przycisk|rozwiązania?\\s+(?:sytuacji\\s+)?patowej|rozwiązania?\\s+impasu)[^.!?]{0,140}(?:był|byla|było|był[aą])[^.!?]{0,80}(?:szans|okazj|możliwoś|ucieczk)/i.test(a);
-  const gladosJakoProjektantWheatleya = /glados[^.!?]{0,160}(?:zaprojektowała|zaprojektowała go|stworzyła|stworzyła go)[^.!?]{0,160}(?:wheatley|niestabil|zmniejsz|obniż)/i.test(a) || /wheatley[^.!?]{0,120}(?:zaprojektowany|stworzony)[^.!?]{0,120}(?:przez|przez samą)\\s+glados/i.test(a);
+  const gladosJakoProjektantWheatleya = /glados[^.!?]{0,160}(?:zaprojektowała|zaprojektowała go|stworzyła|stworzyła go)[^.!?]{0,160}(?:wheatley|niestabil|zmniejsz|obniż)/i.test(a) || /wheatley[^.!?]{0,120}(?:zaprojektowany|stworzony)[^.!?]{0,120}(?:przez|przez samą)\s+glados/i.test(a);
   const unsupported = [];
   if (przyciskJakoSzansaNaUcieczke) unsupported.push('odpowiedź przedstawia przycisk jako szansę Wheatleya na ucieczkę zamiast jako mechanizm uruchamiający transfer');
   if (gladosJakoProjektantWheatleya) unsupported.push('odpowiedź błędnie przypisuje GLaDOS zaprojektowanie lub stworzenie Wheatleya');
