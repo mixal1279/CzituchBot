@@ -951,9 +951,9 @@ function formatHltbGodziny(h) {
 function normalizujTytulHLTB(tekst) {
   return String(tekst || '')
     .toLocaleLowerCase('pl-PL')
-    .normalize('NFD').replace(/[\\u0300-\\u036f]/g, '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     .replace(/[^a-z0-9]+/g, ' ')
-    .replace(/\\s+/g, ' ')
+    .replace(/\s+/g, ' ')
     .trim();
 }
 
