@@ -832,7 +832,7 @@ DOBRZE: „Nie mam w danych informacji o czasie przejścia.”`;
 //  TAVILY WEB SEARCH + KLASYFIKACJA
 // =============================================
 
-function zakresTavilyDlaPytania(pytanie, domyslny = 'past_year') {
+function zakresTavilyDlaPytania(pytanie, domyslny = null) {
   return AI_POLICY.zakresTavilyDlaPytania(pytanie, domyslny);
 }
 
@@ -1894,7 +1894,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
           || (pytanieOrazBilly ? domenyTavilyBilly : null)
           || (pytanieOrazEdzzi ? domenyTavilyEdzzi : null)
           || (pytanieOrazAngie ? domenyTavilyAngie : null),
-        time_range: zakresTavilyDlaPytania(pytanie, tavilyOptions.time_range || 'past_year'),
+        time_range: zakresTavilyDlaPytania(pytanie, routingAI.freshness === 'evergreen' ? null : (tavilyOptions.time_range || 'past_year')),
         _skipRewrite: true,
         returnMeta: true,
         sourceStartIndex: sourceOffset,
