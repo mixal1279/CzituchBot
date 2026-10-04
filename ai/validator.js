@@ -76,6 +76,35 @@ function wyodrebnijIdentyfikatoryZrodel(dane) {
   return ids;
 }
 
+function pobierzBlokZrodla(dane, sourceId) {
+  const lines = String(dane || '').split(/\r?\n/);
+  const wanted = String(sourceId || '').trim();
+  let active = false;
+  const body = [];
+  for (const line of lines) {
+    const header = line.match(/^\[(SOURCE \d+|REFERENCE [^\]\r\n]+)\]\s*$/i);
+    if (header) {
+      if (active) break;
+      active = header[1].trim() === wanted;
+      continue;
+    }
+    if (active) body.push(line);
+  }
+  return active ? body.join('\n') : null;
+}
+
+function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote) {
+  if (!Array.isArray(sourceIds) || !sourceIds.length || typeof evidenceQuote !== 'string') return false;
+  const quote = evidenceQuote.trim().replace(/\s+/g, ' ').toLocaleLowerCase('pl-PL');
+  if (quote.length < 3 || quote.length > 500) return false;
+  return sourceIds.some(id => {
+    const block = pobierzBlokZrodla(dane, id);
+    if (!block) return false;
+    const normalizedBlock = block.replace(/\s+/g, ' ').toLocaleLowerCase('pl-PL');
+    return normalizedBlock.includes(quote);
+  });
+}
+
 function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSourceIds = null, dane = '') {
   if (!wynik || typeof wynik !== 'object' || Array.isArray(wynik)) return null;
 
