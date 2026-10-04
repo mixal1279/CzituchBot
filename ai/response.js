@@ -44,21 +44,30 @@ function sprawdzZgodnoscKontekstuGry(odpowiedz, pytanie) {
 function sprawdzSpojnoscLorePortal2(odpowiedz, pytanie) {
   const q = String(pytanie || '').toLocaleLowerCase('pl-PL');
   const a = String(odpowiedz || '').toLocaleLowerCase('pl-PL');
-  const portal = /\\bportal\\s*2\\b|\\bwheatley\\b|\\bglados\\b|\\bchell\\b|\\baperture\\s+science\\b/i.test(q);
+  const portal = /\bportal\s*2\b|\bwheatley\b|\bglados\b|\bchell\b|\baperture\s+science\b/i.test(q);
   if (!portal) return { ok: true, unsupported: [] };
 
-  const pytaOPrzejecie = /\\b(?:przejął|przej[aą]ł|przejęła|przejęcie|kontrolę|władzę|wladze)\\b/i.test(q)
-    && /\\bwheatley\\b/i.test(q);
+  const pytaOPrzejecie = /\b(?:przejął|przej[aą]ł|przejęła|przejęcie|kontrolę|władzę|wladze)\b/i.test(q)
+    && /\bwheatley\b/i.test(q);
   if (!pytaOPrzejecie) return { ok: true, unsupported: [] };
 
-  const maZamianeCial = /zamian(?:a|ę)|zamianie|zamienił(?:a|y)?\\s+ciał|ciał(?:a|o)\\s+glados|ciał(?:a|o)\\s+gla+d+os|zamian[aey]\\s+ciał/i.test(a);
-  const przypisujeObnizenieJakoPrzyczyne = /(?:przejął|przejąć|przej[aą]ł|kontrolę|władzę)[^.!?]{0,180}(?:zmniejsz|obniż|obniz)[^.!?]*(?:inteligenc|iq)/i.test(a)
+  const maZamianeCial = /zamian(?:a|ę)|zamianie|zamienił(?:a|y)?\s+ciał|ciał(?:a|o)\s+glados|zamian[aey]\s+ciał/i.test(a);
+  const przypisujeObnizenieJakoPrzyczyne =
+    /(?:przejął|przejąć|przej[aą]ł|kontrolę|władzę)[^.!?]{0,180}(?:zmniejsz|obniż|obniz)[^.!?]*(?:inteligenc|iq)/i.test(a)
     || /(?:zmniejsz|obniż|obniz)[^.!?]*(?:inteligenc|iq)[^.!?]{0,180}(?:przejął|przejąć|kontrolę|władzę)/i.test(a);
-  const twierdziZeGladosBylaWylaczona = /glados[^.!?]{0,80}(?:była|byla|została|zostala)\\s+(?:całkowicie\\s+)?wyłączon/i.test(a);
+  const przyciskJakoBezposredniaPrzyczyna =
+    /(?:przejął|przejąć|przej[aą]ł|zdobył|uzyskał)[^.!?]{0,120}(?:bo|ponieważ|dlatego|dzięki)[^.!?]*(?:przycisk|rozwiązania?\s+(?:sytuacji\s+)?patowej|rozwiązania?\s+impasu)/i.test(a)
+    || /(?:przycisk|rozwiązania?\s+(?:sytuacji\s+)?patowej|rozwiązania?\s+impasu)[^.!?]{0,120}(?:oddał|dał|zapewnił|dała|zapewniła)[^.!?]*(?:władz|kontrol)/i.test(a);
+  const rdzenJakoPrzyczynaPrzejecia =
+    /(?:przejął|przejąć|przej[aą]ł|kontrolę|władzę)[^.!?]{0,180}(?:bezsensown|bezsensu|osłabić|osłabienie|zmniejsz|obniż)[^.!?]*(?:rdze|inteligenc)/i.test(a);
+  const twierdziZeGladosBylaWylaczona =
+    /glados[^.!?]{0,80}(?:była|byla|została|zostala)\s+(?:całkowicie\s+)?wyłączon/i.test(a);
 
   const unsupported = [];
   if (!maZamianeCial) unsupported.push('odpowiedź nie potwierdza kluczowej zamiany ciał podczas przejęcia kontroli przez Wheatleya');
+  if (przyciskJakoBezposredniaPrzyczyna) unsupported.push('odpowiedź przedstawia przycisk rozwiązania impasu jako bezpośrednią przyczynę przejęcia kontroli');
   if (przypisujeObnizenieJakoPrzyczyne) unsupported.push('odpowiedź miesza późniejsze obniżenie inteligencji GLaDOS z przyczyną przejęcia kontroli');
+  if (rdzenJakoPrzyczynaPrzejecia) unsupported.push('odpowiedź miesza przeznaczenie rdzenia Wheatleya z przyczyną przejęcia kontroli');
   if (twierdziZeGladosBylaWylaczona) unsupported.push('odpowiedź upraszcza stan GLaDOS jako całkowite wyłączenie');
 
   return { ok: unsupported.length === 0, unsupported };
