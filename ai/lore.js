@@ -17,7 +17,7 @@ function czyPytanieOLore(pytanie, domeny = null) {
   const loreIntent = LORE_INTENT_RE.test(p) || (WHY_LORE_RE.test(p) && GAME_TITLE_RE.test(p));
   if (!loreIntent) return false;
   const gamingDomain = Array.isArray(domeny) && domeny.some(d => /(?:minecraft\.wiki|gamelore\.fandom\.com|fandom\.com|ign\.com|gamespot\.com|pcgamer\.com|eurogamer|rockstargames\.com|thewitcher\.com|bandainamco|playstation\.com|naughtydog\.com|baldursgate3\.game|larian\.com|fortnite\.gg)/i.test(String(d)));
-  return GAME_CONTEXT_RE.test(p) || gamingDomain;
+  return GAME_CONTEXT_RE.test(p) || GAME_TITLE_RE.test(p) || gamingDomain;
 }
 
 function dodajGameLoreDomenę(domeny) {
