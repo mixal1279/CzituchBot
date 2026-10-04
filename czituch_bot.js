@@ -1557,14 +1557,24 @@ function czyOdpowiedzToOdmowa(tekst) {
   return AI_POLICY.czyOdpowiedzToOdmowa(tekst);
 }
 
-function ograniczDoPelnychZdanAI(tekst, limit = 490) {
-  const t = String(tekst || '').replace(/\s+/g, ' ').trim();
+function ograniczDoPelnychZdanAI(tekst, limit = 490, maxZdania = 2) {
+  let t = String(tekst || '').replace(/\s+/g, ' ').trim();
   if (!t) return '';
+
+  // Kontrakt 2 zdań jest wymuszany lokalnie, nie tylko przez prompt.
+  // Kropka dziesiętna (np. 2.5) nie jest końcem zdania.
+  const sentenceEnds = [...t.matchAll(/[.!?]+(?=\s|$)/g)]
+    .slice(0, maxZdania)
+    .map(m => m.index + m[0].length);
+  if (sentenceEnds.length >= maxZdania) {
+    t = t.slice(0, sentenceEnds[maxZdania - 1]).trim();
+  }
+
   if (t.length <= limit) return t;
   const prefix = t.slice(0, limit);
-  const matches = [...prefix.matchAll(/[.!?](?=\s|$)/g)];
+  const matches = [...prefix.matchAll(/[.!?]+(?=\s|$)/g)];
   if (!matches.length) return '';
-  const end = matches[matches.length - 1].index + 1;
+  const end = matches[Math.min(matches.length, maxZdania) - 1].index + matches[Math.min(matches.length, maxZdania) - 1][0].length;
   return prefix.slice(0, end).trim();
 }
 
