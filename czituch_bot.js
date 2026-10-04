@@ -1302,7 +1302,7 @@ function czyPytanieBillyFaktograficzne(pytanie, kategoriaAI) {
     || ['fact', 'youtube'].includes(kategoriaAI);
 }
 
-const { VALIDATOR_JSON_SCHEMA, wytnijJsonWalidatora, normalizujWynikWalidatora, wyodrebnijIdentyfikatoryZrodel, sprawdzTwardeFaktyOdpowiedzi } = AI_VALIDATOR;
+const { VALIDATOR_JSON_SCHEMA, wytnijJsonWalidatora, normalizujWynikWalidatora, wyodrebnijIdentyfikatoryZrodel } = AI_VALIDATOR;
 
 async function walidujOdpowiedzGeminiModel(model, persona, pytanie, odpowiedz, dane, historiaRozmowy = [], requestId = '-', requestState = null, requestMeta = null) {
   if (!dane) return { status: 'unavailable', ok: false, technicalError: true, provider: 'gemini', model, unsupported_claims: [], reason: 'brak danych referencyjnych' };
