@@ -9,7 +9,6 @@ const VALIDATOR_JSON_SCHEMA = {
   properties: {
     valid: { type: 'boolean' },
     reason: { type: 'string' },
-    confidence: { type: 'number', minimum: 0, maximum: 1 },
     unsupported_claims: { type: 'array', items: { type: 'string' } },
     // Pola zachowane dla kompatybilności z istniejącym pipeline'em.
     ok: { type: 'boolean' },
@@ -32,7 +31,7 @@ const VALIDATOR_JSON_SCHEMA = {
       },
     },
   },
-  required: ['valid', 'reason', 'unsupported_claims'],
+  required: ['valid', 'reason', 'confidence', 'unsupported_claims', 'claims', 'supported', 'relevant', 'complete', 'hallucination'],
 };
 
 function wytnijJsonWalidatora(text) {
@@ -79,13 +78,16 @@ function wyodrebnijIdentyfikatoryZrodel(dane) {
 function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSourceIds = null) {
   if (!wynik || typeof wynik !== 'object' || Array.isArray(wynik)) return null;
 
-  // `valid` jest nowym kontraktem. `ok` pozostaje fallbackiem dla starszych
-  // odpowiedzi modeli/cache, ale nowy validator zawsze powinien zwracać `valid`.
-  if (typeof wynik.valid !== 'boolean' && typeof wynik.ok !== 'boolean') return null;
-  // Starsze fixture'y/cache mogą nie mieć reason; nowy kontrakt JSON go wymaga.
-  // Normalizator pozostaje kompatybilny z tymi starszymi payloadami.
-  if (typeof wynik.reason !== 'string' && typeof wynik.valid === 'boolean') return null;
+  // Validator produkcyjny ma ścisły kontrakt. Nie akceptujemy już starych,
+  // częściowych payloadów, bo właśnie one tworzyły luki w fact-checkingu.
+  if (typeof wynik.valid !== 'boolean') return null;
+  if (typeof wynik.reason !== 'string') return null;
   if (!Array.isArray(wynik.unsupported_claims)) return null;
+  if (!Array.isArray(wynik.claims) && !Array.isArray(wynik.claims_list)) return null;
+  for (const key of ['supported', 'relevant', 'complete', 'hallucination']) {
+    if (typeof wynik[key] !== 'boolean') return null;
+  }
+  if (typeof wynik.confidence !== 'number' || !Number.isFinite(wynik.confidence) || wynik.confidence < 0 || wynik.confidence > 1) return null;
 
   const validFromModel = typeof wynik.valid === 'boolean' ? wynik.valid : wynik.ok;
   const wymaganeBooleany = ['supported', 'relevant', 'complete', 'hallucination'];
@@ -115,11 +117,14 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
 
   // Gdy stary model nie zwróci pól claim-by-claim, nie wymuszamy ich obecności
   // jako technicznego błędu. Nowy kontrakt nadal wymaga `valid/reason/unsupported_claims`.
-  const claimContractOk = !claims.length
-    ? validFromModel === true && unsupported.length === 0
-    : claims.every(c => c.supported) && !unknownSourceClaim && unsupported.length === 0;
+  // W produkcji accepted wymaga jawnego rozpisania twierdzeń i źródeł.
+  // Brak claims nie jest dowodem poprawności — jest niekompletnym wynikiem validatora.
+  const claimContractOk = claims.length > 0
+    && claims.every(c => c.supported)
+    && !unknownSourceClaim
+    && unsupported.length === 0;
 
-  const claimCoverage = claims.length ? claims.filter(c => c.supported).length / claims.length : (validFromModel ? 0.75 : 0);
+  const claimCoverage = claims.length ? claims.filter(c => c.supported).length / claims.length : 0;
   const confidence = Math.max(0, Math.min(1,
     typeof wynik.confidence === 'number' ? wynik.confidence :
     claimCoverage * (maStarePola ? (wynik.complete === true ? 1 : 0.75) : 0.9)
