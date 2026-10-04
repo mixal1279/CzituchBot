@@ -140,7 +140,7 @@ function formatujReceptureMC(item, receptury) {
 
 function czyPytanieOReceptureMC(pytanie) {
   const maKontekstMinecrafta = /\b(?:minecraft|mc)\b/i.test(pytanie);
-  const maSygnałReceptury = /(?:\b(?:receptur\w*|przepis\w*|wycraft\w*|wytwor\w*|składnik\w*|skladnik\w*)\b|\bcraft(?:ing)?\b)/i.test(pytanie);
+  const maSygnałReceptury = /(?:\b(?:receptur\w*|przepis\w*|wycraft\w*|wytwor\w*|składnik\w*|skladnik\w*|materiał\w*|material\w*|potrzeb\w*)\b|\bcraft(?:ing)?\b)/i.test(pytanie);
   const pytaJakZrobić = /jak\s+(?:zrobić|zrobic|wycraftować|wycraftowac|wytworzyć|wytworzyc)/i.test(pytanie);
   // Sama fraza „jak zrobić” nie wystarcza — pytania o filmy, projekty itd.
   // nie powinny trafiać do lokalnej bazy Minecrafta.
