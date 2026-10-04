@@ -103,17 +103,90 @@ function normalizujNazweMC(tekst) {
   return String(tekst || '').toLowerCase().replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
-function znajdzPrzedmiotMC(pytanie) {
+let MC26_POLSKIE_NAZWY_PROMISE = null;
+
+async function pobierzPolskieNazwyMC() {
+  if (MC26_POLSKIE_NAZWY_PROMISE) return MC26_POLSKIE_NAZWY_PROMISE;
+  MC26_POLSKIE_NAZWY_PROMISE = (async () => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 5000);
+    try {
+      // Lokalizacja Minecraft 26.1.x: używamy aktualnego patcha tej samej
+      // linii jako słownika nazw; receptury pozostają z lokalnego minecraft-data-26.1.
+      const response = await fetch('https://assets.mcasset.cloud/26.1.2/assets/minecraft/lang/pl_pl.json', {
+        signal: controller.signal,
+        headers: { 'Accept': 'application/json' },
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const dane = await response.json();
+      return Object.fromEntries(
+        Object.entries(dane)
+          .filter(([key, value]) => /^item\.minecraft\.[^.]+$/.test(key) && typeof value === 'string')
+          .map(([key, value]) => [key.slice('item.minecraft.'.length), value])
+      );
+    } catch (err) {
+      console.warn(`[Minecraft 26.1] Nie udało się pobrać polskiej lokalizacji nazw: ${err.message}`);
+      return {};
+    } finally {
+      clearTimeout(timer);
+    }
+  })();
+  return MC26_POLSKIE_NAZWY_PROMISE;
+}
+
+function tokenyNazwyMC(tekst) {
+  return normalizujNazweMC(tekst)
+    .replace(/[^a-z0-9ąćęłńóśźż ]/gi, ' ')
+    .split(/\s+/)
+    .filter(token => token.length >= 3);
+}
+
+function tokenySaPodobneMC(a, b) {
+  if (a === b) return 1;
+  if (a.length >= 4 && b.length >= 4 && (a.startsWith(b) || b.startsWith(a))) {
+    return Math.min(a.length, b.length) / Math.max(a.length, b.length);
+  }
+  return 0;
+}
+
+function podobienstwoNazwyMC(pytanie, nazwa) {
+  const queryTokens = tokenyNazwyMC(pytanie);
+  const nameTokens = tokenyNazwyMC(nazwa);
+  if (!queryTokens.length || !nameTokens.length) return 0;
+  const dopasowane = nameTokens.map(nameToken =>
+    Math.max(...queryTokens.map(queryToken => tokenySaPodobneMC(nameToken, queryToken)))
+  );
+  const pokrycie = dopasowane.filter(score => score >= 0.65);
+  if (pokrycie.length !== nameTokens.length) return 0;
+  return pokrycie.reduce((suma, score) => suma + score, 0) / nameTokens.length;
+}
+
+function znajdzPrzedmiotMC(pytanie, polskieNazwy = {}) {
   const tekst = normalizujNazweMC(pytanie);
   const alias = Object.keys(MC26_ALIASY).sort((a, b) => b.length - a.length)
     .find(nazwa => tekst.includes(nazwa));
   if (alias) return MC26_ITEMS.find(item => item.name === MC26_ALIASY[alias]) || null;
 
-  // Obsługa pytań z angielską nazwą, np. "how to craft diamond_sword".
-  return MC26_ITEMS
-    .filter(item => item.name !== 'air')
-    .sort((a, b) => b.name.length - a.name.length)
-    .find(item => tekst.includes(normalizujNazweMC(item.name)) || tekst.includes(normalizujNazweMC(item.displayName))) || null;
+  const kandydaci = MC26_ITEMS.filter(item => item.name !== 'air');
+  let najlepszy = null;
+  let najlepszyScore = 0;
+
+  for (const item of kandydaci) {
+    const nazwy = [item.name, item.displayName, polskieNazwy[item.name]].filter(Boolean);
+    for (const nazwa of nazwy) {
+      const score = tekst.includes(normalizujNazweMC(nazwa))
+        ? 1
+        : podobienstwoNazwyMC(pytanie, nazwa);
+      if (score > najlepszyScore) {
+        najlepszyScore = score;
+        najlepszy = item;
+      }
+    }
+  }
+
+  // Nie zgadujemy przy słabym dopasowaniu. Lokalna receptura musi wskazywać
+  // jednoznacznie istniejący przedmiot.
+  return najlepszyScore >= 0.82 ? najlepszy : null;
 }
 
 function nazwaElementuMC(element) {
@@ -142,10 +215,7 @@ function czyPytanieOReceptureMC(pytanie) {
   const maKontekstMinecrafta = /\b(?:minecraft|mc)\b/i.test(pytanie);
   const maSygnałReceptury = /(?:\b(?:receptur\w*|przepis\w*|wycraft\w*|wytwor\w*|składnik\w*|skladnik\w*|materiał\w*|material\w*|potrzeb\w*)\b|\bcraft(?:ing)?\b)/i.test(pytanie);
   const pytaJakZrobić = /jak\s+(?:zrobić|zrobic|wycraftować|wycraftowac|wytworzyć|wytworzyc)/i.test(pytanie);
-  // Sama fraza „jak zrobić” nie wystarcza — pytania o filmy, projekty itd.
-  // nie powinny trafiać do lokalnej bazy Minecrafta.
-  const maZnanyPrzedmiot = typeof znajdzPrzedmiotMC === 'function' && Boolean(znajdzPrzedmiotMC(pytanie));
-  return (maSygnałReceptury || (pytaJakZrobić && maZnanyPrzedmiot)) && (maKontekstMinecrafta || maZnanyPrzedmiot);
+  return Boolean(maSygnałReceptury || (pytaJakZrobić && maKontekstMinecrafta));
 }
 
 function przygotujOdpowiedzReceptureMC(nick, item, receptury) {
@@ -180,9 +250,10 @@ async function wyslijReceptureMC(tekst, wyslijFn, limit = 490) {
   if (wiadomosc) await wyslijFn(wiadomosc);
 }
 
-function pobierzDaneRecepturyMC(pytanie) {
+async function pobierzDaneRecepturyMC(pytanie) {
   if (!czyPytanieOReceptureMC(pytanie)) return null;
-  const item = znajdzPrzedmiotMC(pytanie);
+  const polskieNazwy = await pobierzPolskieNazwyMC();
+  const item = znajdzPrzedmiotMC(pytanie, polskieNazwy);
   if (!item) return null;
   const receptury = MC26_RECIPES[String(item.id)];
   return receptury?.length ? { item, receptury, tekst: formatujReceptureMC(item, receptury) } : null;
@@ -1660,7 +1731,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
   console.log(`[AI][${requestId}] routing=${JSON.stringify({ intent: routingAI.intent, entity: routingAI.entity, needs_web: routingAI.needs_web, freshness: routingAI.freshness, source_type: routingAI.source_type, confidence: routingAI.confidence })}`);
   console.log(`[AI] kategoria=${kategoriaAI} nick=${nick}`);
   const jestRecepturaMC = czyPytanieOReceptureMC(pytanie);
-  const daneRecepturyMC = pobierzDaneRecepturyMC(pytanie);
+  const daneRecepturyMC = await pobierzDaneRecepturyMC(pytanie);
   if (jestRecepturaMC) {
     if (!daneRecepturyMC) {
       await wyslijFn(`@${nick} nie mam pewnej receptury dla Minecraft Java 26.1 — nie będę zgadywać.`);
