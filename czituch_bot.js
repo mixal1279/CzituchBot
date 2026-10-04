@@ -76,7 +76,7 @@ const MC26_RECIPES = require('./minecraft-data-26.1/recipes.json');
 const MC26_ITEMS = require('./minecraft-data-26.1/items.json');
 const MC26_ITEMS_BY_ID = Object.fromEntries(MC26_ITEMS.map(item => [item.id, item]));
 const MC26_ALIASY = {
-  'miecz diamentowy': 'diamond_sword', 'kilof diamentowy': 'diamond_pickaxe',
+  'miecz diamentowy': 'diamond_sword', 'diamentowego miecza': 'diamond_sword', 'diamentowy miecz': 'diamond_sword', 'kilof diamentowy': 'diamond_pickaxe',
   'siekiera diamentowa': 'diamond_axe', 'łopata diamentowa': 'diamond_shovel',
   'motyka diamentowa': 'diamond_hoe',
   'napierśnik diamentowy': 'diamond_chestplate', 'hełm diamentowy': 'diamond_helmet',
