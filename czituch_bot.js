@@ -196,7 +196,7 @@ function wyznaczRoutingAI(pytanie) {
   return classifyAIRequest(pytanie, AI_POLICY.okreslKategorieAI, czyPytanieOReceptureMC);
 }
 
-function zastosujDeterministyczneGuards(walidacja, odpowiedz, dane) {
+function zastosujDeterministyczneGuards(walidacja, odpowiedz, dane, pytanie) {
   if (!walidacja || walidacja.status !== 'accepted') return walidacja;
   const format = sprawdzFormatOdpowiedzi(odpowiedz);
   if (!format.ok) {
@@ -209,7 +209,7 @@ function zastosujDeterministyczneGuards(walidacja, odpowiedz, dane) {
       reason: `odpowiedź nie spełnia kontraktu formatu: ${format.reason}`,
     };
   }
-  const twardeFakty = sprawdzTwardeFaktyOdpowiedzi(odpowiedz, dane);
+  const twardeFakty = sprawdzTwardeFaktyOdpowiedzi(odpowiedz, dane, pytanie);
   if (!twardeFakty.ok) {
     return {
       ...walidacja,
@@ -2188,7 +2188,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
     }
     if (walidacja.status === 'accepted') {
       const beforeGuard = walidacja;
-      walidacja = zastosujDeterministyczneGuards(walidacja, odp, daneDoWalidacji);
+      walidacja = zastosujDeterministyczneGuards(walidacja, odp, daneDoWalidacji, pytanie);
       if (walidacja.status !== beforeGuard.status) {
         console.warn(`[AI][${requestId}] deterministic response guard rejected: ${JSON.stringify(walidacja.unsupported_claims || [])}`);
       }

@@ -19,8 +19,11 @@ function wyodrebnijTwardeTokeny(tekst) {
   )];
 }
 
-function sprawdzTwardeFaktyOdpowiedzi(odpowiedz, dane) {
-  const answerTokens = wyodrebnijTwardeTokeny(odpowiedz);
+function sprawdzTwardeFaktyOdpowiedzi(odpowiedz, dane, pytanie = '') {
+  const questionTokens = new Set(wyodrebnijTwardeTokeny(pytanie));
+  // Liczby obecne już w pytaniu mogą być częścią nazwy encji (np. Cyberpunk 2077).
+  // Validator semantyczny nadal sprawdza zgodność całej odpowiedzi z pytaniem i źródłami.
+  const answerTokens = wyodrebnijTwardeTokeny(odpowiedz).filter(token => !questionTokens.has(token));
   const refs = String(dane || '').toLocaleLowerCase('pl-PL').replace(/,/g, '.');
   const unsupported = answerTokens.filter(token => !refs.includes(token));
   return { ok: unsupported.length === 0, unsupported: unsupported.slice(0, 8), checked: answerTokens };

@@ -30,9 +30,9 @@ const policy = (q, recipe) => recipe(q) ? 'minecraft_recipe' : /pogoda/i.test(q)
 }
 
 {
-  const good = sprawdzTwardeFaktyOdpowiedzi('Cyberpunk 2077 wydano w 2020 roku.', '[SOURCE 1] Wydano w 2020 roku.');
+  const good = sprawdzTwardeFaktyOdpowiedzi('Cyberpunk 2077 wydano w 2020 roku.', '[SOURCE 1] Wydano w 2020 roku.', 'Kiedy wydano Cyberpunka 2077?');
   assert.equal(good.ok, true);
-  const bad = sprawdzTwardeFaktyOdpowiedzi('Cyberpunk 2077 wydano w 2021 roku.', '[SOURCE 1] Wydano w 2020 roku.');
+  const bad = sprawdzTwardeFaktyOdpowiedzi('Cyberpunk 2077 wydano w 2021 roku.', '[SOURCE 1] Wydano w 2020 roku.', 'Kiedy wydano Cyberpunka 2077?');
   assert.equal(bad.ok, false);
 }
 
