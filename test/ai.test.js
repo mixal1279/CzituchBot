@@ -123,3 +123,10 @@ console.log('AI regression tests: OK');
     claims: [{ claim: 'Fakt', supported: true, source_ids: ['REFERENCE 999'], evidence_quote: 'Fakt źródłowy', reason: 'źródło' }]
   }, 'test', 'test', new Set(['REFERENCE 1']), '[REFERENCE 1]\nFakt źródłowy').status, 'rejected');
 }
+
+
+{
+  const source = require('fs').readFileSync(require('path').join(__dirname, '..', 'czituch_bot.js'), 'utf8');
+  assert.match(source, /generujOdpowiedz\(max_tokens, promptRetry, 'soft validation retry', true\)/);
+  assert.match(source, /weakRetrieval && wynik\.text\.length < 1200/);
+}
