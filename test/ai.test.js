@@ -116,10 +116,10 @@ console.log('AI regression tests: OK');
   assert.equal(normalizujWynikWalidatora({ ...base, claims: [] }, 'test', 'test', new Set(['REFERENCE 1'])).status, 'rejected');
   assert.equal(normalizujWynikWalidatora({
     ...base,
-    claims: [{ claim: 'Fakt', supported: true, source_ids: ['REFERENCE 1'], reason: 'źródło' }]
-  }, 'test', 'test', new Set(['REFERENCE 1'])).status, 'accepted');
+    claims: [{ claim: 'Fakt', supported: true, source_ids: ['REFERENCE 1'], evidence_quote: 'Fakt źródłowy', reason: 'źródło' }]
+  }, 'test', 'test', new Set(['REFERENCE 1']), '[REFERENCE 1]\nFakt źródłowy')).status, 'accepted');
   assert.equal(normalizujWynikWalidatora({
     ...base,
-    claims: [{ claim: 'Fakt', supported: true, source_ids: ['REFERENCE 999'], reason: 'źródło' }]
-  }, 'test', 'test', new Set(['REFERENCE 1'])).status, 'rejected');
+    claims: [{ claim: 'Fakt', supported: true, source_ids: ['REFERENCE 999'], evidence_quote: 'Fakt źródłowy', reason: 'źródło' }]
+  }, 'test', 'test', new Set(['REFERENCE 1']), '[REFERENCE 1]\nFakt źródłowy')).status, 'rejected');
 }
