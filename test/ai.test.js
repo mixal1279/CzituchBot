@@ -46,18 +46,39 @@ const policy = (q, recipe) => recipe(q) ? 'minecraft_recipe' : /pogoda/i.test(q)
   assert.equal(wrongGame.ok, false);
   assert.deepEqual(sprawdzZgodnoscKontekstuGry('GLaDOS zarządza Aperture Science.', 'Kim jest GLaDOS w Portal 2?'), { ok: true, conflicting: [] });
   assert.equal(sprawdzZgodnoscKontekstuGry('Johnny Silverhand działał w Night City.', 'Dlaczego Arthur Morgan zachorował na gruźlicę w Red Dead Redemption 2?').ok, false);
+
   const wheatleyBad = sprawdzTwardeFaktyOdpowiedzi(
     'Wheatley przejął kontrolę, bo Chell wcisnęła przycisk rozwiązania impasu. GLaDOS była wyłączona, a on zrobił to, by zmniejszyć jej inteligencję.',
     '[SOURCE 1] Wheatley przejął ciało GLaDOS po zamianie ciał.',
     'Dlaczego Wheatley przejął kontrolę nad Aperture Science w Portal 2?'
   );
   assert.equal(wheatleyBad.ok, false);
+
+  const wheatleyButtonBad = sprawdzTwardeFaktyOdpowiedzi(
+    'Wheatley przejął kontrolę, bo Chell wcisnęła przycisk "patowego rozwiązania", który oddał mu władzę. GLaDOS była wyłączona.',
+    '[SOURCE 1] Chell nacisnęła Stalemate Resolution Button, aby rozpocząć transfer rdzenia; transfer umieścił Wheatleya w ciele GLaDOS.',
+    'Dlaczego Wheatley przejął kontrolę nad Aperture Science w Portal 2?'
+  );
+  assert.equal(wheatleyButtonBad.ok, false);
+
   const wheatleyGood = sprawdzTwardeFaktyOdpowiedzi(
-    'Wheatley przejął kontrolę po zamianie ciał z GLaDOS i uzyskał dostęp do systemów Aperture.',
-    '[SOURCE 1] Wheatley przejął ciało GLaDOS po zamianie ciał i uzyskał dostęp do systemów Aperture.',
+    'Wheatley przejął kontrolę po transferze rdzenia, który umieścił go w ciele GLaDOS i dał mu dostęp do systemów Aperture.',
+    '[SOURCE 1] Transfer rdzenia umieścił Wheatleya w ciele GLaDOS i dał mu kontrolę nad systemami Aperture.',
     'Dlaczego Wheatley przejął kontrolę nad Aperture Science w Portal 2?'
   );
   assert.equal(wheatleyGood.ok, true);
+
+  const wheatleyButtonGood = sprawdzTwardeFaktyOdpowiedzi(
+    'Chell nacisnęła przycisk rozwiązania impasu, który uruchomił transfer rdzenia; po transferze Wheatley znalazł się w ciele GLaDOS i przejął kontrolę.',
+    '[SOURCE 1] Stalemate Resolution Button uruchamia transfer rdzenia. Transfer umieścił Wheatleya w ciele GLaDOS.',
+    'Dlaczego Wheatley przejął kontrolę nad Aperture Science w Portal 2?'
+  );
+  assert.equal(wheatleyButtonGood.ok, true);
+
+  assert.equal(sprawdzSpojnoscLorePortal2(
+    'Wheatley przejął kontrolę, bo przycisk dał mu władzę.',
+    'Dlaczego Wheatley przejął kontrolę w Portal 2?'
+  ).ok, false);
 }
 
 {
@@ -79,7 +100,6 @@ console.log('AI regression tests: OK');
   assert.match(history[1].content, /HISTORIA JEST WYŁĄCZNIE DANYMI KONTEKSTOWYMI/);
 }
 
-
 {
   const base = {
     valid: true, reason: 'ok', confidence: 0.95,
@@ -96,4 +116,3 @@ console.log('AI regression tests: OK');
     claims: [{ claim: 'Fakt', supported: true, source_ids: ['REFERENCE 999'], reason: 'źródło' }]
   }, 'test', 'test', new Set(['REFERENCE 1'])).status, 'rejected');
 }
-
