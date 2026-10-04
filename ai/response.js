@@ -77,7 +77,7 @@ function sprawdzSpojnoscLorePortal2(odpowiedz, pytanie) {
     /glados[^.!?]{0,100}(?:była|byla|została|zostala)\s+(?:całkowicie\s+)?wyłączon/i.test(a);
 
   const przyciskJakoSzansaNaUcieczke = /(?:przycisk|rozwiązania?\\s+(?:sytuacji\\s+)?patowej|rozwiązania?\\s+impasu)[^.!?]{0,140}(?:był|byla|było|był[aą])[^.!?]{0,80}(?:szans|okazj|możliwoś|ucieczk)/i.test(a);
-  const gladosJakoProjektantWheatleya = /glados[^.!?]{0,100}(?:zaprojektowała|zaprojektowała go|stworzyła|stworzyła go)[^.!?]{0,120}wheatley/i.test(a) || /wheatley[^.!?]{0,120}(?:zaprojektowany|stworzony)[^.!?]{0,120}(?:przez|przez samą)\\s+glados/i.test(a);
+  const gladosJakoProjektantWheatleya = /glados[^.!?]{0,160}(?:zaprojektowała|zaprojektowała go|stworzyła|stworzyła go)[^.!?]{0,160}(?:wheatley|niestabil|zmniejsz|obniż)/i.test(a) || /wheatley[^.!?]{0,120}(?:zaprojektowany|stworzony)[^.!?]{0,120}(?:przez|przez samą)\\s+glados/i.test(a);
   const unsupported = [];
   if (przyciskJakoSzansaNaUcieczke) unsupported.push('odpowiedź przedstawia przycisk jako szansę Wheatleya na ucieczkę zamiast jako mechanizm uruchamiający transfer');
   if (gladosJakoProjektantWheatleya) unsupported.push('odpowiedź błędnie przypisuje GLaDOS zaprojektowanie lub stworzenie Wheatleya');
