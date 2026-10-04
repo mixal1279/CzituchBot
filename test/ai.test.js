@@ -79,6 +79,13 @@ const policy = (q, recipe) => recipe(q) ? 'minecraft_recipe' : /pogoda/i.test(q)
     'Wheatley przejął kontrolę, bo przycisk dał mu władzę.',
     'Dlaczego Wheatley przejął kontrolę w Portal 2?'
   ).ok, false);
+
+  const wheatleyAuthorshipBad = sprawdzTwardeFaktyOdpowiedzi(
+    'Wheatley przejął kontrolę, bo Chell wcisnęła przycisk „patowego rozwiązania” — był to jego szansą na ucieczkę. GLaDOS zaprojektowała go jako niestabilnego, by zmniejszyć swoją inteligencję, ale on wykorzystał to na własną rękę.',
+    '[SOURCE 1] Stalemate Resolution Button uruchomił transfer rdzenia. Wheatley został umieszczony w ciele GLaDOS. Wheatley został zaprojektowany jako rdzeń mający generować złe pomysły i utrudniać GLaDOS podejmowanie decyzji.',
+    'Dlaczego Wheatley przejął kontrolę nad Aperture Science w Portal 2?'
+  );
+  assert.equal(wheatleyAuthorshipBad.ok, false);
 }
 
 {
