@@ -1,4 +1,4 @@
-'use strict';
+const { sprawdzTwardeFaktyOdpowiedzi } = require('./response');\n\n'use strict';
 
 // Kontrakt walidatora jest celowo mały: generator potrzebuje tylko jasnego
 // werdyktu i konkretnej informacji zwrotnej do jednego retry.
@@ -162,18 +162,7 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
   };
 }
 
-// Deterministyczny bezpiecznik dla twardych danych. Nie próbuje zastępować
-// semantycznego fact-checkera; wykrywa natomiast liczby, lata, procenty i kwoty,
-// które pojawiły się w odpowiedzi, ale nie występują w materiale referencyjnym.
-function sprawdzTwardeFaktyOdpowiedzi(odpowiedz, dane) {
-  const answer = String(odpowiedz || '').toLocaleLowerCase('pl-PL');
-  const refs = String(dane || '').toLocaleLowerCase('pl-PL');
-  const tokens = answer.match(/(?:\\b(?:19|20)\\d{2}\\b|\\b\\d+(?:[.,]\\d+)?%|\\b\\d+(?:[.,]\\d+)?\\s*(?:zł|pln|usd|eur|gb|mb|tb|hz|fps|°c|stopni)\\b|\\b\\d+(?:[.,]\\d+)?\\b)/gi) || [];
-  const unique = [...new Set(tokens.map(v => v.trim()))];
-  const unsupported = unique.filter(token => !refs.includes(token));
-  return { ok: unsupported.length === 0, unsupported: unsupported.slice(0, 8) };
-}
-
+// Deterministyczny bezpiecznik przeniesiony do osobnego modułu.\n
 module.exports = {
   VALIDATOR_JSON_SCHEMA,
   wytnijJsonWalidatora,
