@@ -61,7 +61,7 @@ function sprawdzSpojnoscLorePortal2(odpowiedz, pytanie) {
     || /(?:przycisk|rozwiązania?\s+(?:sytuacji\s+)?patowej|rozwiązania?\s+impasu)[^.!?]{0,180}(?:oddał|dał|zapewnił|dała|zapewniła|przekazał|przekazała)[^.!?]*(?:władz|kontrol)/i.test(a);
 
   const przyciskJakoWylacznaPrzyczyna =
-    /(?:przycisk|rozwiązania?\s+(?:sytuacji\s+)?patowej|rozwiązania?\s+impasu)[^.!?]{0,120}(?:przejęcia|przejęcie|przejął|uzyskania\s+władzy|dania\s+władzy)/i.test(a);
+    /(?:przycisk|rozwiązania?\s+(?:sytuacji\s+)?patowej|rozwiązania?\s+impasu)[^.!?]{0,140}(?:spowodował|spowodowało|doprowadził|doprowadziło|dał|dała|zapewnił|zapewniła|umożliwił|umożliwiła|przekazał|przekazała)[^.!?]{0,100}(?:przejęcia|przejęcie|przejął|uzyskania\s+władzy|dania\s+władzy)/i.test(a);
 
   const przyciskJakoSzansaNaUcieczke =
     /(?:przycisk|rozwiązania?\s+(?:sytuacji\s+)?patowej|rozwiązania?\s+impasu)[^.!?]{0,180}(?:był|była|było|był[aą])[^.!?]{0,100}(?:szans|okazj|możliwoś|ucieczk)/i.test(a);
