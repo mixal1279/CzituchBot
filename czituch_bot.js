@@ -209,7 +209,7 @@ function zastosujDeterministyczneGuards(walidacja, odpowiedz, dane) {
       reason: `odpowiedź nie spełnia kontraktu formatu: ${format.reason}`,
     };
   }
-  const twardeFakty = sprawdzTwardeFaktyOdpowiedzi(odpowiedz, dane);
+  const twardeFakty = sprawdzTwardeFaktyOdpowiedzi(odpowiedz, dane, pytanie);
   if (!twardeFakty.ok) {
     return {
       ...walidacja,
