@@ -25,9 +25,10 @@ const VALIDATOR_JSON_SCHEMA = {
           claim: { type: 'string' },
           supported: { type: 'boolean' },
           source_ids: { type: 'array', items: { type: 'string' } },
+          evidence_quote: { type: 'string' },
           reason: { type: 'string' },
         },
-        required: ['claim', 'supported', 'source_ids'],
+        required: ['claim', 'supported', 'source_ids', 'evidence_quote'],
       },
     },
   },
@@ -75,7 +76,7 @@ function wyodrebnijIdentyfikatoryZrodel(dane) {
   return ids;
 }
 
-function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSourceIds = null) {
+function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSourceIds = null, dane = '') {
   if (!wynik || typeof wynik !== 'object' || Array.isArray(wynik)) return null;
 
   // Validator produkcyjny ma ścisły kontrakt. Nie akceptujemy już starych,
@@ -102,11 +103,13 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
     source_ids: Array.isArray(claim?.source_ids)
       ? claim.source_ids.filter(v => typeof v === 'string' && v.trim()).map(v => v.trim().slice(0, 80)).slice(0, 5)
       : [],
+    evidence_quote: typeof claim?.evidence_quote === 'string' ? claim.evidence_quote.trim().slice(0, 500) : '',
     reason: typeof claim?.reason === 'string' ? claim.reason.trim().slice(0, 240) : '',
   })).filter(c => c.claim);
 
   const allowed = allowedSourceIds instanceof Set ? allowedSourceIds : null;
   const unknownSourceClaim = claims.some(c => c.supported && (!c.source_ids.length || (allowed && c.source_ids.some(id => !allowed.has(id)))));
+  const unsupportedEvidenceClaim = claims.some(c => c.supported && !czyDowodPotwierdzaClaim(dane, c.source_ids, c.evidence_quote));
   const unsupportedFromClaims = claims.filter(c => !c.supported).map(c => c.claim).filter(Boolean);
   const unsupported = [...new Set([
     ...unsupportedFromClaims,
@@ -122,6 +125,7 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
   const claimContractOk = claims.length > 0
     && claims.every(c => c.supported)
     && !unknownSourceClaim
+    && !unsupportedEvidenceClaim
     && unsupported.length === 0;
 
   const claimCoverage = claims.length ? claims.filter(c => c.supported).length / claims.length : 0;
@@ -147,7 +151,8 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
   const sprzecznyWerdykt = validFromModel === false
     && unsupported.length === 0
     && (!claims.length || claims.every(c => c.supported))
-    && !unknownSourceClaim;
+    && !unknownSourceClaim
+    && !unsupportedEvidenceClaim;
 
   const status = accepted ? 'accepted' : (sprzecznyWerdykt ? 'inconclusive' : 'rejected');
 
