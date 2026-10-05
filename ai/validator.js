@@ -49,7 +49,7 @@ const VALIDATOR_JSON_SCHEMA = {
   },
 };
 
-function wytnijJsonWalidatora(text) {
+\nfunction sprawdzKompletnoscOdpowiedzi(odpowiedz) {\n  const text = String(odpowiedz || '').trim();\n  if (!text) return { ok: false, reason: 'pusta odpowiedź' };\n  if (/[,:;\\-]$/.test(text)) return { ok: false, reason: 'odpowiedź kończy się w połowie zdania lub listy' };\n  if (/\\.{2,}$|…$/.test(text)) return { ok: false, reason: 'odpowiedź kończy się wielokropkiem' };\n  if (/(?:^|\\s)(?:i|oraz|albo|lub|a|ale|że|żeby|aby|który|która|które|którym|ponieważ|dlatego|następnie|potem)\\s*$/iu.test(text)) return { ok: false, reason: 'odpowiedź kończy się niedokończonym łącznikiem' };\n  const pairs = [['(', ')'], ['[', ']'], ['{', '}'], ['„', '”']];\n  for (const [open, close] of pairs) {\n    if ((text.split(open).length - 1) !== (text.split(close).length - 1)) return { ok: false, reason: 'odpowiedź ma niedomkniętą strukturę' };\n  }\n  const doubleQuotes = (text.match(/"/g) || []).length;\n  if (doubleQuotes % 2 !== 0) return { ok: false, reason: 'odpowiedź ma niedomknięty cudzysłów' };\n  return { ok: true, reason: 'odpowiedź wygląda na kompletną' };\n}\nfunction wytnijJsonWalidatora(text) {
   let t = String(text || '').trim();
   t = t.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
   if (!t) return null;
