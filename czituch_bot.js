@@ -65,7 +65,7 @@ const { czyPytanieOLore, dodajGameLoreDomenę, wytnijAtrybucjeGameLore, GAMELORE
 const { czyPytanieOGameplay, dodajGameFAQsDomenę, wytnijAtrybucjeGameFAQs, GAMEFAQS_DOMAIN } = require('./ai/gameplay');
 const { przygotujHistorieDoModelu, opakujDaneReferencyjne } = AI_POLICY;
 const { classifyAIRequest } = require('./ai/router');
-const { planAIRequest, responseContract, RESPONSE_PROFILES } = require('./ai/planner');
+const { planAIRequest, responseContract, RESPONSE_PROFILES, buildRetrievalQueries } = require('./ai/planner');
 const { resolveGameEntity } = require('./ai/entities');
 const { sprawdzTwardeFaktyOdpowiedzi, sprawdzFormatOdpowiedzi } = require('./ai/response');
 const { Firestore } = require('@google-cloud/firestore');
@@ -1742,6 +1742,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
     routingAI.game = routingAI.game || resolvedEntity.game || (resolvedEntity.type === 'game' ? resolvedEntity.name : null);
   }
   const aiPlan = planAIRequest(pytanie, routingAI);
+  const plannedRetrievalQueries = buildRetrievalQueries(pytanie, routingAI, { maxQueries: 3 });
   const responseCfg = RESPONSE_PROFILES[aiPlan.responseProfile] || RESPONSE_PROFILES.simple;
   max_tokens = Math.max(Number(max_tokens) || 200, responseCfg.maxTokens);
   systemPrompt = `${systemPrompt}\n\n${responseContract(aiPlan.responseProfile)}`;
@@ -1852,6 +1853,17 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
       console.log(`[Tavily] 🧩 Pytanie wieloczęściowe rozbite na ${pytaniaAtomoweTavily.length} query`);
     } else {
       pytaniaAtomoweTavily = [pytanieTavily];
+    }
+
+    // Deterministyczny planner jest drugim zabezpieczeniem: modelowy rewrite
+    // może być poprawny stylistycznie, ale nadal zgubić encję albo istotny fragment.
+    // Nie zastępuje rewrite'u — dostarcza maksymalnie jeden dodatkowy query do drugiego slotu.
+    if (pytaniaAtomoweTavily.length === 1 && plannedRetrievalQueries.length > 1) {
+      const dodatkowe = plannedRetrievalQueries.find(q => q.trim().toLowerCase() !== pytaniaAtomoweTavily[0].trim().toLowerCase());
+      if (dodatkowe) {
+        pytaniaAtomoweTavily.push(dodatkowe);
+        console.log(`[Tavily] 🧭 Planner dodał query zabezpieczający: "${dodatkowe}"`);
+      }
     }
   }
 
