@@ -9,6 +9,11 @@ const { przygotujHistorieDoModelu } = require('../ai/policy');
 const { sprawdzTwardeFaktyOdpowiedzi, sprawdzSpojnoscLorePortal2, sprawdzZgodnoscKontekstuGry, sprawdzFormatOdpowiedzi } = require('../ai/response');
 const { normalizujWynikWalidatora } = require('../ai/validator');
 const { extractExplicitUserMemories, mergeMemoryRecords, buildVerifiedMemoryContext, isActive } = require('../ai/memory');
+const { parseMemoryCommand, forgetMemories } = require('../ai/memory_manager');
+const { buildAdvancedRetrievalPlan, shouldRunAdditionalRetrieval, rankRetrievalNeed } = require('../ai/retrieval');
+const { classifyFailure, nextFallbacks, shouldRetryFailure } = require('../ai/fallback');
+const { createAIMetrics, recordAIMetric, snapshotAIMetrics } = require('../ai/metrics');
+const { createRequestBudget, sanitizeRequestText } = require('../ai/limits');
 const { rerankujWynikiTavily, wykryjKonfliktyZrodelTavily, zbudujRaportKonfliktowTavily, sanityzujTrescZrodlaTavily } = require('../ai/tavily');
 
 const policy = (q, recipe) => recipe(q) ? 'minecraft_recipe' : /pogoda/i.test(q) ? 'weather' : /ile trwa/i.test(q) ? 'hltb' : /dzisiaj|najnowsz/i.test(q) ? 'web_fact' : 'conversation';
@@ -134,6 +139,43 @@ const policy = (q, recipe) => recipe(q) ? 'minecraft_recipe' : /pogoda/i.test(q)
 }
 
 assert.match(require('fs').readFileSync(require('path').join(__dirname, '..', 'czituch_bot.js'), 'utf8'), /generujOdpowiedz\(max_tokens, promptRetry, 'soft validation retry', true\)/);
+{
+  assert.deepEqual(parseMemoryCommand('co o mnie pamiętasz?'), { type:'list' });
+  assert.deepEqual(parseMemoryCommand('zapomnij Czituch'), { type:'forget', query:'Czituch' });
+  const mem = extractExplicitUserMemories('Nazywam się Czituch.', { sourceRole:'user', userId:'u1', now:1000 });
+  const forgotten = forgetMemories(mem, 'Czituch', 2000);
+  assert.equal(forgotten.changed, true);
+  assert.equal(forgotten.records[0].status, 'revoked');
+}
+{
+  const plan = buildAdvancedRetrievalPlan('Kim jest Wheatley i dlaczego przejął kontrolę?', {game:'Portal 2', is_lore:true, needs_fresh_data:false}, ['Kim jest Wheatley?']);
+  assert.ok(plan.length >= 2);
+  assert.ok(plan.some(x => /Portal 2/i.test(x.query)));
+  assert.equal(shouldRunAdditionalRetrieval({text:'krótko',sourceCount:1}), true);
+  assert.equal(rankRetrievalNeed({routing:{is_lore:true},sourceCount:1,textLength:100}), 'high');
+}
+{
+  assert.equal(classifyFailure('429 rate limit'), 'quota');
+  assert.equal(classifyFailure('401 invalid API key'), 'auth');
+  assert.equal(classifyFailure('timeout'), 'transient');
+  assert.equal(shouldRetryFailure('transient'), true);
+  assert.equal(nextFallbacks({failure:'grounded_reject',attempted:['groq:openai/gpt-oss-120b']})[0], 'groq:openai/gpt-oss-20b');
+}
+{
+  const m = createAIMetrics();
+  recordAIMetric(m,{status:'accepted',latencyMs:100,modelCalls:2,tavilySearches:1,category:'lore'});
+  const snap = snapshotAIMetrics(m);
+  assert.equal(snap.requests,1);
+  assert.equal(snap.avgLatencyMs,100);
+  assert.equal(snap.avgModelCalls,2);
+}
+{
+  const budget=createRequestBudget({maxModelCalls:1});
+  assert.equal(budget.reserve('modelCalls'),true);
+  assert.equal(budget.reserve('modelCalls'),false);
+  assert.equal(sanitizeRequestText('  test\u0000  '),'test');
+}
+
 
 {
   const ranked = rerankujWynikiTavily([
