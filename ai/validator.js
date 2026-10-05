@@ -151,6 +151,12 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
   // jako technicznego błędu. Nowy kontrakt nadal wymaga `valid/reason/unsupported_claims`.
   // W produkcji accepted wymaga jawnego rozpisania twierdzeń i źródeł.
   // Brak claims nie jest dowodem poprawności — jest niekompletnym wynikiem validatora.
+  const claimCoverage = claims.length ? claims.filter(c => c.supported).length / claims.length : 0;
+  const confidence = Math.max(0, Math.min(1,
+    typeof wynik.confidence === 'number' ? wynik.confidence :
+    claimCoverage * (maStarePola ? (wynik.complete === true ? 1 : 0.75) : 0.9)
+  ));
+
   const emptyClaimsAreExplicitlyValid =
     claims.length === 0
     && validFromModel === true
@@ -171,12 +177,6 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
     && !unsupportedEvidenceClaim
     && unsupported.length === 0)
     || emptyClaimsAreExplicitlyValid;
-
-  const claimCoverage = claims.length ? claims.filter(c => c.supported).length / claims.length : 0;
-  const confidence = Math.max(0, Math.min(1,
-    typeof wynik.confidence === 'number' ? wynik.confidence :
-    claimCoverage * (maStarePola ? (wynik.complete === true ? 1 : 0.75) : 0.9)
-  ));
 
   const accepted = validFromModel === true
     && confidence >= 0.75
