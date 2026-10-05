@@ -2172,9 +2172,9 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
   }
 
   async function zapytajGeminiFallback(maxTok = 700, overrideSystemPrompt = systemPrompt, powod = 'Groq') {
-    if (!moznaWykonacGeneracje('gemini', 'gemini-3.8-flash')) return wynikPusty('gemini', 'gemini-3.8-flash', 'AI request budget exceeded');
     if (!KONFIGURACJA.geminiKey) return wynikPusty('gemini', 'gemini-3.8-flash', 'brak GEMINI_API_KEY');
     if (Date.now() < geminiGenerationCooldownUntil) return wynikPusty('gemini', 'gemini-3.8-flash', 'Gemini generation cooldown');
+    if (!moznaWykonacGeneracje('gemini', 'gemini-3.8-flash')) return wynikPusty('gemini', 'gemini-3.8-flash', 'AI request budget exceeded');
     const messages = buildMessages(overrideSystemPrompt);
     const prompt = messages.user;
     const controller = new AbortController();
@@ -2205,9 +2205,9 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
   }
 
   async function zapytajGeminiLiteFallback(maxTok = 700, overrideSystemPrompt = systemPrompt, powod = 'Gemini 3.8 Flash') {
-    if (!moznaWykonacGeneracje('gemini', 'gemini-3.5-flash-lite')) return wynikPusty('gemini', 'gemini-3.5-flash-lite', 'AI request budget exceeded');
     if (!KONFIGURACJA.geminiKey) return wynikPusty('gemini', 'gemini-3.5-flash-lite', 'brak GEMINI_API_KEY');
     if (Date.now() < geminiGenerationCooldownUntil) return wynikPusty('gemini', 'gemini-3.5-flash-lite', 'Gemini generation cooldown');
+    if (!moznaWykonacGeneracje('gemini', 'gemini-3.5-flash-lite')) return wynikPusty('gemini', 'gemini-3.5-flash-lite', 'AI request budget exceeded');
     const messages = buildMessages(overrideSystemPrompt);
     const prompt = messages.user;
     const controller = new AbortController();
@@ -2238,8 +2238,8 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
   }
 
   async function zapytajOpenRouterFallback(maxTok = 700, overrideSystemPrompt = systemPrompt, powod = 'Gemini') {
-    if (!moznaWykonacGeneracje('openrouter', KONFIGURACJA.openrouterGeneratorModel)) return wynikPusty('openrouter', KONFIGURACJA.openrouterGeneratorModel, 'AI request budget exceeded');
     if (!KONFIGURACJA.openrouterKey) return wynikPusty('openrouter', KONFIGURACJA.openrouterGeneratorModel, 'brak OPENROUTER_API_KEY');
+    if (!moznaWykonacGeneracje('openrouter', KONFIGURACJA.openrouterGeneratorModel)) return wynikPusty('openrouter', KONFIGURACJA.openrouterGeneratorModel, 'AI request budget exceeded');
     const messages = buildOpenRouterMessages(overrideSystemPrompt);
     const prompt = messages[messages.length - 1]?.content || pytanie;
     const controller = new AbortController();
