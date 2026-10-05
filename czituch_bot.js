@@ -1918,16 +1918,8 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
       pytaniaAtomoweTavily = [pytanieTavily];
     }
 
-    // Deterministyczny planner jest drugim zabezpieczeniem: modelowy rewrite
-    // może być poprawny stylistycznie, ale nadal zgubić encję albo istotny fragment.
-    // Nie zastępuje rewrite'u — dostarcza maksymalnie jeden dodatkowy query do drugiego slotu.
-    if (pytaniaAtomoweTavily.length === 1 && advancedRetrievalPlan.length > 1) {
-      const dodatkowe = advancedRetrievalPlan.map(x => x.query).find(q => q.trim().toLowerCase() !== pytaniaAtomoweTavily[0].trim().toLowerCase());
-      if (dodatkowe) {
-        pytaniaAtomoweTavily.push(dodatkowe);
-        console.log(`[Tavily] 🧭 Planner dodał query zabezpieczający: "${dodatkowe}"`);
-      }
-    }
+    // Nie uruchamiamy drugiego wyszukania z góry. Drugi slot zostaje rezerwą
+    // na słaby retrieval albo celowane uzupełnienie po validatorze.
   }
 
   let pogodaKontekst = null;
@@ -1993,7 +1985,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
   if (!pogodaKontekst && !hltbKontekst && !infoKanalu && czyWyszukac && pytaniaAtomoweTavily.length && aiState.tavilySearches < aiState.maxWyszukanTavily && !budzetPrzekroczony()) {
     const materialyTavily = [];
     let sourceOffset = 0;
-    const kolejkaTavily = [...pytaniaAtomoweTavily.slice(0, aiState.maxWyszukanTavily)];
+    const kolejkaTavily = [pytaniaAtomoweTavily[0]];
     let indexZapytania = 0;
     while (indexZapytania < kolejkaTavily.length && aiState.tavilySearches < aiState.maxWyszukanTavily && !budzetPrzekroczony()) {
       const query = kolejkaTavily[indexZapytania++];
