@@ -71,16 +71,6 @@ function buildRetrievalQueries(question, routing = {}, options = {}) {
   return queries.slice(0, maxQueries);
 }
 
-
-  simple: { maxSentences: 2, maxWords: 60, maxTokens: 220 },
-  comparison: { maxSentences: 4, maxWords: 110, maxTokens: 360 },
-  lore: { maxSentences: 7, maxWords: 180, maxTokens: 650 },
-  gameplay: { maxSentences: 8, maxWords: 180, maxTokens: 700 },
-  timeline: { maxSentences: 8, maxWords: 180, maxTokens: 700 },
-  technical: { maxSentences: 6, maxWords: 160, maxTokens: 600 },
-  chat: { maxSentences: 3, maxWords: 90, maxTokens: 300 },
-};
-
 const RESPONSE_PROFILES = {
   simple: { maxSentences: 2, maxWords: 60, maxTokens: 220 },
   comparison: { maxSentences: 4, maxWords: 110, maxTokens: 360 },
@@ -121,6 +111,7 @@ function planAIRequest(question, routing) {
     responseProfile,
     sourcePolicy: buildSourcePolicy(routing, responseProfile),
     retrievalTimeRange: routing?.freshness === 'live' ? 'day' : routing?.freshness === 'recent' ? 'week' : null,
+    retrievalQueries: buildRetrievalQueries(question, routing),
     claimsRequired: ['lore', 'gameplay'].includes(responseProfile) ? 'claim_by_claim' : 'normal',
   };
 }
@@ -135,4 +126,4 @@ function responseContract(profile) {
   ].join('\n');
 }
 
-module.exports = { SOURCE_POLICIES, RESPONSE_PROFILES, detectResponseProfile, buildSourcePolicy, planAIRequest, responseContract };
+module.exports = { SOURCE_POLICIES, RESPONSE_PROFILES, detectResponseProfile, buildSourcePolicy, buildRetrievalQueries, planAIRequest, responseContract };
