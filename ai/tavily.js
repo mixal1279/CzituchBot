@@ -126,7 +126,7 @@ function wykryjKonfliktyZrodelTavily(results, sourceQuestion, requestedDomains =
     const numbers = [...new Set((text.match(/\b(?:19|20)\d{2}\b|\b\d+(?:[.,]\d+)?\s*(?:godzin|h|min|dni|lat|%|GB|MB)\b/gi) || []).map(x => x.toLowerCase()))];
     const negated = /\b(?:nie|nigdy|brak|nie jest|nie był|nie była|nie zosta[łl]|false|no)\b/i.test(text);
     const haystack = normalizujTokenTavily([r?.title, text].filter(Boolean).join(' '));
-    const topical = !questionKeywords.length || questionKeywords.filter(k => haystack.includes(k)).length >= Math.min(2, questionKeywords.length);
+    const topical = !questionKeywords.length || questionKeywords.filter(k => haystack.includes(k)).length >= Math.min(1, questionKeywords.length);
     return {
       index, id: `SOURCE ${index + 1}`,
       host: (() => { try { return new URL(r.url).hostname; } catch (_) { return '(nieznany host)'; } })(),
