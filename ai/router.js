@@ -17,7 +17,7 @@ function classifyAIRequest(pytanie, policyCategory, recipeDetector = () => false
   const p = text.toLocaleLowerCase('pl-PL');
   const category = policyCategory(text, recipeDetector);
   const resolved = resolveGameEntity(text);
-  const entity = detectEntity(p) || resolved?.game || resolved?.name || null;
+  const entity = resolved?.game || resolved?.name || detectEntity(p) || null;
   const freshness = detectFreshness(p);
   const lore = czyPytanieOLore(text);
   const gameplay = czyPytanieOGameplay(text);
