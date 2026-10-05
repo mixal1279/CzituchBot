@@ -1,4 +1,13 @@
-/**
+/
+
+async function ustawZweryfikowanaPamiecAI(userId, records) {
+  try {
+    const ref = db.collection(COL_AI_MEMORY).doc(hashAIUserMemoryId(userId));
+    await ref.set({ version: 1, records: pruneExpiredMemories(records || []), updatedAt: Date.now() }, { merge: true });
+  } catch (err) {
+    console.warn('[AI Memory] Aktualizacja pamięci nieudana:', err.message);
+  }
+}**
  * CzituchBot – YouTube + Kick.com + Twitch (UNIFIED)
  * npm install groq-sdk @googleapis/youtube google-auth-library @google-cloud/firestore tmi.js dotenv ws
  *
@@ -68,6 +77,11 @@ const { classifyAIRequest } = require('./ai/router');
 const { planAIRequest, responseContract, RESPONSE_PROFILES, buildRetrievalQueries } = require('./ai/planner');
 const { resolveGameEntity } = require('./ai/entities');
 const { extractExplicitUserMemories, mergeMemoryRecords, buildVerifiedMemoryContext, pruneExpiredMemories } = require('./ai/memory');
+const { parseMemoryCommand, forgetMemories, describeMemories } = require('./ai/memory_manager');
+const { buildAdvancedRetrievalPlan } = require('./ai/retrieval');
+const { classifyFailure, nextFallbacks } = require('./ai/fallback');
+const { createAIMetrics, recordAIMetric, snapshotAIMetrics } = require('./ai/metrics');
+const { sanitizeRequestText } = require('./ai/limits');
 const { sprawdzTwardeFaktyOdpowiedzi, sprawdzFormatOdpowiedzi } = require('./ai/response');
 const { Firestore } = require('@google-cloud/firestore');
 
@@ -328,6 +342,7 @@ const COL_LOKATY_ANGIE  = 'ekonomia_lokaty_angie';
 const COL_UBEZP_ANGIE   = 'ekonomia_ubezpieczenia_angie';
 const COL_DUEL_ANGIE    = 'ekonomia_duel_angie';
 const COL_AI_MEMORY = 'ai_verified_user_memory';
+const AI_OBSERVABILITY = createAIMetrics();
 
 // --- Test połączenia z Firestore ---
 
@@ -1721,7 +1736,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
   const jestAI_Billy = aiProfile === 'billy' || systemPrompt === AI_SYSTEM_PROMPT_BILLY;
   const jestAI_EdzzI = aiProfile === 'edzzi' || systemPrompt === AI_SYSTEM_PROMPT_EDZZI;
   const jestAI_Angie = aiProfile === 'angie' || systemPrompt === AI_SYSTEM_PROMPT_ANGIE;
-  const pytanieCzyste = String(pytanie || '').trim();
+  const pytanieCzyste = sanitizeRequestText(pytanie);
   if (!pytanieCzyste) return;
   if (pytanieCzyste.length > 500) {
     await wyslijFn(`@${nick} pytanie jest za długie — skróć je do 500 znaków.`);
@@ -1772,7 +1787,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
       validatorResults: aiState.validatorResults, tavilySearches: aiState.tavilySearches,
       global120bRequests: model120bGlobalRequesty,
       sourceCount: daneDoWalidacji ? (daneDoWalidacji.match(/\[(?:SOURCE|REFERENCE) [^\]]+\]/g) || []).length : 0,
-      metrics: { ...AI_METRYKI },
+      metrics: { ...AI_METRYKI, observability: snapshotAIMetrics(AI_OBSERVABILITY) },
       durationMs: Date.now() - aiState.startedAt, finalStatus: status,
     })}`);
   };
@@ -1788,6 +1803,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
   }
   const aiPlan = planAIRequest(pytanie, routingAI);
   const plannedRetrievalQueries = buildRetrievalQueries(pytanie, routingAI, { maxQueries: 3 });
+  const advancedRetrievalPlan = buildAdvancedRetrievalPlan(pytanie, routingAI, plannedRetrievalQueries);
   const responseCfg = RESPONSE_PROFILES[aiPlan.responseProfile] || RESPONSE_PROFILES.simple;
   max_tokens = Math.max(Number(max_tokens) || 200, responseCfg.maxTokens);
   systemPrompt = `${systemPrompt}\n\n${responseContract(aiPlan.responseProfile)}`;
@@ -1903,8 +1919,8 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
     // Deterministyczny planner jest drugim zabezpieczeniem: modelowy rewrite
     // może być poprawny stylistycznie, ale nadal zgubić encję albo istotny fragment.
     // Nie zastępuje rewrite'u — dostarcza maksymalnie jeden dodatkowy query do drugiego slotu.
-    if (pytaniaAtomoweTavily.length === 1 && plannedRetrievalQueries.length > 1) {
-      const dodatkowe = plannedRetrievalQueries.find(q => q.trim().toLowerCase() !== pytaniaAtomoweTavily[0].trim().toLowerCase());
+    if (pytaniaAtomoweTavily.length === 1 && advancedRetrievalPlan.length > 1) {
+      const dodatkowe = advancedRetrievalPlan.map(x => x.query).find(q => q.trim().toLowerCase() !== pytaniaAtomoweTavily[0].trim().toLowerCase());
       if (dodatkowe) {
         pytaniaAtomoweTavily.push(dodatkowe);
         console.log(`[Tavily] 🧭 Planner dodał query zabezpieczający: "${dodatkowe}"`);
@@ -2456,6 +2472,7 @@ function oczyscOdpowiedzPrzedWalidacja(tekst) {
   odp = finalizeResponse(odp, aiState.finalStatus);
 
   AI_METRYKI[aiState.finalStatus] = (AI_METRYKI[aiState.finalStatus] || 0) + 1;
+  recordAIMetric(AI_OBSERVABILITY, { status: aiState.finalStatus, latencyMs: Date.now() - aiState.startedAt, modelCalls: aiState.modelCalls, tavilySearches: aiState.tavilySearches, category: kategoriaAI });
   zalogujPodsumowanieAI(aiState.finalStatus);
   const newMemories = extractExplicitUserMemories(pytanie, { sourceRole: 'user', userId: verifiedMemoryUserId, sourceMessageId: requestId });
   if (newMemories.length) await zapiszZweryfikowanaPamiecAI(verifiedMemoryUserId, newMemories);
@@ -4101,6 +4118,19 @@ async function obslugaWiadomosci(nick, message, platforma, wyslijFn, kanal = nul
   // Stan użytkownika jest izolowany między platformami i kanałami.
   const historiaKlucz = `${platforma}:${kanalNorm || 'brak-kanalu'}:${nick.toLowerCase()}`;
   const cooldownKey = historiaKlucz;
+
+  // Zarządzanie zweryfikowaną pamięcią jest lokalne dla użytkownika i nie przechodzi przez generator.
+  const memoryCommand = parseMemoryCommand(message);
+  if (memoryCommand) {
+    const records = await wczytajZweryfikowanaPamiecAI(historiaKlucz);
+    if (memoryCommand.type === 'list') {
+      return await wyslijFn('@' + nick + ' Zapamiętane informacje:\n' + describeMemories(records));
+    }
+    const result = forgetMemories(records, memoryCommand.query);
+    if (!result.changed) return await wyslijFn('@' + nick + ' Nie znalazłem takiej informacji w pamięci.');
+    await ustawZweryfikowanaPamiecAI(historiaKlucz, result.records);
+    return await wyslijFn('@' + nick + ' Usunąłem wskazaną informację z pamięci.');
+  }
 
   if (ostatnieUzycie[cooldownKey] && teraz - ostatnieUzycie[cooldownKey] < KONFIGURACJA.cooldown) return;
 
