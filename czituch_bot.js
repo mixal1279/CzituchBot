@@ -1802,6 +1802,11 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
     routingAI.entity_type = routingAI.entity_type || resolvedEntity.type;
     routingAI.game = routingAI.game || resolvedEntity.game || (resolvedEntity.type === 'game' ? resolvedEntity.name : null);
   }
+  if (routingAI.confidence_policy === 'clarify') {
+    console.log(`[AI][${requestId}] routing confidence too low (${routingAI.confidence}) — clarification required`);
+    await wyslijFn(`@${nick} Nie jestem pewien, o jaki konkretnie fakt chodzi — doprecyzuj proszę pytanie.`);
+    return;
+  }
   const aiPlan = planAIRequest(pytanie, routingAI);
   const plannedRetrievalQueries = buildRetrievalQueries(pytanie, routingAI, { maxQueries: 3 });
   const advancedRetrievalPlan = buildAdvancedRetrievalPlan(pytanie, routingAI, plannedRetrievalQueries);
