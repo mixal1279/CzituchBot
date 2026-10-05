@@ -2,12 +2,45 @@
 
 const assert = require('node:assert/strict');
 const { classifyAIRequest } = require('../ai/router');
+const { resolveGameEntity } = require('../ai/entities');
+const { planAIRequest } = require('../ai/planner');
 const { czyPytanieOLore } = require('../ai/lore');
 const { przygotujHistorieDoModelu } = require('../ai/policy');
 const { sprawdzTwardeFaktyOdpowiedzi, sprawdzSpojnoscLorePortal2, sprawdzZgodnoscKontekstuGry, sprawdzFormatOdpowiedzi } = require('../ai/response');
 const { normalizujWynikWalidatora } = require('../ai/validator');
 
 const policy = (q, recipe) => recipe(q) ? 'minecraft_recipe' : /pogoda/i.test(q) ? 'weather' : /ile trwa/i.test(q) ? 'hltb' : /dzisiaj|najnowsz/i.test(q) ? 'web_fact' : 'conversation';
+\n{
+  const entity = resolveGameEntity('Dlaczego Wheatley przejął kontrolę w Portal 2?');
+  assert.equal(entity.type, 'character');
+  assert.equal(entity.name, 'Wheatley');
+  assert.equal(entity.game, 'Portal 2');
+}
+
+{
+  const r = classifyAIRequest('Kim jest Wheatley?', policy);
+  assert.equal(r.is_lore, true);
+  assert.equal(r.needs_web, true);
+  assert.equal(r.entity, 'Portal 2');
+  assert.equal(r.entity_type, 'character');
+  assert.equal(r.game, 'Portal 2');
+}
+
+{
+  const routing = classifyAIRequest('Dlaczego Wheatley przejął kontrolę w Portal 2?', policy);
+  const plan = planAIRequest('Dlaczego Wheatley przejął kontrolę w Portal 2?', routing);
+  assert.equal(plan.responseProfile, 'lore');
+  assert.equal(plan.claimsRequired, 'claim_by_claim');
+  assert.equal(plan.sourcePolicy.preferred.includes('gamelore'), true);
+  assert.equal(plan.retrievalTimeRange, null);
+}
+
+{
+  const routing = classifyAIRequest('Co nowego dzisiaj w Minecraft?', policy);
+  const plan = planAIRequest('Co nowego dzisiaj w Minecraft?', routing);
+  assert.equal(plan.retrievalTimeRange, 'day');
+}
+
 
 {
   const r = classifyAIRequest('Jaka jest dzisiaj pogoda?', policy);
