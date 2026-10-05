@@ -5,6 +5,7 @@ const { classifyAIRequest } = require('../ai/router');
 const { planAIRequest } = require('../ai/planner');
 
 const policy = (q, recipe) => {
+  if (/czy warto|co myślisz|co sadzisz|opinia/i.test(q)) return 'conversation';
   if (recipe(q)) return 'minecraft_recipe';
   if (/pogod|temperatur|deszcz|wiatr/i.test(q)) return 'weather';
   if (/ile trwa|jak długo.*gry|hltb/i.test(q)) return 'hltb';
