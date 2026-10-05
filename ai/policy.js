@@ -22,7 +22,7 @@ function normalizujZapytanieUzupelniajace(q, maxSlowa = 14) {
 }
 
 function zawieraTokenPL(tekst, wzorzec) {
-  return new RegExp(`(?:^|[^\\p{L}\\p{N}_])(?:${wzorzec})(?:[\\p{L}\\p{N}_]*)?(?=$|[^\\p{L}\\p{N}_])`, 'iu').test(String(tekst || ''));
+  return new RegExp('(?:^|[^\\p{L}\\p{N}_])(?:' + String(wzorzec || '').trim() + ')(?:[\\p{L}\\p{N}_]*)?(?=$|[^\\p{L}\\p{N}_])', 'iu').test(String(tekst || ''));
 }
 
 function zawieraJedenZTokenowPL(tekst, wzorce) {
@@ -35,14 +35,14 @@ function czyPytanieOPogode(pytanie) {
   // Samo „temperatura GPU/CPU” nie jest pogodą. Temperatura jest sygnałem pogodowym
   // dopiero przy miejscu albo jednostce pogodowej.
   return zawieraTokenPL(p, 'temperatur')
-    && (/(?:^|[^\\p{L}])(?:w|we|na)\\s+\\p{L}/iu.test(p) || zawieraTokenPL(p, 'stopni'));
+    && (/(?:^|[^\p{L}])(?:w|we|na)\s+\p{L}/iu.test(p) || zawieraTokenPL(p, 'stopni'));
 }
 
 function zakresTavilyDlaPytania(pytanie, domyslny = null) {
   const p = String(pytanie || '').toLocaleLowerCase('pl-PL');
   if (zawieraJedenZTokenowPL(p, ['dzisiaj', 'dzis', 'today', 'teraz', 'obecnie', 'właśnie', 'wlasnie', 'aktualnie', 'najnowsz', 'ostatni', 'ostatnio', 'news'])) return 'day';
   if (zawieraJedenZTokenowPL(p, ['wczoraj', 'yesterday'])) return 'day';
-  if (/\\b(?:19\\d{2}|20\\d{2})\\b/.test(p) || zawieraJedenZTokenowPL(p, ['histori', 'pierwsz', 'wydan', 'wydany', 'wydana', 'powstał', 'powstała', 'założon', 'wynalaz', 'prototyp', 'premier', 'ukazał', 'ukazala', 'wyszedł', 'wyszła', 'wydano'])) return null;
+  if (/\b(?:19\d{2}|20\d{2})\b/.test(p) || zawieraJedenZTokenowPL(p, ['histori', 'pierwsz', 'wydan', 'wydany', 'wydana', 'powstał', 'powstała', 'założon', 'wynalaz', 'prototyp', 'premier', 'ukazał', 'ukazala', 'wyszedł', 'wyszła', 'wydano'])) return null;
   return domyslny;
 }
 
