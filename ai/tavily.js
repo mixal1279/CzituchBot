@@ -59,6 +59,17 @@ function slowaKluczoweTavily(pytanie) {
     .map(t => t.length >= 6 ? t.slice(0, 6) : t))].slice(0, 18);
 }
 
+function sanityzujTrescZrodlaTavily(material) {
+  let text = String(material || '');
+  text = text
+    .replace(/<\/?(?:system|developer|assistant|user|tool|instructions?|prompt|context)\b[^>]*>/gi, '[USUNIĘTY_MARKER_ZRODŁA]')
+    .replace(/\[\s*(?:system|developer|assistant|user|tool|instructions?|prompt)\s*\]/gi, '[USUNIĘTY_MARKER_ZRODŁA]')
+    .replace(/\b(?:ignore|disregard|forget)\s+(?:all\s+|any\s+|the\s+)?(?:previous|prior|above|earlier)\s+(?:instructions?|rules?|messages?)\b/gi, '[USUNIĘTA_INSTRUKCJA_ZRODŁA]')
+    .replace(/\b(?:system|developer)\s+(?:message|prompt)\s*:/gi, '[USUNIĘTY_MARKER_ZRODŁA:]')
+    .replace(/\b(?:you are|act as|jesteś|działaj jako)\s+(?:an?\s+)?(?:assistant|system|developer|model|ai|bot)\b/gi, '[USUNIĘTA_INSTRUKCJA_ROLI]');
+  return text.replace(/\s{2,}/g, ' ').trim();
+}
+
 function filtrujMaterialPoSlowachTavily(material, pytanie) {
   const text = String(material || '').trim();
   const keywords = slowaKluczoweTavily(pytanie);
@@ -282,10 +293,10 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
             .map(line => line.trim())
             .filter(Boolean)
             .join('\n');
-          const material = filtrujMaterialPoSlowachTavily(materialRaw, sourceQuestion);
+          const material = sanityzujTrescZrodlaTavily(filtrujMaterialPoSlowachTavily(materialRaw, sourceQuestion));
           const host = (() => { try { return new URL(r.url).hostname; } catch (_) { return '(nieznany host)'; } })();
           const quality = ocenaZrodla(r.url, domains);
-          return `[SOURCE ${sourceStartIndex + index + 1}]\nTYTUŁ: ${String(r.title || '(brak tytułu)').slice(0, 300)}\nHOST: ${host}\nURL: ${r.url}\nHEURYSTYCZNA_OCENA: ${quality}\nTREŚĆ: ${material}`;
+          return `[SOURCE ${sourceStartIndex + index + 1}]\nTYP: UNTRUSTED_WEB_DATA\nTYTUŁ: ${sanityzujTrescZrodlaTavily(String(r.title || '(brak tytułu)').slice(0, 300))}\nHOST: ${host}\nURL: ${r.url}\nHEURYSTYCZNA_OCENA: ${quality}\nTREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>\n${material}\n<<<END_UNTRUSTED_SOURCE_CONTENT>>>`;
         });
         const blocks = [];
         let used = 0;
@@ -316,4 +327,12 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
   };
 }
 
-module.exports = { createTavilySearch, hostnamePasujeDoDomenyTavily, czyZablokowanyHostTavily, ttlDlaZakresu, filtrujPoScore, rerankujWynikiTavily };
+module.exports = {
+  createTavilySearch,
+  hostnamePasujeDoDomenyTavily,
+  czyZablokowanyHostTavily,
+  ttlDlaZakresu,
+  filtrujPoScore,
+  rerankujWynikiTavily,
+  sanityzujTrescZrodlaTavily,
+};
