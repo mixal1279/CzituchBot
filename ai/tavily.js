@@ -347,15 +347,15 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
         if (odrzuconePoScore) logger.log(`[Tavily] 📉 Odrzucono ${odrzuconePoScore} wyników o niskim score (< ${TAVILY_MIN_SCORE})`);
         if (scoreFilter.lowConfidence) logger.log('[Tavily] ⚠️ Wszystkie wyniki poniżej progu jakości — brak materiału dowodowego');
         if (!results.length) { onStatus({ status: 'empty', query: searchQuery }); return returnMeta ? { status: 'empty', text: '' } : ''; }
-        const limit = historical ? 12000 : 8000;
+        const limit = historical ? 6000 : 5000;
         const sourceConflicts = wykryjKonfliktyZrodelTavily(results, sourceQuestion, domains);
         const sourceConflictReport = zbudujRaportKonfliktowTavily(sourceConflicts);
-        const sourceBlocks = results.map((r, index) => {
+        const sourceBlocks = results.slice(0, 4).map((r, index) => {
           const content = String(r.content || '').trim();
           const raw = String(r.raw_content || '').trim();
           // content = fragmenty dobrane pod zapytanie; raw tylko awaryjnie.
           // Lekki filtr usuwa zdania niezwiązane z pytaniem, ale nigdy nie usuwa całego źródła.
-          const materialRaw = (content || raw).substring(0, 1800)
+          const materialRaw = (content || raw).substring(0, 1400)
             .split('\n')
             .map(line => line.trim())
             .filter(Boolean)
