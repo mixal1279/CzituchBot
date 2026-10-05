@@ -80,7 +80,7 @@ function findAlias(text, entries) {
 function resolveGameEntity(text) {
   const character = findAlias(text, CHARACTER_ALIASES);
   const game = findAlias(text, GAME_ALIASES);
-  if (character && (!game || character.confidence >= game.confidence)) {
+  if (character) {
     return { type: 'character', name: character.entry.name, confidence: character.confidence, game: character.entry.game, matchedAlias: character.alias, resolution: 'deterministic' };
   }
   if (game) {
