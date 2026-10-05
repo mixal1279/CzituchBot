@@ -71,8 +71,13 @@ function wytnijJsonWalidatora(text) {
 
 function wyodrebnijIdentyfikatoryZrodel(dane) {
   const ids = new Set();
-  const text = String(dane || '');
-  for (const match of text.matchAll(/\[(SOURCE \d+|REFERENCE [^\]]+)\]/g)) ids.add(match[1]);
+  const lines = String(dane || '').split(/\r?\n/);
+  for (let i = 0; i < lines.length; i++) {
+    const header = lines[i].match(/^\[(SOURCE \d+|REFERENCE [^\]\r\n]+)\]\s*$/i);
+    if (!header) continue;
+    const next = lines[i + 1] || '';
+    if (/^\s*(?:TYP|TYTUŁ|HOST|URL)\s*:/i.test(next)) ids.add(header[1].trim());
+  }
   return ids;
 }
 
@@ -187,12 +192,17 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
   const accepted = validFromModel === true
     && confidence >= 0.75
     && claimContractOk
+    && unsupported.length === 0
+    && !unknownSourceClaim
     && (!maStarePola || (
       wynik.supported === true
       && wynik.relevant === true
       && wynik.complete === true
       && wynik.hallucination === false
     ));
+
+  const legacyConflict = validFromModel === true && maStarePola
+    && (wynik.supported === false || wynik.relevant === false || wynik.complete === false || wynik.hallucination === true);
 
   // Model może zwrócić sprzeczny werdykt: valid=false, ale jednocześnie
   // nie wskazać żadnego niepotwierdzonego twierdzenia i wszystkie claims
@@ -204,7 +214,7 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
     && !unknownSourceClaim
     && !unsupportedEvidenceClaim;
 
-  const status = accepted ? 'accepted' : (sprzecznyWerdykt ? 'inconclusive' : 'rejected');
+  const status = sprzecznyWerdykt ? 'inconclusive' : (accepted ? 'accepted' : (legacyConflict ? 'inconclusive' : 'rejected'));
 
   return {
     status,
