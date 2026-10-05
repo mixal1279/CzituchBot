@@ -65,6 +65,8 @@ const { czyPytanieOLore, dodajGameLoreDomenę, wytnijAtrybucjeGameLore, GAMELORE
 const { czyPytanieOGameplay, dodajGameFAQsDomenę, wytnijAtrybucjeGameFAQs, GAMEFAQS_DOMAIN } = require('./ai/gameplay');
 const { przygotujHistorieDoModelu, opakujDaneReferencyjne } = AI_POLICY;
 const { classifyAIRequest } = require('./ai/router');
+const { planAIRequest, responseContract, RESPONSE_PROFILES } = require('./ai/planner');
+const { resolveGameEntity } = require('./ai/entities');
 const { sprawdzTwardeFaktyOdpowiedzi, sprawdzFormatOdpowiedzi } = require('./ai/response');
 const { Firestore } = require('@google-cloud/firestore');
 
@@ -1630,7 +1632,7 @@ function czyOdpowiedzToOdmowa(tekst) {
   return AI_POLICY.czyOdpowiedzToOdmowa(tekst);
 }
 
-function ograniczDoPelnychZdanAI(tekst, limit = 490, maxZdania = 2) {
+function ograniczDoPelnychZdanAI(tekst, maxZdania = 2, limit = 1800) {
   let t = String(tekst || '').replace(/\s+/g, ' ').trim();
   if (!t) return '';
 
@@ -1667,7 +1669,7 @@ function wykonajAIWHistorii(historia, zadanie) {
 async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn, opcje = {}) {
   AI_METRYKI.requests++;
   const { temperature = 0.5, max_tokens = 200, tavilyOptions = {}, aiProfile = 'generic' } = opcje;
-  systemPrompt = `${systemPrompt}\n\nLIMIT ODPOWIEDZI: maksymalnie 60 słów i 2 krótkie zdania. Zawsze zakończ pełne zdanie; nie urywaj odpowiedzi.\n\nNie umieszczaj w odpowiedzi nazw źródeł, atrybucji, etykiet „Źródło:” ani URL-i. Źródła są wyłącznie wewnętrznym materiałem RAG i walidacji.`;
+  systemPrompt = `${systemPrompt}\n\nNie umieszczaj w odpowiedzi nazw źródeł, atrybucji, etykiet „Źródło:” ani URL-i. Źródła są wyłącznie wewnętrznym materiałem RAG i walidacji.`;
   const jestAI_Billy = aiProfile === 'billy' || systemPrompt === AI_SYSTEM_PROMPT_BILLY;
   const jestAI_EdzzI = aiProfile === 'edzzi' || systemPrompt === AI_SYSTEM_PROMPT_EDZZI;
   const jestAI_Angie = aiProfile === 'angie' || systemPrompt === AI_SYSTEM_PROMPT_ANGIE;
@@ -1729,8 +1731,18 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
   console.log(`[AI][${requestId}] start kategoria=pending persona=${aiProfile}`);
 
   const routingAI = wyznaczRoutingAI(pytanie);
+  const resolvedEntity = resolveGameEntity(pytanie);
+  if (resolvedEntity) {
+    routingAI.resolved_entity = resolvedEntity;
+    routingAI.entity = routingAI.entity || resolvedEntity.game || resolvedEntity.name;
+    routingAI.entity_type = routingAI.entity_type || resolvedEntity.type;
+    routingAI.game = routingAI.game || resolvedEntity.game || (resolvedEntity.type === 'game' ? resolvedEntity.name : null);
+  }
+  const aiPlan = planAIRequest(pytanie, routingAI);
+  const responseCfg = RESPONSE_PROFILES[aiPlan.responseProfile] || RESPONSE_PROFILES.simple;
+  systemPrompt = `${systemPrompt}\n\n${responseContract(aiPlan.responseProfile)}`;
   const kategoriaAI = routingAI.intent;
-  console.log(`[AI][${requestId}] routing=${JSON.stringify({ intent: routingAI.intent, entity: routingAI.entity, needs_web: routingAI.needs_web, freshness: routingAI.freshness, source_type: routingAI.source_type, confidence: routingAI.confidence })}`);
+  console.log(`[AI][${requestId}] routing=${JSON.stringify({ intent: routingAI.intent, entity: routingAI.entity, game: routingAI.game, entity_type: routingAI.entity_type, needs_web: routingAI.needs_web, freshness: routingAI.freshness, source_type: routingAI.source_type, response_profile: aiPlan.responseProfile, confidence: routingAI.confidence })}`);
   console.log(`[AI] kategoria=${kategoriaAI} nick=${nick}`);
   const jestRecepturaMC = czyPytanieOReceptureMC(pytanie);
   const daneRecepturyMC = await pobierzDaneRecepturyMC(pytanie);
@@ -1780,10 +1792,15 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
   ]);
 
   const metadaneRequestu = {
-    entity: (() => {
+    entity: routingAI.entity || (() => {
       const m = pytanie.match(/\b(?:Minecraft|Wied[źz]min(?: 3)?|Cyberpunk(?: 2077)?|GTA(?: [IV1-6]+)?|Red Dead Redemption(?: 2)?|RDR2|Elden Ring|Baldur[’']?s Gate 3|Fortnite|Dark Souls|The Last of Us|Skyrim|Fallout 4|Starfield|HSV)\b/i);
       return m ? m[0] : null;
     })(),
+    entityType: routingAI.entity_type || null,
+    game: routingAI.game || null,
+    intent: routingAI.intent,
+    responseProfile: aiPlan.responseProfile,
+    sourcePolicy: aiPlan.sourcePolicy,
     version: (pytanie.match(/\b(?:Java|Bedrock|PC|PS[45]|Xbox(?: One| Series [SX])?|Switch)\b[^\d]{0,12}(?:1\.\d+(?:\.\d+)?|\d{4})?/i)?.[0] || pytanie.match(/\b1\.\d+(?:\.\d+)?\b/)?.[0] || null),
     platform: (pytanie.match(/\b(?:Java|Bedrock|PC|PS4|PS5|Xbox One|Xbox Series S|Xbox Series X|Switch)\b/i)?.[0] || null),
     domains: Array.isArray(domeny) ? domeny.slice(0, 8) : [],
@@ -2259,7 +2276,7 @@ function oczyscOdpowiedzPrzedWalidacja(tekst) {
 }
 
   let wynikGeneracji = await generujOdpowiedz(max_tokens, systemPrompt);
-  let odp = oczyscOdpowiedzPrzedWalidacja(ograniczDoPelnychZdanAI(usunMarkeryWewnetrzneAI(filtrBezpieczenstwa(wynikGeneracji.tekst))));
+  let odp = oczyscOdpowiedzPrzedWalidacja(ograniczDoPelnychZdanAI(usunMarkeryWewnetrzneAI(filtrBezpieczenstwa(wynikGeneracji.tekst)), responseCfg.maxSentences));
   if (!odp) { console.log(`[AI][${requestId}] final status=unavailable — brak odpowiedzi`); zalogujPodsumowanieAI('unavailable'); return; }
   console.log(`[AI][${requestId}] generator=${wynikGeneracji.provider}/${wynikGeneracji.model} liczba prób 120B=${liczbaProb120b}`);
 
@@ -2272,7 +2289,7 @@ function oczyscOdpowiedzPrzedWalidacja(tekst) {
     const maWalidowac = Boolean(daneZewnetrzne)
       && (czyPytanieWymagaPewnychDanych(kategoriaAI) || Boolean(wynikSzukania));
   if (maWalidowac) {
-    let walidacja = await walidujOdpowiedzAI(jestAI_Billy ? 'billy' : jestAI_EdzzI ? 'edzzi' : 'angie', pytanie, odp, daneDoWalidacji, historiaRozmowy, requestId, aiState, metadaneRequestu);
+    let walidacja = await walidujOdpowiedzAI(aiProfile === 'billy' ? 'billy' : aiProfile === 'edzzi' ? 'edzzi' : aiProfile === 'angie' ? 'angie' : 'generic', pytanie, odp, daneDoWalidacji, historiaRozmowy, requestId, aiState, metadaneRequestu);
     // Model validatora może omyłkowo zwrócić accepted dla odpowiedzi będącej
     // odmową. Tego nie można zostawić wyłącznie jego ocenie.
     if (walidacja.status === 'accepted' && daneDoWalidacji && AI_POLICY.czyOdpowiedzToJednoznacznaOdmowa(odp)) {
@@ -2319,7 +2336,7 @@ function oczyscOdpowiedzPrzedWalidacja(tekst) {
         const nowaOdp = usunMarkeryWewnetrzneAI(filtrBezpieczenstwa(retry.tekst));
         if (nowaOdp) {
           odp = oczyscOdpowiedzPrzedWalidacja(nowaOdp);
-          walidacja = await walidujOdpowiedzAI(jestAI_Billy ? 'billy' : jestAI_EdzzI ? 'edzzi' : 'angie', pytanie, odp, daneDoWalidacji, historiaRozmowy, requestId, aiState, metadaneRequestu);
+          walidacja = await walidujOdpowiedzAI(aiProfile === 'billy' ? 'billy' : aiProfile === 'edzzi' ? 'edzzi' : aiProfile === 'angie' ? 'angie' : 'generic', pytanie, odp, daneDoWalidacji, historiaRozmowy, requestId, aiState, metadaneRequestu);
           if (walidacja.status === 'accepted') {
             walidacja = zastosujDeterministyczneGuards(walidacja, odp, daneDoWalidacji, pytanie);
           }
@@ -2351,7 +2368,7 @@ function oczyscOdpowiedzPrzedWalidacja(tekst) {
   const finalizeResponse = (tekst, status) => {
     if (status === 'rejected') return 'Nie mam wystarczających danych, żeby odpowiedzieć na to pewnie.';
     if (status === 'unavailable') return 'Chwilowo nie mogę potwierdzić tej informacji, więc nie będę zgadywać.';
-    let finalText = ograniczDoPelnychZdanAI(usunMarkeryWewnetrzneAI(filtrBezpieczenstwa(tekst)));
+    let finalText = ograniczDoPelnychZdanAI(usunMarkeryWewnetrzneAI(filtrBezpieczenstwa(tekst)), responseCfg.maxSentences);
     if (!finalText) return '';
     // Źródła pozostają wewnętrznym materiałem RAG/validatora. Nie wysyłamy
     // użytkownikowi nazw źródeł, atrybucji ani linków.
