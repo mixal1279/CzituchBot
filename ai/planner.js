@@ -81,6 +81,16 @@ function buildRetrievalQueries(question, routing = {}, options = {}) {
   chat: { maxSentences: 3, maxWords: 90, maxTokens: 300 },
 };
 
+const RESPONSE_PROFILES = {
+  simple: { maxSentences: 2, maxWords: 60, maxTokens: 220 },
+  comparison: { maxSentences: 4, maxWords: 110, maxTokens: 360 },
+  lore: { maxSentences: 7, maxWords: 180, maxTokens: 650 },
+  gameplay: { maxSentences: 8, maxWords: 180, maxTokens: 700 },
+  timeline: { maxSentences: 8, maxWords: 180, maxTokens: 700 },
+  technical: { maxSentences: 6, maxWords: 160, maxTokens: 600 },
+  chat: { maxSentences: 3, maxWords: 90, maxTokens: 300 },
+};
+
 function detectResponseProfile(question, routing) {
   const p = String(question || '').toLocaleLowerCase('pl-PL');
   if (routing?.is_gameplay) return 'gameplay';
