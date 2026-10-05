@@ -1,0 +1,6 @@
+'use strict';
+const MAX_RECENT=200;
+function createAIMetrics(){return{requests:0,accepted:0,rejected:0,inconclusive:0,unavailable:0,errors:0,totalLatencyMs:0,totalModelCalls:0,totalTavilySearches:0,recent:[]};}
+function recordAIMetric(metrics,event={}){const m=metrics||createAIMetrics(),latency=Math.max(0,Number(event.latencyMs)||0),status=String(event.status||'unknown');m.requests++;if(Object.prototype.hasOwnProperty.call(m,status))m[status]++;m.totalLatencyMs+=latency;m.totalModelCalls+=Number(event.modelCalls)||0;m.totalTavilySearches+=Number(event.tavilySearches)||0;m.recent.push({at:Date.now(),status,latencyMs:latency,modelCalls:Number(event.modelCalls)||0,tavilySearches:Number(event.tavilySearches)||0,category:event.category||null});if(m.recent.length>MAX_RECENT)m.recent.splice(0,m.recent.length-MAX_RECENT);return m;}
+function snapshotAIMetrics(metrics){const m=metrics||createAIMetrics();return{...m,avgLatencyMs:m.requests?Math.round(m.totalLatencyMs/m.requests):0,avgModelCalls:m.requests?Number((m.totalModelCalls/m.requests).toFixed(2)):0,avgTavilySearches:m.requests?Number((m.totalTavilySearches/m.requests).toFixed(2)):0};}
+module.exports={createAIMetrics,recordAIMetric,snapshotAIMetrics};
