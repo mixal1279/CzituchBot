@@ -298,3 +298,11 @@ console.log('AI regression tests: OK');
   assert.equal(v.status,'accepted');
   assert.equal(v.ok,true);
 }
+
+{
+  const source = require('fs').readFileSync(require('path').join(__dirname, '..', 'czituch_bot.js'), 'utf8');
+  assert.match(source, /confidence: \{ type: 'number', minimum: 0, maximum: 1 \}/);
+  assert.match(source, /required: \['valid', 'reason', 'unsupported_claims', 'confidence', 'ok', 'supported', 'relevant', 'complete', 'hallucination', 'claims'\]/);
+  assert.match(source, /AI_TAVILY_CACHE_FILE \|\| path\.join\(process\.env\.AI_CACHE_DIR \|\| __dirname, 'tavily_cache\.json'\)/);
+  assert.match(source, /validatorTimeoutMs = requestState \?/);
+}
