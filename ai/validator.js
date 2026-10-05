@@ -4,13 +4,12 @@ const { sprawdzTwardeFaktyOdpowiedzi } = require('./response');
 
 // Kontrakt walidatora jest celowo mały: generator potrzebuje tylko jasnego
 // werdyktu i konkretnej informacji zwrotnej do jednego retry.
-const VALIDATOR_JSON_SCHEMA = {
+const GEMINI_VALIDATOR_JSON_SCHEMA = {
   type: 'object',
   properties: {
     valid: { type: 'boolean' },
     reason: { type: 'string' },
     unsupported_claims: { type: 'array', items: { type: 'string' } },
-    // Pola zachowane dla kompatybilności z istniejącym pipeline'em.
     ok: { type: 'boolean' },
     supported: { type: 'boolean' },
     relevant: { type: 'boolean' },
@@ -29,11 +28,25 @@ const VALIDATOR_JSON_SCHEMA = {
           reason: { type: 'string' },
         },
         required: ['claim', 'supported', 'source_ids', 'evidence_quote'],
-        additionalProperties: false,
       },
     },
   },
   required: ['valid', 'reason', 'confidence', 'unsupported_claims', 'claims', 'supported', 'relevant', 'complete', 'hallucination'],
+};
+
+const VALIDATOR_JSON_SCHEMA = {
+  ...GEMINI_VALIDATOR_JSON_SCHEMA,
+  additionalProperties: false,
+  properties: {
+    ...GEMINI_VALIDATOR_JSON_SCHEMA.properties,
+    claims: {
+      ...GEMINI_VALIDATOR_JSON_SCHEMA.properties.claims,
+      items: {
+        ...GEMINI_VALIDATOR_JSON_SCHEMA.properties.claims.items,
+        additionalProperties: false,
+      },
+    },
+  },
 };
 
 function wytnijJsonWalidatora(text) {
@@ -215,6 +228,7 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
 
 module.exports = {
   VALIDATOR_JSON_SCHEMA,
+  GEMINI_VALIDATOR_JSON_SCHEMA,
   wytnijJsonWalidatora,
   normalizujWynikWalidatora,
   wyodrebnijIdentyfikatoryZrodel,
