@@ -25,7 +25,7 @@ const cases = [
   ['Kim jest Ellie?', 'lore', 'The Last of Us', 'character'],
   ['Historia świata Elden Ring', 'lore', 'Elden Ring', 'game'],
   ['Historia Cyberpunka 2077', 'lore', 'Cyberpunk 2077', 'game'],
-  ['Timeline Fallouta', 'lore', 'Fallout', 'franchise'],
+  ['Timeline Fallouta', 'timeline', 'Fallout', 'franchise'],
   ['Jak pokonać bossa w Portal 2?', 'gameplay', 'Portal 2', 'game'],
   ['Jak znaleźć sekret w Wiedźminie 3?', 'gameplay', 'The Witcher 3: Wild Hunt', 'game'],
   ['Jak zdobyć broń w Cyberpunk 2077?', 'gameplay', 'Cyberpunk 2077', 'game'],
@@ -48,7 +48,11 @@ for (const [question, expectedIntent, expectedEntity, expectedType] of cases) {
   const routing = classifyAIRequest(question, policy, q => /minecraft.*zrobić|zrobić.*minecraft/i.test(q));
   const plan = planAIRequest(question, routing);
 
-  if (expectedIntent === 'lore') {
+  if (expectedIntent === 'timeline') {
+    assert.equal(routing.is_lore, true, question);
+    assert.equal(routing.needs_web, true, question);
+    assert.equal(plan.responseProfile, 'timeline', question);
+  } else if (expectedIntent === 'lore') {
     assert.equal(routing.is_lore, true, question);
     assert.equal(routing.needs_web, true, question);
     assert.equal(plan.responseProfile, 'lore', question);
