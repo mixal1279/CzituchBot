@@ -6,7 +6,7 @@
   "main": "czituch_bot.js",
   "scripts": {
     "start": "node czituch_bot.js",
-    "test": "node --test test/ai.test.js"
+    "test": "node --test test"
   },
   "dependencies": {
     "@google-cloud/firestore": "^8.6.0",
