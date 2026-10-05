@@ -145,9 +145,9 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
         const clean = String(d || '').toLowerCase().replace(/^www\./, '');
         return clean && (host === clean || host.endsWith(`.${clean}`));
       });
-      const official = ['minecraft.net', 'minecraft.wiki', 'rockstargames.com', 'thewitcher.com', 'playstation.com', 'naughtydog.com', 'bandainamcoent.com', 'larian.com', 'baldursgate3.game', 'nvidia.com', 'openai.com', 'anthropic.com', 'microsoft.com', 'apple.com', 'discord.com', 'twitch.tv', 'kick.com']
+      const official = ['minecraft.net', 'rockstargames.com', 'thewitcher.com', 'playstation.com', 'naughtydog.com', 'bandainamcoent.com', 'larian.com', 'baldursgate3.game', 'nvidia.com', 'openai.com', 'anthropic.com', 'microsoft.com', 'apple.com', 'discord.com', 'twitch.tv', 'kick.com']
         .some(d => host === d || host.endsWith(`.${d}`));
-      const specialized = ['minecraft.wiki', 'steamdb.info', 'docs.npmjs.com', 'developer.mozilla.org', 'gamefaqs.gamespot.com']
+      const specialized = ['minecraft.wiki', 'gamelore.fandom.com', 'steamdb.info', 'docs.npmjs.com', 'developer.mozilla.org', 'gamefaqs.gamespot.com']
         .some(d => host === d || host.endsWith(`.${d}`));
       const guide = ['ign.com', 'gamespot.com', 'pcgamer.com', 'fandom.com']
         .some(d => host === d || host.endsWith(`.${d}`));
