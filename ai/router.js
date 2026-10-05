@@ -15,7 +15,10 @@ const SOURCE_TYPES = {
 function classifyAIRequest(pytanie, policyCategory, recipeDetector = () => false) {
   const text = String(pytanie || '').trim();
   const p = text.toLocaleLowerCase('pl-PL');
-  const category = policyCategory(text, recipeDetector);
+  const policyResult = policyCategory(text, recipeDetector);
+  const isOpinion = /\b(?:czy warto|co (?:myślisz|myslisz|sądzisz|sad zisz)|co sądzisz|co sadzisz|jaka jest twoja opinia|jak oceniasz|polecasz|jest nadal dobre|jest nadal dobry|opłaca się|oplaca sie)\b/i.test(p);
+  const isHLTB = /\b(?:ile\s+(?:jest\s+)?(?:godzin|czasu)|ile\s+godzin\s+(?:ma|zajmuje)|ile\s+trwa|jak\s+d[łl]ugo(?:\s+trwa)?|czas(?:u)?\s+(?:gry|przejścia|przejscia|ukończenia|ukonczenia)|przejście\s+gry|przejscie\s+gry)\b/i.test(p);
+  const category = isOpinion ? 'conversation' : isHLTB ? 'hltb' : policyResult;
   const resolved = resolveGameEntity(text);
   const entity = resolved?.game || resolved?.name || detectEntity(p) || null;
   const freshness = detectFreshness(p);
