@@ -189,7 +189,7 @@ assert.match(require('fs').readFileSync(require('path').join(__dirname, '..', 'c
   assert.equal(merged.find(x => x.status === 'active').value, 'NowyNick');
   assert.equal(merged.find(x => x.status === 'superseded').value, 'StaryNick');
 
-  const context = buildVerifiedMemoryContext(merged);
+  const context = buildVerifiedMemoryContext(merged, 2000);
   assert.match(context, /VERIFIED_USER_MEMORY/);
   assert.match(context, /NowyNick/);
   assert.equal(isActive(merged.find(x => x.status === 'superseded')), false);
