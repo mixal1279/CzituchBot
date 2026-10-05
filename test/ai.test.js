@@ -306,3 +306,9 @@ console.log('AI regression tests: OK');
   assert.match(source, /AI_TAVILY_CACHE_FILE \|\| path\.join\(process\.env\.AI_CACHE_DIR \|\| __dirname, 'tavily_cache\.json'\)/);
   assert.match(source, /validatorTimeoutMs = requestState \?/);
 }
+
+{
+  const r = classifyAIRequest('To pytanie bez jednoznacznej encji', () => 'web_fact');
+  assert.ok(['normal','retrieve_and_guard','clarify'].includes(r.confidence_policy));
+  assert.equal(typeof r.confidence_policy, 'string');
+}
