@@ -51,6 +51,7 @@ function classifyAIRequest(pytanie, policyCategory, recipeDetector = () => false
     is_lore: lore,
     is_gameplay: gameplay,
     confidence,
+    confidence_policy: confidence < 0.65 ? 'clarify' : confidence < 0.8 ? 'retrieve_and_guard' : 'normal',
     query: text,
   };
 }
