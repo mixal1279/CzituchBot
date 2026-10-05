@@ -2178,7 +2178,8 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
     const messages = buildMessages(overrideSystemPrompt);
     const prompt = messages.user;
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 30000);
+    const remainingMs = Math.max(1000, aiState.maxCzasMs - (Date.now() - aiState.startedAt));
+    const timer = setTimeout(() => controller.abort(), Math.min(30000, remainingMs));
     try {
       const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${encodeURIComponent(KONFIGURACJA.geminiKey)}`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -2210,7 +2211,8 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
     const messages = buildMessages(overrideSystemPrompt);
     const prompt = messages.user;
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 30000);
+    const remainingMs = Math.max(1000, aiState.maxCzasMs - (Date.now() - aiState.startedAt));
+    const timer = setTimeout(() => controller.abort(), Math.min(30000, remainingMs));
     try {
       const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=${encodeURIComponent(KONFIGURACJA.geminiKey)}`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -2241,7 +2243,8 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
     const messages = buildOpenRouterMessages(overrideSystemPrompt);
     const prompt = messages[messages.length - 1]?.content || pytanie;
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 30000);
+    const remainingMs = Math.max(1000, aiState.maxCzasMs - (Date.now() - aiState.startedAt));
+    const timer = setTimeout(() => controller.abort(), Math.min(30000, remainingMs));
     try {
       const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
