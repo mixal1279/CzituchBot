@@ -58,7 +58,7 @@ function extractExplicitUserMemories(text, options = {}) {
   if (!input || input.length > 500 || INJECTION_PATTERN.test(input)) return [];
 
   const patterns = [
-    { key: 'nickname', re: /(?:m[oó]j\s+nick|nazywam\s+si[eę]|mam\s+na\s+imi[eę])\s*(?:to|jest)?\s*[:=-]?\s*([A-Za-z0-9_.-]{2,32})/i },
+    { key: 'nickname', re: /(?:m[oó]j\s+nick|nazywam\s+si[eę]|mam\s+na\s+imi[eę])\s*(?:to|jest)?\s*[:=-]?\s*([A-Za-z0-9_.-]{2,32}?)(?=[.!?,\s]|$)/i },
     { key: 'favorite_game', re: /(?:m[oó]j[aą]?\s+)?ulubion(?:a|ą|y|ym)\s+gr(?:a|ę|ze)\s+(?:to|jest)\s+(.{2,80}?)(?:[.!?]|$)/i },
     { key: 'favorite_creator', re: /(?:m[oó]j[aą]?\s+)?ulubion(?:y|ym|a|ą)\s+(?:tw[oó]rca|streamer|streamerka)\s+(?:to|jest)\s+(.{2,80}?)(?:[.!?]|$)/i },
     { key: 'preferred_language', re: /(?:wol[eę]|preferuj[eę])\s+(?:j[eę]zyk\s+)?(polski|polish|pl|angielski|english|en)(?:\s+j[eę]zyk)?(?:[.!?]|$)/i },
