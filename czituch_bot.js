@@ -1748,7 +1748,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
   console.log(`[AI][${requestId}] routing=${JSON.stringify({ intent: routingAI.intent, entity: routingAI.entity, game: routingAI.game, entity_type: routingAI.entity_type, needs_web: routingAI.needs_web, freshness: routingAI.freshness, source_type: routingAI.source_type, response_profile: aiPlan.responseProfile, confidence: routingAI.confidence })}`);
   console.log(`[AI] kategoria=${kategoriaAI} nick=${nick}`);
   const jestRecepturaMC = czyPytanieOReceptureMC(pytanie);
-  const daneRecepturyMC = await pobierzDaneRecepturyMC(pytanie);
+  const daneRecepturyMC = jestRecepturaMC ? await pobierzDaneRecepturyMC(pytanie) : null;
   if (jestRecepturaMC) {
     if (!daneRecepturyMC) {
       await wyslijFn(`@${nick} nie mam pewnej receptury dla Minecraft Java 26.1 — nie będę zgadywać.`);
@@ -1804,6 +1804,9 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
     intent: routingAI.intent,
     responseProfile: aiPlan.responseProfile,
     sourcePolicy: aiPlan.sourcePolicy,
+    freshness: routingAI.freshness,
+    needsFreshData: routingAI.needs_fresh_data,
+    retrievalTimeRange: aiPlan.retrievalTimeRange,
     version: (pytanie.match(/\b(?:Java|Bedrock|PC|PS[45]|Xbox(?: One| Series [SX])?|Switch)\b[^\d]{0,12}(?:1\.\d+(?:\.\d+)?|\d{4})?/i)?.[0] || pytanie.match(/\b1\.\d+(?:\.\d+)?\b/)?.[0] || null),
     platform: (pytanie.match(/\b(?:Java|Bedrock|PC|PS4|PS5|Xbox One|Xbox Series S|Xbox Series X|Switch)\b/i)?.[0] || null),
     domains: Array.isArray(domeny) ? domeny.slice(0, 8) : [],
@@ -1918,7 +1921,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
           || (pytanieOrazBilly ? domenyTavilyBilly : null)
           || (pytanieOrazEdzzi ? domenyTavilyEdzzi : null)
           || (pytanieOrazAngie ? domenyTavilyAngie : null),
-        time_range: zakresTavilyDlaPytania(pytanie, routingAI.freshness === 'evergreen' ? null : (tavilyOptions.time_range || 'past_year')),
+        time_range: aiPlan.retrievalTimeRange || zakresTavilyDlaPytania(pytanie, null),
         _skipRewrite: true,
         returnMeta: true,
         sourceStartIndex: sourceOffset,
