@@ -1,13 +1,4 @@
-/
-
-async function ustawZweryfikowanaPamiecAI(userId, records) {
-  try {
-    const ref = db.collection(COL_AI_MEMORY).doc(hashAIUserMemoryId(userId));
-    await ref.set({ version: 1, records: pruneExpiredMemories(records || []), updatedAt: Date.now() }, { merge: true });
-  } catch (err) {
-    console.warn('[AI Memory] Aktualizacja pamięci nieudana:', err.message);
-  }
-}**
+/**
  * CzituchBot – YouTube + Kick.com + Twitch (UNIFIED)
  * npm install groq-sdk @googleapis/youtube google-auth-library @google-cloud/firestore tmi.js dotenv ws
  *
@@ -444,6 +435,13 @@ async function zapiszZweryfikowanaPamiecAI(userId, incoming) {
   } catch (err) {
     console.warn('[AI Memory] Zapis pamięci nieudany:', err.message);
   }
+}
+
+async function ustawZweryfikowanaPamiecAI(userId, records) {
+  try {
+    const ref = db.collection(COL_AI_MEMORY).doc(hashAIUserMemoryId(userId));
+    await ref.set({ version: 1, records: pruneExpiredMemories(records || []), updatedAt: Date.now() }, { merge: true });
+  } catch (err) { console.warn('[AI Memory] Aktualizacja pamięci nieudana:', err.message); }
 }
 
 const readline   = require('readline');
@@ -4121,13 +4119,10 @@ async function obslugaWiadomosci(nick, message, platforma, wyslijFn, kanal = nul
   const historiaKlucz = `${platforma}:${kanalNorm || 'brak-kanalu'}:${nick.toLowerCase()}`;
   const cooldownKey = historiaKlucz;
 
-  // Zarządzanie zweryfikowaną pamięcią jest lokalne dla użytkownika i nie przechodzi przez generator.
   const memoryCommand = parseMemoryCommand(message);
   if (memoryCommand) {
     const records = await wczytajZweryfikowanaPamiecAI(historiaKlucz);
-    if (memoryCommand.type === 'list') {
-      return await wyslijFn('@' + nick + ' Zapamiętane informacje:\n' + describeMemories(records));
-    }
+    if (memoryCommand.type === 'list') return await wyslijFn('@' + nick + ' Zapamiętane informacje:\n' + describeMemories(records));
     const result = forgetMemories(records, memoryCommand.query);
     if (!result.changed) return await wyslijFn('@' + nick + ' Nie znalazłem takiej informacji w pamięci.');
     await ustawZweryfikowanaPamiecAI(historiaKlucz, result.records);
