@@ -233,4 +233,5 @@ module.exports = {
   normalizujWynikWalidatora,
   wyodrebnijIdentyfikatoryZrodel,
   sprawdzTwardeFaktyOdpowiedzi,
+  sprawdzKompletnoscOdpowiedzi,
 };
