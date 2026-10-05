@@ -906,6 +906,7 @@ async function wybierzDomenyDlaPytania(pytanie, domyslnieMinecraft = false, requ
       if (gra) {
         console.log(`[IGDB] Gra: ${gra.nazwa}`);
         domeny = ['ign.com', 'gamespot.com', 'pcgamer.com', 'eurogamer.net', 'fandom.com'];
+        domeny.resolvedGame = gra;
       }
     } catch (_) {}
   }
@@ -1793,6 +1794,13 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
     czyPytanieOYouTube ? znajdzYoutuberaWPytaniu(pytanie, aiState) : Promise.resolve(null),
     czyPytanieOHLTB ? Promise.resolve(wyodrebnijGryHLTB(pytanie)) : Promise.resolve(null),
   ]);
+
+  if (domeny?.resolvedGame && !routingAI.game) {
+    routingAI.game = domeny.resolvedGame.nazwa;
+    routingAI.entity = routingAI.entity || domeny.resolvedGame.nazwa;
+    routingAI.entity_type = routingAI.entity_type || 'game';
+    routingAI.resolved_entity = routingAI.resolved_entity || { type: 'game', name: domeny.resolvedGame.nazwa, confidence: 0.90, resolution: 'igdb' };
+  }
 
   const metadaneRequestu = {
     entity: routingAI.entity || (() => {
