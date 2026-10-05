@@ -6305,7 +6305,7 @@ function uruchomBillyDiscordInterval(clientLubTwitchClient, config = TWITCH_CONF
     }
 
     kolejneBledyApi = 0; // udany self-check — reset licznika
-    const msg2 = `Wbijaj na nasz serwer Discord: https://discord.gg/WrD2CU2Xdx 💬 Dostępne komendy: !ai, !watchtime, !followage, !dc, !tiktok, !ig, !yt`;
+    const msg2 = `💬 Wbijaj na nasz serwer Discord: https://discord.gg/WrD2CU2Xdx | Dostępne komendy: !komendy`;
     wyslijTwitchHelix(msg2, 'billybulka', config)
       .catch(err => console.error('[Twitch/AutoMsg] Błąd:', err.message));
   }, 30 * 60 * 1000);
