@@ -255,7 +255,7 @@ console.log('AI regression tests: OK');
     unsupported_claims: [], supported: true, relevant: true,
     complete: true, hallucination: false,
   };
-  assert.equal(normalizujWynikWalidatora({ ...base, claims: [] }, 'test', 'test', new Set(['REFERENCE 1'])).status, 'accepted');
+  assert.equal(normalizujWynikWalidatora({ ...base, claims: [] }, 'test', 'test', new Set(['REFERENCE 1'])).status, 'rejected');
   assert.equal(normalizujWynikWalidatora({
     ...base,
     claims: [{ claim: 'Fakt', supported: true, source_ids: ['1'], evidence_quote: 'Fakt źródłowy', reason: 'źródło' }]
@@ -295,8 +295,8 @@ console.log('AI regression tests: OK');
 {
   const { normalizujWynikWalidatora } = require('../ai/validator');
   const v = normalizujWynikWalidatora({valid:true,reason:'Wszystkie twierdzenia zawarte w odpowiedzi są w pełni poparte przez dane referencyjne.',unsupported_claims:[],claims:[],supported:true,relevant:true,complete:true,hallucination:false,confidence:0.95},'test-model','gemini',new Set(['SOURCE 1']),'[SOURCE 1]\nRodzina Matters opisuje wydarzenia misji.');
-  assert.equal(v.status,'accepted');
-  assert.equal(v.ok,true);
+  assert.equal(v.status,'rejected');
+  assert.equal(v.ok,false);
 }
 
 {
