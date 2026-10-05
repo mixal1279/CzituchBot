@@ -67,6 +67,7 @@ const { przygotujHistorieDoModelu, opakujDaneReferencyjne } = AI_POLICY;
 const { classifyAIRequest } = require('./ai/router');
 const { planAIRequest, responseContract, RESPONSE_PROFILES, buildRetrievalQueries } = require('./ai/planner');
 const { resolveGameEntity } = require('./ai/entities');
+const { extractExplicitUserMemories, mergeMemoryRecords, buildVerifiedMemoryContext, pruneExpiredMemories } = require('./ai/memory');
 const { sprawdzTwardeFaktyOdpowiedzi, sprawdzFormatOdpowiedzi } = require('./ai/response');
 const { Firestore } = require('@google-cloud/firestore');
 
@@ -326,6 +327,7 @@ const COL_PODATKI_ANGIE = 'ekonomia_podatki_angie';
 const COL_LOKATY_ANGIE  = 'ekonomia_lokaty_angie';
 const COL_UBEZP_ANGIE   = 'ekonomia_ubezpieczenia_angie';
 const COL_DUEL_ANGIE    = 'ekonomia_duel_angie';
+const COL_AI_MEMORY = 'ai_verified_user_memory';
 
 // --- Test połączenia z Firestore ---
 
@@ -388,6 +390,46 @@ async function testFirestoreConnection() {
   }
 }
 testFirestoreConnection().then(() => autoMigrateJsonToFirestore());
+
+function hashAIUserMemoryId(userId) {
+  return crypto.createHash('sha256').update(String(userId || 'unknown')).digest('hex');
+}
+
+async function wczytajZweryfikowanaPamiecAI(userId) {
+  try {
+    const ref = db.collection(COL_AI_MEMORY).doc(hashAIUserMemoryId(userId));
+    const snap = await ref.get();
+    if (!snap.exists) return [];
+    const records = pruneExpiredMemories(snap.data()?.records || []);
+    if (records.length !== (snap.data()?.records || []).length) {
+      await ref.set({ records, updatedAt: Date.now() }, { merge: true });
+    }
+    return records;
+  } catch (err) {
+    console.warn('[AI Memory] Odczyt pamięci nieudany:', err.message);
+    return [];
+  }
+}
+
+async function zapiszZweryfikowanaPamiecAI(userId, incoming) {
+  if (!Array.isArray(incoming) || !incoming.length) return;
+  try {
+    const ref = db.collection(COL_AI_MEMORY).doc(hashAIUserMemoryId(userId));
+    await db.runTransaction(async transaction => {
+      const snap = await transaction.get(ref);
+      const current = pruneExpiredMemories(snap.exists ? (snap.data()?.records || []) : []);
+      const merged = mergeMemoryRecords(current, incoming, Date.now());
+      transaction.set(ref, {
+        version: 1,
+        records: merged,
+        updatedAt: Date.now(),
+      }, { merge: true });
+    });
+    console.log('[AI Memory] Zapisano', incoming.length, 'zweryfikowanych faktów.');
+  } catch (err) {
+    console.warn('[AI Memory] Zapis pamięci nieudany:', err.message);
+  }
+}
 
 const readline   = require('readline');
 const crypto     = require('crypto');
@@ -1671,8 +1713,11 @@ function wykonajAIWHistorii(historia, zadanie) {
 
 async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn, opcje = {}) {
   AI_METRYKI.requests++;
-  let { temperature = 0.5, max_tokens = 200, tavilyOptions = {}, aiProfile = 'generic' } = opcje;
-  systemPrompt = `${systemPrompt}\n\nNie umieszczaj w odpowiedzi nazw źródeł, atrybucji, etykiet „Źródło:” ani URL-i. Źródła są wyłącznie wewnętrznym materiałem RAG i walidacji.`;
+  let { temperature = 0.5, max_tokens = 200, tavilyOptions = {}, aiProfile = 'generic', memoryUserId = null } = opcje;
+  const verifiedMemoryUserId = memoryUserId || String(nick || '').toLowerCase();
+  const verifiedMemory = await wczytajZweryfikowanaPamiecAI(verifiedMemoryUserId);
+  const verifiedMemoryContext = buildVerifiedMemoryContext(verifiedMemory);
+  systemPrompt = `${systemPrompt}${verifiedMemoryContext ? `\n\n${verifiedMemoryContext}` : ''}\n\nNie umieszczaj w odpowiedzi nazw źródeł, atrybucji, etykiet „Źródło:” ani URL-i. Źródła są wyłącznie wewnętrznym materiałem RAG i walidacji.`;
   const jestAI_Billy = aiProfile === 'billy' || systemPrompt === AI_SYSTEM_PROMPT_BILLY;
   const jestAI_EdzzI = aiProfile === 'edzzi' || systemPrompt === AI_SYSTEM_PROMPT_EDZZI;
   const jestAI_Angie = aiProfile === 'angie' || systemPrompt === AI_SYSTEM_PROMPT_ANGIE;
@@ -2412,6 +2457,8 @@ function oczyscOdpowiedzPrzedWalidacja(tekst) {
 
   AI_METRYKI[aiState.finalStatus] = (AI_METRYKI[aiState.finalStatus] || 0) + 1;
   zalogujPodsumowanieAI(aiState.finalStatus);
+  const newMemories = extractExplicitUserMemories(pytanie, { sourceRole: 'user', userId: verifiedMemoryUserId, sourceMessageId: requestId });
+  if (newMemories.length) await zapiszZweryfikowanaPamiecAI(verifiedMemoryUserId, newMemories);
   historiaRozmowy.push({ role: 'user', content: pytanie }, { role: 'assistant', content: odp });
   zmienWersjeHistorii(historiaRozmowy);
   ostatnieUzycie[nick] = Date.now();
@@ -4385,7 +4432,7 @@ async function obslugaWiadomosci(nick, message, platforma, wyslijFn, kanal = nul
         : {};
 
     try {
-      await wykonajAIWHistorii(historiaRozmowy[historiaKlucz], () => wykonajWKolejceAI(() => zapytajAI(nick, pytanie, historiaRozmowy[historiaKlucz], prompt, wyslijFn, { temperature: 0.25, max_tokens: 150, aiProfile, tavilyOptions })));
+      await wykonajAIWHistorii(historiaRozmowy[historiaKlucz], () => wykonajWKolejceAI(() => zapytajAI(nick, pytanie, historiaRozmowy[historiaKlucz], prompt, wyslijFn, { temperature: 0.25, max_tokens: 150, aiProfile, tavilyOptions, memoryUserId: historiaKlucz })));
     } catch (err) {
       console.error('[Groq] Błąd:', err.message);
       if (err.code === 'AI_QUEUE_FULL') await wyslijFn(`@${nick} AI jest teraz zajęte — spróbuj za chwilę.`);
@@ -4425,6 +4472,7 @@ async function obslugaWiadomosci(nick, message, platforma, wyslijFn, kanal = nul
           max_tokens: 150,
           aiProfile: 'angie',
           tavilyOptions: { domains: KONFIGURACJA.tavilyAngieDomains, time_range: KONFIGURACJA.tavilyAngieTimeRange },
+          memoryUserId: historiaKlucz,
         })));
       } catch (err) {
         console.error('[Groq/Angie] Błąd:', err.message);
