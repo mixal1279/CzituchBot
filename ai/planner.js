@@ -11,7 +11,67 @@ const SOURCE_POLICIES = {
   conversation: { preferred: [], fallback: [] },
 };
 
-const RESPONSE_PROFILES = {
+const QUERY_STOPWORDS = new Set([
+  'czy', 'jak', 'jaki', 'jaka', 'jakie', 'co', 'czym', 'kto', 'kim', 'kiedy',
+  'gdzie', 'ile', 'dlaczego', 'jest', 'są', 'to', 'ten', 'ta', 'te', 'do', 'na',
+  'w', 'we', 'z', 'ze', 'o', 'od', 'po', 'dla', 'i', 'oraz', 'a', 'czyli',
+  'może', 'mogę', 'można', 'się', 'mi', 'mnie', 'jego', 'jej', 'ich', 'tym',
+  'tę', 'tą', 'być', 'ma', 'mają', 'miał', 'była', 'było', 'były',
+]);
+
+function normalizujQueryToken(value) {
+  return String(value || '')
+    .toLocaleLowerCase('pl-PL')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\p{L}\p{N}'-]+/gu, '')
+    .trim();
+}
+
+function slowaZapytania(question) {
+  const tokens = String(question || '').match(/[\p{L}\p{N}][\p{L}\p{N}'-]*/gu) || [];
+  return [...new Set(tokens.map(normalizujQueryToken)
+    .filter(token => token.length >= 4 && !QUERY_STOPWORDS.has(token)))].slice(0, 14);
+}
+
+function dodajUnikalneQuery(lista, query) {
+  const q = String(query || '').replace(/\s+/g, ' ').trim();
+  if (!q || q.length < 8) return;
+  const key = normalizujQueryToken(q);
+  if (!lista.some(x => normalizujQueryToken(x) === key)) lista.push(q);
+}
+
+function buildRetrievalQueries(question, routing = {}, options = {}) {
+  const original = String(question || '').replace(/\s+/g, ' ').trim();
+  if (!original || routing?.needs_web === false) return [];
+
+  const queries = [];
+  const entity = String(routing?.game || routing?.entity || '').trim();
+  const keywords = slowaZapytania(original);
+  const normalizedOriginal = normalizujQueryToken(original);
+  const normalizedEntity = normalizujQueryToken(entity);
+
+  dodajUnikalneQuery(queries, original);
+
+  if (entity && keywords.length) {
+    const filtered = keywords.filter(k => !normalizedEntity.includes(k)).slice(0, 8);
+    dodajUnikalneQuery(queries, [entity, ...filtered].join(' '));
+  }
+
+  if (routing?.is_lore) {
+    dodajUnikalneQuery(queries, [entity || original, 'historia fabuła lore'].join(' '));
+  } else if (routing?.is_gameplay) {
+    dodajUnikalneQuery(queries, [entity || original, 'guide walkthrough'].join(' '));
+  } else if (routing?.freshness === 'live') {
+    dodajUnikalneQuery(queries, [entity, ...keywords.slice(0, 8), 'latest today'].filter(Boolean).join(' '));
+  } else if (routing?.freshness === 'recent') {
+    dodajUnikalneQuery(queries, [entity, ...keywords.slice(0, 8), 'latest'].filter(Boolean).join(' '));
+  }
+
+  const maxQueries = Math.max(1, Math.min(Number(options.maxQueries) || 3, 4));
+  return queries.slice(0, maxQueries);
+}
+
+
   simple: { maxSentences: 2, maxWords: 60, maxTokens: 220 },
   comparison: { maxSentences: 4, maxWords: 110, maxTokens: 360 },
   lore: { maxSentences: 7, maxWords: 180, maxTokens: 650 },
