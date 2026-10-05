@@ -95,7 +95,7 @@ function rerankujWynikiTavily(results, sourceQuestion, requestedDomains = []) {
   const keywords = slowaKluczoweTavily(sourceQuestion);
   return [...(Array.isArray(results) ? results : [])].map((result, index) => {
     const quality = ocenaZrodlaLokalnie(result?.url, requestedDomains);
-    const qualityBonus = quality === 'oficjalne' ? 0.12 : quality === 'wyspecjalizowane' ? 0.08 : quality === 'guide/referencyjne' ? 0.03 : 0;
+    const qualityBonus = quality === 'oficjalne' ? 0.12 : quality === 'wyspecjalizowane' ? 0.12 : quality === 'guide/referencyjne' ? 0.02 : 0;
     const haystack = normalizujTokenTavily([result?.title, result?.content].filter(Boolean).join(' '));
     const coverage = keywords.length ? keywords.filter(k => haystack.includes(k)).length / keywords.length : 0;
     const coverageBonus = Math.min(0.15, coverage * 0.15);
