@@ -102,7 +102,70 @@ function filtrujMaterialPoSlowachTavily(material, pytanie) {
   return keep.filter(Boolean).join(' ');
 }
 
-function rerankujWynikiTavily(results, sourceQuestion, requestedDomains = []) {
+function poziomAutorytetuTavily(url, requestedDomains = []) {
+  const quality = ocenaZrodlaLokalnie(url, requestedDomains);
+  if (quality === 'oficjalne') return 4;
+  if (quality === 'wyspecjalizowane') return 3;
+  if (quality === 'guide/referencyjne') return 2;
+  if (quality === 'zewnętrzne-niezweryfikowane') return 1;
+  return 0;
+}
+
+function dataZrodlaTavily(result) {
+  const raw = result?.published_date || result?.publishedDate || result?.date || result?.updated_date || result?.updatedDate;
+  const time = raw ? Date.parse(raw) : NaN;
+  return Number.isFinite(time) ? time : null;
+}
+
+function wykryjKonfliktyZrodelTavily(results, sourceQuestion, requestedDomains = []) {
+  const lista = Array.isArray(results) ? results : [];
+  const konflikty = [];
+  const questionKeywords = slowaKluczoweTavily(sourceQuestion).filter(k => k.length >= 5);
+  const evidence = lista.map((r, index) => {
+    const text = String(r?.content || '').replace(/\s+/g, ' ').trim();
+    const numbers = [...new Set((text.match(/\b(?:19|20)\d{2}\b|\b\d+(?:[.,]\d+)?\s*(?:godzin|h|min|dni|lat|%|GB|MB)\b/gi) || []).map(x => x.toLowerCase()))];
+    const negated = /\b(?:nie|nigdy|brak|nie jest|nie był|nie była|nie zosta[łl]|false|no)\b/i.test(text);
+    const haystack = normalizujTokenTavily([r?.title, text].filter(Boolean).join(' '));
+    const topical = !questionKeywords.length || questionKeywords.filter(k => haystack.includes(k)).length >= Math.min(2, questionKeywords.length);
+    return {
+      index, id: `SOURCE ${index + 1}`,
+      host: (() => { try { return new URL(r.url).hostname; } catch (_) { return '(nieznany host)'; } })(),
+      authority: poziomAutorytetuTavily(r?.url, requestedDomains), date: dataZrodlaTavily(r),
+      numbers, negated, topical, text: text.slice(0, 900),
+    };
+  }).filter(x => x.topical);
+  for (let i = 0; i < evidence.length; i++) {
+    for (let j = i + 1; j < evidence.length; j++) {
+      const a = evidence[i], b = evidence[j];
+      const differingNumbers = a.numbers.length && b.numbers.length &&
+        a.numbers.some(x => b.numbers.every(y => y !== x)) &&
+        b.numbers.some(x => a.numbers.every(y => y !== x));
+      const opposingNegation = a.negated !== b.negated && (a.numbers.length || b.numbers.length);
+      if (!differingNumbers && !opposingNegation) continue;
+      const winner = a.authority !== b.authority
+        ? (a.authority > b.authority ? a : b)
+        : ((a.date || 0) !== (b.date || 0) ? ((a.date || 0) > (b.date || 0) ? a : b) : null);
+      konflikty.push({
+        sources: [a.id, b.id], type: differingNumbers ? 'different_numeric_or_date_claims' : 'opposing_negation',
+        preferred: winner?.id || null,
+        reason: winner ? `Preferuj ${winner.id} (${winner.host}) ze względu na wyższy autorytet/świeżość; drugi wynik traktuj jako sprzeczny.` : 'Źródła mają podobny autorytet i brak rozstrzygającej daty — nie wybieraj arbitralnie.',
+      });
+    }
+  }
+  return konflikty.slice(0, 8);
+}
+
+function zbudujRaportKonfliktowTavily(conflicts) {
+  if (!Array.isArray(conflicts) || !conflicts.length) return '';
+  return [
+    '[SOURCE_CONFLICTS]',
+    'Wykryto potencjalnie sprzeczne fragmenty źródeł.',
+    ...conflicts.map(c => `- ${c.sources.join(' vs ')} | typ=${c.type} | preferowane=${c.preferred || 'BRAK'} | ${c.reason}`),
+    'ZASADA: konflikt bez jednoznacznego rozstrzygnięcia oznacza brak pewnego dowodu; nie zgaduj.',
+    '[/SOURCE_CONFLICTS]',
+  ].join('\n');
+}
+function rerankujWynikiTavily(results, sourceQuestion, requestedDomains = [], options = {}) {
   const keywords = slowaKluczoweTavily(sourceQuestion);
   return [...(Array.isArray(results) ? results : [])].map((result, index) => {
     const quality = ocenaZrodlaLokalnie(result?.url, requestedDomains);
@@ -111,7 +174,9 @@ function rerankujWynikiTavily(results, sourceQuestion, requestedDomains = []) {
     const coverage = keywords.length ? keywords.filter(k => haystack.includes(k)).length / keywords.length : 0;
     const coverageBonus = Math.min(0.15, coverage * 0.15);
     const baseScore = typeof result?.score === 'number' ? result.score : 0;
-    return { result, index, rerankScore: baseScore + qualityBonus + coverageBonus };
+    const published = dataZrodlaTavily(result);
+    const freshnessBonus = options.freshness === 'live' && published ? (published >= Date.now() - 7 * 86400000 ? 0.08 : 0) : 0;
+    return { result, index, rerankScore: baseScore + qualityBonus + coverageBonus + freshnessBonus };
   }).sort((a, b) => b.rerankScore - a.rerankScore || a.index - b.index).map(x => x.result);
 }
 
@@ -277,12 +342,14 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
         if (rejected.length) logger.log(`[Tavily] 🛡️ Odrzucono ${rejected.length} wyników przez lokalny filtr domen/URL`);
         const scoreFilter = filtrujPoScore(poDomenach);
         const resultsPoScore = scoreFilter.kept;
-        const results = rerankujWynikiTavily(resultsPoScore, sourceQuestion, domains);
+        const results = rerankujWynikiTavily(resultsPoScore, sourceQuestion, domains, { freshness: time_range === 'day' || time_range === 'week' ? 'live' : 'evergreen' });
         const odrzuconePoScore = scoreFilter.dropped;
         if (odrzuconePoScore) logger.log(`[Tavily] 📉 Odrzucono ${odrzuconePoScore} wyników o niskim score (< ${TAVILY_MIN_SCORE})`);
         if (scoreFilter.lowConfidence) logger.log('[Tavily] ⚠️ Wszystkie wyniki poniżej progu jakości — brak materiału dowodowego');
         if (!results.length) { onStatus({ status: 'empty', query: searchQuery }); return returnMeta ? { status: 'empty', text: '' } : ''; }
         const limit = historical ? 12000 : 8000;
+        const sourceConflicts = wykryjKonfliktyZrodelTavily(results, sourceQuestion, domains);
+        const sourceConflictReport = zbudujRaportKonfliktowTavily(sourceConflicts);
         const sourceBlocks = results.map((r, index) => {
           const content = String(r.content || '').trim();
           const raw = String(r.raw_content || '').trim();
@@ -306,7 +373,7 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
           blocks.push(block);
           used += extra + block.length;
         }
-        const text = blocks.join('\n---\n');
+        const text = [sourceConflictReport, blocks.join('\n---\n')].filter(Boolean).join('\n---\n');
         logger.log(`[Tavily] ✅ Zwrócono ${results.length}/${all.length} wyników źródłowych (${text.length} znaków)`);
         cache.set(key, { wynik: text, czas: Date.now(), ttl: ttlDlaZakresu(validTimeRange) });
         if (cache.size > 300) cache.delete(cache.keys().next().value);
@@ -334,5 +401,7 @@ module.exports = {
   ttlDlaZakresu,
   filtrujPoScore,
   rerankujWynikiTavily,
+  wykryjKonfliktyZrodelTavily,
+  zbudujRaportKonfliktowTavily,
   sanityzujTrescZrodlaTavily,
 };
