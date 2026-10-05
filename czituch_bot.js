@@ -4165,9 +4165,9 @@ async function obslugaWiadomosci(nick, message, platforma, wyslijFn, kanal = nul
     return await wyslijFn(`@${cel} ukradł wypowiedź i się nie chce przyznać 🚨`);
   }
 
-  if (msgLower === '!commands') {
+  if (msgLower === '!commands' || msgLower === '!komendy') {
     ostatnieUzycie[cooldownKey] = teraz;
-    return await wyslijFn(`📋 Komendy: !iq | !8ball | !sus | !simp | !mamdepresje | !californiarz | !nowyfilm | !ai [pytanie] | !lurk | !klip [opis] | !donate | !memkomendy | !poradnik [gra] [fraza]`);
+    return await wyslijFn(`📋 Komendy: !iq | !8ball | !sus | !simp | !mamdepresje | !californiarz | !nowyfilm | !ai [pytanie] | !lurk | !klip [opis] | !donate | !memkomendy | !poradnik [gra] [fraza] | !cm | !horoskop | !bułka`);
   }
 
 
