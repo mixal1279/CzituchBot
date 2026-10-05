@@ -8,6 +8,7 @@ const { czyPytanieOLore } = require('../ai/lore');
 const { przygotujHistorieDoModelu } = require('../ai/policy');
 const { sprawdzTwardeFaktyOdpowiedzi, sprawdzSpojnoscLorePortal2, sprawdzZgodnoscKontekstuGry, sprawdzFormatOdpowiedzi } = require('../ai/response');
 const { normalizujWynikWalidatora } = require('../ai/validator');
+const { rerankujWynikiTavily } = require('../ai/tavily');
 
 const policy = (q, recipe) => recipe(q) ? 'minecraft_recipe' : /pogoda/i.test(q) ? 'weather' : /ile trwa/i.test(q) ? 'hltb' : /dzisiaj|najnowsz/i.test(q) ? 'web_fact' : 'conversation';
 \n{
@@ -129,6 +130,15 @@ const policy = (q, recipe) => recipe(q) ? 'minecraft_recipe' : /pogoda/i.test(q)
 }
 
 assert.match(require('fs').readFileSync(require('path').join(__dirname, '..', 'czituch_bot.js'), 'utf8'), /generujOdpowiedz\(max_tokens, promptRetry, 'soft validation retry', true\)/);
+
+{
+  const ranked = rerankujWynikiTavily([
+    { url: 'https://ign.com/article', title: 'Minecraft guide', content: 'Minecraft information', score: 0.80 },
+    { url: 'https://minecraft.wiki/w/Minecraft', title: 'Minecraft', content: 'Minecraft information', score: 0.75 },
+  ], 'Minecraft information', ['minecraft.wiki']);
+  assert.equal(new URL(ranked[0].url).hostname, 'minecraft.wiki');
+}
+
 console.log('AI regression tests: OK');
 
 {
