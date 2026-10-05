@@ -1696,23 +1696,25 @@ function ograniczDoPelnychZdanAI(tekst, maxZdania = 2, limit = 1800, maxSlowa = 
   let t = String(tekst || '').replace(/\s+/g, ' ').trim();
   if (!t) return '';
 
-  // Kontrakt 2 zdań jest wymuszany lokalnie, nie tylko przez prompt.
-  // Kropka dziesiętna (np. 2.5) nie jest końcem zdania.
-  const sentenceEnds = [...t.matchAll(/[.!?]+(?=\s|$)/g)]
+  // Skróty nie kończą zdania: ok., godz., np., itp., itd., tj., tzn., dr., prof.
+  // Najpierw chronimy ich kropki, aby „ok. 20 godz. w zależności…” nie zostało ucięte.
+  const protectedText = t.replace(/(?:m\.in|np|itp|itd|tj|tzn|ok|godz|dr|prof|mgr|inż)\./giu, m => m.slice(0, -1) + '§');
+  const sentenceEnds = [...protectedText.matchAll(/[.!?]+(?=\s|$)/g)]
     .slice(0, maxZdania)
     .map(m => m.index + m[0].length);
   if (sentenceEnds.length >= maxZdania) {
-    t = t.slice(0, sentenceEnds[maxZdania - 1]).trim();
+    t = protectedText.slice(0, sentenceEnds[maxZdania - 1]).replace(/§/g, '.').trim();
   }
 
   const words = t.split(/\s+/).filter(Boolean);
   if (words.length > maxSlowa) t = words.slice(0, maxSlowa).join(' ');
   if (t.length <= limit) return t;
   const prefix = t.slice(0, limit);
-  const matches = [...prefix.matchAll(/[.!?]+(?=\s|$)/g)];
+  const protectedPrefix = prefix.replace(/(?:m\.in|np|itp|itd|tj|tzn|ok|godz|dr|prof|mgr|inż)\./giu, m => m.slice(0, -1) + '§');
+  const matches = [...protectedPrefix.matchAll(/[.!?]+(?=\s|$)/g)];
   if (!matches.length) return '';
   const end = matches[Math.min(matches.length, maxZdania) - 1].index + matches[Math.min(matches.length, maxZdania) - 1][0].length;
-  return prefix.slice(0, end).trim();
+  return protectedPrefix.slice(0, end).replace(/§/g, '.').trim();
 }
 
 const aiHistoriaKolejki = new WeakMap();
