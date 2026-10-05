@@ -1,6 +1,7 @@
 'use strict';
 
 const fs = require('fs');
+const path = require('path');
 
 const TAVILY_CACHE_TTL_MS = 10 * 60 * 1000; // domyślne / pytania o świeże wiadomości
 const TAVILY_REWRITE_TTL_MS = 6 * 60 * 60 * 1000;
@@ -66,6 +67,8 @@ function sanityzujTrescZrodlaTavily(material) {
     .replace(/\[\s*(?:system|developer|assistant|user|tool|instructions?|prompt)\s*\]/gi, '[USUNIĘTY_MARKER_ZRODŁA]')
     .replace(/\b(?:ignore|disregard|forget)\s+(?:all\s+|any\s+|the\s+)?(?:previous|prior|above|earlier)\s+(?:instructions?|rules?|messages?)\b/gi, '[USUNIĘTA_INSTRUKCJA_ZRODŁA]')
     .replace(/\b(?:system|developer)\s+(?:message|prompt)\s*:/gi, '[USUNIĘTY_MARKER_ZRODŁA:]')
+    .replace(/\[\s*SOURCE\s+\d+\s*\]/gi, '[USUNIĘTY_MARKER_ŹRÓDŁA]')
+    .replace(/<<<\/?END?_?UNTRUSTED_SOURCE_CONTENT>>>/gi, '[USUNIĘTY_MARKER_ŹRÓDŁA]')
     .replace(/\b(?:you are|act as|jesteś|działaj jako)\s+(?:an?\s+)?(?:assistant|system|developer|model|ai|bot)\b/gi, '[USUNIĘTA_INSTRUKCJA_ROLI]');
   return text.replace(/\s{2,}/g, ' ').trim();
 }
@@ -117,7 +120,7 @@ function dataZrodlaTavily(result) {
   return Number.isFinite(time) ? time : null;
 }
 
-function wykryjKonfliktyZrodelTavily(results, sourceQuestion, requestedDomains = []) {
+function wykryjKonfliktyZrodelTavily(results, sourceQuestion, requestedDomains = [], sourceStartIndex = 0) {
   const lista = Array.isArray(results) ? results : [];
   const konflikty = [];
   const questionKeywords = slowaKluczoweTavily(sourceQuestion).filter(k => k.length >= 5);
@@ -128,7 +131,7 @@ function wykryjKonfliktyZrodelTavily(results, sourceQuestion, requestedDomains =
     const haystack = normalizujTokenTavily([r?.title, text].filter(Boolean).join(' '));
     const topical = !questionKeywords.length || questionKeywords.filter(k => haystack.includes(k)).length >= Math.min(1, questionKeywords.length);
     return {
-      index, id: `SOURCE ${index + 1}`,
+      index, id: `SOURCE ${sourceStartIndex + index + 1}`,
       host: (() => { try { return new URL(r.url).hostname; } catch (_) { return '(nieznany host)'; } })(),
       authority: poziomAutorytetuTavily(r?.url, requestedDomains), date: dataZrodlaTavily(r),
       numbers, negated, topical, text: text.slice(0, 900),
@@ -140,7 +143,8 @@ function wykryjKonfliktyZrodelTavily(results, sourceQuestion, requestedDomains =
       const differingNumbers = a.numbers.length && b.numbers.length &&
         a.numbers.some(x => b.numbers.every(y => y !== x)) &&
         b.numbers.some(x => a.numbers.every(y => y !== x));
-      const opposingNegation = a.negated !== b.negated && (a.numbers.length || b.numbers.length);
+      const sharedTopic = questionKeywords.some(k => a.text.toLocaleLowerCase('pl-PL').includes(k) && b.text.toLocaleLowerCase('pl-PL').includes(k));
+      const opposingNegation = sharedTopic && a.negated !== b.negated && (a.numbers.length || b.numbers.length);
       if (!differingNumbers && !opposingNegation) continue;
       const winner = a.authority !== b.authority
         ? (a.authority > b.authority ? a : b)
@@ -222,10 +226,12 @@ function czyZablokowanyHostTavily(url) {
 
 function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logger = console, onStatus = () => {}, cacheFile = './tavily_cache.json' }) {
   const cache = new Map();
+  const resolvedCacheFile = path.isAbsolute(cacheFile) ? cacheFile : path.resolve(__dirname, '..', cacheFile);
+  fs.mkdirSync(path.dirname(resolvedCacheFile), { recursive: true });
   const inFlight = new Map();
   let persistQueue = Promise.resolve();
   try {
-    const saved = JSON.parse(fs.readFileSync(cacheFile, 'utf8'));
+    const saved = JSON.parse(fs.readFileSync(resolvedCacheFile, 'utf8'));
     for (const [key, value] of Object.entries(saved || {})) {
       if (value?.czas && Date.now() - value.czas < (value.ttl || TAVILY_CACHE_TTL_MS)) cache.set(key, value);
     }
@@ -239,7 +245,7 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
       const snapshot = JSON.stringify(Object.fromEntries(cache));
       persistQueue = persistQueue
         .catch(err => logger.warn?.('[Tavily] poprzedni zapis cache nieudany:', err.message))
-        .then(() => fs.promises.writeFile(cacheFile, snapshot, 'utf8'))
+        .then(() => fs.promises.writeFile(`${resolvedCacheFile}.tmp`, snapshot, 'utf8').then(() => fs.promises.rename(`${resolvedCacheFile}.tmp`, resolvedCacheFile)))
         .catch(err => logger.warn?.('[Tavily] zapis cache nieudany:', err.message));
     }, TAVILY_PERSIST_DEBOUNCE_MS);
     persistTimer.unref?.();
@@ -248,26 +254,8 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
   const rewriteCache = new Map();
   const kluczRewrite = q => String(q || '').toLowerCase().replace(/\s+/g, ' ').trim();
 
-  const ocenaZrodla = (url, requestedDomains = []) => {
-    try {
-      const host = new URL(url).hostname.toLowerCase().replace(/^www\./, '');
-      const requested = Array.isArray(requestedDomains) && requestedDomains.some(d => {
-        const clean = String(d || '').toLowerCase().replace(/^www\./, '');
-        return clean && (host === clean || host.endsWith(`.${clean}`));
-      });
-      const official = ['minecraft.net', 'rockstargames.com', 'thewitcher.com', 'playstation.com', 'naughtydog.com', 'bandainamcoent.com', 'larian.com', 'baldursgate3.game', 'nvidia.com', 'openai.com', 'anthropic.com', 'microsoft.com', 'apple.com', 'discord.com', 'twitch.tv', 'kick.com']
-        .some(d => host === d || host.endsWith(`.${d}`));
-      const specialized = ['minecraft.wiki', 'gamelore.fandom.com', 'steamdb.info', 'docs.npmjs.com', 'developer.mozilla.org', 'gamefaqs.gamespot.com']
-        .some(d => host === d || host.endsWith(`.${d}`));
-      const guide = ['ign.com', 'gamespot.com', 'pcgamer.com', 'fandom.com']
-        .some(d => host === d || host.endsWith(`.${d}`));
-      if (official) return 'oficjalne';
-      if (specialized || requested) return 'wyspecjalizowane';
-      if (guide) return 'guide/referencyjne';
-      return 'zewnętrzne-niezweryfikowane';
-    } catch (_) { return 'nieznane'; }
-  };
-  const cacheKey = (query, domains, timeRange, sourceQuestion = '') => `${query.toLowerCase().trim()}|${(domains || []).slice().sort().join(',')}|${timeRange || ''}|${slowaKluczoweTavily(sourceQuestion).join(',')}`;
+  const ocenaZrodla = (url, requestedDomains = []) => ocenaZrodlaLokalnie(url, requestedDomains);
+  const cacheKey = (query, domains, timeRange, sourceQuestion = '', sourceStartIndex = 0) => `${query.toLowerCase().trim()}|${(domains || []).slice().sort().join(',')}|${timeRange || ''}|${sourceStartIndex}|${slowaKluczoweTavily(sourceQuestion).join(',')}`;
 
   return async function szukajTavily(pytanie, options = {}) {
     const original = String(pytanie || '').trim();
@@ -295,7 +283,7 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
         if (rewriteCache.size > 500) rewriteCache.delete(rewriteCache.keys().next().value);
       }
       logger.log(`[Tavily] searchQuery: "${searchQuery}" | domains: ${JSON.stringify(domains)} | time_range: ${time_range}`);
-      const key = cacheKey(searchQuery, domains, time_range, sourceQuestion);
+      const key = cacheKey(searchQuery, domains, time_range, sourceQuestion, sourceStartIndex);
       const cached = cache.get(key);
       if (cached && Date.now() - cached.czas < (cached.ttl || TAVILY_CACHE_TTL_MS)) {
         onStatus({ status: 'cache', query: searchQuery });
@@ -348,7 +336,7 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
         if (scoreFilter.lowConfidence) logger.log('[Tavily] ⚠️ Wszystkie wyniki poniżej progu jakości — brak materiału dowodowego');
         if (!results.length) { onStatus({ status: 'empty', query: searchQuery }); return returnMeta ? { status: 'empty', text: '' } : ''; }
         const limit = historical ? 6000 : 5000;
-        const sourceConflicts = wykryjKonfliktyZrodelTavily(results, sourceQuestion, domains);
+        const sourceConflicts = wykryjKonfliktyZrodelTavily(results, sourceQuestion, domains, sourceStartIndex);
         const sourceConflictReport = zbudujRaportKonfliktowTavily(sourceConflicts);
         const sourceBlocks = results.slice(0, 4).map((r, index) => {
           const content = String(r.content || '').trim();
