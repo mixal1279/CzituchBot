@@ -2588,7 +2588,7 @@ const szukajTavily = createTavilySearch({
   groq,
   fetchZTimeout,
   normalizeQuery: normalizujZapytanieTavily,
-  cacheFile: './tavily_cache.json',
+  cacheFile: process.env.AI_TAVILY_CACHE_FILE || path.join(process.env.AI_CACHE_DIR || __dirname, 'tavily_cache.json'),
   onStatus: status => {
     if (['error', 'rate_limited', 'timeout'].includes(status?.status)) AI_METRYKI.tavilyErrors++;
     if (status?.status === 'cache' || status?.status === 'deduped') AI_METRYKI.tavilyCacheHits++;
