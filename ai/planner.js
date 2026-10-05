@@ -50,6 +50,7 @@ function planAIRequest(question, routing) {
     sourceType: routing?.source_type || 'none',
     responseProfile,
     sourcePolicy: buildSourcePolicy(routing, responseProfile),
+    retrievalTimeRange: routing?.freshness === 'live' ? 'day' : routing?.freshness === 'recent' ? 'week' : null,
     claimsRequired: ['lore', 'gameplay'].includes(responseProfile) ? 'claim_by_claim' : 'normal',
   };
 }
