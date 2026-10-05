@@ -1509,7 +1509,7 @@ async function walidujOdpowiedzOpenRouter(persona, pytanie, odpowiedz, dane, req
         model: KONFIGURACJA.openrouterValidatorModel,
         messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
         temperature: 0,
-        max_tokens: 500,
+        max_tokens: 900,
         reasoning: { effort: 'low', exclude: true },
         include_reasoning: false,
         response_format: {
