@@ -11,7 +11,8 @@ const { normalizujWynikWalidatora } = require('../ai/validator');
 const { rerankujWynikiTavily } = require('../ai/tavily');
 
 const policy = (q, recipe) => recipe(q) ? 'minecraft_recipe' : /pogoda/i.test(q) ? 'weather' : /ile trwa/i.test(q) ? 'hltb' : /dzisiaj|najnowsz/i.test(q) ? 'web_fact' : 'conversation';
-\n{
+
+{
   const entity = resolveGameEntity('Dlaczego Wheatley przejął kontrolę w Portal 2?');
   assert.equal(entity.type, 'character');
   assert.equal(entity.name, 'Wheatley');
