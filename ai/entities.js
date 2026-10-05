@@ -47,9 +47,22 @@ function normalizujEncje(text) {
 }
 
 function containsAlias(text, alias) {
-  const normalized = normalizujEncje(text);
-  const a = normalizujEncje(alias);
-  return Boolean(a && (' ' + normalized + ' ').includes(' ' + a + ' '));
+  const textTokens = normalizujEncje(text).split(' ').filter(Boolean);
+  const aliasTokens = normalizujEncje(alias).split(' ').filter(Boolean);
+  if (!aliasTokens.length || textTokens.length < aliasTokens.length) return false;
+  for (let i = 0; i <= textTokens.length - aliasTokens.length; i++) {
+    let match = true;
+    for (let j = 0; j < aliasTokens.length; j++) {
+      const a = aliasTokens[j];
+      const t = textTokens[i + j];
+      if (t === a) continue;
+      if (a.length >= 5 && t.startsWith(a)) continue;
+      match = false;
+      break;
+    }
+    if (match) return true;
+  }
+  return false;
 }
 
 function findAlias(text, entries) {
