@@ -1632,7 +1632,7 @@ function czyOdpowiedzToOdmowa(tekst) {
   return AI_POLICY.czyOdpowiedzToOdmowa(tekst);
 }
 
-function ograniczDoPelnychZdanAI(tekst, maxZdania = 2, limit = 1800) {
+function ograniczDoPelnychZdanAI(tekst, maxZdania = 2, limit = 1800, maxSlowa = 180) {
   let t = String(tekst || '').replace(/\s+/g, ' ').trim();
   if (!t) return '';
 
@@ -1645,6 +1645,8 @@ function ograniczDoPelnychZdanAI(tekst, maxZdania = 2, limit = 1800) {
     t = t.slice(0, sentenceEnds[maxZdania - 1]).trim();
   }
 
+  const words = t.split(/\s+/).filter(Boolean);
+  if (words.length > maxSlowa) t = words.slice(0, maxSlowa).join(' ');
   if (t.length <= limit) return t;
   const prefix = t.slice(0, limit);
   const matches = [...prefix.matchAll(/[.!?]+(?=\s|$)/g)];
@@ -1668,7 +1670,7 @@ function wykonajAIWHistorii(historia, zadanie) {
 
 async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn, opcje = {}) {
   AI_METRYKI.requests++;
-  const { temperature = 0.5, max_tokens = 200, tavilyOptions = {}, aiProfile = 'generic' } = opcje;
+  let { temperature = 0.5, max_tokens = 200, tavilyOptions = {}, aiProfile = 'generic' } = opcje;
   systemPrompt = `${systemPrompt}\n\nNie umieszczaj w odpowiedzi nazw źródeł, atrybucji, etykiet „Źródło:” ani URL-i. Źródła są wyłącznie wewnętrznym materiałem RAG i walidacji.`;
   const jestAI_Billy = aiProfile === 'billy' || systemPrompt === AI_SYSTEM_PROMPT_BILLY;
   const jestAI_EdzzI = aiProfile === 'edzzi' || systemPrompt === AI_SYSTEM_PROMPT_EDZZI;
@@ -1740,6 +1742,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
   }
   const aiPlan = planAIRequest(pytanie, routingAI);
   const responseCfg = RESPONSE_PROFILES[aiPlan.responseProfile] || RESPONSE_PROFILES.simple;
+  max_tokens = Math.max(Number(max_tokens) || 200, responseCfg.maxTokens);
   systemPrompt = `${systemPrompt}\n\n${responseContract(aiPlan.responseProfile)}`;
   const kategoriaAI = routingAI.intent;
   console.log(`[AI][${requestId}] routing=${JSON.stringify({ intent: routingAI.intent, entity: routingAI.entity, game: routingAI.game, entity_type: routingAI.entity_type, needs_web: routingAI.needs_web, freshness: routingAI.freshness, source_type: routingAI.source_type, response_profile: aiPlan.responseProfile, confidence: routingAI.confidence })}`);
@@ -2276,7 +2279,7 @@ function oczyscOdpowiedzPrzedWalidacja(tekst) {
 }
 
   let wynikGeneracji = await generujOdpowiedz(max_tokens, systemPrompt);
-  let odp = oczyscOdpowiedzPrzedWalidacja(ograniczDoPelnychZdanAI(usunMarkeryWewnetrzneAI(filtrBezpieczenstwa(wynikGeneracji.tekst)), responseCfg.maxSentences));
+  let odp = oczyscOdpowiedzPrzedWalidacja(ograniczDoPelnychZdanAI(usunMarkeryWewnetrzneAI(filtrBezpieczenstwa(wynikGeneracji.tekst)), responseCfg.maxSentences, 1800, responseCfg.maxWords));
   if (!odp) { console.log(`[AI][${requestId}] final status=unavailable — brak odpowiedzi`); zalogujPodsumowanieAI('unavailable'); return; }
   console.log(`[AI][${requestId}] generator=${wynikGeneracji.provider}/${wynikGeneracji.model} liczba prób 120B=${liczbaProb120b}`);
 
@@ -2368,7 +2371,7 @@ function oczyscOdpowiedzPrzedWalidacja(tekst) {
   const finalizeResponse = (tekst, status) => {
     if (status === 'rejected') return 'Nie mam wystarczających danych, żeby odpowiedzieć na to pewnie.';
     if (status === 'unavailable') return 'Chwilowo nie mogę potwierdzić tej informacji, więc nie będę zgadywać.';
-    let finalText = ograniczDoPelnychZdanAI(usunMarkeryWewnetrzneAI(filtrBezpieczenstwa(tekst)), responseCfg.maxSentences);
+    let finalText = ograniczDoPelnychZdanAI(usunMarkeryWewnetrzneAI(filtrBezpieczenstwa(tekst)), responseCfg.maxSentences, 1800, responseCfg.maxWords);
     if (!finalText) return '';
     // Źródła pozostają wewnętrznym materiałem RAG/validatora. Nie wysyłamy
     // użytkownikowi nazw źródeł, atrybucji ani linków.
