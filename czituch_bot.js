@@ -2333,11 +2333,13 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
 
   async function generujOdpowiedz(maxTok, prompt = systemPrompt, powod = 'main', allow120b = true) {
     let result = allow120b ? await zapytajGlowny(Math.max(maxTok, 300), prompt, 'openai/gpt-oss-120b') : wynikPusty('groq', 'openai/gpt-oss-120b', '120B skipped after validator rejection');
-    if (allow120b && !requestBlokada120b && (!result.tekst || result.ucieta) && liczbaProb120b < 2 && !result.error?.match?.(/429|rate.?limit|tokens per day|tokens per minute|TPD|TPM|blocked/i)) {
+    const failureType = classifyFailure(result.error || '');
+    if (allow120b && !requestBlokada120b && (!result.tekst || result.ucieta) && liczbaProb120b < 2 && !['quota','auth','invalid_request'].includes(failureType)) {
       console.log(`[AI][${requestId}] 120B retry #1 (${powod})`);
       result = await zapytajGlowny(Math.max(maxTok, 300) + 250, prompt, 'openai/gpt-oss-120b');
     }
     if (result.tekst && !result.ucieta) return result;
+    console.log(`[AI][${requestId}] fallback policy=${failureType || 'unknown'} next=${JSON.stringify(nextFallbacks({ failure: failureType, attempted: ['groq:openai/gpt-oss-120b'] }))}`);
     const fallback20 = await zapytajGlowny(Math.max(maxTok, 300), prompt, 'openai/gpt-oss-20b');
     if (fallback20.tekst && !fallback20.ucieta) return fallback20;
     const mistral = await zapytajMistral(Math.max(maxTok, 300), prompt, powod);
