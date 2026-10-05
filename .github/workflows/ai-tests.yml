@@ -29,7 +29,7 @@ jobs:
           node-version: 24
 
       - name: Run AI regression tests
-        run: node --test test
+        run: node --test test/*.test.js
 
       - name: Syntax check AI modules
         run: |
