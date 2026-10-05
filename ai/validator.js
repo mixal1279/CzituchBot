@@ -105,6 +105,12 @@ function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote) {
   });
 }
 
+function normalizujIdZrodla(value) {
+  const raw = String(value || '').trim();
+  const match = raw.match(/^(?:SOURCE\s*)?(\d+)$/i);
+  return match ? `SOURCE ${match[1]}` : raw;
+}
+
 function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSourceIds = null, dane = '') {
   if (!wynik || typeof wynik !== 'object' || Array.isArray(wynik)) return null;
 
@@ -130,7 +136,7 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
     claim: typeof claim?.claim === 'string' ? claim.claim.trim().slice(0, 500) : '',
     supported: claim?.supported === true,
     source_ids: Array.isArray(claim?.source_ids)
-      ? claim.source_ids.filter(v => typeof v === 'string' && v.trim()).map(v => v.trim().slice(0, 80)).slice(0, 5)
+      ? claim.source_ids.filter(v => typeof v === 'string' && v.trim()).map(normalizujIdZrodla).map(v => v.slice(0, 80)).slice(0, 5)
       : [],
     evidence_quote: typeof claim?.evidence_quote === 'string' ? claim.evidence_quote.trim().slice(0, 500) : '',
     reason: typeof claim?.reason === 'string' ? claim.reason.trim().slice(0, 240) : '',
