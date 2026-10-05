@@ -21,37 +21,63 @@ function normalizujZapytanieUzupelniajace(q, maxSlowa = 14) {
   }).slice(0, maxSlowa).join(' ');
 }
 
+function zawieraTokenPL(tekst, wzorzec) {
+  return new RegExp(`(?:^|[^\\p{L}\\p{N}_])(?:${wzorzec})(?:[\\p{L}\\p{N}_]*)?(?=$|[^\\p{L}\\p{N}_])`, 'iu').test(String(tekst || ''));
+}
+
+function zawieraJedenZTokenowPL(tekst, wzorce) {
+  return wzorce.some(wzorzec => zawieraTokenPL(tekst, wzorzec));
+}
+
+function czyPytanieOPogode(pytanie) {
+  const p = String(pytanie || '');
+  if (zawieraJedenZTokenowPL(p, ['pogod', 'deszcz', 'wiatr', 'słonecz', 'śnieg', 'mróz', 'upał', 'zachmurz', 'forecast'])) return true;
+  // Samo „temperatura GPU/CPU” nie jest pogodą. Temperatura jest sygnałem pogodowym
+  // dopiero przy miejscu albo jednostce pogodowej.
+  return zawieraTokenPL(p, 'temperatur')
+    && (/(?:^|[^\\p{L}])(?:w|we|na)\\s+\\p{L}/iu.test(p) || zawieraTokenPL(p, 'stopni'));
+}
+
 function zakresTavilyDlaPytania(pytanie, domyslny = null) {
-  const p = String(pytanie || '').toLowerCase();
-  if (/\b(dzisiaj|dzis|today|teraz|obecnie|właśnie|wlasnie|aktualnie|najnowsz|ostatni[ae]|ostatnio)\b/.test(p)) return 'day';
-  if (/\b(wczoraj|yesterday)\b/.test(p)) return 'day';
-  if (/\b(?:19\d{2}|20\d{2})\b|(?:histori|pierwsz|wydan|wydany|wydana|powstał|powstała|założon|wynalaz|prototyp|premier|ukazał\s+się|ukazala\s+się|wyszedł|wyszła|wydano)/i.test(p)) return null;
+  const p = String(pytanie || '').toLocaleLowerCase('pl-PL');
+  if (zawieraJedenZTokenowPL(p, ['dzisiaj', 'dzis', 'today', 'teraz', 'obecnie', 'właśnie', 'wlasnie', 'aktualnie', 'najnowsz', 'ostatni', 'ostatnio', 'news'])) return 'day';
+  if (zawieraJedenZTokenowPL(p, ['wczoraj', 'yesterday'])) return 'day';
+  if (/\\b(?:19\\d{2}|20\\d{2})\\b/.test(p) || zawieraJedenZTokenowPL(p, ['histori', 'pierwsz', 'wydan', 'wydany', 'wydana', 'powstał', 'powstała', 'założon', 'wynalaz', 'prototyp', 'premier', 'ukazał', 'ukazala', 'wyszedł', 'wyszła', 'wydano'])) return null;
   return domyslny;
 }
 
 function okreslKategorieAI(pytanie, czyPytanieOReceptureMC = () => false) {
   const p = String(pytanie || '');
-  const graSygnal = /\b(minecraft|wied[źz]min|cyberpunk(?:\s+2077)?|gta(?:\s+[iv1-6]+)?|fortnite|elden\s+ring|baldur'?s\s+gate|witcher|assassin'?s\s+creed|red\s+dead|fallout|skyrim|starfield|dark\s+souls|game|gra|gry|tytuł\s+gry)\b/i.test(p);
+  const graSygnal = /(?:^|[^\\p{L}\\p{N}_])(?:minecraft|wied[źz]min|cyberpunk(?:\\s+2077)?|gta(?:\\s+[iv1-6]+)?|fortnite|elden\\s+ring|baldur'?s\\s+gate|witcher|assassin'?s\\s+creed|red\\s+dead|fallout|skyrim|starfield|dark\\s+souls|game)(?=$|[^\\p{L}\\p{N}_])/iu.test(p)
+    || zawieraJedenZTokenowPL(p, ['gra', 'gry', 'tytuł', 'tytul', 'minecraft', 'wiedźmin', 'wiedzmin']);
   if (czyPytanieOReceptureMC(p)) return 'minecraft_recipe';
-  if (/pogod|temperatur|deszcz|wiatr|słonecz|slonecz|forecast/i.test(p)) return 'weather';
-  const hltbSygnal = /(?:czas(?:\s+(?:przej[śs]cia|uko[ńn]czenia))|przej[śs]cie|uko[ńn]czenie|howlongtobeat|hltb|ile\s+(?:godzin|czasu)\s+(?:zajmuje|potrzeba).*(?:gry|tytułu|przej[śs]cia))/i.test(p)
-    || (graSygnal && /(?:ile\s+trwa|jak\s+d[łl]ugo)/i.test(p) && !/aktualizacj|instalacj|pobier|serwer|event|wydarzen/i.test(p));
-  if (hltbSygnal) return 'hltb';
-  if (/youtube|kanał|kanal|youtuber|subskryb|streamer|twitch|kick|o\s+czym\s+jest\s+(?:kanał|kanal)/i.test(p)) return 'youtube';
+  if (czyPytanieOPogode(p)) return 'weather';
 
-  // Pytania o zdrowy rozsądek / wybór codziennego działania nie wymagają
-  // wyszukiwarki. Muszą być rozpoznane PRZED ogólną regułą web_fact, bo słowa
-  // takie jak „czy”, „jak” albo „gdzie” występują w zwykłych pytaniach równie
-  // często jak w pytaniach faktograficznych. Nie dotyczy to pytań z wyraźnym
-  // sygnałem gry ani bieżących informacji, które zostały obsłużone wyżej.
+  const hltbSygnal = /(?:czas(?:\\s+(?:przej[śs]cia|uko[ńn]czenia))|przej[śs]cie|uko[ńn]czenie|howlongtobeat|hltb|ile\\s+(?:godzin|czasu)\\s+(?:zajmuje|potrzeba).*(?:gry|tytułu|tytulu|przej[śs]cia))/iu.test(p)
+    || (graSygnal && /(?:ile\\s+trwa|jak\\s+d[łl]ugo)/iu.test(p) && !/aktualizacj|instalacj|pobier|serwer|event|wydarzen/i.test(p));
+  if (hltbSygnal) return 'hltb';
+  if (/youtube|kanał|kanal|youtuber|subskryb|streamer|twitch|kick|o\\s+czym\\s+jest\\s+(?:kanał|kanal)/iu.test(p)) return 'youtube';
+
   const sygnalZdrowegoRozsadku =
-    /(?:iść|isc|jechać|jechac|zrobić|zrobic|wybrać|wybrac|wziąć|wziac|kupić|kupic|brać|brac|zostać|zostac)[\s\S]{0,100}(?:czy|albo)[\s\S]{0,100}(?:iść|isc|jechać|jechac|zrobić|zrobic|wybrać|wybrac|wziąć|wziac|kupić|kupic|brać|brac|zostać|zostac)/i.test(p)
-    || /\b(?:co|jak)\s+(?:lepiej|rozsądniej|rozsadniej|najlepiej)\b/i.test(p)
-    || /\b(?:czy|czy warto)\s+(?:lepiej|opłaca się|oplaca sie)\b/i.test(p);
+    /(?:iść|isc|jechać|jechac|zrobić|zrobic|wybrać|wybrac|wziąć|wziac|kupić|kupic|brać|brac|zostać|zostac)[\\s\\S]{0,100}(?:czy|albo)[\\s\\S]{0,100}(?:iść|isc|jechać|jechac|zrobić|zrobic|wybrać|wybrac|wziąć|wziac|kupić|kupic|brać|brac|zostać|zostac)/iu.test(p)
+    || /\\b(?:co|jak)\\s+(?:lepiej|rozsądniej|rozsadniej|najlepiej)\\b/iu.test(p)
+    || /\\b(?:czy|czy warto)\\s+(?:lepiej|opłaca się|oplaca sie)\\b/iu.test(p);
   if (sygnalZdrowegoRozsadku) return 'conversation';
 
-  if (/\b(?:dzisiaj|dzis|wczoraj|najnowsz\w*|wiadomoś\w*|wiadomos\w*|news|aktualn\w*)\b/i.test(pytanie)) return 'web_fact';
-  if (graSygnal || /\b(jak|gdzie|co to|z czego|kiedy|od kiedy|ile|kto|czy|jaki|jaka|jakie|premier\w*|data|cena|koszt|informacj\w*|aktualizacj\w*|dlaczego|czemu|różni\w*|rożni\w*|działa|dziala|bezpiecz\w*|powstał\w*|został\w*|rozwija\w*|opracow\w*|stworzył\w*|firma|technolog\w*|model\w*|histori\w*|pierwsz\w*|prototyp\w*|http|https|dns|ram|cpu|gpu|api|oauth|javascript|node\.?js|python|groq|gemini|openrouter|discord|crafting)\b/i.test(pytanie)) return 'web_fact';
+  const codziennaCzynność = /\\b(?:jak|co)\\s+(?:zrobić|zrobic|ugotować|ugotowac|upiec|przygotować|przygotowac|posprzątać|posprzatac|naprawić|naprawic|umyć|umyc|załatwić|zalatwic)\\b/iu.test(p)
+    && !/\\b(?:minecraft|wied[źz]min|witcher|cyberpunk|gta|red\\s+dead|rdr2|elden\\s+ring|fortnite|discord|api|node\\.?js|python|javascript|html|css|linux|steam|twitch|youtube|groq|gemini|mistral|openrouter|nvidia|rtx|gpu|cpu)\\b/iu.test(p);
+  if (codziennaCzynność) return 'conversation';
+
+  if (zawieraJedenZTokenowPL(p, ['dzisiaj', 'dzis', 'wczoraj', 'najnowsz', 'wiadomoś', 'wiadomos', 'news', 'aktualn'])) return 'web_fact';
+
+  const webTokens = [
+    'jak','gdzie','co to','z czego','kiedy','od kiedy','ile','kto','czy','jaki','jaka','jakie',
+    'premier','data','cena','koszt','informacj','aktualizacj','dlaczego','czemu','różni','rozni',
+    'działa','dziala','bezpiecz','powstał','powstal','został','zostal','rozwija','opracow','stworzył',
+    'stworzyl','firma','technolog','model','histori','pierwsz','prototyp','http','https','dns','ram',
+    'cpu','gpu','api','oauth','javascript','node','python','groq','gemini','openrouter','discord','crafting'
+  ];
+  if (graSygnal || zawieraJedenZTokenowPL(p, webTokens)) return 'web_fact';
   return 'conversation';
 }
 
