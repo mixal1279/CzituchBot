@@ -144,7 +144,7 @@ function wykryjKonfliktyZrodelTavily(results, sourceQuestion, requestedDomains =
         a.numbers.some(x => b.numbers.every(y => y !== x)) &&
         b.numbers.some(x => a.numbers.every(y => y !== x));
       const sharedTopic = questionKeywords.some(k => a.text.toLocaleLowerCase('pl-PL').includes(k) && b.text.toLocaleLowerCase('pl-PL').includes(k));
-      const opposingNegation = sharedTopic && a.negated !== b.negated && (a.numbers.length || b.numbers.length);
+      const opposingNegation = sharedTopic && a.negated !== b.negated;
       if (!differingNumbers && !opposingNegation) continue;
       const winner = a.authority !== b.authority
         ? (a.authority > b.authority ? a : b)
@@ -283,7 +283,7 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
         if (rewriteCache.size > 500) rewriteCache.delete(rewriteCache.keys().next().value);
       }
       logger.log(`[Tavily] searchQuery: "${searchQuery}" | domains: ${JSON.stringify(domains)} | time_range: ${time_range}`);
-      const key = cacheKey(searchQuery, domains, time_range, sourceQuestion, sourceStartIndex);
+      const key = `${cacheKey(searchQuery, domains, time_range, sourceQuestion, sourceStartIndex)}|meta:${returnMeta ? '1' : '0'}`;
       const cached = cache.get(key);
       if (cached && Date.now() - cached.czas < (cached.ttl || TAVILY_CACHE_TTL_MS)) {
         onStatus({ status: 'cache', query: searchQuery });
