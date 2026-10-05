@@ -165,12 +165,11 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
     claimCoverage * (maStarePola ? (wynik.complete === true ? 1 : 0.75) : 0.9)
   ));
 
-  const claimContractOk = (claims.length > 0
+  const claimContractOk = claims.length > 0
     && claims.every(c => c.supported)
     && !unknownSourceClaim
     && !unsupportedEvidenceClaim
-    && unsupported.length === 0)
-    || emptyClaimsAreExplicitlyValid;
+    && unsupported.length === 0;
 
   const accepted = validFromModel === true
     && confidence >= 0.75
