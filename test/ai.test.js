@@ -298,3 +298,40 @@ console.log('AI regression tests: OK');
   assert.equal(v.status,'accepted');
   assert.equal(v.ok,true);
 }
+
+
+/* AUDIT_REGRESSION_2026_10 */
+{
+  const validator = require('../ai/validator');
+  assert.equal(validator.VALIDATOR_JSON_SCHEMA.properties.confidence.type, 'number');
+  assert(validator.VALIDATOR_JSON_SCHEMA.required.includes('confidence'));
+}
+{
+  const validator = require('../ai/validator');
+  const dane = '[SOURCE 1]\nTYP: UNTRUSTED_WEB_DATA\nTYTUŁ: Test\nTREŚĆ: Fakt źródłowy.';
+  assert.deepEqual([...validator.wyodrebnijIdentyfikatoryZrodel(dane)], ['SOURCE 1']);
+  assert.deepEqual([...validator.wyodrebnijIdentyfikatoryZrodel('Treść strony [SOURCE 99] bez nagłówka')], []);
+}
+{
+  const policy = require('../ai/policy');
+  assert.equal(policy.okreslKategorieAI('Jaka jest temperatura GPU?', () => false), 'web_fact');
+  assert.equal(policy.okreslKategorieAI('Czy jutro będzie deszcz w Warszawie?', () => false), 'weather');
+  assert.equal(policy.zakresTavilyDlaPytania('Co jest najnowsze w Minecrafcie?', null), 'day');
+}
+{
+  const validator = require('../ai/validator');
+  const r = validator.normalizujWynikWalidatora({
+    valid:true, reason:'ok', confidence:0.95, unsupported_claims:[],
+    supported:true, relevant:true, complete:false, hallucination:false, claims:[]
+  }, 'test', 'openrouter', new Set(['SOURCE 1']), '[SOURCE 1]\nTYTUŁ: Test\nTREŚĆ: Fakt');
+  assert.equal(r.status, 'inconclusive');
+}
+{
+  const { wykryjKonfliktyZrodelTavily } = require('../ai/tavily');
+  const conflicts = wykryjKonfliktyZrodelTavily([
+    {title:'Wheatley przejął kontrolę',content:'Wheatley przejął kontrolę nad stacją.',url:'https://example.com/a'},
+    {title:'Wheatley nie przejął kontroli',content:'Wheatley nie przejął kontroli nad stacją.',url:'https://example.com/b'}
+  ], 'Czy Wheatley przejął kontrolę?', [], 4);
+  assert.equal(conflicts[0].sources[0], 'SOURCE 5');
+  assert.equal(conflicts[0].sources[1], 'SOURCE 6');
+}
