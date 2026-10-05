@@ -1775,6 +1775,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
   };
   aiState.zarezerwujModel = zarezerwujModel;
   const moznaWykonacGeneracje = (provider, model) => {
+    if (!provider || !model) return false;
     if (budzetPrzekroczony() || aiState.generacje >= aiState.maxGeneracji || !zarezerwujModel(`generation:${provider}/${model}`)) {
       console.warn(`[AI][${requestId}] budżet generacji/modeli wyczerpany (${provider}/${model})`);
       return false;
@@ -1998,7 +1999,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
   if (!pogodaKontekst && !hltbKontekst && !infoKanalu && czyWyszukac && pytaniaAtomoweTavily.length && aiState.tavilySearches < aiState.maxWyszukanTavily && !budzetPrzekroczony()) {
     const materialyTavily = [];
     let sourceOffset = 0;
-    const kolejkaTavily = pytaniaAtomoweTavily.slice(0, 2);
+    const kolejkaTavily = pytaniaAtomoweTavily.slice(0, Math.min(2, aiState.maxRetrievalQueries || 2));
     let indexZapytania = 0;
     while (indexZapytania < kolejkaTavily.length && aiState.tavilySearches < aiState.maxWyszukanTavily && !budzetPrzekroczony()) {
       const query = kolejkaTavily[indexZapytania++];
