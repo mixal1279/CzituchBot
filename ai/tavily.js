@@ -90,6 +90,40 @@ function filtrujMaterialPoSlowachTavily(material, pytanie) {
   if (keep.length < 2 && sentences.length > 1) keep.push(sentences.find(s => !keep.includes(s)) || '');
   return keep.filter(Boolean).join(' ');
 }
+
+function rerankujWynikiTavily(results, sourceQuestion, requestedDomains = []) {
+  const keywords = slowaKluczoweTavily(sourceQuestion);
+  return [...(Array.isArray(results) ? results : [])].map((result, index) => {
+    const quality = ocenaZrodlaLokalnie(result?.url, requestedDomains);
+    const qualityBonus = quality === 'oficjalne' ? 0.12 : quality === 'wyspecjalizowane' ? 0.08 : quality === 'guide/referencyjne' ? 0.03 : 0;
+    const haystack = normalizujTokenTavily([result?.title, result?.content].filter(Boolean).join(' '));
+    const coverage = keywords.length ? keywords.filter(k => haystack.includes(k)).length / keywords.length : 0;
+    const coverageBonus = Math.min(0.15, coverage * 0.15);
+    const baseScore = typeof result?.score === 'number' ? result.score : 0;
+    return { result, index, rerankScore: baseScore + qualityBonus + coverageBonus };
+  }).sort((a, b) => b.rerankScore - a.rerankScore || a.index - b.index).map(x => x.result);
+}
+
+function ocenaZrodlaLokalnie(url, requestedDomains = []) {
+  try {
+    const host = new URL(url).hostname.toLowerCase().replace(/^www\./, '');
+    const requested = requestedDomains.some(d => {
+      const clean = String(d || '').toLowerCase().replace(/^www\./, '');
+      return clean && (host === clean || host.endsWith('.' + clean));
+    });
+    const official = ['minecraft.net', 'rockstargames.com', 'thewitcher.com', 'playstation.com', 'naughtydog.com', 'bandainamcoent.com', 'larian.com', 'baldursgate3.game', 'nvidia.com', 'openai.com', 'anthropic.com', 'microsoft.com', 'apple.com', 'discord.com', 'twitch.tv', 'kick.com']
+      .some(d => host === d || host.endsWith('.' + d));
+    const specialized = ['minecraft.wiki', 'gamelore.fandom.com', 'steamdb.info', 'gamefaqs.gamespot.com', 'developer.mozilla.org']
+      .some(d => host === d || host.endsWith('.' + d));
+    const guide = ['ign.com', 'gamespot.com', 'pcgamer.com', 'fandom.com', 'eurogamer.net', 'eurogamer.pl']
+      .some(d => host === d || host.endsWith('.' + d));
+    if (official) return 'oficjalne';
+    if (specialized || requested) return 'wyspecjalizowane';
+    if (guide) return 'guide/referencyjne';
+    return 'zewnętrzne-niezweryfikowane';
+  } catch (_) { return 'nieznane'; }
+}
+
 const TAVILY_BLOKOWANE_HOSTY = new Set([
   'forums.gamespot.com', 'community.gamespot.com',
   'answers.ign.com', 'forums.ign.com',
@@ -231,7 +265,9 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
         });
         if (rejected.length) logger.log(`[Tavily] 🛡️ Odrzucono ${rejected.length} wyników przez lokalny filtr domen/URL`);
         const scoreFilter = filtrujPoScore(poDomenach);
-        const { kept: results, dropped: odrzuconePoScore } = scoreFilter;
+        const resultsPoScore = scoreFilter.kept;
+        const results = rerankujWynikiTavily(resultsPoScore, sourceQuestion, domains);
+        const odrzuconePoScore = scoreFilter.dropped;
         if (odrzuconePoScore) logger.log(`[Tavily] 📉 Odrzucono ${odrzuconePoScore} wyników o niskim score (< ${TAVILY_MIN_SCORE})`);
         if (scoreFilter.lowConfidence) logger.log('[Tavily] ⚠️ Wszystkie wyniki poniżej progu jakości — brak materiału dowodowego');
         if (!results.length) { onStatus({ status: 'empty', query: searchQuery }); return returnMeta ? { status: 'empty', text: '' } : ''; }
@@ -280,4 +316,4 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
   };
 }
 
-module.exports = { createTavilySearch, hostnamePasujeDoDomenyTavily, czyZablokowanyHostTavily, ttlDlaZakresu, filtrujPoScore };
+module.exports = { createTavilySearch, hostnamePasujeDoDomenyTavily, czyZablokowanyHostTavily, ttlDlaZakresu, filtrujPoScore, rerankujWynikiTavily };
