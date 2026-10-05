@@ -28,11 +28,21 @@ jobs:
         with:
           node-version: 24
 
-      - run: node --test test/ai.test.js
-      - run: node --check ai/router.js
-      - run: node --check ai/response.js
-      - run: node --check ai/validator.js
-      - run: node --check ai/policy.js
+      - name: Run AI regression tests
+        run: node --test test
+
+      - name: Syntax check AI modules
+        run: |
+          node --check ai/entities.js
+          node --check ai/planner.js
+          node --check ai/router.js
+          node --check ai/lore.js
+          node --check ai/gameplay.js
+          node --check ai/policy.js
+          node --check ai/response.js
+          node --check ai/validator.js
+          node --check ai/tavily.js
+          node --check czituch_bot.js
 
       - name: Prepare changed-files artifact
         shell: bash
