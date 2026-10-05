@@ -1729,9 +1729,8 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
   AI_METRYKI.requests++;
   let { temperature = 0.5, max_tokens = 200, tavilyOptions = {}, aiProfile = 'generic', memoryUserId = null } = opcje;
   const verifiedMemoryUserId = memoryUserId || String(nick || '').toLowerCase();
-  const verifiedMemory = await wczytajZweryfikowanaPamiecAI(verifiedMemoryUserId);
-  const verifiedMemoryContext = buildVerifiedMemoryContext(verifiedMemory);
-  systemPrompt = `${systemPrompt}${verifiedMemoryContext ? `\n\n${verifiedMemoryContext}` : ''}\n\nNie umieszczaj w odpowiedzi nazw źródeł, atrybucji, etykiet „Źródło:” ani URL-i. Źródła są wyłącznie wewnętrznym materiałem RAG i walidacji.`;
+  const verifiedMemoryPromise = wczytajZweryfikowanaPamiecAI(verifiedMemoryUserId);
+  systemPrompt = `${systemPrompt}\n\nNie umieszczaj w odpowiedzi nazw źródeł, atrybucji, etykiet „Źródło:” ani URL-i. Źródła są wyłącznie wewnętrznym materiałem RAG i walidacji.`;
   const jestAI_Billy = aiProfile === 'billy' || systemPrompt === AI_SYSTEM_PROMPT_BILLY;
   const jestAI_EdzzI = aiProfile === 'edzzi' || systemPrompt === AI_SYSTEM_PROMPT_EDZZI;
   const jestAI_Angie = aiProfile === 'angie' || systemPrompt === AI_SYSTEM_PROMPT_ANGIE;
@@ -1856,6 +1855,10 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
     czyPytanieOHLTB ? Promise.resolve(wyodrebnijGryHLTB(pytanie)) : Promise.resolve(null),
   ]);
 
+
+  const verifiedMemory = await verifiedMemoryPromise;
+  const verifiedMemoryContext = buildVerifiedMemoryContext(verifiedMemory);
+  systemPrompt = `${systemPrompt}${verifiedMemoryContext ? `\n\n${verifiedMemoryContext}` : ''}`;
   if (domeny?.resolvedGame && !routingAI.game) {
     routingAI.game = domeny.resolvedGame.nazwa;
     routingAI.entity = routingAI.entity || domeny.resolvedGame.nazwa;
