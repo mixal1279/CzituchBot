@@ -3,6 +3,7 @@
 const WEB_CATEGORIES = new Set(['weather', 'hltb', 'youtube', 'web_fact']);
 const { czyPytanieOLore } = require('./lore');
 const { czyPytanieOGameplay } = require('./gameplay');
+const { resolveGameEntity } = require('./entities');
 
 const SOURCE_TYPES = {
   weather: 'weather_api',
@@ -15,25 +16,30 @@ function classifyAIRequest(pytanie, policyCategory, recipeDetector = () => false
   const text = String(pytanie || '').trim();
   const p = text.toLocaleLowerCase('pl-PL');
   const category = policyCategory(text, recipeDetector);
-
-  const entity = detectEntity(p);
+  const resolved = resolveGameEntity(text);
+  const entity = detectEntity(p) || resolved?.game || resolved?.name || null;
   const freshness = detectFreshness(p);
-  const needsWeb = WEB_CATEGORIES.has(category);
-  const needsFreshData = freshness === 'live' || freshness === 'recent';
   const lore = czyPytanieOLore(text);
   const gameplay = czyPytanieOGameplay(text);
+
+  // Lore/gameplay zawsze potrzebują retrievalu, nawet gdy policy zwróci conversation.
+  const needsWeb = WEB_CATEGORIES.has(category) || lore || gameplay;
+  const needsFreshData = freshness === 'live' || freshness === 'recent';
   const sourceType = lore ? 'game_lore' : gameplay ? 'gameplay_guide' : (SOURCE_TYPES[category] || (needsWeb ? 'web_search' : 'none'));
 
-  // Confidence describes routing confidence, not factual confidence.
   let confidence = 0.65;
   if (category === 'minecraft_recipe') confidence = 0.99;
   else if (category === 'weather' || category === 'hltb' || category === 'youtube') confidence = 0.95;
   else if (category === 'web_fact') confidence = entity ? 0.90 : 0.78;
+  else if (lore || gameplay) confidence = resolved ? Math.max(0.86, resolved.confidence) : 0.80;
   else if (category === 'conversation') confidence = 0.88;
 
   return {
     intent: category,
     entity,
+    entity_type: resolved?.type || (entity ? 'entity' : null),
+    game: resolved?.game || (resolved?.type === 'game' ? resolved.name : null),
+    resolved_entity: resolved,
     needs_web: needsWeb,
     needs_fresh_data: needsFreshData,
     freshness,
