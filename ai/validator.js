@@ -29,6 +29,7 @@ const VALIDATOR_JSON_SCHEMA = {
           reason: { type: 'string' },
         },
         required: ['claim', 'supported', 'source_ids', 'evidence_quote'],
+        additionalProperties: false,
       },
     },
   },
@@ -72,7 +73,8 @@ function wytnijJsonWalidatora(text) {
 function wyodrebnijIdentyfikatoryZrodel(dane) {
   const ids = new Set();
   const text = String(dane || '');
-  for (const match of text.matchAll(/\[(SOURCE \d+|REFERENCE [^\]]+)\]/g)) ids.add(match[1]);
+  for (const match of text.matchAll(/^\[SOURCE (\d+)\]\s*\r?\n(?=TYTUŁ:)/gmi)) ids.add(`SOURCE ${match[1]}`);
+  for (const match of text.matchAll(/^\[REFERENCE ([^\]\r\n]+)\]\s*$/gmi)) ids.add(`REFERENCE ${match[1].trim()}`);
   return ids;
 }
 
@@ -163,7 +165,7 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
     claimCoverage * (maStarePola ? (wynik.complete === true ? 1 : 0.75) : 0.9)
   ));
 
-  const emptyClaimsAreExplicitlyValid =
+  const emptyClaimsAreExplicitlyValid = false &&
     claims.length === 0
     && validFromModel === true
     && confidence >= 0.85
