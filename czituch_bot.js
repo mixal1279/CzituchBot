@@ -269,9 +269,9 @@ function wyznaczRoutingAI(pytanie) {
   return classifyAIRequest(pytanie, AI_POLICY.okreslKategorieAI, czyPytanieOReceptureMC);
 }
 
-function zastosujDeterministyczneGuards(walidacja, odpowiedz, dane, pytanie) {
+function zastosujDeterministyczneGuards(walidacja, odpowiedz, dane, pytanie, formatOptions = {}) {
   if (!walidacja || walidacja.status !== 'accepted') return walidacja;
-  const format = sprawdzFormatOdpowiedzi(odpowiedz);
+  const format = sprawdzFormatOdpowiedzi(odpowiedz, formatOptions);
   if (!format.ok) {
     return {
       ...walidacja,
@@ -2320,7 +2320,7 @@ function oczyscOdpowiedzPrzedWalidacja(tekst) {
     }
     if (walidacja.status === 'accepted') {
       const beforeGuard = walidacja;
-      walidacja = zastosujDeterministyczneGuards(walidacja, odp, daneDoWalidacji, pytanie);
+      walidacja = zastosujDeterministyczneGuards(walidacja, odp, daneDoWalidacji, pytanie, { maxZdania: responseCfg.maxSentences, maxZnakow: 1800 });
       if (walidacja.status !== beforeGuard.status) {
         console.warn(`[AI][${requestId}] deterministic response guard rejected: ${JSON.stringify(walidacja.unsupported_claims || [])}`);
       }
@@ -2352,7 +2352,7 @@ function oczyscOdpowiedzPrzedWalidacja(tekst) {
           odp = oczyscOdpowiedzPrzedWalidacja(nowaOdp);
           walidacja = await walidujOdpowiedzAI(aiProfile === 'billy' ? 'billy' : aiProfile === 'edzzi' ? 'edzzi' : aiProfile === 'angie' ? 'angie' : 'generic', pytanie, odp, daneDoWalidacji, historiaRozmowy, requestId, aiState, metadaneRequestu);
           if (walidacja.status === 'accepted') {
-            walidacja = zastosujDeterministyczneGuards(walidacja, odp, daneDoWalidacji, pytanie);
+            walidacja = zastosujDeterministyczneGuards(walidacja, odp, daneDoWalidacji, pytanie, { maxZdania: responseCfg.maxSentences, maxZnakow: 1800 });
           }
           if (walidacja.status === 'accepted' && daneDoWalidacji && AI_POLICY.czyOdpowiedzToJednoznacznaOdmowa(odp)) {
             walidacja = { ...walidacja, status: 'rejected', ok: false, complete: false, reason: 'regeneracja nadal jest odmową mimo danych' };
