@@ -19,8 +19,9 @@ function classifyAIRequest(pytanie, policyCategory, recipeDetector = () => false
   const resolved = resolveGameEntity(text);
   const entity = resolved?.game || resolved?.name || detectEntity(p) || null;
   const freshness = detectFreshness(p);
-  const lore = czyPytanieOLore(text);
-  const gameplay = czyPytanieOGameplay(text);
+  const isMinecraftRecipe = category === 'minecraft_recipe';
+  const lore = !isMinecraftRecipe && czyPytanieOLore(text);
+  const gameplay = !isMinecraftRecipe && czyPytanieOGameplay(text);
 
   // Lore/gameplay zawsze potrzebują retrievalu, nawet gdy policy zwróci conversation.
   const needsWeb = WEB_CATEGORIES.has(category) || lore || gameplay;
