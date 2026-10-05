@@ -282,3 +282,10 @@ console.log('AI regression tests: OK');
 
 
 console.log('AI regression tests: OK');
+
+{
+  const { normalizujWynikWalidatora } = require('../ai/validator');
+  const v = normalizujWynikWalidatora({valid:true,reason:'Wszystkie twierdzenia zawarte w odpowiedzi są w pełni poparte przez dane referencyjne.',unsupported_claims:[],claims:[],supported:true,relevant:true,complete:true,hallucination:false,confidence:0.95},'test-model','gemini',new Set(['SOURCE 1']),'[SOURCE 1]\nRodzina Matters opisuje wydarzenia misji.');
+  assert.equal(v.status,'accepted');
+  assert.equal(v.ok,true);
+}
