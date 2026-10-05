@@ -1434,7 +1434,7 @@ function czyPytanieBillyFaktograficzne(pytanie, kategoriaAI) {
     || ['fact', 'youtube'].includes(kategoriaAI);
 }
 
-const { VALIDATOR_JSON_SCHEMA, wytnijJsonWalidatora, normalizujWynikWalidatora, wyodrebnijIdentyfikatoryZrodel } = AI_VALIDATOR;
+const { VALIDATOR_JSON_SCHEMA, GEMINI_VALIDATOR_JSON_SCHEMA, wytnijJsonWalidatora, normalizujWynikWalidatora, wyodrebnijIdentyfikatoryZrodel } = AI_VALIDATOR;
 
 async function walidujOdpowiedzGeminiModel(model, persona, pytanie, odpowiedz, dane, historiaRozmowy = [], requestId = '-', requestState = null, requestMeta = null) {
   if (!dane) return { status: 'unavailable', ok: false, technicalError: true, provider: 'gemini', model, unsupported_claims: [], reason: 'brak danych referencyjnych' };
@@ -1459,7 +1459,7 @@ Zwróć WYŁĄCZNIE JSON: {"valid":true/false,"reason":"krótki powód","confide
         body: JSON.stringify({
           system_instruction: { parts: [{ text: system }] },
           contents: [{ role: 'user', parts: [{ text: user }] }],
-          generationConfig: { temperature: 0, maxOutputTokens: 900, responseMimeType: 'application/json', responseSchema: VALIDATOR_JSON_SCHEMA, thinkingConfig: { thinkingLevel: model === 'gemini-3.7-flash' ? 'low' : 'minimal' } },
+          generationConfig: { temperature: 0, maxOutputTokens: 900, responseMimeType: 'application/json', responseSchema: GEMINI_VALIDATOR_JSON_SCHEMA, thinkingConfig: { thinkingLevel: model === 'gemini-3.7-flash' ? 'low' : 'minimal' } },
         }), signal: controller.signal,
       });
       const data = await response.json().catch(() => ({}));
