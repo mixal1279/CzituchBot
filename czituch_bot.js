@@ -2168,7 +2168,8 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
     const messages = buildMessages(overrideSystemPrompt);
     const prompt = messages.user;
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 30000);
+    const timeoutMs = Math.max(1, Math.min(30000, pozostalyCzasMs()));
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
       const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${encodeURIComponent(KONFIGURACJA.geminiKey)}`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -2200,7 +2201,8 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
     const messages = buildMessages(overrideSystemPrompt);
     const prompt = messages.user;
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 30000);
+    const timeoutMs = Math.max(1, Math.min(30000, pozostalyCzasMs()));
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
       const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=${encodeURIComponent(KONFIGURACJA.geminiKey)}`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -2231,7 +2233,8 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
     const messages = buildOpenRouterMessages(overrideSystemPrompt);
     const prompt = messages[messages.length - 1]?.content || pytanie;
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 30000);
+    const timeoutMs = Math.max(1, Math.min(30000, pozostalyCzasMs()));
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
       const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
@@ -2257,7 +2260,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
     if (!KONFIGURACJA.mistralKey) return wynikPusty('mistral', model, 'brak MISTRAL_API_KEY');
     if (!moznaWykonacGeneracje('mistral', model)) return wynikPusty('mistral', model, 'AI request budget exceeded');
     const controller = new AbortController();
-    const remainingMs = Math.max(1000, aiState.maxCzasMs - (Date.now() - aiState.startedAt));
+    const remainingMs = pozostalyCzasMs();
     const timer = setTimeout(() => controller.abort(), remainingMs);
     try {
       const response = await fetch('https://api.mistral.ai/v1/chat/completions', {
@@ -2309,7 +2312,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
     try {
       const kontekstDoGroq = String(kontekstAI || '').slice(0, 10000);
       const controller = new AbortController();
-      const remainingMs = Math.max(1000, aiState.maxCzasMs - (Date.now() - aiState.startedAt));
+      const remainingMs = pozostalyCzasMs();
       const timer = setTimeout(() => controller.abort(), remainingMs);
       try {
         const response = await groq.chat.completions.create({ model, messages: [{ role: 'system', content: overrideSystemPrompt }, ...przygotujHistorieDoModelu(historiaRozmowy, 4), { role: 'user', content: kontekstDoGroq }], temperature, max_tokens: maxTok, reasoning_effort: model === 'openai/gpt-oss-120b' ? 'medium' : 'low', signal: controller.signal });
