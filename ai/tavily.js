@@ -121,7 +121,7 @@ function filtrujMaterialPoSlowachTavily(material, pytanie) {
   // Heurystyka nie może wyzerować źródła: gdy nic nie pasuje, zwracamy pełny materiał.
   if (!relevant.length) return text;
 
-  const keep = relevant.slice(0, 8).sort((a, b) => a.index - b.index).map(x => x.sentence);
+  const keep = relevant.slice(0, 10).sort((a, b) => a.index - b.index).map(x => x.sentence);
   // Jeżeli filtr wyciął prawie wszystko, zostawiamy jeszcze jedno zdanie kontekstowe.
   if (keep.length < 2 && sentences.length > 1) keep.push(sentences.find(s => !keep.includes(s)) || '');
   return keep.filter(Boolean).join(' ');
@@ -432,9 +432,38 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
           });
           if (secondary.status === 'ok' && secondary.text) {
             const secondaryProviders = [...new Set((secondary.sources || []).map(s => s.provider).filter(Boolean))];
-            logger.log(`[Retrieval] 🔎 Tavily weak — użyto secondary providerów: ${secondaryProviders.join(', ') || 'unknown'} (źródeł: ${secondary.sources?.length || 0})`);
+            logger.log(`[Retrieval] 🔎 Tavily weak — dołączono secondary providerów: ${secondaryProviders.join(', ') || 'unknown'} (źródeł: ${secondary.sources?.length || 0})`);
             onStatus({ status: 'secondary', query: searchQuery, providers: secondaryProviders, sourceCount: secondary.sources?.length || 0 });
-            return returnMeta ? { status: 'ok', text: secondary.text, secondary: true, sources: secondary.sources } : secondary.text;
+            // Secondary retrieval uzupełnia Tavily zamiast go zastępować. Wcześniej
+            // słaby Tavily był całkowicie wyrzucany, przez co traciliśmy użyteczne
+            // fragmenty i validator miał mniej dowodów.
+            const secondaryText = secondary.text;
+            const secondaryRebased = secondary.sources?.length
+              ? formatSources(
+                  secondary.sources.map((source, index) => ({
+                    ...source,
+                    sourceId: `SOURCE ${sourceStartIndex + results.length + index + 1}`,
+                  })),
+                  sourceStartIndex + results.length,
+                )
+              : secondaryText;
+            const primaryPreview = results.slice(0, 4).map((r, index) => {
+              const content = String(r.content || r.raw_content || '').trim();
+              const materialRaw = content.substring(0, 1800)
+                .split('\n').map(line => line.trim()).filter(Boolean).join('\n');
+              const material = sanityzujTrescZrodlaTavily(filtrujMaterialPoSlowachTavily(materialRaw, sourceQuestion));
+              const host = (() => { try { return new URL(r.url).hostname; } catch (_) { return '(nieznany host)'; } })();
+              return [
+                `[SOURCE ${sourceStartIndex + index + 1}]`,
+                'TYP: UNTRUSTED_WEB_DATA',
+                `TYTUŁ: ${sanityzujTrescZrodlaTavily(String(r.title || '(brak tytułu)').slice(0, 300))}`,
+                `HOST: ${host}`,
+                `URL: ${r.url}`,
+                `TREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>\n${material}\n<<<END_UNTRUSTED_SOURCE_CONTENT>>>`,
+              ].join('\n');
+            }).join('\n---\n');
+            const mergedText = [primaryPreview, secondaryRebased].filter(Boolean).join('\n---\n');
+            return returnMeta ? { status: 'ok', text: mergedText, secondary: true, sources: [...results, ...(secondary.sources || [])] } : mergedText;
           }
         }
         if (!results.length) { onStatus({ status: 'empty', query: searchQuery }); return returnMeta ? { status: 'empty', text: '' } : ''; }
@@ -446,7 +475,7 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
           const raw = String(r.raw_content || '').trim();
           // content = fragmenty dobrane pod zapytanie; raw tylko awaryjnie.
           // Lekki filtr usuwa zdania niezwiązane z pytaniem, ale nigdy nie usuwa całego źródła.
-          const materialRaw = (content || raw).substring(0, 1400)
+          const materialRaw = (content || raw).substring(0, 2200)
             .split('\n')
             .map(line => line.trim())
             .filter(Boolean)
