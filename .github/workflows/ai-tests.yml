@@ -46,6 +46,7 @@ jobs:
           node --check ai/response.js
           node --check ai/validator.js
           node --check ai/tavily.js
+          node --check ai/webRetrieval.js
           node --check czituch_bot.js
 
       - name: Prepare changed-files artifact

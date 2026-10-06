@@ -279,7 +279,9 @@ console.log('AI regression tests: OK');
 {
   const source = require('fs').readFileSync(require('path').join(__dirname, '..', 'czituch_bot.js'), 'utf8');
   assert.match(source, /generujOdpowiedz\(max_tokens, promptRetry, 'soft validation retry', true\)/);
-  assert.match(source, /weakRetrieval && wynik\.text\.length < 1200/);
+  assert.match(source, /const retrievalText = String\(wynik\?\.text \|\| ''\);/);
+  assert.match(source, /const retrievalSourceCount = \(retrievalText\.match\(\/\\\[\(\?:SOURCE\|REFERENCE\) \[\^\\\]\]\+\\\]\/g\) \|\| \[\]\)\.length;/);
+  assert.match(source, /weakRetrieval = !retrievalText/);
 }
 
 {

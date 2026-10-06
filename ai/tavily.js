@@ -1,6 +1,7 @@
 'use strict';
 
 const fs = require('fs');
+const { searchSecondaryProviders } = require('./webRetrieval');
 
 const TAVILY_CACHE_TTL_MS = 10 * 60 * 1000; // domyślne / pytania o świeże wiadomości
 const TAVILY_REWRITE_TTL_MS = 6 * 60 * 60 * 1000;
@@ -220,7 +221,7 @@ function czyZablokowanyHostTavily(url) {
   catch (_) { return true; }
 }
 
-function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logger = console, onStatus = () => {}, cacheFile = './tavily_cache.json' }) {
+function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logger = console, onStatus = () => {}, cacheFile = './tavily_cache.json', geminiKey = process.env.GEMINI_API_KEY, exaKey = process.env.EXA_API_KEY }) {
   const cache = new Map();
   const inFlight = new Map();
   let persistQueue = Promise.resolve();
@@ -346,6 +347,22 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
         const odrzuconePoScore = scoreFilter.dropped;
         if (odrzuconePoScore) logger.log(`[Tavily] 📉 Odrzucono ${odrzuconePoScore} wyników o niskim score (< ${TAVILY_MIN_SCORE})`);
         if (scoreFilter.lowConfidence) logger.log('[Tavily] ⚠️ Wszystkie wyniki poniżej progu jakości — brak materiału dowodowego');
+        if (results.length < 2) {
+          const secondary = await searchSecondaryProviders({
+            query: sourceQuestion || searchQuery,
+            geminiKey,
+            exaKey,
+            fetchFn: fetchZTimeout,
+            startIndex: sourceStartIndex,
+            domains,
+            prefer: time_range ? 'gemini' : 'exa',
+          });
+          if (secondary.status === 'ok' && secondary.text) {
+            logger.log(`[Retrieval] 🔎 Tavily weak — użyto secondary provider (${secondary.sources.map(s => s.provider).join(', ')})`);
+            onStatus({ status: 'secondary', query: searchQuery, providers: secondary.sources.map(s => s.provider) });
+            return returnMeta ? { status: 'ok', text: secondary.text, secondary: true, sources: secondary.sources } : secondary.text;
+          }
+        }
         if (!results.length) { onStatus({ status: 'empty', query: searchQuery }); return returnMeta ? { status: 'empty', text: '' } : ''; }
         const limit = historical ? 6000 : 5000;
         const sourceConflicts = wykryjKonfliktyZrodelTavily(results, sourceQuestion, domains);
@@ -388,10 +405,22 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
       logger.error('[Tavily] Błąd:', err.message);
       const rateLimited = /(?:\b429\b|rate.?limit|too many requests|quota)/i.test(err.message || '');
       const status = rateLimited ? 'rate_limited' : (/timeout|abort|timed out/i.test(err.message || '') ? 'timeout' : 'error');
+      const secondary = await searchSecondaryProviders({
+        query: sourceQuestion || original,
+        geminiKey,
+        exaKey,
+        fetchFn: fetchZTimeout,
+        startIndex: sourceStartIndex,
+        domains,
+        prefer: 'gemini',
+      });
+      if (secondary.status === 'ok' && secondary.text) {
+        onStatus({ status: 'secondary', query: original, providers: secondary.sources.map(s => s.provider), fallbackFrom: status });
+        return returnMeta ? { status: 'ok', text: secondary.text, secondary: true, sources: secondary.sources } : secondary.text;
+      }
       onStatus({ status, query: original, error: err.message });
       return returnMeta ? { status, text: '', error: err.message } : null;
-    }
-  };
+    }  };
 }
 
 module.exports = {
