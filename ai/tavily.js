@@ -6,11 +6,32 @@ const { searchSecondaryProviders } = require('./webRetrieval');
 const TAVILY_CACHE_TTL_MS = 10 * 60 * 1000; // domyślne / pytania o świeże wiadomości
 const TAVILY_REWRITE_TTL_MS = 6 * 60 * 60 * 1000;
 const TAVILY_PERSIST_DEBOUNCE_MS = 5000;
+const TAVILY_CACHE_MAX_ENTRIES = 300;
+const TAVILY_CACHE_MAX_BYTES = 2 * 1024 * 1024;
+const TAVILY_REWRITE_MAX_ENTRIES = 500;
+const TAVILY_CACHE_VERSION = 2;
 const TAVILY_MIN_SCORE = Number(process.env.TAVILY_MIN_SCORE) || 0.2;
 const TAVILY_MIN_STRONG_RESULTS = 1;
 
 // TTL zależny od tego, jak szybko odpowiedź się starzeje: świeże wiadomości krótko,
 // fakty historyczne (bez time_range) długo.
+function ograniczCacheTavily(cache, maxEntries = TAVILY_CACHE_MAX_ENTRIES) {
+  while (cache.size > maxEntries) cache.delete(cache.keys().next().value);
+  return cache;
+}
+
+function snapshotCacheTavily(cache, maxBytes = TAVILY_CACHE_MAX_BYTES) {
+  const entries = [...cache.entries()];
+  let snapshot = { version: TAVILY_CACHE_VERSION, entries: Object.fromEntries(entries) };
+  let serialized = JSON.stringify(snapshot);
+  while (Buffer.byteLength(serialized, 'utf8') > maxBytes && entries.length) {
+    entries.shift();
+    snapshot = { version: TAVILY_CACHE_VERSION, entries: Object.fromEntries(entries) };
+    serialized = JSON.stringify(snapshot);
+  }
+  return serialized;
+}
+
 function ttlDlaZakresu(timeRange) {
   const r = String(timeRange || '').replace(/^past_/, '').toLowerCase();
   if (!r) return 6 * 60 * 60 * 1000;
@@ -63,6 +84,9 @@ function slowaKluczoweTavily(pytanie) {
 function sanityzujTrescZrodlaTavily(material) {
   let text = String(material || '');
   text = text
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F\u200B-\u200F\u202A-\u202E\u2060\u2066-\u2069\uFEFF]/g, '')
+    .replace(/<!--[\s\S]*?-->/g, '[USUNIĘTY_KOMENTARZ_HTML]')
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '[USUNIĘTY_SKRYPT_HTML]')
     .replace(/<\/?(?:system|developer|assistant|user|tool|instructions?|prompt|context)\b[^>]*>/gi, '[USUNIĘTY_MARKER_ZRODŁA]')
     .replace(/\[\s*(?:system|developer|assistant|user|tool|instructions?|prompt)\s*\]/gi, '[USUNIĘTY_MARKER_ZRODŁA]')
     .replace(/\b(?:ignore|disregard|forget)\s+(?:all\s+|any\s+|the\s+)?(?:previous|prior|above|earlier)\s+(?:instructions?|rules?|messages?)\b/gi, '[USUNIĘTA_INSTRUKCJA_ZRODŁA]')
@@ -242,22 +266,40 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
   const inFlight = new Map();
   let persistQueue = Promise.resolve();
   try {
-    const saved = JSON.parse(fs.readFileSync(cacheFile, 'utf8'));
-    for (const [key, value] of Object.entries(saved || {})) {
-      if (value?.czas && Date.now() - value.czas < (value.ttl || TAVILY_CACHE_TTL_MS)) cache.set(key, value);
+    const stat = fs.statSync(cacheFile);
+    if (stat.size <= TAVILY_CACHE_MAX_BYTES) {
+      const saved = JSON.parse(fs.readFileSync(cacheFile, 'utf8'));
+      const entries = saved?.version === TAVILY_CACHE_VERSION ? saved.entries : saved;
+      if (entries && typeof entries === 'object' && !Array.isArray(entries)) {
+        for (const [key, value] of Object.entries(entries)) {
+          if (typeof key !== 'string' || key.length > 2048) continue;
+          if (!value || typeof value.wynik !== 'string' || value.wynik.length > 12000) continue;
+          if (value.czas && Date.now() - value.czas < (value.ttl || TAVILY_CACHE_TTL_MS)) cache.set(key, value);
+        }
+      }
+    } else {
+      logger.warn?.(`[Tavily] cache pominięty — plik przekracza limit ${TAVILY_CACHE_MAX_BYTES} B`);
     }
   } catch (_) {}
+  ograniczCacheTavily(cache);
   // Zapis odroczony: wiele wyników w krótkim czasie = jeden zapis pliku (snapshot z chwili zapisu).
   let persistTimer = null;
   const persistCache = () => {
     if (persistTimer) return persistQueue;
     persistTimer = setTimeout(() => {
       persistTimer = null;
-      const snapshot = JSON.stringify(Object.fromEntries(cache));
+      const snapshot = snapshotCacheTavily(cache);
+      const tempFile = `${cacheFile}.tmp-${process.pid}`;
       persistQueue = persistQueue
         .catch(err => logger.warn?.('[Tavily] poprzedni zapis cache nieudany:', err.message))
-        .then(() => fs.promises.writeFile(cacheFile, snapshot, 'utf8'))
-        .catch(err => logger.warn?.('[Tavily] zapis cache nieudany:', err.message));
+        .then(async () => {
+          await fs.promises.writeFile(tempFile, snapshot, 'utf8', { mode: 0o600 });
+          await fs.promises.rename(tempFile, cacheFile);
+        })
+        .catch(err => {
+          logger.warn?.('[Tavily] zapis cache nieudany:', err.message);
+          return fs.promises.unlink(tempFile).catch(() => {});
+        });
     }, TAVILY_PERSIST_DEBOUNCE_MS);
     persistTimer.unref?.();
     return persistQueue;
@@ -288,7 +330,7 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
 
   return async function szukajTavily(pytanie, options = {}) {
     const original = String(pytanie || '').trim();
-    const { domains, time_range, _skipRewrite = false, returnMeta = false, sourceStartIndex = 0, sourceQuestion = original, remainingMs = 15000 } = options;
+    const { domains, time_range, _skipRewrite = false, returnMeta = false, sourceStartIndex = 0, sourceQuestion = original, remainingMs = 15000, requestState = null } = options;
     try {
       let searchQuery = original;
       const rewriteKey = kluczRewrite(original);
@@ -297,19 +339,32 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
         searchQuery = rewriteZCache.query;
         logger.log(`[Tavily] ♻️ Rewrite z cache — bez wywołania modelu`);
       } else if (!_skipRewrite && original) {
-        const rewrite = await groq.chat.completions.create({
-          model: 'openai/gpt-oss-20b', max_tokens: 220, reasoning_effort: 'low',
-          include_reasoning: false, temperature: 0,
-          messages: [
-            { role: 'system', content: 'Przepisz pytanie na jedno kompletne zapytanie do wyszukiwarki. Zachowaj WSZYSTKIE istotne elementy pytania, nazwy własne, relacje i części składowe. Nie odpowiadaj. Nie usuwaj drugiej ani kolejnych części pytania. Maksymalnie 35 słów. Tylko samo zapytanie.' },
-            { role: 'user', content: original },
-          ],
-        });
-        const rewritten = normalizeQuery(rewrite.choices?.[0]?.message?.content);
-        if (rewritten && rewritten.length >= 30 && rewritten.length >= Math.min(original.length * 0.28, 80)) searchQuery = rewritten;
-        else logger.log(`[Tavily] ↩️ Rewrite odrzucony — używam oryginalnego pytania: "${original}"`);
-        rewriteCache.set(rewriteKey, { query: searchQuery, czas: Date.now() });
-        if (rewriteCache.size > 500) rewriteCache.delete(rewriteCache.keys().next().value);
+        const canRewrite = !requestState?.zarezerwujModel || requestState.zarezerwujModel('tavily-query-rewrite');
+        if (!canRewrite) {
+          logger.warn?.('[Tavily] rewrite pominięty — budżet modelu/ czasu requestu wyczerpany');
+        } else {
+          const rewriteController = new AbortController();
+          const rewriteTimeoutMs = Math.max(1, Math.min(8000, Number(remainingMs) || 8000));
+          const rewriteTimer = setTimeout(() => rewriteController.abort(), rewriteTimeoutMs);
+          let rewrite;
+          try {
+            rewrite = await groq.chat.completions.create({
+              model: 'openai/gpt-oss-20b', max_tokens: 220, reasoning_effort: 'low',
+              include_reasoning: false, temperature: 0, signal: rewriteController.signal,
+              messages: [
+                { role: 'system', content: 'Przepisz pytanie na jedno kompletne zapytanie do wyszukiwarki. Zachowaj WSZYSTKIE istotne elementy pytania, nazwy własne, relacje i części składowe. Nie odpowiadaj. Nie usuwaj drugiej ani kolejnych części pytania. Maksymalnie 35 słów. Tylko samo zapytanie.' },
+                { role: 'user', content: original },
+              ],
+            });
+          } finally {
+            clearTimeout(rewriteTimer);
+          }
+          const rewritten = normalizeQuery(rewrite.choices?.[0]?.message?.content);
+          if (rewritten && rewritten.length >= 30 && rewritten.length >= Math.min(original.length * 0.28, 80)) searchQuery = rewritten;
+          else logger.log(`[Tavily] ↩️ Rewrite odrzucony — używam oryginalnego pytania: "${original}"`);
+          rewriteCache.set(rewriteKey, { query: searchQuery, czas: Date.now() });
+          if (rewriteCache.size > TAVILY_REWRITE_MAX_ENTRIES) rewriteCache.delete(rewriteCache.keys().next().value);
+        }
       }
       logger.log(`[Tavily] searchQuery: "${searchQuery}" | domains: ${JSON.stringify(domains)} | time_range: ${time_range}`);
       const key = cacheKey(searchQuery, domains, time_range, sourceQuestion);
@@ -411,7 +466,7 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
         const text = [sourceConflictReport, blocks.join('\n---\n')].filter(Boolean).join('\n---\n');
         logger.log(`[Tavily] ✅ Zwrócono ${results.length}/${all.length} wyników źródłowych (${text.length} znaków)`);
         cache.set(key, { wynik: text, czas: Date.now(), ttl: ttlDlaZakresu(validTimeRange) });
-        if (cache.size > 300) cache.delete(cache.keys().next().value);
+        ograniczCacheTavily(cache);
         persistCache();
         onStatus({ status: 'ok', query: searchQuery, results: results.length });
         return returnMeta ? { status: 'ok', text } : text;
@@ -431,6 +486,7 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
         startIndex: sourceStartIndex,
         domains,
         prefer: 'gemini',
+        timeoutMs: Math.max(1, Math.min(15000, Number(remainingMs) || 15000)),
       });
       if (secondary.status === 'ok' && secondary.text) {
         onStatus({ status: 'secondary', query: original, providers: secondary.sources.map(s => s.provider), fallbackFrom: status });
@@ -446,6 +502,8 @@ module.exports = {
   hostnamePasujeDoDomenyTavily,
   czyZablokowanyHostTavily,
   ttlDlaZakresu,
+  ograniczCacheTavily,
+  snapshotCacheTavily,
   filtrujPoScore,
   rerankujWynikiTavily,
   wykryjKonfliktyZrodelTavily,
