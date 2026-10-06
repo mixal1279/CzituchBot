@@ -51,7 +51,7 @@ async function fetchJson(fetchFn, url, options, timeoutMs = 30000) {
   }
 }
 
-async function searchGeminiWeb({ apiKey, query, fetchFn = fetch, startIndex = 0 }) {
+async function searchGeminiWeb({ apiKey, query, fetchFn = fetch, startIndex = 0, timeoutMs = 30000 }) {
   if (!apiKey || !query) return { status: 'disabled', text: '', sources: [] };
   try {
     const data = await fetchJson(fetchFn,
@@ -65,7 +65,7 @@ async function searchGeminiWeb({ apiKey, query, fetchFn = fetch, startIndex = 0 
           generationConfig: { temperature: 0, maxOutputTokens: 900 },
         }),
       },
-      30000
+      Math.max(1000, Math.min(30000, Number(timeoutMs) || 30000))
     );
     const candidate = data?.candidates?.[0];
     const text = (candidate?.content?.parts || []).map(p => p?.text || '').join(' ').trim();
@@ -94,6 +94,8 @@ async function searchGeminiWeb({ apiKey, query, fetchFn = fetch, startIndex = 0 
     }).filter(s => s.url && s.content);
     return {
       status: sources.length ? 'ok' : (text ? 'text_only' : 'empty'),
+      // Text-only grounding is deliberately not exposed as source evidence.
+      answer: text,
       text: formatSources(sources, startIndex),
       sources,
       citations: supports,
@@ -104,7 +106,7 @@ async function searchGeminiWeb({ apiKey, query, fetchFn = fetch, startIndex = 0 
   }
 }
 
-async function searchExa({ apiKey, query, fetchFn = fetch, startIndex = 0, domains = [] }) {
+async function searchExa({ apiKey, query, fetchFn = fetch, startIndex = 0, domains = [], timeoutMs = 30000 }) {
   if (!apiKey || !query) return { status: 'disabled', text: '', sources: [] };
   try {
     const data = await fetchJson(fetchFn, 'https://api.exa.ai/search',
@@ -119,7 +121,7 @@ async function searchExa({ apiKey, query, fetchFn = fetch, startIndex = 0, domai
           ...(domains?.length ? { includeDomains: domains } : {}),
         }),
       },
-      30000
+      Math.max(1000, Math.min(30000, Number(timeoutMs) || 30000))
     );
     const results = Array.isArray(data?.results) ? data.results : [];
     const sources = results.map((r, i) => normalizeSource({
@@ -137,7 +139,7 @@ async function searchExa({ apiKey, query, fetchFn = fetch, startIndex = 0, domai
   }
 }
 
-async function searchSecondaryProviders({ query, geminiKey, exaKey, fetchFn = fetch, startIndex = 0, domains = [], prefer = 'gemini' }) {
+async function searchSecondaryProviders({ query, geminiKey, exaKey, fetchFn = fetch, startIndex = 0, domains = [], prefer = 'gemini', timeoutMs = 15000 }) {
   const order = prefer === 'exa'
     ? [['exa', exaKey], ['gemini', geminiKey]]
     : [['gemini', geminiKey], ['exa', exaKey]];
@@ -146,7 +148,7 @@ async function searchSecondaryProviders({ query, geminiKey, exaKey, fetchFn = fe
     if (!key) continue;
     const result = provider === 'exa'
       ? await searchExa({ apiKey: key, query, fetchFn, startIndex, domains })
-      : await searchGeminiWeb({ apiKey: key, query, fetchFn, startIndex });
+      : await searchGeminiWeb({ apiKey: key, query, fetchFn, startIndex, timeoutMs });
     if (result.status === 'ok' && result.sources.length) return result;
     if (result.error) errors.push(`${provider}: ${result.error}`);
   }
