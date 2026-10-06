@@ -405,10 +405,22 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
       logger.error('[Tavily] Błąd:', err.message);
       const rateLimited = /(?:\b429\b|rate.?limit|too many requests|quota)/i.test(err.message || '');
       const status = rateLimited ? 'rate_limited' : (/timeout|abort|timed out/i.test(err.message || '') ? 'timeout' : 'error');
+      const secondary = await searchSecondaryProviders({
+        query: sourceQuestion || original,
+        geminiKey,
+        exaKey,
+        fetchFn: fetchZTimeout,
+        startIndex: sourceStartIndex,
+        domains,
+        prefer: 'gemini',
+      });
+      if (secondary.status === 'ok' && secondary.text) {
+        onStatus({ status: 'secondary', query: original, providers: secondary.sources.map(s => s.provider), fallbackFrom: status });
+        return returnMeta ? { status: 'ok', text: secondary.text, secondary: true, sources: secondary.sources } : secondary.text;
+      }
       onStatus({ status, query: original, error: err.message });
       return returnMeta ? { status, text: '', error: err.message } : null;
-    }
-  };
+    }  };
 }
 
 module.exports = {
