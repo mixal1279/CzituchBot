@@ -2004,6 +2004,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
         returnMeta: true,
         sourceStartIndex: sourceOffset,
         remainingMs: pozostalyCzasMs(),
+        requestState: aiState,
       });
       aiState.tavilyLastStatus = wynik?.status || (wynik ? 'ok' : 'error');
       if (wynik?.text) {
@@ -2145,6 +2146,8 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
       time_range: aiPlan.retrievalTimeRange || zakresTavilyDlaPytania(pytanie, null),
       _skipRewrite: true,
       sourceStartIndex,
+      requestState: aiState,
+      remainingMs: pozostalyCzasMs(),
       returnMeta: true,
     });
 
