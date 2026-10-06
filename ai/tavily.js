@@ -229,7 +229,7 @@ function czyWymagaSecondaryRetrieval(results, sourceQuestion = '', timeRange = n
 
   // Dla pytań faktograficznych/lore/gameplay pojedyncze źródło jest słabszym
   // dowodem niż dla prostego zapytania nawigacyjnego.
-  return /\\b(?:dlaczego|czemu|kto|kim|kiedy|ile|czy|jak(?: działa| zrob| przejść| przejsc| pokonać| pokonac))\\b/i.test(String(sourceQuestion));
+  return /\b(?:dlaczego|czemu|kto|kim|kiedy|ile|czy|jak(?: działa| zrob| przejść| przejsc| pokonać| pokonac))\b/i.test(String(sourceQuestion));
 }
 
 function czyZablokowanyHostTavily(url) {
