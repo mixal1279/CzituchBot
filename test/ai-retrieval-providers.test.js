@@ -50,7 +50,7 @@ test('Gemini grounding parser preserves web source URLs', async () => {
       groundingMetadata: {
         webSearchQueries: ['query'],
         groundingChunks: [{ web: { uri: 'https://example.com/source', title: 'Source' } }],
-        groundingSupports: [],
+        groundingSupports: [{ groundingChunkIndices: [0], segment: { startIndex: 0, endIndex: 6 } }],
       },
     }],
   }), { status: 200, headers: { 'content-type': 'application/json' } });
