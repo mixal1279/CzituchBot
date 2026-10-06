@@ -15,6 +15,7 @@ const { classifyFailure, nextFallbacks, shouldRetryFailure } = require('../ai/fa
 const { createAIMetrics, recordAIMetric, snapshotAIMetrics } = require('../ai/metrics');
 const { createRequestBudget, sanitizeRequestText } = require('../ai/limits');
 const { rerankujWynikiTavily, wykryjKonfliktyZrodelTavily, zbudujRaportKonfliktowTavily, sanityzujTrescZrodlaTavily } = require('../ai/tavily');
+const { ocenJakoscOdpowiedzi } = require('../ai/quality');
 
 const policy = (q, recipe) => recipe(q) ? 'minecraft_recipe' : /pogoda/i.test(q) ? 'weather' : /ile trwa/i.test(q) ? 'hltb' : /dzisiaj|najnowsz/i.test(q) ? 'web_fact' : 'conversation';
 
@@ -254,7 +255,33 @@ assert.match(require('fs').readFileSync(require('path').join(__dirname, '..', 'c
   assert.equal(isActive(merged.find(x => x.status === 'superseded')), false);
 }
 
+
+{
+  const good = ocenJakoscOdpowiedzi(
+    'Kim jest Lord Farquaad?',
+    'Lord Farquaad jest władcą Duloc w świecie Shreka i jedną z głównych postaci pierwszego filmu.',
+    { entity: 'Shrek', resolved_entity: { name: 'Lord Farquaad' } },
+    'lore'
+  );
+  assert.equal(good.ok, true);
+
+  const bad = ocenJakoscOdpowiedzi(
+    'Kim jest Lord Farquaad?',
+    'Nie mam wystarczających danych.',
+    { entity: 'Shrek', resolved_entity: { name: 'Lord Farquaad' } },
+    'lore'
+  );
+  assert.equal(bad.ok, false);
+}
+
 console.log('AI regression tests: OK');
+
+{
+  const source = require('fs').readFileSync(require('path').join(__dirname, '..', 'czituch_bot.js'), 'utf8');
+  assert.match(source, /planowaneQueryRetrieval/);
+  assert.match(source, /item\?\.reason === 'lore'/);
+  assert.match(source, /slice\(0, 2\)/);
+}
 
 {
   const history = przygotujHistorieDoModelu([
