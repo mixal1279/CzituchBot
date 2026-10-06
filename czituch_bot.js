@@ -74,6 +74,7 @@ const { buildAdvancedRetrievalPlan } = require('./ai/retrieval');
 const { classifyFailure, nextFallbacks, GENERATION_FALLBACK_CHAIN } = require('./ai/fallback');
 const { createAIMetrics, recordAIMetric, snapshotAIMetrics } = require('./ai/metrics');
 const { sanitizeRequestText } = require('./ai/limits');
+const { createAIRequestContext } = require('./ai/requestContext');
 const { sprawdzTwardeFaktyOdpowiedzi, sprawdzFormatOdpowiedzi } = require('./ai/response');
 const { Firestore } = require('@google-cloud/firestore');
 
@@ -1745,41 +1746,33 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
   }
   pytanie = pytanieCzyste;
   const requestId = crypto.randomUUID ? crypto.randomUUID().slice(0, 12) : `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  const aiState = {
-    startedAt: Date.now(),
+  // Jeden kontekst kontroluje czas i wszystkie limity całego pipeline'u AI.
+  // Nie utrzymujemy osobnych budżetów w generatorze, retrievalu i validatorze.
+  const aiState = createAIRequestContext({
+    requestId,
     maxCzasMs: 60000,
-    // Jedno zapytanie może przejść przez 120B, 20B i fallback dostawcy;
-    // po rejected potrzebujemy jeszcze jednej pełnej regeneracji.
     maxGeneracji: 6,
     maxModelCalls: 10,
     maxValidatorow: 3,
     maxWyszukanTavily: 2,
-    generacje: 0,
-    modelCalls: 0,
-    validatory: 0,
-    tavilySearches: 0,
-    validatorResults: [],
-    finalStatus: 'unavailable',
-  };
+  });
   let daneDoWalidacji = null;
-  const budzetPrzekroczony = () => Date.now() - aiState.startedAt >= aiState.maxCzasMs;
-  const pozostalyCzasMs = () => Math.max(1000, aiState.maxCzasMs - (Date.now() - aiState.startedAt));
+  const budzetPrzekroczony = () => aiState.isExpired();
+  const pozostalyCzasMs = () => aiState.remainingMs();
   const zarezerwujModel = (purpose = 'model') => {
-    if (budzetPrzekroczony() || aiState.modelCalls >= aiState.maxModelCalls) {
+    const reserved = aiState.reserveModel(purpose);
+    if (!reserved) {
       console.warn(`[AI][${requestId}] globalny budżet modeli wyczerpany (${purpose})`);
-      return false;
     }
-    aiState.modelCalls++;
-    return true;
+    return reserved;
   };
   aiState.zarezerwujModel = zarezerwujModel;
   const moznaWykonacGeneracje = (provider, model) => {
-    if (budzetPrzekroczony() || aiState.generacje >= aiState.maxGeneracji || !zarezerwujModel(`generation:${provider}/${model}`)) {
+    const reserved = aiState.reserveGeneration(provider, model);
+    if (!reserved) {
       console.warn(`[AI][${requestId}] budżet generacji/modeli wyczerpany (${provider}/${model})`);
-      return false;
     }
-    aiState.generacje++;
-    return true;
+    return reserved;
   };
   const zalogujPodsumowanieAI = (status = aiState.finalStatus) => {
     aiState.finalStatus = status;
