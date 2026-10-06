@@ -1777,7 +1777,10 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
     console.log(`[AI][${requestId}] SUMMARY ${JSON.stringify({
       requestId, persona: aiProfile, category: kategoriaAI || 'pending',
       generatorAttempts: aiState.generacje, modelCalls: aiState.modelCalls, validatorCalls: aiState.validatory,
-      validatorResults: aiState.validatorResults, tavilySearches: aiState.tavilySearches,
+      validatorResults: aiState.validatorResults,
+      fallbackReasons: aiState.fallbackReasons,
+      finalProvider: wynikGeneracji?.provider || null,
+      finalModel: wynikGeneracji?.model || null, tavilySearches: aiState.tavilySearches,
       global120bRequests: model120bGlobalRequesty,
       sourceCount: daneDoWalidacji ? (daneDoWalidacji.match(/\[(?:SOURCE|REFERENCE) [^\]]+\]/g) || []).length : 0,
       metrics: { ...AI_METRYKI, observability: snapshotAIMetrics(AI_OBSERVABILITY) },
@@ -2339,6 +2342,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
       result = await zapytajGlowny(Math.max(maxTok, 300) + 250, prompt, 'openai/gpt-oss-120b');
     }
     if (result.tekst && !result.ucieta) return result;
+    aiState.fallbackReasons.push(failureType || 'unknown');
     console.log(`[AI][${requestId}] fallback policy=${failureType || 'unknown'} next=${JSON.stringify(nextFallbacks({ failure: failureType, attempted: ['groq:openai/gpt-oss-120b'] }))}`);
     const attempted = ['groq:openai/gpt-oss-120b'];
     const fallbackSteps = {
@@ -2485,7 +2489,17 @@ function oczyscOdpowiedzPrzedWalidacja(tekst) {
   odp = finalizeResponse(odp, aiState.finalStatus);
 
   AI_METRYKI[aiState.finalStatus] = (AI_METRYKI[aiState.finalStatus] || 0) + 1;
-  recordAIMetric(AI_OBSERVABILITY, { status: aiState.finalStatus, latencyMs: Date.now() - aiState.startedAt, modelCalls: aiState.modelCalls, tavilySearches: aiState.tavilySearches, category: kategoriaAI });
+  recordAIMetric(AI_OBSERVABILITY, {
+    status: aiState.finalStatus,
+    latencyMs: Date.now() - aiState.startedAt,
+    modelCalls: aiState.modelCalls,
+    tavilySearches: aiState.tavilySearches,
+    category: kategoriaAI,
+    providers: wynikGeneracji?.provider && wynikGeneracji?.model ? [`${wynikGeneracji.provider}/${wynikGeneracji.model}`] : [],
+    fallbackReasons: aiState.fallbackReasons,
+    validatorStatuses: aiState.validatorResults.map(v => v.status),
+    retrievalStatuses: aiState.tavilyLastStatus ? [aiState.tavilyLastStatus] : [],
+  });
   zalogujPodsumowanieAI(aiState.finalStatus);
   const newMemories = extractExplicitUserMemories(pytanie, { sourceRole: 'user', userId: verifiedMemoryUserId, sourceMessageId: requestId });
   if (newMemories.length) await zapiszZweryfikowanaPamiecAI(verifiedMemoryUserId, newMemories);
