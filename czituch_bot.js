@@ -1988,7 +1988,14 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
   if (!pogodaKontekst && !hltbKontekst && !infoKanalu && czyWyszukac && pytaniaAtomoweTavily.length && aiState.tavilySearches < aiState.maxWyszukanTavily && !budzetPrzekroczony()) {
     const materialyTavily = [];
     let sourceOffset = 0;
-    const kolejkaTavily = [pytaniaAtomoweTavily[0]];
+    const planowaneQueryRetrieval = [...new Set([
+      ...pytaniaAtomoweTavily,
+      ...advancedRetrievalPlan.map(item => item?.query).filter(Boolean),
+    ])].slice(0, aiPlan.responseProfile === 'lore' || aiPlan.responseProfile === 'gameplay' ? 2 : 2);
+    const kolejkaTavily = planowaneQueryRetrieval.length
+      ? planowaneQueryRetrieval
+      : [pytaniaAtomoweTavily[0]];
+    console.log(`[Retrieval] 🧭 Plan: ${JSON.stringify(kolejkaTavily)}`);
     let indexZapytania = 0;
     while (indexZapytania < kolejkaTavily.length && aiState.tavilySearches < aiState.maxWyszukanTavily && !budzetPrzekroczony()) {
       const query = kolejkaTavily[indexZapytania++];
