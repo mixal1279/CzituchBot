@@ -15,7 +15,7 @@ const {
   nextFallbacks,
   classifyFailure,
 } = require('../ai/fallback');
-const { filtrujPoScore, sanityzujTrescZrodlaTavily } = require('../ai/tavily');
+const { filtrujPoScore, sanityzujTrescZrodlaTavily, czyWymagaSecondaryRetrieval } = require('../ai/tavily');
 
 test('retrieval source contract is normalized', () => {
   const source = normalizeSource({
@@ -94,6 +94,33 @@ test('secondary retrieval uses the first healthy provider and falls back to the 
   assert.equal(result.status, 'ok');
   assert.equal(result.sources[0].provider, 'exa');
   assert.equal(calls, 2);
+});
+
+
+test('Gemini text-only result is never promoted to source evidence', async () => {
+  const fakeFetch = async () => new Response(JSON.stringify({
+    candidates: [{
+      content: { parts: [{ text: 'Uncited answer' }] },
+      groundingMetadata: { webSearchQueries: ['q'], groundingChunks: [], groundingSupports: [] },
+    }],
+  }), { status: 200, headers: { 'content-type': 'application/json' } });
+  const result = await searchGeminiWeb({ apiKey: 'test', query: 'q', fetchFn: fakeFetch });
+  assert.equal(result.status, 'text_only');
+  assert.equal(result.sources.length, 0);
+  assert.equal(result.text, '');
+  assert.equal(result.answer, 'Uncited answer');
+});
+
+test('secondary retrieval is skipped for a strong single evergreen source', () => {
+  assert.equal(czyWymagaSecondaryRetrieval([
+    { score: 0.82, url: 'https://minecraft.wiki/a' },
+  ], 'Minecraft wiki article', null), false);
+});
+
+test('secondary retrieval is used for weak, fresh, or fact-heavy single-source results', () => {
+  assert.equal(czyWymagaSecondaryRetrieval([{ score: 0.30 }], 'Minecraft article', null), true);
+  assert.equal(czyWymagaSecondaryRetrieval([{ score: 0.90 }], 'Co nowego dzisiaj w Minecraft?', 'day'), true);
+  assert.equal(czyWymagaSecondaryRetrieval([{ score: 0.90 }], 'Dlaczego Wheatley przejął kontrolę?', null), true);
 });
 
 test('fallback policy is a single ordered chain', () => {
