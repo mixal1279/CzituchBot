@@ -71,7 +71,7 @@ const { resolveGameEntity } = require('./ai/entities');
 const { extractExplicitUserMemories, mergeMemoryRecords, buildVerifiedMemoryContext, pruneExpiredMemories } = require('./ai/memory');
 const { parseMemoryCommand, forgetMemories, describeMemories } = require('./ai/memory_manager');
 const { buildAdvancedRetrievalPlan } = require('./ai/retrieval');
-const { classifyFailure, nextFallbacks } = require('./ai/fallback');
+const { classifyFailure, nextFallbacks, GENERATION_FALLBACK_CHAIN } = require('./ai/fallback');
 const { createAIMetrics, recordAIMetric, snapshotAIMetrics } = require('./ai/metrics');
 const { sanitizeRequestText } = require('./ai/limits');
 const { sprawdzTwardeFaktyOdpowiedzi, sprawdzFormatOdpowiedzi } = require('./ai/response');
@@ -2017,10 +2017,12 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
 
       // Jeśli pojedyncze wyszukanie dało bardzo mało materiału, wykorzystujemy drugi
       // slot Tavily na semantycznie szersze zapytanie zamiast generować z ubogiego RAG.
-      const weakRetrieval = !wynik?.text
-        || wynik.text.length < 1200
-        || (wynik.text.match(/\[SOURCE \d+\]/g) || []).length < 2;
-      if (weakRetrieval && wynik.text.length < 1200 && (wynik.text.match(/\[(?:SOURCE|REFERENCE) [^\]]+\]/g) || []).length < 2 && kolejkaTavily.length === 1 && aiState.tavilySearches < aiState.maxWyszukanTavily) {
+      const retrievalText = String(wynik?.text || '');
+      const retrievalSourceCount = (retrievalText.match(/\[(?:SOURCE|REFERENCE) [^\]]+\]/g) || []).length;
+      const weakRetrieval = !retrievalText
+        || retrievalText.length < 1200
+        || retrievalSourceCount < 2;
+      if (weakRetrieval && retrievalText.length < 1200 && retrievalSourceCount < 2 && kolejkaTavily.length === 1 && aiState.tavilySearches < aiState.maxWyszukanTavily) {
         const fallbackQuery = /dying\s*light/i.test(pytanie)
           ? 'Dying Light The Beast loot locations guide wiki'
           : `${pytanie} guide wiki`;
@@ -2342,16 +2344,27 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
     }
     if (result.tekst && !result.ucieta) return result;
     console.log(`[AI][${requestId}] fallback policy=${failureType || 'unknown'} next=${JSON.stringify(nextFallbacks({ failure: failureType, attempted: ['groq:openai/gpt-oss-120b'] }))}`);
-    const fallback20 = await zapytajGlowny(Math.max(maxTok, 300), prompt, 'openai/gpt-oss-20b');
-    if (fallback20.tekst && !fallback20.ucieta) return fallback20;
-    const mistral = await zapytajMistral(Math.max(maxTok, 300), prompt, powod);
-    if (mistral.tekst && !mistral.ucieta) return mistral;
-    const gemini = await zapytajGeminiFallback(Math.max(maxTok, 300), prompt, powod);
-    if (gemini.tekst && !gemini.ucieta) return ujednolicWynik(gemini, 'gemini', 'gemini-3.8-flash');
-    const lite = await zapytajGeminiLiteFallback(Math.max(maxTok, 300), prompt, powod);
-    if (lite.tekst && !lite.ucieta) return ujednolicWynik(lite, 'gemini', 'gemini-3.5-flash-lite');
-    const openrouter = await zapytajOpenRouterFallback(Math.max(maxTok, 300), prompt, powod);
-    if (openrouter.tekst && !openrouter.ucieta) return ujednolicWynik(openrouter, 'openrouter', KONFIGURACJA.openrouterGeneratorModel);
+    const attempted = ['groq:openai/gpt-oss-120b'];
+    const fallbackSteps = {
+      'groq:openai/gpt-oss-20b': () => zapytajGlowny(Math.max(maxTok, 300), prompt, 'openai/gpt-oss-20b'),
+      'mistral:default': () => zapytajMistral(Math.max(maxTok, 300), prompt, powod),
+      'gemini:gemini-3.8-flash': () => zapytajGeminiFallback(Math.max(maxTok, 300), prompt, powod),
+      'gemini:gemini-3.5-flash-lite': () => zapytajGeminiLiteFallback(Math.max(maxTok, 300), prompt, powod),
+      'openrouter:default': () => zapytajOpenRouterFallback(Math.max(maxTok, 300), prompt, powod),
+    };
+    for (const step of nextFallbacks({ failure: failureType, attempted })) {
+      if (!GENERATION_FALLBACK_CHAIN.includes(step) || step === 'groq:openai/gpt-oss-120b') continue;
+      const fn = fallbackSteps[step];
+      if (!fn) continue;
+      attempted.push(step);
+      const candidate = await fn();
+      if (candidate.tekst && !candidate.ucieta) {
+        if (step.startsWith('gemini:')) return ujednolicWynik(candidate, 'gemini', step.split(':')[1]);
+        if (step.startsWith('openrouter:')) return ujednolicWynik(candidate, 'openrouter', KONFIGURACJA.openrouterGeneratorModel);
+        if (step.startsWith('groq:')) return ujednolicWynik(candidate, 'groq', step.split(':')[1]);
+        return candidate;
+      }
+    }
     return wynikPusty('openrouter', KONFIGURACJA.openrouterGeneratorModel, openrouter.ucieta ? 'OpenRouter response truncated' : openrouter.error);
   }
 
@@ -2585,6 +2598,8 @@ async function skompresujHistorie(historiaRozmowy) {
 const groq            = new Groq({ apiKey: KONFIGURACJA.groqKey });
 const szukajTavily = createTavilySearch({
   apiKey: KONFIGURACJA.tavilyKey,
+  geminiKey: KONFIGURACJA.geminiKey,
+  exaKey: process.env.EXA_API_KEY,
   groq,
   fetchZTimeout,
   normalizeQuery: normalizujZapytanieTavily,
