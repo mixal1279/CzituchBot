@@ -1593,10 +1593,9 @@ async function walidujOdpowiedzAI(persona, pytanie, odpowiedz, dane, historiaRoz
   if (!models.length) console.warn(`[AI][${requestId}] Gemini validator w cooldownie — używam fallbacku OpenRouter`);
   let last = null;
   for (let i = 0; i < models.length; i++) {
-    if (requestState && requestState.validatory >= requestState.maxValidatorow) {
-      return { status: 'unavailable', ok: false, technicalError: true, provider: 'gemini', model: null, unsupported_claims: [], reason: 'budżet validatora wyczerpany' };
+    if (requestState?.reserveValidator && !requestState.reserveValidator(`validator:${models[i]}`)) {
+      return { status: 'unavailable', ok: false, technicalError: true, provider: 'gemini', model: models[i], unsupported_claims: [], reason: 'budżet validatora wyczerpany' };
     }
-    if (requestState) requestState.validatory++;
     if (requestState?.zarezerwujModel && !requestState.zarezerwujModel(`validator:${models[i]}`)) {
       return { status: 'unavailable', ok: false, technicalError: true, provider: 'gemini', model: models[i], unsupported_claims: [], reason: 'globalny budżet modeli wyczerpany' };
     }
@@ -1610,10 +1609,9 @@ async function walidujOdpowiedzAI(persona, pytanie, odpowiedz, dane, historiaRoz
     return { ...(last || {}), status: 'unavailable', ok: false, technicalError: true, unsupported_claims: [], reason: 'budżet czasu validatora wyczerpany' };
   }
   if (requestState) {
-    if (requestState.validatory >= requestState.maxValidatorow) {
+    if (requestState.reserveValidator && !requestState.reserveValidator('validator:openrouter')) {
       return { status: 'unavailable', ok: false, technicalError: true, provider: 'openrouter', model: KONFIGURACJA.openrouterValidatorModel, unsupported_claims: [], reason: 'budżet validatora wyczerpany' };
     }
-    requestState.validatory++;
     requestState.validatorResults.push({ model: KONFIGURACJA.openrouterValidatorModel, status: 'fallback', complete: false });
   }
   // Brak Gemini nie jest błędem logicznym: OpenRouter jest pełnoprawnym
