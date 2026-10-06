@@ -33,7 +33,7 @@ function ocenJakoscOdpowiedzi(question, answer, routing = {}, profile = 'simple'
   const entity = routing?.resolved_entity?.name || routing?.entity || routing?.game || '';
   const entityTokens = tokens(entity).filter(t => t.length >= 5);
   const overlap = [...new Set([...qTokens, ...entityTokens])].filter(t => aNorm.includes(t));
-  if ((entityTokens.length || qTokens.length) && overlap.length === 0) {
+  if (profile === 'lore' && (entityTokens.length || qTokens.length) && overlap.length === 0) {
     issues.push('odpowiedź nie odnosi się wprost do rozpoznanej encji ani słów kluczowych pytania');
   }
 
