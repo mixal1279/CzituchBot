@@ -1988,10 +1988,17 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
   if (!pogodaKontekst && !hltbKontekst && !infoKanalu && czyWyszukac && pytaniaAtomoweTavily.length && aiState.tavilySearches < aiState.maxWyszukanTavily && !budzetPrzekroczony()) {
     const materialyTavily = [];
     let sourceOffset = 0;
-    const planowaneQueryRetrieval = [...new Set([
-      ...pytaniaAtomoweTavily,
-      ...advancedRetrievalPlan.map(item => item?.query).filter(Boolean),
-    ])].slice(0, aiPlan.responseProfile === 'lore' || aiPlan.responseProfile === 'gameplay' ? 2 : 2);
+    const planowaneQueryRetrieval = (() => {
+      const primary = pytaniaAtomoweTavily.filter(Boolean);
+      const specialized = advancedRetrievalPlan
+        .filter(item => aiPlan.responseProfile === 'lore'
+          ? item?.reason === 'lore'
+          : aiPlan.responseProfile === 'gameplay' ? item?.reason === 'gameplay' : false)
+        .map(item => item.query)
+        .filter(Boolean);
+      const fallback = advancedRetrievalPlan.map(item => item?.query).filter(Boolean);
+      return [...new Set([...primary, ...specialized, ...fallback])].slice(0, 2);
+    })();
     const kolejkaTavily = planowaneQueryRetrieval.length
       ? planowaneQueryRetrieval
       : [pytaniaAtomoweTavily[0]];
