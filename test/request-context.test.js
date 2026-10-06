@@ -1,0 +1,68 @@
+'use strict';
+
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const { createAIRequestContext } = require('../ai/requestContext');
+
+test('request context enforces shared model, generation, validator and Tavily budgets', () => {
+  const ctx = createAIRequestContext({
+    requestId: 'test',
+    maxCzasMs: 60000,
+    maxGeneracji: 2,
+    maxModelCalls: 3,
+    maxValidatorow: 1,
+    maxWyszukanTavily: 1,
+  });
+
+  assert.equal(ctx.reserveGeneration('groq', 'model-a'), true);
+  assert.equal(ctx.generacje, 1);
+  assert.equal(ctx.modelCalls, 1);
+
+  assert.equal(ctx.reserveGeneration('groq', 'model-b'), true);
+  assert.equal(ctx.generacje, 2);
+  assert.equal(ctx.modelCalls, 2);
+
+  assert.equal(ctx.reserveGeneration('gemini', 'model-c'), false);
+  assert.equal(ctx.generacje, 2);
+  assert.equal(ctx.modelCalls, 2);
+
+  assert.equal(ctx.reserveModel('validator:gemini'), true);
+  assert.equal(ctx.modelCalls, 3);
+  assert.equal(ctx.reserveModel('over-budget'), false);
+
+  assert.equal(ctx.reserveValidator('validator'), true);
+  assert.equal(ctx.reserveValidator('validator-again'), false);
+
+  assert.equal(ctx.reserveTavily('retrieval'), true);
+  assert.equal(ctx.reserveTavily('retrieval-again'), false);
+});
+
+test('request context clamps remaining time to zero instead of extending the deadline', () => {
+  const ctx = createAIRequestContext({ startedAt: Date.now() - 1000, maxCzasMs: 100 });
+  assert.equal(ctx.isExpired(), true);
+  assert.equal(ctx.remainingMs(), 0);
+  assert.equal(ctx.reserveModel('late-call'), false);
+});
+
+test('request context snapshot is stable and exposes one shared budget', () => {
+  const ctx = createAIRequestContext({
+    requestId: 'snapshot-test',
+    maxCzasMs: 5000,
+    maxGeneracji: 4,
+    maxModelCalls: 5,
+    maxValidatorow: 2,
+    maxWyszukanTavily: 2,
+  });
+  ctx.reserveGeneration('groq', 'model');
+  ctx.reserveValidator('validator');
+  ctx.reserveTavily('retrieval');
+
+  const snapshot = ctx.snapshot();
+  assert.equal(snapshot.requestId, 'snapshot-test');
+  assert.equal(snapshot.generacje, 1);
+  assert.equal(snapshot.modelCalls, 1);
+  assert.equal(snapshot.validatory, 1);
+  assert.equal(snapshot.tavilySearches, 1);
+  assert.ok(snapshot.remainingMs >= 0);
+  assert.ok(snapshot.remainingMs <= snapshot.maxCzasMs);
+});
