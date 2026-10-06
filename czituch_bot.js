@@ -77,6 +77,7 @@ const { sanitizeRequestText } = require('./ai/limits');
 const { createAIRequestContext } = require('./ai/requestContext');
 const { sprawdzTwardeFaktyOdpowiedzi, sprawdzFormatOdpowiedzi } = require('./ai/response');
 const { Firestore } = require('@google-cloud/firestore');
+const { ocenJakoscOdpowiedzi } = require('./ai/quality');
 
 // =============================================
 //  MINECRAFT JAVA 26.1 — LOKALNE RECEPTURY
@@ -277,7 +278,7 @@ function wyznaczRoutingAI(pytanie) {
   return classifyAIRequest(pytanie, AI_POLICY.okreslKategorieAI, czyPytanieOReceptureMC);
 }
 
-function zastosujDeterministyczneGuards(walidacja, odpowiedz, dane, pytanie, formatOptions = {}) {
+function zastosujDeterministyczneGuards(walidacja, odpowiedz, dane, pytanie, formatOptions = {}, routingForQuality = {}, qualityProfile = 'simple') {
   if (!walidacja || walidacja.status !== 'accepted') return walidacja;
   const format = sprawdzFormatOdpowiedzi(odpowiedz, formatOptions);
   if (!format.ok) {
@@ -288,6 +289,19 @@ function zastosujDeterministyczneGuards(walidacja, odpowiedz, dane, pytanie, for
       confidence: Math.min(Number(walidacja.confidence) || 0, 0.5),
       unsupported_claims: [...(walidacja.unsupported_claims || [])],
       reason: `odpowiedź nie spełnia kontraktu formatu: ${format.reason}`,
+    };
+  }
+  const quality = ocenJakoscOdpowiedzi(pytanie, odpowiedz, {
+    ...routingForQuality,
+  }, qualityProfile);
+  if (!quality.ok) {
+    return {
+      ...walidacja,
+      status: 'rejected', ok: false, valid: false,
+      supported: false, complete: false, hallucination: false,
+      confidence: Math.min(Number(walidacja.confidence) || 0, 0.6),
+      unsupported_claims: [...(walidacja.unsupported_claims || [])],
+      reason: `odpowiedź nie spełnia minimalnego kontraktu jakości: ${quality.issues.join('; ')}`,
     };
   }
   const twardeFakty = sprawdzTwardeFaktyOdpowiedzi(odpowiedz, dane, pytanie);
@@ -2427,7 +2441,7 @@ function oczyscOdpowiedzPrzedWalidacja(tekst) {
     }
     if (walidacja.status === 'accepted') {
       const beforeGuard = walidacja;
-      walidacja = zastosujDeterministyczneGuards(walidacja, odp, daneDoWalidacji, pytanie, { maxZdania: responseCfg.maxSentences, maxZnakow: 1800 });
+      walidacja = zastosujDeterministyczneGuards(walidacja, odp, daneDoWalidacji, pytanie, { maxZdania: responseCfg.maxSentences, maxZnakow: 1800 }, routingAI, aiPlan.responseProfile);
       if (walidacja.status !== beforeGuard.status) {
         console.warn(`[AI][${requestId}] deterministic response guard rejected: ${JSON.stringify(walidacja.unsupported_claims || [])}`);
       }
@@ -2459,7 +2473,7 @@ function oczyscOdpowiedzPrzedWalidacja(tekst) {
           odp = oczyscOdpowiedzPrzedWalidacja(nowaOdp);
           walidacja = await walidujOdpowiedzAI(aiProfile === 'billy' ? 'billy' : aiProfile === 'edzzi' ? 'edzzi' : aiProfile === 'angie' ? 'angie' : 'generic', pytanie, odp, daneDoWalidacji, historiaRozmowy, requestId, aiState, metadaneRequestu);
           if (walidacja.status === 'accepted') {
-            walidacja = zastosujDeterministyczneGuards(walidacja, odp, daneDoWalidacji, pytanie, { maxZdania: responseCfg.maxSentences, maxZnakow: 1800 });
+            walidacja = zastosujDeterministyczneGuards(walidacja, odp, daneDoWalidacji, pytanie, { maxZdania: responseCfg.maxSentences, maxZnakow: 1800 }, routingAI, aiPlan.responseProfile);
           }
           if (walidacja.status === 'accepted' && daneDoWalidacji && AI_POLICY.czyOdpowiedzToJednoznacznaOdmowa(odp)) {
             walidacja = { ...walidacja, status: 'rejected', ok: false, complete: false, reason: 'regeneracja nadal jest odmową mimo danych' };
