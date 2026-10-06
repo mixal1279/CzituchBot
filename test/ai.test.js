@@ -26,6 +26,23 @@ const policy = (q, recipe) => recipe(q) ? 'minecraft_recipe' : /pogoda/i.test(q)
 }
 
 {
+  const entity = resolveGameEntity('Kim jest Lord Farquad?');
+  assert.equal(entity.type, 'character');
+  assert.equal(entity.name, 'Lord Farquaad');
+  assert.equal(entity.game, 'Shrek');
+  assert.equal(entity.matchedAlias, 'lord farquad');
+}
+
+{
+  const r = classifyAIRequest('Kim jest Lord Farquad?', policy);
+  assert.equal(r.is_lore, true);
+  assert.equal(r.needs_web, true);
+  assert.equal(r.entity, 'Shrek');
+  assert.equal(r.entity_type, 'character');
+  assert.equal(r.game, 'Shrek');
+}
+
+{
   const r = classifyAIRequest('Kim jest Wheatley?', policy);
   assert.equal(r.is_lore, true);
   assert.equal(r.needs_web, true);
