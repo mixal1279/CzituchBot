@@ -2450,6 +2450,21 @@ function oczyscOdpowiedzPrzedWalidacja(tekst) {
           if (walidacja.status === 'accepted' && daneDoWalidacji && AI_POLICY.czyOdpowiedzToJednoznacznaOdmowa(odp)) {
             walidacja = { ...walidacja, status: 'rejected', ok: false, complete: false, reason: 'regeneracja nadal jest odmową mimo danych' };
           }
+          // Jeśli druga generacja również jest jednoznaczną odmową, nie traktuj
+          // tego jako halucynacji/błędu odpowiedzi. To nierozstrzygnięty przypadek:
+          // model nie potwierdził faktu mimo dostępnego materiału.
+          if (walidacja.status === 'rejected' && AI_POLICY.czyOdpowiedzToJednoznacznaOdmowa(odp)) {
+            walidacja = {
+              ...walidacja,
+              status: 'inconclusive',
+              ok: false,
+              valid: false,
+              supported: false,
+              complete: false,
+              hallucination: false,
+              reason: 'model odmówił odpowiedzi mimo dostępnego materiału referencyjnego; brak bezpiecznego rozstrzygnięcia',
+            };
+          }
         }
       }
     } else if (walidacja.status === 'unavailable') {
@@ -2459,6 +2474,9 @@ function oczyscOdpowiedzPrzedWalidacja(tekst) {
     if (walidacja.status === 'rejected') {
       // Maksymalnie jedna regeneracja + jedna rewalidacja. Drugi reject kończy flow.
       odp = 'Nie mam wystarczających danych, żeby odpowiedzieć na to pewnie.';
+    }
+    if (walidacja.status === 'inconclusive') {
+      odp = 'Chwilowo nie mogę wiarygodnie potwierdzić tej informacji, więc nie będę zgadywać.';
     }
     if (walidacja.status === 'unavailable') {
       odp = 'Chwilowo nie mogę potwierdzić tej informacji, więc nie będę zgadywać.';
@@ -2474,6 +2492,7 @@ function oczyscOdpowiedzPrzedWalidacja(tekst) {
   // więc validator zawsze ocenia tekst bazowy, a odmowa nie dostaje sprzecznej atrybucji.
   const finalizeResponse = (tekst, status) => {
     if (status === 'rejected') return 'Nie mam wystarczających danych, żeby odpowiedzieć na to pewnie.';
+    if (status === 'inconclusive') return 'Chwilowo nie mogę wiarygodnie potwierdzić tej informacji, więc nie będę zgadywać.';
     if (status === 'unavailable') return 'Chwilowo nie mogę potwierdzić tej informacji, więc nie będę zgadywać.';
     let finalText = ograniczDoPelnychZdanAI(usunMarkeryWewnetrzneAI(filtrBezpieczenstwa(tekst)), responseCfg.maxSentences, 1800, responseCfg.maxWords);
     if (!finalText) return '';
