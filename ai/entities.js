@@ -37,6 +37,9 @@ const CHARACTER_ALIASES = [
   { name: 'Kratos', game: 'God of War', aliases: ['kratos'] },
   { name: 'Ellie', game: 'The Last of Us', aliases: ['ellie'] },
   { name: 'Joel Miller', game: 'The Last of Us', aliases: ['joel miller', 'joel'] },
+  // Postać spoza gier: pytania o znane postacie filmowe/serialowe również
+  // powinny przechodzić przez resolver, żeby nie wpadały w niepewny routing.
+  { name: 'Lord Farquaad', game: 'Shrek', aliases: ['lord farquaad', 'lord farquad', 'farquaad', 'farquad'] },
 ];
 
 function normalizujEncje(text) {
