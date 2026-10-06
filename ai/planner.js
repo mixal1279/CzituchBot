@@ -74,7 +74,7 @@ function buildRetrievalQueries(question, routing = {}, options = {}) {
 const RESPONSE_PROFILES = {
   simple: { maxSentences: 2, maxWords: 60, maxTokens: 220 },
   comparison: { maxSentences: 4, maxWords: 110, maxTokens: 360 },
-  lore: { maxSentences: 7, maxWords: 180, maxTokens: 650 },
+  lore: { maxSentences: 9, maxWords: 240, maxTokens: 800 },
   gameplay: { maxSentences: 8, maxWords: 180, maxTokens: 700 },
   timeline: { maxSentences: 8, maxWords: 180, maxTokens: 700 },
   technical: { maxSentences: 6, maxWords: 160, maxTokens: 600 },
@@ -120,9 +120,12 @@ function responseContract(profile) {
   const cfg = RESPONSE_PROFILES[profile] || RESPONSE_PROFILES.simple;
   return [
     'FORMAT ODPOWIEDZI: maksymalnie ' + cfg.maxSentences + ' zdań i około ' + cfg.maxWords + ' słów.',
-    'Zawsze kończ pełne zdania.',
+    'Zawsze kończ pełne zdania i odpowiadaj bezpośrednio na pytanie, zanim dodasz kontekst.',
+    'Jeśli materiał pozwala odpowiedzieć częściowo, odpowiedz na potwierdzoną część zamiast automatycznie odmawiać.',
+    'Nie zastępuj odpowiedzi ogólnym komunikatem o braku danych, jeśli źródła zawierają odpowiedź na pytanie.',
     'Dla pytań gameplay podawaj kolejność działań, jeśli jest potrzebna do wykonania zadania.',
-    'Dla pytań lore nie dopowiadaj spoilerów, których nie wymaga pytanie.',
+    'Dla pytań lore nie dopowiadaj spoilerów, których nie wymaga pytanie; gdy występuje interpretacja lub niepewność, oznacz ją wprost.',
+    'Oddzielaj fakty potwierdzone przez źródła od interpretacji i nie przedstawiaj interpretacji jako kanonu.'
   ].join('\n');
 }
 
