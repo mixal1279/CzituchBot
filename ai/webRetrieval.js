@@ -74,15 +74,24 @@ async function searchGeminiWeb({ apiKey, query, fetchFn = fetch, startIndex = 0 
     const supports = Array.isArray(gm.groundingSupports) ? gm.groundingSupports : [];
     const sources = chunks.map((chunk, i) => {
       const web = chunk?.web || {};
+      const citedSegments = supports
+        .filter(s => Array.isArray(s?.groundingChunkIndices) && s.groundingChunkIndices.includes(i))
+        .map(s => {
+          const segment = s?.segment || {};
+          const start = Number.isInteger(segment.startIndex) ? segment.startIndex : null;
+          const end = Number.isInteger(segment.endIndex) ? segment.endIndex : null;
+          return start !== null && end !== null ? text.slice(start, end) : '';
+        })
+        .filter(Boolean);
       return normalizeSource({
         provider: 'gemini_google_search',
         title: web.title,
         url: web.uri || web.url,
-        snippet: web.title,
-        content: text,
+        snippet: citedSegments.join(' '),
+        content: citedSegments.join(' '),
         score: null,
       }, i);
-    }).filter(s => s.url);
+    }).filter(s => s.url && s.content);
     return {
       status: sources.length ? 'ok' : (text ? 'text_only' : 'empty'),
       text: formatSources(sources, startIndex),
