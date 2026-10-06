@@ -1935,8 +1935,9 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
       pytaniaAtomoweTavily = [pytanieTavily];
     }
 
-    // Nie uruchamiamy drugiego wyszukania z góry. Drugi slot zostaje rezerwą
-    // na słaby retrieval albo celowane uzupełnienie po validatorze.
+    // Plan retrievalu jest wykonywany od razu dla pytań wymagających szerszego
+    // kontekstu; przy słabym pojedynczym wyniku drugi slot nadal może zostać
+    // użyty jako fallback albo później przez celowane uzupełnienie validatora.
   }
 
   let pogodaKontekst = null;
