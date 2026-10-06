@@ -1763,6 +1763,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
   };
   let daneDoWalidacji = null;
   const budzetPrzekroczony = () => Date.now() - aiState.startedAt >= aiState.maxCzasMs;
+  const pozostalyCzasMs = () => Math.max(1000, aiState.maxCzasMs - (Date.now() - aiState.startedAt));
   const zarezerwujModel = (purpose = 'model') => {
     if (budzetPrzekroczony() || aiState.modelCalls >= aiState.maxModelCalls) {
       console.warn(`[AI][${requestId}] globalny budżet modeli wyczerpany (${purpose})`);
@@ -2008,6 +2009,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
         _skipRewrite: true,
         returnMeta: true,
         sourceStartIndex: sourceOffset,
+        remainingMs: pozostalyCzasMs(),
       });
       aiState.tavilyLastStatus = wynik?.status || (wynik ? 'ok' : 'error');
       if (wynik?.text) {

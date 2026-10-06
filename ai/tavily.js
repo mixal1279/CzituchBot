@@ -216,6 +216,22 @@ function hostnamePasujeDoDomenyTavily(url, domains) {
   } catch (_) { return false; }
 }
 
+function czyWymagaSecondaryRetrieval(results, sourceQuestion = '', timeRange = null) {
+  const lista = Array.isArray(results) ? results : [];
+  if (lista.length === 0) return true;
+  if (lista.length >= 2) return false;
+
+  const bestScore = typeof lista[0]?.score === 'number' ? lista[0].score : null;
+  if (bestScore !== null && bestScore < 0.55) return true;
+
+  // Świeże dane wymagają niezależnego potwierdzenia przy pojedynczym wyniku.
+  if (timeRange) return true;
+
+  // Dla pytań faktograficznych/lore/gameplay pojedyncze źródło jest słabszym
+  // dowodem niż dla prostego zapytania nawigacyjnego.
+  return /\b(?:dlaczego|czemu|kto|kim|kiedy|ile|czy|jak(?: działa| zrob| przejść| przejsc| pokonać| pokonac))\b/i.test(String(sourceQuestion));
+}
+
 function czyZablokowanyHostTavily(url) {
   try { return TAVILY_BLOKOWANE_HOSTY.has(new URL(url).hostname.toLowerCase().replace(/^www\./, '')); }
   catch (_) { return true; }
@@ -272,7 +288,7 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
 
   return async function szukajTavily(pytanie, options = {}) {
     const original = String(pytanie || '').trim();
-    const { domains, time_range, _skipRewrite = false, returnMeta = false, sourceStartIndex = 0, sourceQuestion = original } = options;
+    const { domains, time_range, _skipRewrite = false, returnMeta = false, sourceStartIndex = 0, sourceQuestion = original, remainingMs = 15000 } = options;
     try {
       let searchQuery = original;
       const rewriteKey = kluczRewrite(original);
@@ -347,7 +363,8 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
         const odrzuconePoScore = scoreFilter.dropped;
         if (odrzuconePoScore) logger.log(`[Tavily] 📉 Odrzucono ${odrzuconePoScore} wyników o niskim score (< ${TAVILY_MIN_SCORE})`);
         if (scoreFilter.lowConfidence) logger.log('[Tavily] ⚠️ Wszystkie wyniki poniżej progu jakości — brak materiału dowodowego');
-        if (results.length < 2) {
+        if (czyWymagaSecondaryRetrieval(results, sourceQuestion, time_range)) {
+          const secondaryTimeoutMs = Math.max(1000, Math.min(15000, Number(remainingMs) || 15000));
           const secondary = await searchSecondaryProviders({
             query: sourceQuestion || searchQuery,
             geminiKey,
@@ -356,6 +373,7 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
             startIndex: sourceStartIndex,
             domains,
             prefer: time_range ? 'gemini' : 'exa',
+            timeoutMs: secondaryTimeoutMs,
           });
           if (secondary.status === 'ok' && secondary.text) {
             logger.log(`[Retrieval] 🔎 Tavily weak — użyto secondary provider (${secondary.sources.map(s => s.provider).join(', ')})`);
@@ -433,4 +451,5 @@ module.exports = {
   wykryjKonfliktyZrodelTavily,
   zbudujRaportKonfliktowTavily,
   sanityzujTrescZrodlaTavily,
+  czyWymagaSecondaryRetrieval,
 };

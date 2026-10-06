@@ -64,13 +64,9 @@ function detectFreshness(p) {
 }
 
 function detectEntity(p) {
+  // Gry i postacie są rozwiązywane przez resolveGameEntity(), więc nie
+  // utrzymujemy tutaj drugiej, rozjeżdżającej się listy aliasów.
   const patterns = [
-    ['Minecraft', /\bminecraft\b/i],
-    ['GTA', /\b(?:gta|grand theft auto)\b/i],
-    ['The Witcher', /\b(?:wiedźmin|wiedzmin|witcher|geralt|ciri)\b/i],
-    ['Cyberpunk 2077', /\b(?:cyberpunk|night city|johnny silverhand)\b/i],
-    ['Red Dead Redemption', /\b(?:red dead|rdr2|arthur morgan)\b/i],
-    ['Portal 2', /\b(?:portal\s*2|wheatley|glados|aperture science)\b/i],
     ['YouTube', /\b(?:youtube|youtuber|kanał|kanal|subskryb)\b/i],
     ['Twitch', /\btwitch\w*/i],
     ['Kick', /\bkick\w*/i],
