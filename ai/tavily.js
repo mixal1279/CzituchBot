@@ -330,7 +330,7 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
 
   return async function szukajTavily(pytanie, options = {}) {
     const original = String(pytanie || '').trim();
-    const { domains, time_range, _skipRewrite = false, returnMeta = false, sourceStartIndex = 0, sourceQuestion = original, remainingMs = 15000 } = options;
+    const { domains, time_range, _skipRewrite = false, returnMeta = false, sourceStartIndex = 0, sourceQuestion = original, remainingMs = 15000, requestState = null } = options;
     try {
       let searchQuery = original;
       const rewriteKey = kluczRewrite(original);
@@ -339,19 +339,32 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
         searchQuery = rewriteZCache.query;
         logger.log(`[Tavily] ♻️ Rewrite z cache — bez wywołania modelu`);
       } else if (!_skipRewrite && original) {
-        const rewrite = await groq.chat.completions.create({
-          model: 'openai/gpt-oss-20b', max_tokens: 220, reasoning_effort: 'low',
-          include_reasoning: false, temperature: 0,
-          messages: [
-            { role: 'system', content: 'Przepisz pytanie na jedno kompletne zapytanie do wyszukiwarki. Zachowaj WSZYSTKIE istotne elementy pytania, nazwy własne, relacje i części składowe. Nie odpowiadaj. Nie usuwaj drugiej ani kolejnych części pytania. Maksymalnie 35 słów. Tylko samo zapytanie.' },
-            { role: 'user', content: original },
-          ],
-        });
-        const rewritten = normalizeQuery(rewrite.choices?.[0]?.message?.content);
-        if (rewritten && rewritten.length >= 30 && rewritten.length >= Math.min(original.length * 0.28, 80)) searchQuery = rewritten;
-        else logger.log(`[Tavily] ↩️ Rewrite odrzucony — używam oryginalnego pytania: "${original}"`);
-        rewriteCache.set(rewriteKey, { query: searchQuery, czas: Date.now() });
-        if (rewriteCache.size > TAVILY_REWRITE_MAX_ENTRIES) rewriteCache.delete(rewriteCache.keys().next().value);
+        const canRewrite = !requestState?.zarezerwujModel || requestState.zarezerwujModel('tavily-query-rewrite');
+        if (!canRewrite) {
+          logger.warn?.('[Tavily] rewrite pominięty — budżet modelu/ czasu requestu wyczerpany');
+        } else {
+          const rewriteController = new AbortController();
+          const rewriteTimeoutMs = Math.max(1, Math.min(8000, Number(remainingMs) || 8000));
+          const rewriteTimer = setTimeout(() => rewriteController.abort(), rewriteTimeoutMs);
+          let rewrite;
+          try {
+            rewrite = await groq.chat.completions.create({
+              model: 'openai/gpt-oss-20b', max_tokens: 220, reasoning_effort: 'low',
+              include_reasoning: false, temperature: 0, signal: rewriteController.signal,
+              messages: [
+                { role: 'system', content: 'Przepisz pytanie na jedno kompletne zapytanie do wyszukiwarki. Zachowaj WSZYSTKIE istotne elementy pytania, nazwy własne, relacje i części składowe. Nie odpowiadaj. Nie usuwaj drugiej ani kolejnych części pytania. Maksymalnie 35 słów. Tylko samo zapytanie.' },
+                { role: 'user', content: original },
+              ],
+            });
+          } finally {
+            clearTimeout(rewriteTimer);
+          }
+          const rewritten = normalizeQuery(rewrite.choices?.[0]?.message?.content);
+          if (rewritten && rewritten.length >= 30 && rewritten.length >= Math.min(original.length * 0.28, 80)) searchQuery = rewritten;
+          else logger.log(`[Tavily] ↩️ Rewrite odrzucony — używam oryginalnego pytania: "${original}"`);
+          rewriteCache.set(rewriteKey, { query: searchQuery, czas: Date.now() });
+          if (rewriteCache.size > TAVILY_REWRITE_MAX_ENTRIES) rewriteCache.delete(rewriteCache.keys().next().value);
+        }
       }
       logger.log(`[Tavily] searchQuery: "${searchQuery}" | domains: ${JSON.stringify(domains)} | time_range: ${time_range}`);
       const key = cacheKey(searchQuery, domains, time_range, sourceQuestion);
@@ -473,6 +486,7 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
         startIndex: sourceStartIndex,
         domains,
         prefer: 'gemini',
+        timeoutMs: Math.max(1, Math.min(15000, Number(remainingMs) || 15000)),
       });
       if (secondary.status === 'ok' && secondary.text) {
         onStatus({ status: 'secondary', query: original, providers: secondary.sources.map(s => s.provider), fallbackFrom: status });
