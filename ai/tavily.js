@@ -451,4 +451,5 @@ module.exports = {
   wykryjKonfliktyZrodelTavily,
   zbudujRaportKonfliktowTavily,
   sanityzujTrescZrodlaTavily,
+  czyWymagaSecondaryRetrieval,
 };
