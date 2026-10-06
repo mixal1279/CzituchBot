@@ -431,8 +431,9 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
             timeoutMs: secondaryTimeoutMs,
           });
           if (secondary.status === 'ok' && secondary.text) {
-            logger.log(`[Retrieval] 🔎 Tavily weak — użyto secondary provider (${secondary.sources.map(s => s.provider).join(', ')})`);
-            onStatus({ status: 'secondary', query: searchQuery, providers: secondary.sources.map(s => s.provider) });
+            const secondaryProviders = [...new Set((secondary.sources || []).map(s => s.provider).filter(Boolean))];
+            logger.log(`[Retrieval] 🔎 Tavily weak — użyto secondary providerów: ${secondaryProviders.join(', ') || 'unknown'} (źródeł: ${secondary.sources?.length || 0})`);
+            onStatus({ status: 'secondary', query: searchQuery, providers: secondaryProviders, sourceCount: secondary.sources?.length || 0 });
             return returnMeta ? { status: 'ok', text: secondary.text, secondary: true, sources: secondary.sources } : secondary.text;
           }
         }
@@ -489,7 +490,8 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
         timeoutMs: Math.max(1, Math.min(15000, Number(remainingMs) || 15000)),
       });
       if (secondary.status === 'ok' && secondary.text) {
-        onStatus({ status: 'secondary', query: original, providers: secondary.sources.map(s => s.provider), fallbackFrom: status });
+        const secondaryProviders = [...new Set((secondary.sources || []).map(s => s.provider).filter(Boolean))];
+        onStatus({ status: 'secondary', query: original, providers: secondaryProviders, sourceCount: secondary.sources?.length || 0, fallbackFrom: status });
         return returnMeta ? { status: 'ok', text: secondary.text, secondary: true, sources: secondary.sources } : secondary.text;
       }
       onStatus({ status, query: original, error: err.message });
