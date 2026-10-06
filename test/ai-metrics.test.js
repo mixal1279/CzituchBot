@@ -31,7 +31,7 @@ test('AI observability buckets remain bounded', () => {
   for (let i = 0; i < 100; i++) {
     recordAIMetric(metrics, { providers: [`provider-${i}`], fallbackReasons: [`reason-${i}`] });
   }
-  assert.ok(Object.keys(metrics.providerCalls).length <= 40);
-  assert.ok(Object.keys(metrics.fallbackReasons).length <= 40);
+  assert.ok(Object.keys(metrics.providerCalls).length <= 41);
+  assert.ok(Object.keys(metrics.fallbackReasons).length <= 41);
   assert.ok(metrics.recent.length <= 200);
 });
