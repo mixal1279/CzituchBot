@@ -303,6 +303,14 @@ console.log('AI regression tests: OK');
 
 {
   const source = require('fs').readFileSync(require('path').join(__dirname, '..', 'czituch_bot.js'), 'utf8');
+  assert.match(source, /walidacja\.status === 'rejected' && AI_POLICY\.czyOdpowiedzToJednoznacznaOdmowa\(odp\)/);
+  assert.match(source, /status: 'inconclusive'/);
+  assert.match(source, /model odmówił odpowiedzi mimo dostępnego materiału referencyjnego/);
+  assert.match(source, /status === 'inconclusive'\) return 'Chwilowo nie mogę wiarygodnie potwierdzić/);
+}
+
+{
+  const source = require('fs').readFileSync(require('path').join(__dirname, '..', 'czituch_bot.js'), 'utf8');
   assert.match(source, /confidence: \{ type: 'number', minimum: 0, maximum: 1 \}/);
   assert.match(source, /required: \['valid', 'reason', 'unsupported_claims', 'confidence', 'ok', 'supported', 'relevant', 'complete', 'hallucination', 'claims'\]/);
   assert.match(source, /AI_TAVILY_CACHE_FILE \|\| path\.join\(process\.env\.AI_CACHE_DIR \|\| __dirname, 'tavily_cache\.json'\)/);
