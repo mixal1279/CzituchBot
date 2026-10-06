@@ -6,11 +6,32 @@ const { searchSecondaryProviders } = require('./webRetrieval');
 const TAVILY_CACHE_TTL_MS = 10 * 60 * 1000; // domyślne / pytania o świeże wiadomości
 const TAVILY_REWRITE_TTL_MS = 6 * 60 * 60 * 1000;
 const TAVILY_PERSIST_DEBOUNCE_MS = 5000;
+const TAVILY_CACHE_MAX_ENTRIES = 300;
+const TAVILY_CACHE_MAX_BYTES = 2 * 1024 * 1024;
+const TAVILY_REWRITE_MAX_ENTRIES = 500;
+const TAVILY_CACHE_VERSION = 2;
 const TAVILY_MIN_SCORE = Number(process.env.TAVILY_MIN_SCORE) || 0.2;
 const TAVILY_MIN_STRONG_RESULTS = 1;
 
 // TTL zależny od tego, jak szybko odpowiedź się starzeje: świeże wiadomości krótko,
 // fakty historyczne (bez time_range) długo.
+function ograniczCacheTavily(cache, maxEntries = TAVILY_CACHE_MAX_ENTRIES) {
+  while (cache.size > maxEntries) cache.delete(cache.keys().next().value);
+  return cache;
+}
+
+function snapshotCacheTavily(cache, maxBytes = TAVILY_CACHE_MAX_BYTES) {
+  const entries = [...cache.entries()];
+  let snapshot = { version: TAVILY_CACHE_VERSION, entries: Object.fromEntries(entries) };
+  let serialized = JSON.stringify(snapshot);
+  while (Buffer.byteLength(serialized, 'utf8') > maxBytes && entries.length) {
+    entries.shift();
+    snapshot = { version: TAVILY_CACHE_VERSION, entries: Object.fromEntries(entries) };
+    serialized = JSON.stringify(snapshot);
+  }
+  return serialized;
+}
+
 function ttlDlaZakresu(timeRange) {
   const r = String(timeRange || '').replace(/^past_/, '').toLowerCase();
   if (!r) return 6 * 60 * 60 * 1000;
@@ -242,22 +263,40 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
   const inFlight = new Map();
   let persistQueue = Promise.resolve();
   try {
-    const saved = JSON.parse(fs.readFileSync(cacheFile, 'utf8'));
-    for (const [key, value] of Object.entries(saved || {})) {
-      if (value?.czas && Date.now() - value.czas < (value.ttl || TAVILY_CACHE_TTL_MS)) cache.set(key, value);
+    const stat = fs.statSync(cacheFile);
+    if (stat.size <= TAVILY_CACHE_MAX_BYTES) {
+      const saved = JSON.parse(fs.readFileSync(cacheFile, 'utf8'));
+      const entries = saved?.version === TAVILY_CACHE_VERSION ? saved.entries : saved;
+      if (entries && typeof entries === 'object' && !Array.isArray(entries)) {
+        for (const [key, value] of Object.entries(entries)) {
+          if (typeof key !== 'string' || key.length > 2048) continue;
+          if (!value || typeof value.wynik !== 'string' || value.wynik.length > 12000) continue;
+          if (value.czas && Date.now() - value.czas < (value.ttl || TAVILY_CACHE_TTL_MS)) cache.set(key, value);
+        }
+      }
+    } else {
+      logger.warn?.(`[Tavily] cache pominięty — plik przekracza limit ${TAVILY_CACHE_MAX_BYTES} B`);
     }
   } catch (_) {}
+  ograniczCacheTavily(cache);
   // Zapis odroczony: wiele wyników w krótkim czasie = jeden zapis pliku (snapshot z chwili zapisu).
   let persistTimer = null;
   const persistCache = () => {
     if (persistTimer) return persistQueue;
     persistTimer = setTimeout(() => {
       persistTimer = null;
-      const snapshot = JSON.stringify(Object.fromEntries(cache));
+      const snapshot = snapshotCacheTavily(cache);
+      const tempFile = `${cacheFile}.tmp-${process.pid}`;
       persistQueue = persistQueue
         .catch(err => logger.warn?.('[Tavily] poprzedni zapis cache nieudany:', err.message))
-        .then(() => fs.promises.writeFile(cacheFile, snapshot, 'utf8'))
-        .catch(err => logger.warn?.('[Tavily] zapis cache nieudany:', err.message));
+        .then(async () => {
+          await fs.promises.writeFile(tempFile, snapshot, 'utf8', { mode: 0o600 });
+          await fs.promises.rename(tempFile, cacheFile);
+        })
+        .catch(err => {
+          logger.warn?.('[Tavily] zapis cache nieudany:', err.message);
+          return fs.promises.unlink(tempFile).catch(() => {});
+        });
     }, TAVILY_PERSIST_DEBOUNCE_MS);
     persistTimer.unref?.();
     return persistQueue;
@@ -309,7 +348,7 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
         if (rewritten && rewritten.length >= 30 && rewritten.length >= Math.min(original.length * 0.28, 80)) searchQuery = rewritten;
         else logger.log(`[Tavily] ↩️ Rewrite odrzucony — używam oryginalnego pytania: "${original}"`);
         rewriteCache.set(rewriteKey, { query: searchQuery, czas: Date.now() });
-        if (rewriteCache.size > 500) rewriteCache.delete(rewriteCache.keys().next().value);
+        if (rewriteCache.size > TAVILY_REWRITE_MAX_ENTRIES) rewriteCache.delete(rewriteCache.keys().next().value);
       }
       logger.log(`[Tavily] searchQuery: "${searchQuery}" | domains: ${JSON.stringify(domains)} | time_range: ${time_range}`);
       const key = cacheKey(searchQuery, domains, time_range, sourceQuestion);
@@ -411,7 +450,7 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
         const text = [sourceConflictReport, blocks.join('\n---\n')].filter(Boolean).join('\n---\n');
         logger.log(`[Tavily] ✅ Zwrócono ${results.length}/${all.length} wyników źródłowych (${text.length} znaków)`);
         cache.set(key, { wynik: text, czas: Date.now(), ttl: ttlDlaZakresu(validTimeRange) });
-        if (cache.size > 300) cache.delete(cache.keys().next().value);
+        ograniczCacheTavily(cache);
         persistCache();
         onStatus({ status: 'ok', query: searchQuery, results: results.length });
         return returnMeta ? { status: 'ok', text } : text;
@@ -446,6 +485,8 @@ module.exports = {
   hostnamePasujeDoDomenyTavily,
   czyZablokowanyHostTavily,
   ttlDlaZakresu,
+  ograniczCacheTavily,
+  snapshotCacheTavily,
   filtrujPoScore,
   rerankujWynikiTavily,
   wykryjKonfliktyZrodelTavily,
