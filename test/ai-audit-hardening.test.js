@@ -105,3 +105,14 @@ test('validator accepts paraphrase when entities, relation and facts remain alig
   }, 'test-model', 'test', new Set(['SOURCE 1']), data);
   assert.equal(result.status, 'accepted');
 });
+
+
+test('validator treats a positive result without claims as inconclusive', () => {
+  const result = normalizujWynikWalidatora({
+    valid: true, reason: 'odpowiedź jest w pełni poparta źródłami', unsupported_claims: [],
+    supported: true, relevant: true, complete: true, hallucination: false, confidence: 1,
+    claims: [],
+  }, 'test-model', 'test', new Set(['SOURCE 1']), '[SOURCE 1]\nTREŚĆ: potwierdzony fakt');
+  assert.equal(result.status, 'inconclusive');
+  assert.equal(result.ok, false);
+});
