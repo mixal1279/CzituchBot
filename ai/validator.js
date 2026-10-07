@@ -233,7 +233,15 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
     && !unknownSourceClaim
     && !unsupportedEvidenceClaim;
 
-  const status = accepted ? 'accepted' : (sprzecznyWerdykt ? 'inconclusive' : 'rejected');
+  const niekompletnyPozytywnyWerdykt = validFromModel === true
+    && claims.length === 0
+    && unsupported.length === 0
+    && !unknownSourceClaim
+    && !unsupportedEvidenceClaim;
+
+  const status = accepted
+    ? 'accepted'
+    : (sprzecznyWerdykt || niekompletnyPozytywnyWerdykt ? 'inconclusive' : 'rejected');
 
   return {
     status,
