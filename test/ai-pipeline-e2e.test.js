@@ -15,8 +15,7 @@ test('actual zapytajAI pipeline survives validator rejection and succeeds after 
       completions: {
         create: async (request) => {
           groqCalls++;
-          const maxTokens = Number(request?.max_tokens || 0);
-          if (maxTokens <= 220) {
+          if (groqCalls === 1) {
             return { choices: [{ message: { content: 'Portal 2 Wheatley GLaDOS kontrola' } }] };
           }
           return {
