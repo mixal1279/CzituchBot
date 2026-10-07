@@ -255,7 +255,6 @@ function rerankujWynikiTavily(results, sourceQuestion, requestedDomains = [], op
   );
 
   return ranked
-    .sort((a,b) => b._rerankScore - a._rerankScore)
     .map(({_coreScore,_rerankScore,_host,_key,_index,...result}) => result);
 }
 
