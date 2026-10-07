@@ -147,7 +147,7 @@ async function searchSecondaryProviders({ query, geminiKey, exaKey, fetchFn = fe
   for (const [provider, key] of order) {
     if (!key) continue;
     const result = provider === 'exa'
-      ? await searchExa({ apiKey: key, query, fetchFn, startIndex, domains })
+      ? await searchExa({ apiKey: key, query, fetchFn, startIndex, domains, timeoutMs })
       : await searchGeminiWeb({ apiKey: key, query, fetchFn, startIndex, timeoutMs });
     if (result.status === 'ok' && result.sources.length) return result;
     if (result.error) errors.push(`${provider}: ${result.error}`);
