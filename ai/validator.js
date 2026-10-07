@@ -141,7 +141,11 @@ function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '') {
     if (!block) return false;
     const normalizedBlock = block.replace(/\s+/g, ' ').toLocaleLowerCase('pl-PL');
     if (normalizedBlock.includes(quote)) {
-      return zgodnoscStrukturalna(quote, claim, { allowCrossLanguageExactEvidence: true }).ok;
+      // The quote may be only a partial excerpt and omit a full entity name
+      // present elsewhere in the same source block (e.g. "Johnny" vs
+      // "Johnny Silverhand"). Bind the claim to the whole verified source
+      // block while still requiring the quoted text to come from that block.
+      return zgodnoscStrukturalna(block, claim, { allowCrossLanguageExactEvidence: true }).ok;
     }
     return czyDowodSemantyczniePokrywaClaim(block, quote, { allowCrossLanguageExactEvidence: true })
       && zgodnoscStrukturalna(block, claim, { allowCrossLanguageExactEvidence: true }).ok
