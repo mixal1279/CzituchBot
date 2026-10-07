@@ -143,9 +143,9 @@ function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '') {
     if (normalizedBlock.includes(quote)) {
       return zgodnoscStrukturalna(quote, claim, { allowCrossLanguageExactEvidence: true }).ok;
     }
-    return czyDowodSemantyczniePokrywaClaim(block, quote)
-      && zgodnoscStrukturalna(block, claim).ok
-      && czyDowodSemantyczniePokrywaClaim(block, claim);
+    return czyDowodSemantyczniePokrywaClaim(block, quote, { allowCrossLanguageExactEvidence: true })
+      && zgodnoscStrukturalna(block, claim, { allowCrossLanguageExactEvidence: true }).ok
+      && czyDowodSemantyczniePokrywaClaim(block, claim, { allowCrossLanguageExactEvidence: true });
   });
 }
 
