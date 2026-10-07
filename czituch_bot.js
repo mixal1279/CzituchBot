@@ -2397,7 +2397,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
         return candidate;
       }
     }
-    return wynikPusty('openrouter', KONFIGURACJA.openrouterGeneratorModel, openrouter.ucieta ? 'OpenRouter response truncated' : openrouter.error);
+    return wynikPusty('openrouter', KONFIGURACJA.openrouterGeneratorModel, result?.ucieta ? 'OpenRouter response truncated' : (result?.error || 'AI fallback chain exhausted'));
   }
 
 function oczyscOdpowiedzPrzedWalidacja(tekst) {
