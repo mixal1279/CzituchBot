@@ -1525,9 +1525,27 @@ Zwróć WYŁĄCZNIE JSON: {"valid":true/false,"reason":"krótki powód","confide
     } finally { clearTimeout(timer); }
   } catch (err) {
     console.error(`[AI][${requestId}] ${model} validator error:`, err.message);
-    const quota = /quota|rate.?limit|resource.?exhausted|429|limit:/i.test(err.message || '');
-    if (quota) geminiValidatorCooldownUntil = Date.now() + 90_000;
-    return { status: 'unavailable', ok: false, technicalError: true, quota, provider: 'gemini', model, unsupported_claims: [], reason: quota ? 'quota Gemini — przełączam validator' : `błąd validatora (${model})`, error: err.message };
+    const message = String(err?.message || '');
+    const quota = /quota|rate.?limit|resource.?exhausted|429|limit:/i.test(message);
+    const transient = quota
+      || /(?:HTTP\s*(?:408|409|429|500|502|503|504)|aborted|abort|timeout|timed out|network|fetch failed|ECONNRESET|ETIMEDOUT)/i.test(message);
+    // Gemini GenerateContent documents caller-side cancellation/timeouts as
+    // transient transport failures. Keep Gemini on a short cooldown and let
+    // the independent OpenRouter validator handle this request instead of
+    // spending another Gemini slot during a regeneration.
+    if (transient) geminiValidatorCooldownUntil = Date.now() + (quota ? 90_000 : 30_000);
+    return {
+      status: 'unavailable',
+      ok: false,
+      technicalError: true,
+      transient,
+      quota,
+      provider: 'gemini',
+      model,
+      unsupported_claims: [],
+      reason: quota ? 'quota Gemini — przełączam validator' : (transient ? `przejściowy błąd validatora (${model}) — fallback` : `błąd validatora (${model})`),
+      error: message,
+    };
   }
 }
 
@@ -1778,7 +1796,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
   const searchTavilyFn = opcje.__testDeps?.searchTavily || szukajTavily;
   const validateAI = opcje.__testDeps?.validateAI || walidujOdpowiedzAI;
   const loadMemory = opcje.__testDeps?.loadMemory || wczytajZweryfikowanaPamiecAI;
-  const testMaxTavilySearches = Number.isInteger(opcje.__testDeps?.maxWyszukanTavily) ? Math.max(2, opcje.__testDeps.maxWyszukanTavily) : 2;
+  const testMaxTavilySearches = Number.isInteger(opcje.__testDeps?.maxWyszukanTavily) ? Math.max(2, opcje.__testDeps.maxWyszukanTavily) : 3;
   const verifiedMemoryUserId = memoryUserId || String(nick || '').toLowerCase();
   const verifiedMemoryPromise = loadMemory(verifiedMemoryUserId);
   systemPrompt = `${systemPrompt}\n\nNie umieszczaj w odpowiedzi nazw źródeł, atrybucji, etykiet „Źródło:” ani URL-i. Źródła są wyłącznie wewnętrznym materiałem RAG i walidacji.`;
