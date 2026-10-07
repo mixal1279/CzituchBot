@@ -1,0 +1,78 @@
+name: Mistral API check
+
+on:
+  workflow_dispatch:
+
+jobs:
+  mistral-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    env:
+      MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
+
+    steps:
+      - name: Check Mistral API key
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ -z "${MISTRAL_API_KEY:-}" ]; then
+            echo "MISTRAL_SECRET_MISSING"
+            exit 1
+          fi
+
+          python - <<'PY'
+          import json
+          import os
+          import urllib.error
+          import urllib.request
+
+          key = os.environ["MISTRAL_API_KEY"].replace("\\r", "").replace("\\n", "").strip()
+
+          payload = json.dumps({
+              "model": "mistral-small-latest",
+              "messages": [{"role": "user", "content": "Reply with exactly: OK"}],
+              "max_tokens": 5,
+              "temperature": 0
+          }).encode()
+
+          request = urllib.request.Request(
+              "https://api.mistral.ai/v1/chat/completions",
+              data=payload,
+              headers={
+                  "Authorization": f"Bearer {key}",
+                  "Content-Type": "application/json",
+              },
+              method="POST",
+          )
+
+          try:
+              with urllib.request.urlopen(request, timeout=30) as response:
+                  status = response.status
+                  body = json.loads(response.read().decode())
+                  content = body.get("choices", [{}])[0].get("message", {}).get("content", "")
+                  print(f"MISTRAL_OK status={status} response={content!r}")
+          except urllib.error.HTTPError as error:
+              body = error.read().decode(errors="replace")
+              try:
+                  data = json.loads(body)
+                  message = data.get("message") or data.get("error", {}).get("message") or "unknown"
+              except Exception:
+                  message = "unparseable_error"
+
+              print(f"MISTRAL_HTTP_ERROR status={error.code} message={message}")
+              if error.code == 401:
+                  print("DIAGNOSIS=MISTRAL_KEY_REJECTED")
+              elif error.code == 402:
+                  print("DIAGNOSIS=MISTRAL_BILLING_OR_CREDITS")
+              elif error.code == 429:
+                  print("DIAGNOSIS=MISTRAL_RATE_LIMIT_OR_QUOTA")
+              else:
+                  print("DIAGNOSIS=MISTRAL_API_ERROR")
+              raise SystemExit(1)
+          except Exception as error:
+              print(f"MISTRAL_REQUEST_ERROR type={type(error).__name__}")
+              print("DIAGNOSIS=MISTRAL_CONNECTION_OR_REQUEST_ERROR")
+              raise SystemExit(1)
+          PY
