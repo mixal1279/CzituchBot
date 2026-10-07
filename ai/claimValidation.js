@@ -116,6 +116,14 @@ function zgodnoscStrukturalna(evidence, claim, options = {}) {
   const ct = tokenyClaim(c);
   const et = new Set(tokenyClaim(e));
   const overlap = ct.length ? ct.filter(t => et.has(t)).length / ct.length : 0;
+  if (options.allowCrossLanguageExactEvidence === true && overlap < 0.67) {
+    const evidenceConcepts = pojeciaCrossLanguage(e);
+    const claimConcepts = pojeciaCrossLanguage(c);
+    const sharedConcepts = [...claimConcepts].filter(x => evidenceConcepts.has(x));
+    if (sharedConcepts.length > 0) {
+      return { ok: true, overlap: null, mode: 'cross_language_exact_evidence', sharedConcepts };
+    }
+  }
   const threshold = claimEntities.length && claimEntities.every(entity => evidenceNormalized.includes(entity))
     ? 0.67
     : (ct.length <= 5 ? 0.67 : 0.60);
