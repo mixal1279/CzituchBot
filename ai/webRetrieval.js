@@ -1,5 +1,7 @@
 'use strict';
 
+const { AI_MODELS } = require('./modelConfig');
+
 function cleanText(value, max = 5000) {
   return String(value || '').replace(/\s+/g, ' ').trim().slice(0, max);
 }
@@ -55,7 +57,7 @@ async function searchGeminiWeb({ apiKey, query, fetchFn = fetch, startIndex = 0,
   if (!apiKey || !query) return { status: 'disabled', text: '', sources: [] };
   try {
     const data = await fetchJson(fetchFn,
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${encodeURIComponent(apiKey)}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/${AI_MODELS.webSearch}:generateContent?key=${encodeURIComponent(apiKey)}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
