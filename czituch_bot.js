@@ -2594,24 +2594,27 @@ function oczyscOdpowiedzPrzedWalidacja(tekst) {
 
   // Jedyny etap składający finalny payload. Nic nie jest dopisywane po tej funkcji,
   // więc validator zawsze ocenia tekst bazowy, a odmowa nie dostaje sprzecznej atrybucji.
-  const finalizeResponse = (tekst, status) => {
-    if (status === 'rejected') return 'Nie mam wystarczających danych, żeby odpowiedzieć na to pewnie.';
-    if (status === 'inconclusive') return 'Chwilowo nie mogę wiarygodnie potwierdzić tej informacji, więc nie będę zgadywać.';
-    if (status === 'unavailable') return 'Chwilowo nie mogę potwierdzić tej informacji, więc nie będę zgadywać.';
-    let finalText = ograniczDoPelnychZdanAI(usunMarkeryWewnetrzneAI(filtrBezpieczenstwa(tekst)), responseCfg.maxSentences, 1800, responseCfg.maxWords);
-    if (!finalText) return '';
-    // Źródła pozostają wewnętrznym materiałem RAG/validatora. Nie wysyłamy
-    // użytkownikowi nazw źródeł, atrybucji ani linków.
-    finalText = finalText
-      .split(/\r?\n/)
-      .filter(line => !/https?:\/\/|www\./i.test(line))
-      .filter(line => !/^(?:📚\s*)?Źródło(?: poradnika)?\s*:/i.test(line))
-      .join('\n')
-      .replace(/\[[^\]]*\]\(https?:\/\/[^)]+\)/gi, '')
-      .replace(/\n{3,}/g, '\n\n')
-      .trim();
-    return finalText;
-  };
+  const finalizeResponse = (tekst, status) => finalizeAIPipelineText(tekst, status, {
+    rejectedMessage: 'Nie mam wystarczających danych, żeby odpowiedzieć na to pewnie.',
+    inconclusiveMessage: 'Chwilowo nie mogę wiarygodnie potwierdzić tej informacji, więc nie będę zgadywać.',
+    unavailableMessage: 'Chwilowo nie mogę potwierdzić tej informacji, więc nie będę zgadywać.',
+    sanitizeResponse: value => {
+      let finalText = ograniczDoPelnychZdanAI(
+        usunMarkeryWewnetrzneAI(filtrBezpieczenstwa(value)),
+        responseCfg.maxSentences,
+        1800,
+        responseCfg.maxWords,
+      );
+      return finalText
+        .split(/\r?\n/)
+        .filter(line => !/https?:\/\/|www\./i.test(line))
+        .filter(line => !/^(?:📚\s*)?Źródło(?: poradnika)?\s*:/i.test(line))
+        .join('\n')
+        .replace(/\[[^\]]*\]\(https?:\/\/[^)]+\)/gi, '')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
+    },
+  });
   odp = finalizeResponse(odp, aiState.finalStatus);
 
   AI_METRYKI[aiState.finalStatus] = (AI_METRYKI[aiState.finalStatus] || 0) + 1;
