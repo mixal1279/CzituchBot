@@ -1761,6 +1761,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
   const searchTavilyFn = opcje.__testDeps?.searchTavily || szukajTavily;
   const validateAI = opcje.__testDeps?.validateAI || walidujOdpowiedzAI;
   const loadMemory = opcje.__testDeps?.loadMemory || wczytajZweryfikowanaPamiecAI;
+  const testMaxTavilySearches = Number.isInteger(opcje.__testDeps?.maxWyszukanTavily) ? Math.max(2, opcje.__testDeps.maxWyszukanTavily) : 2;
   const verifiedMemoryUserId = memoryUserId || String(nick || '').toLowerCase();
   const verifiedMemoryPromise = loadMemory(verifiedMemoryUserId);
   systemPrompt = `${systemPrompt}\n\nNie umieszczaj w odpowiedzi nazw źródeł, atrybucji, etykiet „Źródło:” ani URL-i. Źródła są wyłącznie wewnętrznym materiałem RAG i walidacji.`;
@@ -1783,7 +1784,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
     maxGeneracji: 6,
     maxModelCalls: 10,
     maxValidatorow: 3,
-    maxWyszukanTavily: 2,
+    maxWyszukanTavily: testMaxTavilySearches,
   });
   let daneDoWalidacji = null;
   const budzetPrzekroczony = () => aiState.isExpired();
