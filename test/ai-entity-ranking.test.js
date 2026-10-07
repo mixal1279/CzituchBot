@@ -106,3 +106,10 @@ test('live freshness penalizes clearly stale sources without discarding them', (
 
   assert.match(results[0].url, /example\.org/);
 });
+
+
+test('deterministic resolver wins for explicit Cyberpunk 2077 mentions', () => {
+  const resolved = resolveGameEntity('Jaki był związek Johnnyego Silverhanda z Alt Cunningham i jak wpłynęło to na jego konflikt z Arasaką w Cyberpunk 2077?');
+  assert.equal(resolved.game, 'Cyberpunk 2077');
+  assert.ok(resolved.confidence >= 0.8);
+});
