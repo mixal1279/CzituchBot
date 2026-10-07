@@ -140,7 +140,7 @@ function czyDowodSemantyczniePokrywaClaim(evidence, claim) {
   if (ct.length < 3) return false;
   const et = new Set(tokenyDowodu(e));
   const overlap = ct.filter(t => et.has(t)).length / ct.length;
-  return overlap >= 0.62;
+  return overlap >= 0.5;
 }
 function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '') {
   if (!Array.isArray(sourceIds) || !sourceIds.length || typeof evidenceQuote !== 'string') return false;
