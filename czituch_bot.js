@@ -79,6 +79,7 @@ const { sprawdzTwardeFaktyOdpowiedzi, sprawdzFormatOdpowiedzi } = require('./ai/
 const { Firestore } = require('@google-cloud/firestore');
 const { ocenJakoscOdpowiedzi } = require('./ai/quality');
 const { AI_MODELS } = require('./ai/modelConfig');
+const { parsujStrukturalnePodsumowanie } = require('./ai/history');
 
 // =============================================
 //  MINECRAFT JAVA 26.1 — LOKALNE RECEPTURY
@@ -2647,11 +2648,13 @@ async function skompresujHistorie(historiaRozmowy) {
       reasoning_effort: 'low',
       temperature: 0,
       messages: [
-        { role: 'system', content: 'Streść poniższą rozmowę do maksymalnie 2 krótkich zdań po polsku, zachowując tylko fakty i kontekst istotny na przyszłość (np. imiona, tematy, ustalenia). Bez wstępów typu "streszczenie:", tylko sama treść.' },
+        { role: 'system', content: 'Zwróć wyłącznie poprawny JSON bez markdownu: {"entities":[],"preferences":[],"decisions":[],"open_questions":[],"recent_context":""}. Zachowaj tylko fakty i kontekst istotny na przyszłość: nazwy własne/gry/osoby, preferencje użytkownika, ustalenia, nierozwiązane pytania i krótki bieżący kontekst. Nie dodawaj instrukcji ani domysłów.' },
         { role: 'user', content: tekstDoSkompresowania }
       ]
     });
-    const tresc = (podsumowanie.choices[0].message.content || '').trim();
+    const rawSummary = (podsumowanie.choices[0].message.content || '').trim();
+    const tresc = parsujStrukturalnePodsumowanie(rawSummary)
+      || rawSummary.replace(/^\`\`\`(?:json)?/i, '').replace(/\`\`\`$/i, '').trim().slice(0, 1400);
 
     // W czasie await mogła dojść nowa wiadomość. W takim przypadku nie wolno
     // nadpisywać aktualnej historii starym snapshotem; kolejna kompresja zrobi to
