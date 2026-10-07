@@ -18,6 +18,12 @@ const TAVILY_MIN_STRONG_RESULTS = 1;
 
 // TTL zależny od tego, jak szybko odpowiedź się starzeje: świeże wiadomości krótko,
 // fakty historyczne (bez time_range) długo.
+function przesunSourceIdsTavily(text, offset = 0) {
+  const n = Number.isFinite(Number(offset)) ? Math.max(0, Math.floor(Number(offset))) : 0;
+  if (!n) return String(text || '');
+  return String(text || '').replace(/\[SOURCE\s+(\d+)\]/g, (_, id) => '[SOURCE ' + (Number(id) + n) + ']');
+}
+
 function ograniczCacheTavily(cache, maxEntries = TAVILY_CACHE_MAX_ENTRIES) {
   while (cache.size > maxEntries) cache.delete(cache.keys().next().value);
   return cache;
@@ -453,7 +459,8 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
       const cached = cache.get(key);
       if (cached && Date.now() - cached.czas < (cached.ttl || TAVILY_CACHE_TTL_MS)) {
         onStatus({ status: 'cache', query: searchQuery });
-        return returnMeta ? { status: 'ok', text: cached.wynik, cached: true } : cached.wynik;
+        const cachedText = przesunSourceIdsTavily(cached.wynik, sourceStartIndex);
+        return returnMeta ? { status: 'ok', text: cachedText, cached: true } : cachedText;
       }
       const active = inFlight.get(key);
       if (active) {
@@ -616,6 +623,7 @@ module.exports = {
   czyZablokowanyHostTavily,
   ttlDlaZakresu,
   ograniczCacheTavily,
+  przesunSourceIdsTavily,
   snapshotCacheTavily,
   filtrujPoScore,
   rerankujWynikiTavily,
