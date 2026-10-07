@@ -413,7 +413,9 @@ async function testFirestoreConnection() {
     console.error('[Firestore] Sprawdź czy plik klucza .json jest poprawny i czy masz włączoną usługę Firestore w konsoli Firebase.');
   }
 }
-testFirestoreConnection().then(() => autoMigrateJsonToFirestore());
+if (process.env.CZITUCHBOT_SKIP_STARTUP_IO !== '1') {
+  testFirestoreConnection().then(() => autoMigrateJsonToFirestore());
+}
 
 function hashAIUserMemoryId(userId) {
   return crypto.createHash('sha256').update(String(userId || 'unknown')).digest('hex');
