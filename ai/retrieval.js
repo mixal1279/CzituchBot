@@ -29,11 +29,11 @@ function decomposeQuestion(question,routing={}) {
     if(index===0) return clause;
     const normalized=clause.toLocaleLowerCase('pl-PL');
     const previousEntities = extractCarryoverEntities(clauses.slice(0,index).join(' '));
-    const carry = [...anchor, ...previousEntities]
+    const carry = [...previousEntities, ...anchor]
       .filter(Boolean)
       .filter((v,i,a)=>a.findIndex(x=>x.toLocaleLowerCase('pl-PL')===v.toLocaleLowerCase('pl-PL'))===i)
       .filter(v=>!normalized.includes(v.toLocaleLowerCase('pl-PL')))
-      .slice(0,3);
+      .slice(0,4);
     return carry.length ? [...carry,clause].join(' ') : clause;
   });
 }
