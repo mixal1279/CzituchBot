@@ -333,10 +333,12 @@ function komunikatBrakuDanychAI(nick, kategoria) {
   return komunikaty[kategoria] || `@${nick} nie mam pewnych danych — nie będę zgadywać.`;
 }
 
-const db = new Firestore({
-  projectId: 'czituchbot-9c561',
-  keyFilename: './czituchbot-9c561-firebase-adminsdk-fbsvc-241e465e40.json',
-});
+const db = process.env.CZITUCHBOT_SKIP_STARTUP_IO === '1'
+  ? null
+  : new Firestore({
+      projectId: 'czituchbot-9c561',
+      keyFilename: './czituchbot-9c561-firebase-adminsdk-fbsvc-241e465e40.json',
+    });
 
 const COL_GRACZE       = 'ekonomia_gracze';
 const COL_PODATKI      = 'ekonomia_podatki';
