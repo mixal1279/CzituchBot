@@ -7,6 +7,7 @@ on:
       - 'test/**'
       - 'package.json'
       - 'czituch_bot.js'
+      - 'trello.js'
       - '.github/workflows/ai-tests.yml'
   pull_request:
     paths:
@@ -21,11 +22,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
 
@@ -48,6 +49,7 @@ jobs:
           node --check ai/tavily.js
           node --check ai/webRetrieval.js
           node --check czituch_bot.js
+          node --check trello.js
 
       - name: Prepare changed-files artifact
         shell: bash

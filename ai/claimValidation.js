@@ -3,6 +3,24 @@
 const NEGATION_RE = /\b(?:nie|nigdy|brak|bez|żaden|żadna|żadne|never|no|not)\b/iu;
 const CAUSAL_RE = /\b(?:bo|ponieważ|gdyż|dlatego|z\s+powodu|w\s+celu|żeby|aby|chciał(?:a|o)?|chcia(?:ł|ła|li)|celem|because|therefore|due\s+to)\b/iu;
 const TEMPORAL_RE = /\b(?:19|20)\d{2}\b|\b(?:styczeń|luty|marzec|kwiecień|maj|czerwiec|lipiec|sierpień|wrzesień|październik|listopad|grudzień)\b|\b(?:wczoraj|dzisiaj|jutro|today|yesterday|tomorrow)\b/iu;
+const CROSS_LANGUAGE_CONCEPTS = [
+  ['porwanie', /kidnap\w*|abduct\w*|porwan\w*|uprowadz\w*/i],
+  ['obrazenia', /injur\w*|wound\w*|hurt\w*|rann\w*|obraż\w*/i],
+  ['zabojstwo', /kill\w*|murder\w*|death|dead|zabij\w*|zgin\w*|śmier\w*/i],
+  ['konflikt', /conflict\w*|feud\w*|fight\w*|war\w*|konflikt\w*|walcz\w*|wojn\w*/i],
+  ['zwiazek', /relationship\w*|girlfriend\w*|boyfriend\w*|partner\w*|romanc\w*|zwi[aą]zk\w*|relacj\w*|dziewczyn\w*|chłopak\w*|partner\w*/i],
+  ['pomoc', /help\w*|assist\w*|save\w*|rescu\w*|pomog\w*|pomaga\w*|urat\w*|ocal\w*/i],
+  ['kontrola', /control\w*|take[s]?\s+over|command\w*|manipulat\w*|kontrol\w*|przej[aą]ł\w*|manipul\w*/i],
+  ['porazka', /defeat\w*|beaten|overcome\w*|pokon\w*|pora[zż]k\w*/i],
+  ['zdrada', /betray\w*|traitor\w*|zdradz\w*|zdrajc\w*/i],
+  ['tworzenie', /creat\w*|develop\w*|build\w*|made\b|stworz\w*|tworz\w*|opracow\w*/i],
+  ['praca', /work\w*|employ\w*|job\w*|prac\w*|zatrud\w*/i],
+];
+function pojeciaCrossLanguage(value) {
+  const text = normalizujClaim(value);
+  return new Set(CROSS_LANGUAGE_CONCEPTS.filter(([, re]) => re.test(text)).map(([name]) => name));
+}
+
 const COVERAGE_STOPWORDS = new Set(['jest','była','było','byli','został','została','zostało','oraz','który','która','które','przez','jako','jego','jej','this','that','with','from','were','was','have','has']);
 function normalizujClaim(value) {
   return String(value || '')
@@ -58,7 +76,7 @@ function wyodrebnijNazwyWlasne(value) {
 function wyodrebnijMarkery(value, regex) {
   return regex.test(normalizujClaim(value));
 }
-function zgodnoscStrukturalna(evidence, claim) {
+function zgodnoscStrukturalna(evidence, claim, options = {}) {
   const e = String(evidence || '');
   const c = String(claim || '');
   if (!e.trim() || !c.trim()) return { ok: false, reason: 'brak dowodu lub claimu' };
@@ -98,8 +116,16 @@ function zgodnoscStrukturalna(evidence, claim) {
   const ct = tokenyClaim(c);
   const et = new Set(tokenyClaim(e));
   const overlap = ct.length ? ct.filter(t => et.has(t)).length / ct.length : 0;
+  if (options.allowCrossLanguageExactEvidence === true && overlap < 0.67) {
+    const evidenceConcepts = pojeciaCrossLanguage(e);
+    const claimConcepts = pojeciaCrossLanguage(c);
+    const sharedConcepts = [...claimConcepts].filter(x => evidenceConcepts.has(x));
+    if (sharedConcepts.length > 0) {
+      return { ok: true, overlap: null, mode: 'cross_language_exact_evidence', sharedConcepts };
+    }
+  }
   const threshold = claimEntities.length && claimEntities.every(entity => evidenceNormalized.includes(entity))
-    ? 0.50
+    ? 0.67
     : (ct.length <= 5 ? 0.67 : 0.60);
   if (overlap < threshold) return { ok: false, reason: `zbyt małe pokrycie semantyczne (${overlap.toFixed(2)} < ${threshold.toFixed(2)})` };
   return { ok: true, overlap };

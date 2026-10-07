@@ -54,9 +54,17 @@ async function utworzKarteTrello(tytul, opis, idList = null) {
       token:  TRELLO_TOKEN,
     });
 
-    const res = await fetch(`https://api.trello.com/1/cards?${params.toString()}`, {
-      method: 'POST',
-    });
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 10000);
+    let res;
+    try {
+      res = await fetch(`https://api.trello.com/1/cards?${params.toString()}`, {
+        method: 'POST',
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timer);
+    }
 
     if (res.ok) {
       const data = await res.json();

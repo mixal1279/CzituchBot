@@ -34,6 +34,7 @@ test('compound lore question is decomposed into independent clauses without cumu
   assert.match(parts[1], /Johnny.*Silverhand/i);
   assert.match(parts[1], /Arasak/i);
   assert.doesNotMatch(parts[1], /związek Johnny.*Alt Cunningham.*jak wpłynęło/i);
+  assert.match(parts[1], /Alt Cunningham/i);
 });
 
 test('two weak Tavily results from one host do not count as sufficient evidence', () => {
