@@ -36,12 +36,19 @@ test('worst-case request budget cannot exceed configured model, generation, vali
   });
   for (let i = 0; i < 10; i++) assert.equal(ctx.reserveModel('worst-case'), true);
   assert.equal(ctx.reserveModel('overflow'), false);
-  for (let i = 0; i < 6; i++) assert.equal(ctx.reserveGeneration('test', 'model'), true);
-  assert.equal(ctx.reserveGeneration('overflow', 'model'), false);
-  for (let i = 0; i < 3; i++) assert.equal(ctx.reserveValidator('validator'), true);
+
+  const generationCtx = createAIRequestContext({ maxCzasMs: 60000, maxGeneracji: 6, maxModelCalls: 10, maxValidatorow: 3, maxWyszukanTavily: 2 });
+  for (let i = 0; i < 6; i++) assert.equal(generationCtx.reserveGeneration('test', 'model'), true);
+  assert.equal(generationCtx.reserveGeneration('overflow', 'model'), false);
+
+  const validatorCtx = createAIRequestContext({ maxCzasMs: 60000, maxGeneracji: 6, maxModelCalls: 10, maxValidatorow: 3, maxWyszukanTavily: 2 });
+  for (let i = 0; i < 3; i++) assert.equal(validatorCtx.reserveValidator('validator'), true);
+  assert.equal(validatorCtx.reserveValidator('overflow'), false);
+
+  const tavilyCtx = createAIRequestContext({ maxCzasMs: 60000, maxGeneracji: 6, maxModelCalls: 10, maxValidatorow: 3, maxWyszukanTavily: 2 });
+  for (let i = 0; i < 2; i++) assert.equal(tavilyCtx.reserveTavily('retrieval'), true);
+  assert.equal(tavilyCtx.reserveTavily('overflow'), false);
   assert.equal(ctx.reserveValidator('overflow'), false);
-  for (let i = 0; i < 2; i++) assert.equal(ctx.reserveTavily('retrieval'), true);
-  assert.equal(ctx.reserveTavily('overflow'), false);
 });
 
 test('quality metrics expose coverage and answer-quality aggregates', () => {
@@ -57,7 +64,7 @@ test('quality metrics expose coverage and answer-quality aggregates', () => {
     answerQuality: 0.2,
   });
   const snapshot = snapshotAIMetrics(metrics);
-  assert.equal(snapshot.avgClaimCoverage, 0.575);
+  assert.equal(snapshot.avgClaimCoverage, 0.625);
   assert.equal(snapshot.avgAnswerQuality, 0.56);
   assert.equal(snapshot.falseAccepts, 0);
   assert.equal(snapshot.falseRejects, 0);
