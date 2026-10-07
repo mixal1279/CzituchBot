@@ -2575,17 +2575,13 @@ function oczyscOdpowiedzPrzedWalidacja(tekst) {
       console.warn(`[AI][${requestId}] validator unavailable — bez retry generowania`);
       odp = 'Chwilowo nie mogę potwierdzić tej informacji, więc nie będę zgadywać.';
     }
-    if (walidacja.status === 'rejected') {
-      // Maksymalnie jedna regeneracja + jedna rewalidacja. Drugi reject kończy flow.
-      odp = 'Nie mam wystarczających danych, żeby odpowiedzieć na to pewnie.';
-    }
-    if (walidacja.status === 'inconclusive') {
-      odp = 'Chwilowo nie mogę wiarygodnie potwierdzić tej informacji, więc nie będę zgadywać.';
-    }
-    if (walidacja.status === 'unavailable') {
-      odp = 'Chwilowo nie mogę potwierdzić tej informacji, więc nie będę zgadywać.';
-    }
-    aiState.finalStatus = walidacja.status;
+    const validationDecision = decideValidation(walidacja.status, { allowRetry: false });
+    aiState.finalStatus = validationDecision.finalStatus;
+    odp = finalizeAIPipelineText(odp, validationDecision.finalStatus, {
+      rejectedMessage: 'Nie mam wystarczających danych, żeby odpowiedzieć na to pewnie.',
+      inconclusiveMessage: 'Chwilowo nie mogę wiarygodnie potwierdzić tej informacji, więc nie będę zgadywać.',
+      unavailableMessage: 'Chwilowo nie mogę potwierdzić tej informacji, więc nie będę zgadywać.',
+    });
     console.log(`[AI][${requestId}] final status=${walidacja.status} Tavily=${uzupelnienieTavilyWykonane ? 'uzupełniono' : 'bez uzupełnienia'} źródła=${daneDoWalidacji ? daneDoWalidacji.split('---').length : 0}`);
   } else {
     aiState.finalStatus = 'accepted';
