@@ -31,7 +31,7 @@ const CHARACTER_ALIASES = [
   { name: 'Chell', game: 'Portal', aliases: ['chell'] },
   { name: 'Arthur Morgan', game: 'Red Dead Redemption 2', aliases: ['arthur morgan', 'arthur'] },
   { name: 'Dutch van der Linde', game: 'Red Dead Redemption 2', aliases: ['dutch van der linde', 'dutch'] },
-  { name: 'Johnny Silverhand', game: 'Cyberpunk 2077', aliases: ['johnny silverhand', 'johnny'] },
+  { name: 'Johnny Silverhand', game: 'Cyberpunk 2077', aliases: ['johnny silverhand', 'johnnyego silverhanda', 'johnnyemu silverhandowi', 'johnnym silverhandem', 'johnny'] },
   { name: 'Geralt z Rivii', game: 'The Witcher 3: Wild Hunt', aliases: ['geralt', 'geralt z rivii'] },
   { name: 'Ciri', game: 'The Witcher 3: Wild Hunt', aliases: ['ciri'] },
   { name: 'Kratos', game: 'God of War', aliases: ['kratos'] },
@@ -174,6 +174,17 @@ function resolveGameEntity(text) {
   return null;
 }
 
+function externalGameCandidateMatchesQuery(query, candidateName) {
+  const directScore = scoreExternalGameCandidate(query, candidateName);
+  if (directScore >= 0.72) return { ok: true, score: directScore, via: 'query_title_match' };
+  const resolved = resolveGameEntity(query);
+  if (resolved?.game) {
+    const entityScore = scoreExternalGameCandidate(resolved.game, candidateName);
+    if (entityScore >= 0.72) return { ok: true, score: entityScore, via: 'deterministic_entity' };
+  }
+  return { ok: false, score: directScore, via: 'no_query_grounding' };
+}
+
 module.exports = {
   GAME_ALIASES,
   CHARACTER_ALIASES,
@@ -181,5 +192,6 @@ module.exports = {
   containsAlias,
   containsExactAlias,
   scoreExternalGameCandidate,
+  externalGameCandidateMatchesQuery,
   resolveGameEntity,
 };

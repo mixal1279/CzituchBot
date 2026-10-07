@@ -67,7 +67,7 @@ const { czyPytanieOGameplay, dodajGameFAQsDomenę, wytnijAtrybucjeGameFAQs, GAME
 const { przygotujHistorieDoModelu, opakujDaneReferencyjne } = AI_POLICY;
 const { classifyAIRequest } = require('./ai/router');
 const { planAIRequest, responseContract, RESPONSE_PROFILES, buildRetrievalQueries } = require('./ai/planner');
-const { resolveGameEntity, scoreExternalGameCandidate } = require('./ai/entities');
+const { resolveGameEntity, scoreExternalGameCandidate, externalGameCandidateMatchesQuery } = require('./ai/entities');
 const { extractExplicitUserMemories, mergeMemoryRecords, buildVerifiedMemoryContext, pruneExpiredMemories } = require('./ai/memory');
 const { parseMemoryCommand, forgetMemories, describeMemories } = require('./ai/memory_manager');
 const { buildAdvancedRetrievalPlan } = require('./ai/retrieval');
@@ -1059,8 +1059,13 @@ async function znajdzGreIGDB(pytanie, requestState = null) {
       console.log(`[IGDB] Pomijam niepewne dopasowanie "${nazwaGry}" (score=${najlepszy?.score?.toFixed?.(2) || '0.00'})`);
       return null;
     }
+    const grounded = externalGameCandidateMatchesQuery(pytanie, najlepszy.gra.name);
+    if (!grounded.ok) {
+      console.log(`[IGDB] Odrzucam "${najlepszy.gra.name}" — brak potwierdzenia w oryginalnym pytaniu (rewrite="${nazwaGry}", score=${grounded.score.toFixed(2)})`);
+      return null;
+    }
     const gra = najlepszy.gra;
-    return { nazwa: gra.name, gatunki: (gra.genres || []).map(g => g.name).join(', '), confidence: Math.min(0.99, najlepszy.score), resolution: 'igdb_verified' };
+    return { nazwa: gra.name, gatunki: (gra.genres || []).map(g => g.name).join(', '), confidence: Math.min(0.99, Math.min(najlepszy.score, grounded.score)), resolution: `igdb_verified:${grounded.via}` };
   } catch (err) {
     console.error('[IGDB] Błąd:', err.message);
     return null;

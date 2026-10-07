@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { resolveGameEntity, containsAlias } = require('../ai/entities');
+const { resolveGameEntity, containsAlias, externalGameCandidateMatchesQuery } = require('../ai/entities');
 const { rerankujWynikiTavily } = require('../ai/tavily');
 
 test('entity resolver still accepts exact and normal Polish inflection matches', () => {
@@ -112,4 +112,13 @@ test('deterministic resolver wins for explicit Cyberpunk 2077 mentions', () => {
   const resolved = resolveGameEntity('Jaki był związek Johnnyego Silverhanda z Alt Cunningham i jak wpłynęło to na jego konflikt z Arasaką w Cyberpunk 2077?');
   assert.equal(resolved.game, 'Cyberpunk 2077');
   assert.ok(resolved.confidence >= 0.8);
+});
+
+test('genitive Johnny Silverhand mention resolves Cyberpunk 2077 without naming the game', () => {
+  const question = "Jaki był związek Johnny'ego Silverhanda z Alt Cunningham i jak wpłynęło to na jego konflikt z Arasaką?";
+  const resolved = resolveGameEntity(question);
+  assert.equal(resolved?.name, 'Johnny Silverhand');
+  assert.equal(resolved?.game, 'Cyberpunk 2077');
+  assert.equal(externalGameCandidateMatchesQuery(question, 'Cyberpunk 2077').ok, true);
+  assert.equal(externalGameCandidateMatchesQuery(question, 'Cyber Daisenryaku').ok, false);
 });
