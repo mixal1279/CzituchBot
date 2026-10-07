@@ -6,7 +6,7 @@ const { searchSecondaryProviders } = require('../ai/webRetrieval');
 const { czyWymagaSecondaryRetrieval } = require('../ai/tavily');
 const { normalizujWynikWalidatora } = require('../ai/validator');
 const { wyodrebnijJednostkoweWartosci } = require('../ai/claimValidation');
-const { sourceDiversity, shouldRunAdditionalRetrieval } = require('../ai/retrieval');
+const { decomposeQuestion, sourceDiversity, shouldRunAdditionalRetrieval } = require('../ai/retrieval');
 const { createAIRequestContext } = require('../ai/requestContext');
 const { createAIMetrics, recordAIMetric, snapshotAIMetrics } = require('../ai/metrics');
 
@@ -19,6 +19,21 @@ test('secondary provider receives the remaining timeout', async () => {
   const result = await searchSecondaryProviders({ query: 'q', exaKey: 'x', fetchFn: fakeFetch, prefer: 'exa', timeoutMs: 1234 });
   assert.equal(result.status, 'ok');
   assert.equal(observedSignal, true);
+});
+
+
+test('compound lore question is decomposed into independent clauses without cumulative duplication', () => {
+  const question = "Jaki był związek Johnny'ego Silverhanda z Alt Cunningham i jak wpłynęło to na jego konflikt z Arasaką?";
+  const parts = decomposeQuestion(question, {
+    game: 'Cyberpunk 2077',
+    resolved_entity: { name: 'Johnny Silverhand', game: 'Cyberpunk 2077' },
+  });
+  assert.equal(parts.length, 2);
+  assert.match(parts[0], /Johnny.*Silverhand/i);
+  assert.match(parts[0], /Alt Cunningham/i);
+  assert.match(parts[1], /Johnny.*Silverhand/i);
+  assert.match(parts[1], /Arasak/i);
+  assert.doesNotMatch(parts[1], /związek Johnny.*Alt Cunningham.*jak wpłynęło/i);
 });
 
 test('two weak Tavily results from one host do not count as sufficient evidence', () => {
