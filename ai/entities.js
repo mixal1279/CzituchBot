@@ -68,7 +68,7 @@ function tokenPasujeDoAliasu(token, aliasToken) {
   // prefiks. To zachowuje np. „Wiedźminem” bez dopasowywania „Minecraftowo”.
   return aliasToken.length >= 6
     && token.startsWith(aliasToken)
-    && token.length - aliasToken.length <= 3;
+    && token.length - aliasToken.length <= 2;
 }
 
 function containsAlias(text, alias) {
@@ -92,6 +92,16 @@ function aliasLength(alias) {
   return tokenyEncji(alias).join('').length;
 }
 
+function containsExactAlias(text, alias) {
+  const textTokens = tokenyEncji(text);
+  const aliasTokens = tokenyEncji(alias);
+  if (!aliasTokens.length || textTokens.length < aliasTokens.length) return false;
+  for (let i = 0; i <= textTokens.length - aliasTokens.length; i++) {
+    if (aliasTokens.every((token, offset) => textTokens[i + offset] === token)) return true;
+  }
+  return false;
+}
+
 function findAlias(text, entries, options = {}) {
   let best = null;
   for (const entry of entries) {
@@ -99,7 +109,7 @@ function findAlias(text, entries, options = {}) {
       if (!containsAlias(text, alias)) continue;
 
       const normalizedAlias = normalizujEncje(alias);
-      const exact = tokenyEncji(text).some(token => token === normalizedAlias);
+      const exact = containsExactAlias(text, normalizedAlias);
       const confidence = Math.min(
         0.99,
         0.72 + Math.min(aliasLength(alias), 30) / 100 + (exact ? 0.04 : 0),
@@ -124,29 +134,16 @@ function resolveGameEntity(text) {
     const shortAlias = tokenyEncji(character.alias).length === 1
       && CONTEXT_REQUIRED_CHARACTER_ALIASES.has(normalizujEncje(character.alias));
 
-    // Pełne imię/nazwa jest wystarczającym dowodem. Krótkie aliasy wymagają
-    // dodatkowego dopasowania do gry przypisanej do postaci.
-    if (shortAlias && !containsAlias(normalizedText, character.entry.game)) {
-      const fullNameAlias = character.entry.aliases.find(alias => tokenyEncji(alias).length > 1);
-      if (!fullNameAlias || !containsAlias(normalizedText, fullNameAlias)) {
-        return game ? {
-          type: game.entry.type,
-          name: game.entry.name,
-          confidence: game.confidence,
-          game: game.entry.type === 'game' ? game.entry.name : null,
-          matchedAlias: game.alias,
-          resolution: 'deterministic',
-        } : null;
-      }
-    }
-
+    // Krótkie aliasy pozostają obsługiwane dla kompatybilności z istniejącym
+    // routingiem, ale bez kontekstu gry dostają niższe zaufanie.
+    const ambiguityPenalty = shortAlias && !containsAlias(normalizedText, character.entry.game) ? 0.08 : 0;
     return {
       type: 'character',
       name: character.entry.name,
-      confidence: character.confidence,
+      confidence: Math.max(0.65, character.confidence - ambiguityPenalty),
       game: character.entry.game,
       matchedAlias: character.alias,
-      resolution: 'deterministic',
+      resolution: ambiguityPenalty ? 'deterministic_ambiguous' : 'deterministic',
     };
   }
 
@@ -169,5 +166,6 @@ module.exports = {
   CHARACTER_ALIASES,
   normalizujEncje,
   containsAlias,
+  containsExactAlias,
   resolveGameEntity,
 };
