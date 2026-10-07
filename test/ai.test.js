@@ -90,6 +90,7 @@ const policy = (q, recipe) => recipe(q) ? 'minecraft_recipe' : /pogoda/i.test(q)
   assert.equal(r.entity, 'Portal 2');
   assert.equal(r.freshness, 'evergreen');
   assert.equal(czyPytanieOLore('Dlaczego Wheatley przejął kontrolę nad Aperture Science w Portal 2?'), true);
+  assert.equal(czyPytanieOLore("Jaki był związek Johnny'ego Silverhanda z Alt Cunningham i jak wpłynęło to na jego konflikt z Arasaką?"), true);
 }
 
 {
