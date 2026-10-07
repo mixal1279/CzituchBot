@@ -15,6 +15,7 @@ function boundedIncrement(map, key) {
 function createAIMetrics() {
   return {
     requests: 0, accepted: 0, rejected: 0, inconclusive: 0, unavailable: 0, errors: 0,
+    retries: 0, retryAccepted: 0, retryRejected: 0, supplementalRetrievals: 0, supplementalSuccesses: 0, sourceDiversityFailures: 0,
     totalLatencyMs: 0, totalModelCalls: 0, totalTavilySearches: 0,
     providerCalls: {}, fallbackReasons: {}, validatorStatuses: {}, retrievalStatuses: {},
     recent: [],
@@ -30,6 +31,12 @@ function recordAIMetric(metrics, event = {}) {
   m.totalLatencyMs += latency;
   m.totalModelCalls += Number(event.modelCalls) || 0;
   m.totalTavilySearches += Number(event.tavilySearches) || 0;
+  if (event.retry) m.retries++;
+  if (event.retryAccepted) m.retryAccepted++;
+  if (event.retryRejected) m.retryRejected++;
+  if (event.supplementalRetrieval) m.supplementalRetrievals++;
+  if (event.supplementalSuccess) m.supplementalSuccesses++;
+  if (event.sourceDiversityFailure) m.sourceDiversityFailures++;
 
   for (const provider of Array.isArray(event.providers) ? event.providers : []) boundedIncrement(m.providerCalls, provider);
   for (const reason of Array.isArray(event.fallbackReasons) ? event.fallbackReasons : []) boundedIncrement(m.fallbackReasons, reason);

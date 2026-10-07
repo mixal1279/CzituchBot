@@ -1,6 +1,7 @@
 'use strict';
 
 const fs = require('fs');
+const { AI_MODELS } = require('./modelConfig');
 const { searchSecondaryProviders } = require('./webRetrieval');
 
 const TAVILY_CACHE_TTL_MS = 10 * 60 * 1000; // domyślne / pytania o świeże wiadomości
@@ -243,7 +244,13 @@ function hostnamePasujeDoDomenyTavily(url, domains) {
 function czyWymagaSecondaryRetrieval(results, sourceQuestion = '', timeRange = null) {
   const lista = Array.isArray(results) ? results : [];
   if (lista.length === 0) return true;
-  if (lista.length >= 2) return false;
+  if (lista.length >= 2) {
+    const hosts = new Set(lista.map(r => { try { return new URL(r?.url).hostname.toLowerCase().replace(/^www\./, ''); } catch (_) { return ''; } }).filter(Boolean));
+    const providers = new Set(lista.map(r => String(r?.provider || 'tavily')).filter(Boolean));
+    const strong = lista.filter(r => typeof r?.score !== 'number' || r.score >= 0.55).length;
+    if (strong >= 1 && (hosts.size >= 2 || providers.size >= 2)) return false;
+    return true;
+  }
 
   const bestScore = typeof lista[0]?.score === 'number' ? lista[0].score : null;
   if (bestScore !== null && bestScore < 0.55) return true;
@@ -349,7 +356,7 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
           let rewrite;
           try {
             rewrite = await groq.chat.completions.create({
-              model: 'openai/gpt-oss-20b', max_tokens: 220, reasoning_effort: 'low',
+              model: AI_MODELS.queryRewrite, max_tokens: 220, reasoning_effort: 'low',
               include_reasoning: false, temperature: 0, signal: rewriteController.signal,
               messages: [
                 { role: 'system', content: 'Przepisz pytanie na jedno kompletne zapytanie do wyszukiwarki. Zachowaj WSZYSTKIE istotne elementy pytania, nazwy własne, relacje i części składowe. Nie odpowiadaj. Nie usuwaj drugiej ani kolejnych części pytania. Maksymalnie 35 słów. Tylko samo zapytanie.' },
