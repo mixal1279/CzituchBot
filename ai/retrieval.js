@@ -1,6 +1,38 @@
 'use strict';
 function unique(items){const out=[],seen=new Set();for(const item of Array.isArray(items)?items:[]){const q=String(item||'').replace(/\s+/g,' ').trim(),k=q.toLocaleLowerCase('pl-PL');if(q.length>=8&&!seen.has(k)){seen.add(k);out.push(q);}}return out;}
-function buildAdvancedRetrievalPlan(question,routing={},baseQueries=[]){const q=String(question||'').trim(),entity=String(routing.game||routing.entity||'').trim(),plan=[...baseQueries],parts=q.split(/\s+(?:i|oraz|a także|ale)\s+/i).map(x=>x.trim()).filter(Boolean);if(parts.length>1)for(const part of parts.slice(0,3))plan.push(entity?entity+' '+part:part);if(routing.is_lore)plan.push((entity||q)+' plot story lore facts');if(routing.is_gameplay)plan.push((entity||q)+' walkthrough guide solution');if(routing.freshness==='live')plan.push((entity||q)+' latest official');if(routing.freshness==='recent')plan.push((entity||q)+' latest');return unique(plan).slice(0,4).map((query,index)=>({query,priority:index===0?'primary':index===1?'secondary':'fallback',reason:index===0?'original':routing.is_lore?'lore':routing.is_gameplay?'gameplay':'coverage'}));}
+function decomposeQuestion(question,routing={}) {
+  const q=String(question||'').replace(/\s+/g,' ').trim();
+  if(!q) return [];
+  const entity=String(routing.resolved_entity?.name||routing.entity||routing.game||'').trim();
+  const game=String(routing.resolved_entity?.game||routing.game||'').trim();
+  const anchor=[entity,game].filter(Boolean).filter((v,i,a)=>a.findIndex(x=>x.toLocaleLowerCase('pl-PL')===v.toLocaleLowerCase('pl-PL'))===i);
+  const clauses=[];
+  const push=(value)=>{
+    const v=String(value||'').replace(/^\s*(?:i|oraz|a także|natomiast)\s+/i,'').replace(/[?]+$/,'').trim();
+    if(v.length>=12 && !clauses.some(x=>x.toLocaleLowerCase('pl-PL')===v.toLocaleLowerCase('pl-PL'))) clauses.push(v);
+  };
+  // Split only at conjunctions that introduce a new interrogative clause. This
+  // avoids the previous cumulative-prefix bug (clause 2 inherited clause 1).
+  const parts=q.split(/\s+(?=(?:i|oraz|a także|natomiast)\s+(?:jak|dlaczego|czemu|kiedy|gdzie|ile|czy|kto|kim|co|czym|jaki|jaka|jakie)\b)/iu);
+  if(parts.length>1){
+    for(const part of parts.slice(0,3)) push(part);
+  } else {
+    const commaParts=q.split(/,\s*(?=(?:jak|dlaczego|czemu|kiedy|gdzie|ile|czy|kto|kim|co|czym|jaki|jaka|jakie)\b)/iu);
+    if(commaParts.length>1) for(const part of commaParts.slice(0,3)) push(part);
+  }
+  if(clauses.length<2){
+    const questionMarks=q.split(/\?+/).map(x=>x.trim()).filter(Boolean);
+    if(questionMarks.length>1) questionMarks.slice(0,3).forEach(push);
+  }
+  if(clauses.length<2) return [];
+  return clauses.slice(0,3).map((clause,index)=>{
+    if(index===0) return clause;
+    const normalized=clause.toLocaleLowerCase('pl-PL');
+    const missingAnchor=anchor.length && !anchor.some(a=>normalized.includes(a.toLocaleLowerCase('pl-PL')));
+    return missingAnchor ? [...anchor,clause].join(' ') : clause;
+  });
+}
+function buildAdvancedRetrievalPlan(question,routing={},baseQueries=[]){const q=String(question||'').trim(),entity=String(routing.game||routing.entity||'').trim(),plan=[...baseQueries],parts=decomposeQuestion(q,routing);if(parts.length>1)for(const part of parts.slice(0,3))plan.push(part);if(routing.is_lore)plan.push((entity||q)+' plot story lore facts');if(routing.is_gameplay)plan.push((entity||q)+' walkthrough guide solution');if(routing.freshness==='live')plan.push((entity||q)+' latest official');if(routing.freshness==='recent')plan.push((entity||q)+' latest');return unique(plan).slice(0,4).map((query,index)=>({query,priority:index===0?'primary':index===1?'secondary':'fallback',reason:index===0?'original':routing.is_lore?'lore':routing.is_gameplay?'gameplay':'coverage'}));}
 function sourceHost(url){try{return new URL(url).hostname.toLowerCase().replace(/^www\./,'');}catch(_){return '';}}
 function sourceQualityScore(source={}){const score=Number(source.score);const authority=String(source.authority||'').toLowerCase();const authorityBonus=authority==='oficjalne'?0.25:authority==='wyspecjalizowane'?0.2:authority.includes('guide')?0.08:0;return (Number.isFinite(score)?score:0)+authorityBonus;}
 function sourceTokens(source={}){return [...new Set(String([source.title,source.content,source.snippet].filter(Boolean).join(' ')).toLocaleLowerCase('pl-PL').normalize('NFD').replace(/[\u0300-\u036f]/g,'').match(/[\p{L}\p{N}]{3,}/gu)||[])];}
@@ -9,4 +41,4 @@ for(const result of list){const tokens=sourceTokens(result);const tokenSet=new S
 const independentHosts=new Set(independent.map(x=>x.host).filter(Boolean));return {hosts:hosts.size,providers:providers.size,independentSources:independent.length,independentHosts:independentHosts.size,duplicatePairs};}
 function shouldRunAdditionalRetrieval({status='ok',text='',sourceCount=0,queryCount=1,results=[],requireDiversity=false}={}){const list=Array.isArray(results)?results:[];if(status!=='ok'||!String(text).trim()||String(text).length<900||sourceCount<2)return true;if(requireDiversity){const d=sourceDiversity(list);if(d.independentHosts<2)return true;}const strong=list.filter(r=>sourceQualityScore(r)>=0.55).length;if(strong<1)return true;return false;}
 function rankRetrievalNeed({routing={},sourceCount=0,textLength=0,validatorStatus=null,results=[]}={}){let score=0;if(routing.needs_fresh_data)score+=3;if(routing.is_lore||routing.is_gameplay)score+=2;if(sourceCount<2)score+=2;if(textLength<900)score++;if(validatorStatus==='rejected'||validatorStatus==='inconclusive')score+=3;const d=sourceDiversity(results);if(sourceCount>=2&&d.independentHosts<2)score+=2;return score>=5?'high':score>=3?'medium':'low';}
-module.exports={buildAdvancedRetrievalPlan,shouldRunAdditionalRetrieval,rankRetrievalNeed,sourceDiversity,sourceQualityScore};
+module.exports={decomposeQuestion,buildAdvancedRetrievalPlan,shouldRunAdditionalRetrieval,rankRetrievalNeed,sourceDiversity,sourceQualityScore};
