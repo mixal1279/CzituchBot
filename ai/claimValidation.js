@@ -142,16 +142,28 @@ function tokenyPokrywajaSie(a, b) {
 }
 function sprawdzPokrycieClaimamiOdpowiedzi(answer, claims) {
   const sentences = String(answer || '').split(/(?<=[.!?])\s+|\n+/).map(x => x.trim()).filter(Boolean);
-  const claimTexts = (Array.isArray(claims) ? claims : []).map(c => tokenyPokrycia(c?.claim || '')).filter(t => t.length >= 2);
+  const claimRows = (Array.isArray(claims) ? claims : [])
+    .map(c => ({
+      tokens: tokenyPokrycia(c?.claim || ''),
+      concepts: pojeciaCrossLanguage(c?.claim || ''),
+      entities: wyodrebnijNazwyWlasne(c?.claim || ''),
+    }))
+    .filter(row => row.tokens.length >= 2 || row.concepts.size || row.entities.length);
   const uncovered = [];
   let checkedSentences = 0;
   for (const [sentenceIndex, sentence] of sentences.entries()) {
     const tokens = tokenyPokrycia(sentence);
     if (tokens.length < 2) continue;
     checkedSentences++;
-    const maxCoverage = claimTexts.reduce((best, claimTokens) => {
-      const covered = tokens.filter(t => claimTokens.some(c => tokenyPokrywajaSie(t, c))).length / tokens.length;
-      return Math.max(best, covered);
+    const sentenceConcepts = pojeciaCrossLanguage(sentence);
+    const sentenceEntities = wyodrebnijNazwyWlasne(sentence);
+    const maxCoverage = claimRows.reduce((best, row) => {
+      const covered = tokens.filter(t => row.tokens.some(c => tokenyPokrywajaSie(t, c))).length / Math.max(tokens.length, 1);
+      const sharedConcepts = [...sentenceConcepts].filter(concept => row.concepts.has(concept)).length;
+      const sharedEntities = sentenceEntities.filter(entity => row.entities.includes(entity)).length;
+      const conceptCoverage = row.concepts.size ? sharedConcepts / row.concepts.size : 0;
+      const entityCoverage = row.entities.length ? sharedEntities / row.entities.length : 0;
+      return Math.max(best, covered, conceptCoverage >= 0.5 ? 0.75 : 0, entityCoverage >= 0.5 ? 0.75 : 0);
     }, 0);
     if (maxCoverage < 0.65) uncovered.push({ index: sentenceIndex, text: sentence.slice(0, 180) });
   }
