@@ -19,7 +19,21 @@
           "causal_explanation",
           "entity_context"
         ],
-        "must_plan": true
+        "must_plan": true,
+        "factual": {
+          "mustInclude": [
+            [
+              "Wheatley",
+              "przejął kontrolę"
+            ],
+            [
+              "GLaDOS",
+              "wyłączona"
+            ]
+          ],
+          "mustNot": [],
+          "independentGold": true
+        }
       }
     },
     {
@@ -38,7 +52,21 @@
           "causal_explanation",
           "entity_context"
         ],
-        "must_plan": true
+        "must_plan": true,
+        "factual": {
+          "mustInclude": [
+            [
+              "Baron",
+              "pomóc"
+            ],
+            [
+              "Ciri",
+              "nie"
+            ]
+          ],
+          "mustNot": [],
+          "independentGold": true
+        }
       }
     },
     {
@@ -57,7 +85,21 @@
           "causal_explanation",
           "entity_context"
         ],
-        "must_plan": true
+        "must_plan": true,
+        "factual": {
+          "mustInclude": [
+            [
+              "Johnny",
+              "pomoc"
+            ],
+            [
+              "V",
+              "Relic"
+            ]
+          ],
+          "mustNot": [],
+          "independentGold": true
+        }
       }
     },
     {
@@ -76,7 +118,21 @@
           "causal_explanation",
           "entity_context"
         ],
-        "must_plan": true
+        "must_plan": true,
+        "factual": {
+          "mustInclude": [
+            [
+              "Dragonborn",
+              "Smoki"
+            ],
+            [
+              "Alduin",
+              "powrócił"
+            ]
+          ],
+          "mustNot": [],
+          "independentGold": true
+        }
       }
     },
     {
@@ -95,7 +151,21 @@
           "causal_explanation",
           "entity_context"
         ],
-        "must_plan": true
+        "must_plan": true,
+        "factual": {
+          "mustInclude": [
+            [
+              "Astarion",
+              "drużyn"
+            ],
+            [
+              "Cazador",
+              "uciecz"
+            ]
+          ],
+          "mustNot": [],
+          "independentGold": true
+        }
       }
     },
     {
