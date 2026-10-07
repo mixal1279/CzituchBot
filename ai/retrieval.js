@@ -51,10 +51,17 @@ function extractCarryoverEntities(text) {
 }
 function buildAdvancedRetrievalPlan(question, routing = {}, baseQueries = []) {
   const corePlan = buildCoreRetrievalPlan(question, routing, { maxQueries: 5 });
+  const clausePlan = decomposeQuestion(question, routing).map((query, index) => ({
+    query,
+    priority: index === 0 ? 'primary' : 'secondary',
+    reason: 'clause',
+  }));
   const legacy = Array.isArray(baseQueries) ? baseQueries : [];
   const merged = [];
   const seen = new Set();
-  for (const item of [...corePlan, ...legacy.map(query => ({ query, priority: 'fallback', reason: 'legacy' }))]) {
+  // Clause queries are reserved first so compound questions cannot lose a
+  // sub-question when the global five-query cap is applied.
+  for (const item of [...clausePlan, ...corePlan, ...legacy.map(query => ({ query, priority: 'fallback', reason: 'legacy' }))]) {
     const q = String(item?.query || '').replace(/\\s+/g, ' ').trim();
     const key = normalizujToken(q);
     if (q.length < 8 || seen.has(key)) continue;
