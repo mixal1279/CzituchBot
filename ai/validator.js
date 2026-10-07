@@ -136,6 +136,14 @@ function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '') {
   if (!Array.isArray(sourceIds) || !sourceIds.length || typeof evidenceQuote !== 'string') return false;
   const quote = evidenceQuote.trim().replace(/\s+/g, ' ').toLocaleLowerCase('pl-PL');
   if (quote.length < 3 || quote.length > 500) return false;
+  const claimNorm = claim ? String(claim).toLocaleLowerCase('pl-PL') : '';
+  const quoteNorm = quote;
+  const quoteCaptured = quoteNorm.includes('captured') || quoteNorm.includes('kidnapped') || quoteNorm.includes('abducted') || quoteNorm.includes('porwan') || quoteNorm.includes('schwyt');
+  const quoteKilled = quoteNorm.includes('killed') || quoteNorm.includes('murdered') || quoteNorm.includes('zabij') || quoteNorm.includes('zabi') || quoteNorm.includes('śmier');
+  const claimCaptured = claimNorm.includes('captured') || claimNorm.includes('kidnapped') || claimNorm.includes('abducted') || claimNorm.includes('porwan') || claimNorm.includes('schwyt');
+  const claimKilled = claimNorm.includes('killed') || claimNorm.includes('murdered') || claimNorm.includes('zabij') || claimNorm.includes('zabi') || claimNorm.includes('śmier');
+  if (claimKilled && quoteCaptured && !quoteKilled) return false;
+  if (claimCaptured && quoteKilled && !quoteCaptured) return false;
   return sourceIds.some(id => {
     const block = pobierzBlokZrodla(dane, id);
     if (!block) return false;
@@ -145,11 +153,11 @@ function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '') {
       // present elsewhere in the same source block (e.g. "Johnny" vs
       // "Johnny Silverhand"). Bind the claim to the whole verified source
       // block while still requiring the quoted text to come from that block.
-      return zgodnoscStrukturalna(block, claim, { allowCrossLanguageExactEvidence: true }).ok;
+      return zgodnoscStrukturalna(block, claim, { allowCrossLanguageExactEvidence: true, allowDistributedEvidence: true }).ok;
     }
-    return czyDowodSemantyczniePokrywaClaim(block, quote, { allowCrossLanguageExactEvidence: true })
-      && zgodnoscStrukturalna(block, claim, { allowCrossLanguageExactEvidence: true }).ok
-      && czyDowodSemantyczniePokrywaClaim(block, claim, { allowCrossLanguageExactEvidence: true });
+    return czyDowodSemantyczniePokrywaClaim(block, quote, { allowCrossLanguageExactEvidence: true, allowDistributedEvidence: true })
+      && zgodnoscStrukturalna(block, claim, { allowCrossLanguageExactEvidence: true, allowDistributedEvidence: true }).ok
+      && czyDowodSemantyczniePokrywaClaim(block, claim, { allowCrossLanguageExactEvidence: true, allowDistributedEvidence: true });
   });
 }
 
@@ -219,6 +227,10 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
     claimCoverage * (maStarePola ? (wynik.complete === true ? 1 : 0.75) : 0.9)
   ));
 
+  const sentenceCount = answerCoverage.totalSentences ?? null;
+  const claimGranularityOk = !answer || !sentenceCount || sentenceCount <= 1
+    ? true
+    : answerCoverage.ok && claims.length >= Math.min(3, Math.ceil(sentenceCount / 3));
   const claimContractOk = claims.length > 0
     && claims.every(c => c.supported)
     && !unknownSourceClaim
@@ -226,6 +238,7 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
     && !tooManyClaims
     && !malformedClaims
     && answerCoverage.ok
+    && claimGranularityOk
     && unsupported.length === 0;
 
   const accepted = validFromModel === true
@@ -268,6 +281,7 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
   if (unsupportedEvidenceClaim) localRejectReasons.push('evidence_not_verified');
   if (claims.some(c => !c.supported) || wynik.unsupported_claims.some(v => typeof v === 'string' && v.trim())) localRejectReasons.push('unsupported_claims_reported');
   if (!answerCoverage.ok) localRejectReasons.push('answer_not_covered_by_claims');
+  if (!claimGranularityOk) localRejectReasons.push('claims_too_coarse_for_answer');
   if (validFromModel !== true) localRejectReasons.push('model_returned_invalid');
   if (confidence < 0.75) localRejectReasons.push('confidence_below_threshold');
   if (maStarePola && wynik.supported !== true) localRejectReasons.push('model_supported_false');
