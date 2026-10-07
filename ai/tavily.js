@@ -1,5 +1,7 @@
 'use strict';
 
+const { scoreSource: scoreCoreSource, diversifySources: diversifyCoreSources } = require('./core');
+
 const fs = require('fs');
 const { resolveGameEntity, normalizujEncje } = require('./entities');
 const { AI_MODELS } = require('./modelConfig');
@@ -205,86 +207,56 @@ function claimCoverageTavily(result, signals) {
 
 function rerankujWynikiTavily(results, sourceQuestion, requestedDomains = [], options = {}) {
   const input = Array.isArray(results) ? results : [];
-  const keywords = slowaKluczoweTavily(sourceQuestion);
   const resolvedEntity = resolveGameEntity(sourceQuestion);
-  const entityTerms = resolvedEntity
-    ? [resolvedEntity.name, resolvedEntity.game].filter(Boolean).map(normalizujEncje)
-    : [];
-  const now = Date.now();
+  const entity = resolvedEntity?.game || resolvedEntity?.name || null;
+  const claimSignals = sygnalyClaimuTavily(sourceQuestion);
 
   const candidates = input.map((result, index) => {
-    const quality = ocenaZrodlaLokalnie(result?.url, requestedDomains);
-    const qualityBonus = quality === 'oficjalne'
-      ? 0.12
-      : quality === 'wyspecjalizowane'
-        ? 0.10
-        : quality === 'guide/referencyjne'
-          ? 0.02
-          : 0;
+    const localQuality = ocenaZrodlaLokalnie(result?.url, requestedDomains);
+    const core = scoreCoreSource({
+      ...result,
+      authority: localQuality,
+    }, sourceQuestion, {
+      entity,
+      freshness: options.freshness,
+    });
 
-    const haystack = normalizujTokenTavily(
-      [result?.title, result?.content].filter(Boolean).join(' '),
-    );
-    const coverage = keywords.length
-      ? keywords.filter(k => haystack.includes(k)).length / keywords.length
-      : 0;
-    const coverageBonus = Math.min(0.15, coverage * 0.15);
-
-    const entityCoverage = entityTerms.length
-      ? entityTerms.filter(term => haystack.includes(normalizujTokenTavily(term))).length / entityTerms.length
-      : 0;
-    const entityBonus = Math.min(0.10, entityCoverage * 0.10);
-
-    // Claim-aware tie-breaker: źródło musi nie tylko mówić o encji, ale również
-    // zawierać sygnały relacji/liczb istotnych dla samego pytania.
-    const claimSignals = sygnalyClaimuTavily(sourceQuestion);
     const claimCoverage = claimCoverageTavily(result, claimSignals);
-    const claimBonus = Math.min(0.14, claimCoverage * 0.14);
+    const claimBonus = Math.min(0.16, claimCoverage * 0.16);
+    const requestedBonus = requestedDomains?.length && requestedDomains.some(d => {
+      try {
+        const host = new URL(result?.url).hostname.toLowerCase().replace(/^www\./, '');
+        const clean = String(d).toLowerCase().replace(/^www\./, '');
+        return host === clean || host.endsWith('.' + clean);
+      } catch (_) { return false; }
+    }) ? 0.10 : 0;
 
-    const baseScore = typeof result?.score === 'number' ? result.score : 0;
-    const published = dataZrodlaTavily(result);
-    let freshnessBonus = 0;
-    if (published && options.freshness === 'live') {
-      const ageMs = Math.max(0, now - published);
-      freshnessBonus = ageMs <= 7 * 86400000 ? 0.08 : ageMs <= 30 * 86400000 ? 0.03 : -0.03;
-    } else if (published && options.freshness === 'recent') {
-      const ageMs = Math.max(0, now - published);
-      freshnessBonus = ageMs <= 7 * 86400000 ? 0.05 : ageMs <= 30 * 86400000 ? 0.02 : -0.02;
-    }
+    const base = typeof result?.score === 'number' ? result.score : 0;
+    const rerankScore = Math.max(0, Math.min(1.5,
+      base * 0.35 +
+      core.coreScore * 0.55 +
+      claimBonus +
+      requestedBonus
+    ));
 
     return {
-      result,
-      index,
-      host: (() => {
-        try { return new URL(result?.url).hostname.toLowerCase().replace(/^www\\./, ''); }
-        catch (_) { return ''; }
-      })(),
-      rerankScore: baseScore + qualityBonus + coverageBonus + entityBonus + claimBonus + freshnessBonus,
+      ...result,
+      _coreScore: core.coreScore,
+      _rerankScore: rerankScore,
+      _host: core.host,
+      _key: core.key,
+      _index: index,
     };
   });
 
-  // Greedy dobór utrzymuje jakość pierwszego wyniku, ale przy remisach/zbliżonych
-  // wynikach premiuje różne hosty. Dzięki temu ranking nie składa się z czterech
-  // kopii tej samej strony tylko dlatego, że ma minimalnie wyższy score.
-  const ranked = [];
-  const remaining = [...candidates];
-  while (remaining.length) {
-    let bestIndex = 0;
-    let bestAdjusted = -Infinity;
-    for (let i = 0; i < remaining.length; i++) {
-      const candidate = remaining[i];
-      const duplicateHost = candidate.host && ranked.some(x => x.host === candidate.host);
-      const diversityAdjustment = duplicateHost ? -0.025 : (ranked.length ? 0.025 : 0);
-      const adjusted = candidate.rerankScore + diversityAdjustment;
-      if (adjusted > bestAdjusted || (adjusted === bestAdjusted && candidate.index < remaining[bestIndex].index)) {
-        bestAdjusted = adjusted;
-        bestIndex = i;
-      }
-    }
-    ranked.push(remaining.splice(bestIndex, 1)[0]);
-  }
+  const ranked = diversifyCoreSources(
+    candidates.sort((a,b) => b._rerankScore - a._rerankScore),
+    { maxSources: Math.max(1, input.length), minIndependent: Math.min(2, input.length) }
+  );
 
-  return ranked.map(x => x.result);
+  return ranked
+    .sort((a,b) => b._rerankScore - a._rerankScore)
+    .map(({_coreScore,_rerankScore,_host,_key,_index,...result}) => result);
 }
 
 function ocenaZrodlaLokalnie(url, requestedDomains = []) {
