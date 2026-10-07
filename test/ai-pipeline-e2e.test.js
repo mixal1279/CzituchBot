@@ -107,6 +107,7 @@ test('actual zapytajAI pipeline survives validator rejection and succeeds after 
         searchTavily: fakeSearch,
         validateAI: fakeValidator,
         loadMemory: async () => [],
+        maxWyszukanTavily: 3,
       },
     },
   );
