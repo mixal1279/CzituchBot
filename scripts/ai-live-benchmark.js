@@ -16,6 +16,31 @@ const limit = Math.max(1, Math.min(benchmark.cases.length, Number(process.env.AI
 const delayMs = Math.max(0, Number(process.env.AI_BENCHMARK_DELAY_MS) || 0);
 const cases = benchmark.cases.slice(0, limit);
 
+function normalizeFactText(text) {
+  return String(text || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\\u0300-\\u036f]/g, '')
+    .replace(/ł/g, 'l')
+    .replace(/[^a-z0-9\\s]/g, ' ')
+    .replace(/\\s+/g, ' ')
+    .trim();
+}
+
+function scoreGoldenFacts(answer, factual) {
+  if (!factual?.independentGold) return { applicable: false, score: null, passed: null, missing: [], forbidden: [] };
+  const text = normalizeFactText(answer);
+  const missing = [];
+  for (const group of factual.mustInclude || []) {
+    const ok = group.every(phrase => normalizeFactText(phrase).split(' ').every(token => text.includes(token)));
+    if (!ok) missing.push(group);
+  }
+  const forbidden = (factual.mustNot || []).filter(phrase => text.includes(normalizeFactText(phrase)));
+  const total = (factual.mustInclude || []).length;
+  const score = total ? (total - missing.length) / total : 1;
+  return { applicable: true, score, passed: missing.length === 0 && forbidden.length === 0, missing, forbidden };
+}
+
 function isFailureText(text) {
   return /nie mam wystarczających danych|nie mogę wiarygodnie potwierdzić|nie mogę potwierdzić tej informacji|nie będę zgadywać/i.test(String(text || ''));
 }
@@ -47,6 +72,7 @@ async function run() {
 
       const plan = buildAnswerPlan(item.question, { ...item.routing, game: item.game });
       const judge = judgeAnswer(answer, plan);
+      const factual = scoreGoldenFacts(answer, item.expected?.factual);
       results.push({
         id: item.id,
         category: item.category,
@@ -54,6 +80,10 @@ async function run() {
         completeness: judge.score,
         judgeStatus: judge.status,
         missing: judge.missing,
+        factualScore: factual.score,
+        factualPassed: factual.passed,
+        factualMissing: factual.missing,
+        factualForbidden: factual.forbidden,
       });
     } catch (error) {
       results.push({
@@ -63,6 +93,10 @@ async function run() {
         completeness: 0,
         judgeStatus: 'error',
         missing: [],
+        factualScore: item.expected?.factual?.independentGold ? 0 : null,
+        factualPassed: item.expected?.factual?.independentGold ? false : null,
+        factualMissing: [],
+        factualForbidden: [],
         error: String(error?.message || error),
       });
     }
@@ -77,15 +111,21 @@ async function run() {
 
   const answered = results.filter(x => x.answered).length;
   const complete = results.filter(x => x.judgeStatus === 'accepted').length;
+  const factualCases = results.filter(x => x.factualPassed !== null);
+  const factualPassed = factualCases.filter(x => x.factualPassed).length;
+  const factualAverage = factualCases.length ? factualCases.reduce((sum, x) => sum + x.factualScore, 0) / factualCases.length : null;
   const report = {
     benchmark: benchmark.name,
     mode: 'live',
     total: results.length,
     answeredAccuracy: Number((answered / results.length).toFixed(4)),
     completenessAccuracy: Number((complete / results.length).toFixed(4)),
+    factualGoldCases: factualCases.length,
+    factualAccuracy: factualCases.length ? Number((factualPassed / factualCases.length).toFixed(4)) : null,
+    factualAverageScore: factualAverage === null ? null : Number(factualAverage.toFixed(4)),
     durationMs: Date.now() - started,
     note: 'Ten testuje produkcyjny pipeline i kompletność odpowiedzi. Nie jest niezależnym pomiarem factual accuracy; do tego potrzebny jest ręcznie zweryfikowany gold answer/fact set.',
-    failures: results.filter(x => !x.answered || x.judgeStatus !== 'accepted').slice(0, 100),
+    failures: results.filter(x => !x.answered || x.judgeStatus !== 'accepted' || x.factualPassed === false).slice(0, 100),
   };
   console.log(JSON.stringify(report, null, 2));
 }
