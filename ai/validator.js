@@ -19,6 +19,7 @@ const GEMINI_VALIDATOR_JSON_SCHEMA = {
     confidence: { type: 'number', minimum: 0, maximum: 1 },
     claims: {
       type: 'array',
+      minItems: 1,
       items: {
         type: 'object',
         properties: {
@@ -201,7 +202,26 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
   // jako technicznego błędu. Nowy kontrakt nadal wymaga `valid/reason/unsupported_claims`.
   // W produkcji accepted wymaga jawnego rozpisania twierdzeń i źródeł.
   // Brak claims nie jest dowodem poprawności — jest niekompletnym wynikiem validatora.
-  const claimCoverage = claims.length ? claims.filter(c => c.supported).length / claims.length : 0;
+  if (!claims.length) {
+    return {
+      status: 'inconclusive',
+      ok: false,
+      valid: false,
+      technicalError: false,
+      provider,
+      model,
+      supported: false,
+      relevant: wynik.relevant === true,
+      complete: false,
+      hallucination: false,
+      confidence: 0,
+      claims: [],
+      unsupported_claims: [],
+      reason: 'validator nie rozbił odpowiedzi na żadne twierdzenia',
+    };
+  }
+
+  const claimCoverage = claims.filter(c => c.supported).length / claims.length;
   const confidence = Math.max(0, Math.min(1,
     typeof wynik.confidence === 'number' ? wynik.confidence :
     claimCoverage * (maStarePola ? (wynik.complete === true ? 1 : 0.75) : 0.9)
