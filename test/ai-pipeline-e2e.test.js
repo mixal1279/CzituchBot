@@ -94,7 +94,7 @@ test('actual zapytajAI pipeline survives validator rejection and succeeds after 
 
   await zapytajAI(
     'tester',
-    'Dlaczego Wheatley przejął kontrolę nad GLaDOS w Portal 2?',
+    'Co dzieje się z Wheatleyem w Portal 2?',
     [],
     'Odpowiadaj po polsku. Korzystaj wyłącznie z danych referencyjnych.',
     async message => sent.push(String(message)),
