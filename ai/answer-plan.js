@@ -40,7 +40,7 @@ function extractAnswerSignals(answer) {
     comparison: /\b(roznic|rozni|wiecej|mniej|leps|gors|natomiast|podobn|vs|versus|z kolei)\b/.test(text),
     steps: /\b(najpierw|potem|nastepnie|krok|musisz|trzeba|nalezy|wykonaj|zdobadz|przejdz|uzyj)\b/.test(text),
     outcome: /\b(wynik|skutek|konsekwenc|ostatecznie|pozniej|potem|nastepnie|umar|zgina|zostal|zostala)\b/.test(text),
-    relationship: /\b(relacj|zwiazk|przyjac|wrog|sojusz|zdrad|partner)\b/.test(text),
+    relationship: /\b(?:relacj\p{L}*|zwiazk\p{L}*|przyjac\p{L}*|wrog\p{L}*|sojusz\p{L}*|zdrad\p{L}*|partner\p{L}*)\b/u.test(text),
     entity_context: text.length > 0,
     causal_explanation: /\b(dlatego|poniewaz|bo|powodem|przyczyn|wskutek|because|therefore|led to)\b/.test(text),
   };
