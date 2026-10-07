@@ -4,7 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const { resolveGameEntity, containsAlias, externalGameCandidateMatchesQuery } = require('../ai/entities');
-const { rerankujWynikiTavily } = require('../ai/tavily');
+const { rerankujWynikiTavily, przesunSourceIdsTavily } = require('../ai/tavily');
 
 test('entity resolver still accepts exact and normal Polish inflection matches', () => {
   const exact = resolveGameEntity('Co wydarzyło się w Wiedźminie 3?');
@@ -127,4 +127,10 @@ test('natural dative Johnny Silverhand inflection resolves correctly', () => {
   const resolved = resolveGameEntity('Jak Johnnemu Silverhandowi pomogła Alt Cunningham?');
   assert.equal(resolved?.name, 'Johnny Silverhand');
   assert.equal(resolved?.game, 'Cyberpunk 2077');
+});
+
+
+test('cached Tavily source IDs are rebased when appended to existing evidence', () => {
+  const cached = '[SOURCE 1]\nFakt A\n---\n[SOURCE 2]\nFakt B';
+  assert.equal(przesunSourceIdsTavily(cached, 4), '[SOURCE 5]\nFakt A\n---\n[SOURCE 6]\nFakt B');
 });
