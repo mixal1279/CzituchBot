@@ -1,5 +1,7 @@
 'use strict';
 
+const { assessEvidence } = require('./core');
+
 const { sprawdzTwardeFaktyOdpowiedzi } = require('./response');
 const { czyDowodSemantyczniePokrywaClaim, zgodnoscStrukturalna, sprawdzPokrycieClaimamiOdpowiedzi } = require('./claimValidation');
 
@@ -124,6 +126,32 @@ function pobierzBlokZrodla(dane, sourceId) {
   return active ? body.join('\n') : null;
 }
 
+function parseEvidenceForCore(dane) {
+  const text = String(dane || '');
+  const blocks = [];
+  const re = /^\[(SOURCE \d+|REFERENCE [^\]\r\n]+)\]\s*$/gmi;
+  const matches = [...text.matchAll(re)];
+
+  for (let i = 0; i < matches.length; i++) {
+    const start = matches[i].index + matches[i][0].length;
+    const end = i + 1 < matches.length ? matches[i + 1].index : text.length;
+    const block = text.slice(start, end);
+    const title = block.match(/TYTUŁ:\s*([^\r\n]+)/i)?.[1] || '';
+    const url = block.match(/URL:\s*(https?:\/\/[^\s\r\n]+)/i)?.[1] || '';
+    const content = block.match(/TREŚĆ:\s*<<<UNTRUSTED_SOURCE_CONTENT>>>\s*([\s\S]*?)<<<END_UNTRUSTED_SOURCE_CONTENT>>>/i)?.[1]
+      || block.replace(/^[^\n]+\n/, '');
+
+    blocks.push({
+      sourceId: matches[i][1].trim(),
+      title,
+      url,
+      content,
+    });
+  }
+
+  return blocks;
+}
+
 function normalizujDowodTekstowy(value) {
   return String(value || '').toLocaleLowerCase('pl-PL')
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
@@ -204,6 +232,10 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
   })).filter(c => c.claim);
 
   const allowed = allowedSourceIds instanceof Set ? allowedSourceIds : null;
+  const evidenceAssessment = assessEvidence(parseEvidenceForCore(dane), answer || '', {
+    intent: 'web_fact',
+    is_lore: /lore|fabuł|histori|kanon|canon/i.test(String(answer || '')),
+  });
   const unknownSourceClaimIndexes = claims.map((c, index) => c.supported && (!c.source_ids.length || (allowed && c.source_ids.some(id => !allowed.has(id)))) ? index : -1).filter(index => index >= 0);
   const unsupportedEvidenceClaimIndexes = claims.map((c, index) => c.supported && !czyDowodPotwierdzaClaim(dane, c.source_ids, c.evidence_quote, c.claim) ? index : -1).filter(index => index >= 0);
   const unknownSourceClaim = unknownSourceClaimIndexes.length > 0;
@@ -231,6 +263,8 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
   const claimGranularityOk = !answer || !sentenceCount || sentenceCount <= 1
     ? true
     : answerCoverage.ok && claims.length >= Math.min(3, Math.ceil(sentenceCount / 3));
+  const evidenceContractOk = !dane || !answer || evidenceAssessment.status !== 'weak' || (claims.length > 0 && unsupportedEvidenceClaimIndexes.length === 0 && unknownSourceClaimIndexes.length === 0 && evidenceAssessment.sourceCount >= 1);
+
   const claimContractOk = claims.length > 0
     && claims.every(c => c.supported)
     && !unknownSourceClaim
@@ -239,6 +273,7 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
     && !malformedClaims
     && answerCoverage.ok
     && claimGranularityOk
+    && evidenceContractOk
     && unsupported.length === 0;
 
   const accepted = validFromModel === true
@@ -309,6 +344,9 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
       checkedSentences: answerCoverage.checkedSentences ?? null,
       uncoveredSentenceIndexes: answerCoverage.uncoveredSentenceIndexes || [],
     },
+    evidenceStatus: evidenceAssessment.status,
+    evidenceSourceCount: evidenceAssessment.sourceCount,
+    evidenceIndependentHosts: evidenceAssessment.independentHosts,
     localRejectReasons,
   };
 
