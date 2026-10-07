@@ -70,7 +70,7 @@ const { planAIRequest, responseContract, RESPONSE_PROFILES, buildRetrievalQuerie
 const { resolveGameEntity, scoreExternalGameCandidate, externalGameCandidateMatchesQuery } = require('./ai/entities');
 const { extractExplicitUserMemories, mergeMemoryRecords, buildVerifiedMemoryContext, pruneExpiredMemories } = require('./ai/memory');
 const { parseMemoryCommand, forgetMemories, describeMemories } = require('./ai/memory_manager');
-const { buildAdvancedRetrievalPlan } = require('./ai/retrieval');
+const { decomposeQuestion, buildAdvancedRetrievalPlan } = require('./ai/retrieval');
 const { classifyFailure, nextFallbacks, GENERATION_FALLBACK_CHAIN } = require('./ai/fallback');
 const { createAIMetrics, recordAIMetric, snapshotAIMetrics } = require('./ai/metrics');
 const { sanitizeRequestText } = require('./ai/limits');
@@ -1960,12 +1960,9 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
       console.log(`[Tavily] ✍️ Rewrite zaakceptowany: "${pytanieTavily}"`);
     }
     if (pytanieWieloczlonowe) {
-      const czesci = String(pytanie).split(/\?|\b(?:oraz|a także|a tak[eż]|natomiast|i)\b/i).map(x => x.trim()).filter(x => x.length >= 12);
-      const baza = czesci[0] || pytanieTavily;
-      const prefix = baza.split(/\s+/).slice(0, 10).join(' ');
-      pytaniaAtomoweTavily = [...new Set(czesci.slice(0, 3).map((c, i) => i === 0 ? c : `${prefix} ${c}`))].slice(0, 3);
+      pytaniaAtomoweTavily = decomposeQuestion(pytanie, routingAI).slice(0, 3);
       if (pytaniaAtomoweTavily.length < 2) pytaniaAtomoweTavily = [pytanieTavily];
-      console.log(`[Tavily] 🧩 Pytanie wieloczęściowe rozbite na ${pytaniaAtomoweTavily.length} query`);
+      console.log(`[Tavily] 🧩 Pytanie wieloczęściowe rozbite na ${pytaniaAtomoweTavily.length} niezależne query: ${JSON.stringify(pytaniaAtomoweTavily)}`);
     } else {
       pytaniaAtomoweTavily = [pytanieTavily];
     }
@@ -2024,6 +2021,11 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
     domenySpecjalistyczne = dodajGameLoreDomenę(domeny);
   } else if (pytanieOGameplay) {
     domenySpecjalistyczne = dodajGameFAQsDomenę(domeny);
+  }
+  // Specjalistyczna domena ma być rzeczywiście przekazana do Tavily i mieć
+  // pierwszeństwo w planie, zamiast być tylko sygnałem dla logowania.
+  if ((pytanieOLore || pytanieOGameplay) && Array.isArray(domenySpecjalistyczne)) {
+    domenySpecjalistyczne = [...new Set(domenySpecjalistyczne)];
   }
   if (pytanieOLore) console.log(`[Lore] 📚 Wykryto pytanie lore — preferowane źródło: ${GAMELORE_DOMAIN}`);
   if (pytanieOGameplay) console.log(`[Gameplay] 🎮 Wykryto pytanie gameplay — preferowane źródło: ${GAMEFAQS_DOMAIN}`);
