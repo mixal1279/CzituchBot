@@ -1,0 +1,50 @@
+name: AI live benchmark
+
+on:
+  workflow_dispatch:
+
+jobs:
+  live-benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    env:
+      AI_LIVE_BENCHMARK: "1"
+      AI_BENCHMARK_LIMIT: "20"
+      CZITUCHBOT_SKIP_STARTUP_IO: "1"
+      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+      TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      EXA_API_KEY: ${{ secrets.EXA_API_KEY }}
+      MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run 20-case live benchmark
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run ai:benchmark:live 2>&1 | tee ai-live-benchmark-report.txt
+
+      - name: Upload benchmark report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-live-benchmark-${{ github.sha }}
+          path: ai-live-benchmark-report.txt
+          if-no-files-found: warn
+          retention-days: 14
