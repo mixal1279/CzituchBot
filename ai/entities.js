@@ -37,10 +37,19 @@ const CHARACTER_ALIASES = [
   { name: 'Kratos', game: 'God of War', aliases: ['kratos'] },
   { name: 'Ellie', game: 'The Last of Us', aliases: ['ellie'] },
   { name: 'Joel Miller', game: 'The Last of Us', aliases: ['joel miller', 'joel'] },
-  // Postać spoza gier: pytania o znane postacie filmowe/serialowe również
-  // powinny przechodzić przez resolver, żeby nie wpadały w niepewny routing.
   { name: 'Lord Farquaad', game: 'Shrek', aliases: ['lord farquaad', 'lord farquad', 'farquaad', 'farquad'] },
 ];
+
+// Krótkie, powszechne imiona są rozstrzygane tylko wtedy, gdy pytanie zawiera
+// również kontekst gry. Zapobiega to deterministycznemu przypisywaniu np.
+// „Arthur” do RDR2 bez żadnego sygnału kontekstowego.
+const CONTEXT_REQUIRED_CHARACTER_ALIASES = new Set([
+  'arthur',
+  'dutch',
+  'johnny',
+  'ellie',
+  'joel',
+]);
 
 function normalizujEncje(text) {
   return String(text || '').toLocaleLowerCase('pl-PL')
@@ -49,47 +58,116 @@ function normalizujEncje(text) {
     .replace(/\s+/g, ' ').trim();
 }
 
+function tokenyEncji(text) {
+  return normalizujEncje(text).split(' ').filter(Boolean);
+}
+
+function tokenPasujeDoAliasu(token, aliasToken) {
+  if (token === aliasToken) return true;
+  // Dopuszczamy typowe końcówki fleksyjne (maks. 3 znaki), ale nie dowolny
+  // prefiks. To zachowuje np. „Wiedźminem” bez dopasowywania „Minecraftowo”.
+  return aliasToken.length >= 6
+    && token.startsWith(aliasToken)
+    && token.length - aliasToken.length <= 3;
+}
+
 function containsAlias(text, alias) {
-  const textTokens = normalizujEncje(text).split(' ').filter(Boolean);
-  const aliasTokens = normalizujEncje(alias).split(' ').filter(Boolean);
+  const textTokens = tokenyEncji(text);
+  const aliasTokens = tokenyEncji(alias);
   if (!aliasTokens.length || textTokens.length < aliasTokens.length) return false;
   for (let i = 0; i <= textTokens.length - aliasTokens.length; i++) {
     let match = true;
     for (let j = 0; j < aliasTokens.length; j++) {
-      const a = aliasTokens[j];
-      const t = textTokens[i + j];
-      if (t === a) continue;
-      if (a.length >= 5 && t.startsWith(a)) continue;
-      match = false;
-      break;
+      if (!tokenPasujeDoAliasu(textTokens[i + j], aliasTokens[j])) {
+        match = false;
+        break;
+      }
     }
     if (match) return true;
   }
   return false;
 }
 
-function findAlias(text, entries) {
+function aliasLength(alias) {
+  return tokenyEncji(alias).join('').length;
+}
+
+function findAlias(text, entries, options = {}) {
   let best = null;
   for (const entry of entries) {
     for (const alias of entry.aliases) {
       if (!containsAlias(text, alias)) continue;
-      const confidence = Math.min(0.99, 0.72 + Math.min(normalizujEncje(alias).length, 30) / 100);
-      if (!best || confidence > best.confidence) best = { entry, alias, confidence };
+
+      const normalizedAlias = normalizujEncje(alias);
+      const exact = tokenyEncji(text).some(token => token === normalizedAlias);
+      const confidence = Math.min(
+        0.99,
+        0.72 + Math.min(aliasLength(alias), 30) / 100 + (exact ? 0.04 : 0),
+      );
+      const candidate = { entry, alias, confidence, exact };
+      if (!best
+        || candidate.exact !== best.exact
+        || candidate.confidence > best.confidence) {
+        best = candidate;
+      }
     }
   }
   return best;
 }
 
 function resolveGameEntity(text) {
-  const character = findAlias(text, CHARACTER_ALIASES);
-  const game = findAlias(text, GAME_ALIASES);
+  const normalizedText = normalizujEncje(text);
+  const game = findAlias(normalizedText, GAME_ALIASES);
+  const character = findAlias(normalizedText, CHARACTER_ALIASES, {});
+
   if (character) {
-    return { type: 'character', name: character.entry.name, confidence: character.confidence, game: character.entry.game, matchedAlias: character.alias, resolution: 'deterministic' };
+    const shortAlias = tokenyEncji(character.alias).length === 1
+      && CONTEXT_REQUIRED_CHARACTER_ALIASES.has(normalizujEncje(character.alias));
+
+    // Pełne imię/nazwa jest wystarczającym dowodem. Krótkie aliasy wymagają
+    // dodatkowego dopasowania do gry przypisanej do postaci.
+    if (shortAlias && !containsAlias(normalizedText, character.entry.game)) {
+      const fullNameAlias = character.entry.aliases.find(alias => tokenyEncji(alias).length > 1);
+      if (!fullNameAlias || !containsAlias(normalizedText, fullNameAlias)) {
+        return game ? {
+          type: game.entry.type,
+          name: game.entry.name,
+          confidence: game.confidence,
+          game: game.entry.type === 'game' ? game.entry.name : null,
+          matchedAlias: game.alias,
+          resolution: 'deterministic',
+        } : null;
+      }
+    }
+
+    return {
+      type: 'character',
+      name: character.entry.name,
+      confidence: character.confidence,
+      game: character.entry.game,
+      matchedAlias: character.alias,
+      resolution: 'deterministic',
+    };
   }
+
   if (game) {
-    return { type: game.entry.type, name: game.entry.name, confidence: game.confidence, game: game.entry.type === 'game' ? game.entry.name : null, matchedAlias: game.alias, resolution: 'deterministic' };
+    return {
+      type: game.entry.type,
+      name: game.entry.name,
+      confidence: game.confidence,
+      game: game.entry.type === 'game' ? game.entry.name : null,
+      matchedAlias: game.alias,
+      resolution: 'deterministic',
+    };
   }
+
   return null;
 }
 
-module.exports = { GAME_ALIASES, CHARACTER_ALIASES, normalizujEncje, resolveGameEntity };
+module.exports = {
+  GAME_ALIASES,
+  CHARACTER_ALIASES,
+  normalizujEncje,
+  containsAlias,
+  resolveGameEntity,
+};
