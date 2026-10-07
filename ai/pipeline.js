@@ -51,7 +51,7 @@ function planRequest(question, routing, plannerFn, retrievalFn) {
 
 function parseEvidenceText(text) {
   const value = String(text || '');
-  const re = /^\\[(SOURCE \\d+|REFERENCE [^\\]\\r\\n]+)\\]\\s*$/gmi;
+  const re = /^\[(SOURCE \d+|REFERENCE [^\]\r\n]+)\]\s*$/gmi;
   const matches = [...value.matchAll(re)];
   return matches.map((m, i) => {
     const start = m.index + m[0].length;
