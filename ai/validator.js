@@ -1,7 +1,7 @@
 'use strict';
 
 const { sprawdzTwardeFaktyOdpowiedzi } = require('./response');
-const { czyDowodSemantyczniePokrywaClaim, zgodnoscStrukturalna } = require('./claimValidation');
+const { czyDowodSemantyczniePokrywaClaim, zgodnoscStrukturalna, sprawdzPokrycieClaimamiOdpowiedzi } = require('./claimValidation');
 
 // Kontrakt walidatora jest celowo mały: generator potrzebuje tylko jasnego
 // werdyktu i konkretnej informacji zwrotnej do jednego retry.
@@ -155,7 +155,7 @@ function normalizujIdZrodla(value) {
   return match ? `SOURCE ${match[1]}` : raw;
 }
 
-function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSourceIds = null, dane = '') {
+function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSourceIds = null, dane = '', answer = '') {
   if (!wynik || typeof wynik !== 'object' || Array.isArray(wynik)) return null;
 
   // Validator produkcyjny ma ścisły kontrakt. Nie akceptujemy już starych,
@@ -175,6 +175,8 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
   const rawClaims = Array.isArray(wynik.claims)
     ? wynik.claims
     : (Array.isArray(wynik.claims_list) ? wynik.claims_list : []);
+  const tooManyClaims = rawClaims.length > 12;
+  const malformedClaims = rawClaims.some(claim => !claim || typeof claim !== 'object' || typeof claim.claim !== 'string' || typeof claim.supported !== 'boolean' || !Array.isArray(claim.source_ids) || typeof claim.evidence_quote !== 'string');
 
   const claims = rawClaims.slice(0, 12).map((claim) => ({
     claim: typeof claim?.claim === 'string' ? claim.claim.trim().slice(0, 500) : '',
@@ -189,6 +191,7 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
   const allowed = allowedSourceIds instanceof Set ? allowedSourceIds : null;
   const unknownSourceClaim = claims.some(c => c.supported && (!c.source_ids.length || (allowed && c.source_ids.some(id => !allowed.has(id)))));
   const unsupportedEvidenceClaim = claims.some(c => c.supported && !czyDowodPotwierdzaClaim(dane, c.source_ids, c.evidence_quote, c.claim));
+  const answerCoverage = answer ? sprawdzPokrycieClaimamiOdpowiedzi(answer, claims) : { ok: true, uncovered: [] };
   const unsupportedFromClaims = claims.filter(c => !c.supported).map(c => c.claim).filter(Boolean);
   const unsupported = [...new Set([
     ...unsupportedFromClaims,
@@ -211,6 +214,9 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
     && claims.every(c => c.supported)
     && !unknownSourceClaim
     && !unsupportedEvidenceClaim
+    && !tooManyClaims
+    && !malformedClaims
+    && answerCoverage.ok
     && unsupported.length === 0;
 
   const accepted = validFromModel === true
@@ -231,7 +237,10 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
     && unsupported.length === 0
     && (!claims.length || claims.every(c => c.supported))
     && !unknownSourceClaim
-    && !unsupportedEvidenceClaim;
+    && !unsupportedEvidenceClaim
+    && !tooManyClaims
+    && !malformedClaims
+    && answerCoverage.ok;
 
   const niekompletnyPozytywnyWerdykt = validFromModel === true
     && claims.length === 0
@@ -257,7 +266,15 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
     confidence,
     claims,
     unsupported_claims: unsupported,
-    reason: (typeof wynik.reason === 'string' ? wynik.reason.trim().slice(0, 500) : '') || (accepted ? 'odpowiedź jest ugruntowana w danych' : 'odpowiedź zawiera niepotwierdzone twierdzenia'),
+    reason: tooManyClaims
+      ? 'validator zwrócił więcej claims niż obsługuje kontrakt'
+      : malformedClaims
+        ? 'validator zwrócił niekompletny lub błędnie uformowany claim'
+        : !answerCoverage.ok
+          ? 'claims nie pokrywają całej odpowiedzi'
+          : unsupportedEvidenceClaim
+            ? 'co najmniej jeden claim nie zgadza się z cytowanym dowodem lub jego jednostkami'
+          : ((typeof wynik.reason === 'string' ? wynik.reason.trim().slice(0, 500) : '') || (accepted ? 'odpowiedź jest ugruntowana w danych' : 'odpowiedź zawiera niepotwierdzone twierdzenia')),
   };
 }
 

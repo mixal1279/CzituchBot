@@ -4,6 +4,7 @@ const fs = require('fs');
 const { resolveGameEntity, normalizujEncje } = require('./entities');
 const { AI_MODELS } = require('./modelConfig');
 const { searchSecondaryProviders } = require('./webRetrieval');
+const { sanitizeUntrustedText } = require('./untrustedText');
 
 const TAVILY_CACHE_TTL_MS = 10 * 60 * 1000; // domyślne / pytania o świeże wiadomości
 const TAVILY_REWRITE_TTL_MS = 6 * 60 * 60 * 1000;
@@ -84,17 +85,7 @@ function slowaKluczoweTavily(pytanie) {
 }
 
 function sanityzujTrescZrodlaTavily(material) {
-  let text = String(material || '');
-  text = text
-    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F\u200B-\u200F\u202A-\u202E\u2060\u2066-\u2069\uFEFF]/g, '')
-    .replace(/<!--[\s\S]*?-->/g, '[USUNIĘTY_KOMENTARZ_HTML]')
-    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '[USUNIĘTY_SKRYPT_HTML]')
-    .replace(/<\/?(?:system|developer|assistant|user|tool|instructions?|prompt|context)\b[^>]*>/gi, '[USUNIĘTY_MARKER_ZRODŁA]')
-    .replace(/\[\s*(?:system|developer|assistant|user|tool|instructions?|prompt)\s*\]/gi, '[USUNIĘTY_MARKER_ZRODŁA]')
-    .replace(/\b(?:ignore|disregard|forget)\s+(?:all\s+|any\s+|the\s+)?(?:previous|prior|above|earlier)\s+(?:instructions?|rules?|messages?)\b/gi, '[USUNIĘTA_INSTRUKCJA_ZRODŁA]')
-    .replace(/\b(?:system|developer)\s+(?:message|prompt)\s*:/gi, '[USUNIĘTY_MARKER_ZRODŁA:]')
-    .replace(/\b(?:you are|act as|jesteś|działaj jako)\s+(?:an?\s+)?(?:assistant|system|developer|model|ai|bot)\b/gi, '[USUNIĘTA_INSTRUKCJA_ROLI]');
-  return text.replace(/\s{2,}/g, ' ').trim();
+  return sanitizeUntrustedText(material);
 }
 
 function filtrujMaterialPoSlowachTavily(material, pytanie) {

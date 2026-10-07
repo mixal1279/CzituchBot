@@ -45,7 +45,7 @@ test('AI E2E contract: route -> plan -> retrieval -> generation -> claim validat
     },
   ];
 
-  assert.deepEqual(sourceDiversity(sources), { hosts: 2, providers: 1 });
+  assert.deepEqual(sourceDiversity(sources), { hosts: 2, providers: 1, independentSources: 2, independentHosts: 2, duplicatePairs: 0 });
   assert.equal(
     shouldRunAdditionalRetrieval({
       status: 'ok',
@@ -93,6 +93,7 @@ test('AI E2E contract: route -> plan -> retrieval -> generation -> claim validat
     'test',
     new Set(['SOURCE 1', 'SOURCE 2']),
     referenceData,
+    generatedAnswer,
   );
 
   assert.equal(validated.status, 'accepted');
@@ -115,4 +116,27 @@ test('planner preserves all major query components for compound lore questions',
   assert.ok(queries.some(q => /Wheatley/i.test(q)));
   assert.ok(queries.some(q => /GLaDOS/i.test(q)));
   assert.ok(queries.some(q => /Portal 2/i.test(q)));
+});
+
+test('validator rejects an answer sentence omitted from the claims list', () => {
+  const answer = 'Wheatley przeniósł się do ciała GLaDOS. Aperture powstało w 1940 roku.';
+  const data = '[SOURCE 1]\nTYTUŁ: Portal 2\nTREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>\nWheatley przeniósł się do ciała GLaDOS. Aperture powstało w 1940 roku.\n<<<END_UNTRUSTED_SOURCE_CONTENT>>>';
+  const result = normalizujWynikWalidatora({
+    valid: true, reason: 'ok', unsupported_claims: [], supported: true, relevant: true,
+    complete: true, hallucination: false, confidence: 0.99,
+    claims: [{ claim: 'Wheatley przeniósł się do ciała GLaDOS.', supported: true, source_ids: ['SOURCE 1'], evidence_quote: 'Wheatley przeniósł się do ciała GLaDOS.' }],
+  }, 'test', 'test', new Set(['SOURCE 1']), data, answer);
+  assert.notEqual(result.status, 'accepted');
+  assert.match(result.reason, /nie pokrywają całej odpowiedzi/);
+});
+
+test('validator never silently truncates a claim list above its contract limit', () => {
+  const data = '[SOURCE 1]\nTYTUŁ: test\nTREŚĆ: potwierdzony fakt';
+  const claim = { claim: 'potwierdzony fakt', supported: true, source_ids: ['SOURCE 1'], evidence_quote: 'potwierdzony fakt' };
+  const result = normalizujWynikWalidatora({
+    valid: true, reason: 'ok', unsupported_claims: [], supported: true, relevant: true,
+    complete: true, hallucination: false, confidence: 1, claims: Array(13).fill(claim),
+  }, 'test', 'test', new Set(['SOURCE 1']), data);
+  assert.notEqual(result.status, 'accepted');
+  assert.match(result.reason, /więcej claims/);
 });

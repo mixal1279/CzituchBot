@@ -39,7 +39,7 @@ test('retrieval diversity is part of the sufficiency decision', () => {
     { score: 0.9, url: 'https://one.example/a', provider: 'tavily' },
     { score: 0.8, url: 'https://two.example/b', provider: 'tavily' },
   ];
-  assert.deepEqual(sourceDiversity(results), { hosts: 2, providers: 1 });
+  assert.deepEqual(sourceDiversity(results), { hosts: 2, providers: 1, independentSources: 2, independentHosts: 2, duplicatePairs: 0 });
   assert.equal(shouldRunAdditionalRetrieval({ text: 'x'.repeat(1200), sourceCount: 2, queryCount: 1, results, requireDiversity: true }), false);
 });
 
@@ -115,4 +115,35 @@ test('validator treats a positive result without claims as inconclusive', () => 
   }, 'test-model', 'test', new Set(['SOURCE 1']), '[SOURCE 1]\nTREŚĆ: potwierdzony fakt');
   assert.equal(result.status, 'inconclusive');
   assert.equal(result.ok, false);
+});
+
+test('validator rejects a matching number expressed in a different unit', () => {
+  const data = '[SOURCE 1]\nTYTUŁ: czas gry\nTREŚĆ: Ukończenie gry zajmuje 24 godziny.';
+  const result = normalizujWynikWalidatora({
+    valid: true, reason: 'ok', unsupported_claims: [], supported: true, relevant: true,
+    complete: true, hallucination: false, confidence: 0.99,
+    claims: [{ claim: 'Ukończenie gry zajmuje 24 minuty.', supported: true, source_ids: ['SOURCE 1'], evidence_quote: 'Ukończenie gry zajmuje 24 godziny.' }],
+  }, 'test', 'test', new Set(['SOURCE 1']), data);
+  assert.equal(result.status, 'rejected');
+  assert.match(result.reason, /jednostkami/);
+});
+
+test('retrieval asks for more evidence when different hosts syndicate the same text', () => {
+  const copied = 'Wheatley takes control of GLaDOS after the core transfer into her body and gains access to the Aperture systems in Portal 2.';
+  const results = [
+    { score: 0.9, url: 'https://site-one.example/story', provider: 'tavily', title: 'Portal 2 story', content: copied },
+    { score: 0.85, url: 'https://site-two.example/copy', provider: 'exa', title: 'Portal 2 story copy', content: copied },
+  ];
+  assert.equal(sourceDiversity(results).hosts, 2);
+  assert.equal(sourceDiversity(results).independentHosts, 1);
+  assert.equal(shouldRunAdditionalRetrieval({ status: 'ok', text: 'x'.repeat(1200), sourceCount: 2, results, requireDiversity: true }), true);
+});
+
+test('www and apex variants count as one source host', () => {
+  const diversity = sourceDiversity([
+    { url: 'https://www.example.com/a', provider: 'tavily' },
+    { url: 'https://example.com/b', provider: 'exa' },
+  ]);
+  assert.equal(diversity.hosts, 1);
+  assert.equal(diversity.independentHosts, 1);
 });

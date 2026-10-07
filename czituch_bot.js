@@ -1510,7 +1510,7 @@ Zwróć WYŁĄCZNIE JSON: {"valid":true/false,"reason":"krótki powód","confide
         console.warn(`[AI][${requestId}] ${model}: niepoprawny JSON validatora (raw=${content.slice(0, 300)})`);
         return { status: 'unavailable', ok: false, technicalError: true, provider: 'gemini', model, unsupported_claims: [], reason: `${model}: niepoprawny JSON validatora` };
       }
-      const normalized = normalizujWynikWalidatora(parsed, model, 'gemini', wyodrebnijIdentyfikatoryZrodel(dane), dane);
+      const normalized = normalizujWynikWalidatora(parsed, model, 'gemini', wyodrebnijIdentyfikatoryZrodel(dane), dane, odpowiedz);
       if (!normalized) {
         console.warn(`[AI][${requestId}] ${model}: niepoprawna struktura validatora (raw=${content.slice(0, 300)})`);
         return { status: 'unavailable', ok: false, technicalError: true, provider: 'gemini', model, unsupported_claims: [], reason: `${model}: niepoprawna struktura validatora` };
@@ -1604,7 +1604,7 @@ async function walidujOdpowiedzOpenRouter(persona, pytanie, odpowiedz, dane, req
     if (!content && message?.refusal) {
       console.warn(`[AI][${requestId}] OpenRouter validator refusal: ${String(message.refusal).slice(0, 300)}`);
     }
-    const normalized = normalizujWynikWalidatora(parsed, data?.model || KONFIGURACJA.openrouterValidatorModel, 'openrouter', wyodrebnijIdentyfikatoryZrodel(dane), dane);
+    const normalized = normalizujWynikWalidatora(parsed, data?.model || KONFIGURACJA.openrouterValidatorModel, 'openrouter', wyodrebnijIdentyfikatoryZrodel(dane), dane, odpowiedz);
     if (!normalized) {
       console.warn(`[AI][${requestId}] OpenRouter validator zwrócił JSON poza kontraktem (raw=${content.slice(0, 700)})`);
       throw new Error('niepoprawna struktura JSON fallbacku');
@@ -2324,9 +2324,11 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
     const model = KONFIGURACJA.mistralModel;
     if (!KONFIGURACJA.mistralKey) return wynikPusty('mistral', model, 'brak MISTRAL_API_KEY');
     if (!moznaWykonacGeneracje('mistral', model)) return wynikPusty('mistral', model, 'AI request budget exceeded');
-    const controller = new AbortController();
     const remainingMs = pozostalyCzasMs();
-    const timer = setTimeout(() => controller.abort(), remainingMs);
+    if (!Number.isFinite(remainingMs) || remainingMs <= 0) return wynikPusty('mistral', model, 'AI request deadline exceeded');
+    const controller = new AbortController();
+    const timeoutMs = Math.max(1, Math.min(30000, remainingMs));
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
       const response = await fetch('https://api.mistral.ai/v1/chat/completions', {
         method: 'POST',

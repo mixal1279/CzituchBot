@@ -1,6 +1,7 @@
 'use strict';
 
 const { AI_MODELS } = require('./modelConfig');
+const { sanitizeUntrustedText } = require('./untrustedText');
 
 function cleanText(value, max = 5000) {
   return String(value || '').replace(/\s+/g, ' ').trim().slice(0, max);
@@ -10,10 +11,10 @@ function normalizeSource({ provider, title, url, snippet, content, publishedAt =
   return {
     sourceId: `SOURCE ${index + 1}`,
     provider,
-    title: cleanText(title || '(brak tytułu)', 300),
+    title: sanitizeUntrustedText(cleanText(title || '(brak tytułu)', 300)),
     url: String(url || '').trim(),
-    snippet: cleanText(snippet || content, 700),
-    content: cleanText(content || snippet, 4000),
+    snippet: sanitizeUntrustedText(cleanText(snippet || content, 700)),
+    content: sanitizeUntrustedText(cleanText(content || snippet, 4000)),
     publishedAt: publishedAt || null,
     score: typeof score === 'number' ? score : null,
   };
@@ -27,8 +28,8 @@ function formatSources(sources, startIndex = 0) {
       'TYP: UNTRUSTED_WEB_DATA',
       `TYTUŁ: ${s.title}`,
       `HOST: ${safeHost(s.url)}`,
-      `URL: ${s.url}`,
-      `PROVIDER: ${s.provider}`,
+      `URL: ${cleanText(s.url, 500).replace(/[\r\n]/g, '')}`,
+      `PROVIDER: ${cleanText(s.provider, 80).replace(/[^a-z0-9_-]/gi, '')}`,
       'TREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>',
       s.content,
       '<<<END_UNTRUSTED_SOURCE_CONTENT>>>',
