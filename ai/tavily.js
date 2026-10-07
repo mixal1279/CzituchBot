@@ -1,6 +1,7 @@
 'use strict';
 
 const fs = require('fs');
+const { AI_MODELS } = require('./modelConfig');
 const { searchSecondaryProviders } = require('./webRetrieval');
 
 const TAVILY_CACHE_TTL_MS = 10 * 60 * 1000; // domyślne / pytania o świeże wiadomości
@@ -355,7 +356,7 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
           let rewrite;
           try {
             rewrite = await groq.chat.completions.create({
-              model: 'openai/gpt-oss-20b', max_tokens: 220, reasoning_effort: 'low',
+              model: AI_MODELS.queryRewrite, max_tokens: 220, reasoning_effort: 'low',
               include_reasoning: false, temperature: 0, signal: rewriteController.signal,
               messages: [
                 { role: 'system', content: 'Przepisz pytanie na jedno kompletne zapytanie do wyszukiwarki. Zachowaj WSZYSTKIE istotne elementy pytania, nazwy własne, relacje i części składowe. Nie odpowiadaj. Nie usuwaj drugiej ani kolejnych części pytania. Maksymalnie 35 słów. Tylko samo zapytanie.' },
