@@ -76,6 +76,13 @@ function wyodrebnijNazwyWlasne(value) {
 function wyodrebnijMarkery(value, regex) {
   return regex.test(normalizujClaim(value));
 }
+function czyNazwaWlasnaWystepuje(entity, evidenceNormalized) {
+  if (evidenceNormalized.includes(entity)) return true;
+  const parts = entity.split(' ').filter(Boolean);
+  if (parts.length !== 1 || entity.length < 6) return false;
+  const stem = entity.slice(0, Math.max(5, entity.length - 2));
+  return evidenceNormalized.split(' ').some(token => token.length >= stem.length && token.startsWith(stem));
+}
 function zgodnoscStrukturalna(evidence, claim, options = {}) {
   const e = String(evidence || '');
   const c = String(claim || '');
@@ -109,7 +116,7 @@ function zgodnoscStrukturalna(evidence, claim, options = {}) {
   const claimEntities = wyodrebnijNazwyWlasne(c);
   const evidenceNormalized = normalizujClaim(e);
   if (claimEntities.length) {
-    const missingEntities = claimEntities.filter(entity => !evidenceNormalized.includes(entity));
+    const missingEntities = claimEntities.filter(entity => !czyNazwaWlasnaWystepuje(entity, evidenceNormalized));
     if (missingEntities.length > 0) return { ok: false, reason: 'dowód nie zawiera wszystkich istotnych nazw własnych claimu' };
   }
 
