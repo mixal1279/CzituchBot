@@ -1029,14 +1029,42 @@ async function znajdzGreIGDB(pytanie, requestState = null) {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'text/plain',
       },
-      body: `search "${nazwaGry}"; fields name,genres.name; limit 1;`,
+      // IGDB zwraca wyniki uporządkowane wg podobieństwa, ale pierwszy rekord
+      // może być edycją/spinoffem. Pobieramy kilka kandydatów i weryfikujemy
+      // nazwę lokalnie przed użyciem encji w routingu.
+      body: `search "${nazwaGry}"; fields name,genres.name; limit 5;`,
     }, 6000);
     if (!res.ok) return null;
     const data = await res.json();
-    if (!data?.length) return null;
+    if (!Array.isArray(data) || !data.length) return null;
 
-    const gra = data[0];
-    return { nazwa: gra.name, gatunki: (gra.genres || []).map(g => g.name).join(', ') };
+    const normalizujNazweIGDB = value => String(value || '')
+      .toLocaleLowerCase('pl-PL')
+      .normalize('NFD').replace(/[\\u0300-\\u036f]/g, '')
+      .replace(/[^a-z0-9 ]/g, ' ').replace(/\\s+/g, ' ').trim();
+    const queryTokens = new Set(normalizujNazweIGDB(nazwaGry).split(' ').filter(Boolean));
+    const ocenKandydata = gra => {
+      const name = normalizujNazweIGDB(gra?.name);
+      if (!name) return 0;
+      if (name === normalizujNazweIGDB(nazwaGry)) return 1;
+      const nameTokens = name.split(' ').filter(Boolean);
+      const overlap = nameTokens.length
+        ? nameTokens.filter(t => queryTokens.has(t)).length / nameTokens.length
+        : 0;
+      return name.includes(normalizujNazweIGDB(nazwaGry)) || normalizujNazweIGDB(nazwaGry).includes(name)
+        ? Math.max(0.82, overlap)
+        : overlap;
+    };
+    const kandydaci = data
+      .map(gra => ({ gra, score: ocenKandydata(gra) }))
+      .sort((a, b) => b.score - a.score);
+    const najlepszy = kandydaci[0];
+    if (!najlepszy || najlepszy.score < 0.72) {
+      console.log(`[IGDB] Pomijam niepewne dopasowanie "${nazwaGry}" (score=${najlepszy?.score?.toFixed?.(2) || '0.00'})`);
+      return null;
+    }
+    const gra = najlepszy.gra;
+    return { nazwa: gra.name, gatunki: (gra.genres || []).map(g => g.name).join(', '), confidence: Math.min(0.99, najlepszy.score), resolution: 'igdb_verified' };
   } catch (err) {
     console.error('[IGDB] Błąd:', err.message);
     return null;
