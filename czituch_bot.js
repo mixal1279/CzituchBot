@@ -1773,8 +1773,12 @@ function wykonajAIWHistorii(historia, zadanie) {
 async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn, opcje = {}) {
   AI_METRYKI.requests++;
   let { temperature = 0.5, max_tokens = 200, tavilyOptions = {}, aiProfile = 'generic', memoryUserId = null } = opcje;
+  const groqClient = opcje.__testDeps?.groq || groq;
+  const searchTavilyFn = opcje.__testDeps?.searchTavily || szukajTavily;
+  const validateAI = opcje.__testDeps?.validateAI || walidujOdpowiedzAI;
+  const loadMemory = opcje.__testDeps?.loadMemory || wczytajZweryfikowanaPamiecAI;
   const verifiedMemoryUserId = memoryUserId || String(nick || '').toLowerCase();
-  const verifiedMemoryPromise = wczytajZweryfikowanaPamiecAI(verifiedMemoryUserId);
+  const verifiedMemoryPromise = loadMemory(verifiedMemoryUserId);
   systemPrompt = `${systemPrompt}\n\nNie umieszczaj w odpowiedzi nazw źródeł, atrybucji, etykiet „Źródło:” ani URL-i. Źródła są wyłącznie wewnętrznym materiałem RAG i walidacji.`;
   const jestAI_Billy = aiProfile === 'billy' || systemPrompt === AI_SYSTEM_PROMPT_BILLY;
   const jestAI_EdzzI = aiProfile === 'edzzi' || systemPrompt === AI_SYSTEM_PROMPT_EDZZI;
@@ -1886,7 +1890,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
   const czyPytanieOYouTube = kategoriaAI === 'youtube';
   const [rewriteWynik, miastoPogoda, domeny, youtuberNazwa, gryHLTB] = await Promise.all([
     czyWyszukac
-      ? (zarezerwujModel('search-rewrite') ? groq.chat.completions.create({
+      ? (zarezerwujModel('search-rewrite') ? groqClient.chat.completions.create({
           model: AI_MODELS.queryRewrite, // lekka klasyfikacja/rewrite — 20b wystarczy, szybszy/tańszy niż 120b, nie wycofywany 16.08.2026
           max_tokens: 220, reasoning_effort: 'low', include_reasoning: false, temperature: 0,
           messages: [
@@ -2052,7 +2056,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
       const query = kolejkaTavily[indexZapytania++];
       if (!aiState.reserveTavily('retrieval')) break;
       console.log(`[Tavily] 🔍 Query: "${query}" | Domeny: ${JSON.stringify(domenySpecjalistyczne)}`);
-      const wynik = await szukajTavily(query, {
+      const wynik = await searchTavilyFn(query, {
         domains: domenySpecjalistyczne
           || (pytanieOrazBilly ? domenyTavilyBilly : null)
           || (pytanieOrazEdzzi ? domenyTavilyEdzzi : null)
@@ -2164,7 +2168,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
         console.warn(`[Tavily] ⚠️ Brak budżetu modelowego na query uzupełniające`);
         return false;
       }
-      const queryUzupelniajaceAI = await groq.chat.completions.create({
+      const queryUzupelniajaceAI = await groqClient.chat.completions.create({
         model: AI_MODELS.queryRewrite,
         max_tokens: 80,
         reasoning_effort: 'low',
@@ -2199,7 +2203,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
     console.log(`[Tavily] 🔎 Uzupełniające wyszukanie po validatorze: "${queryUzupelniajace}" | Domeny: ${JSON.stringify(domenyUzupelniajace)}`);
 
     if (!aiState.reserveTavily('supplemental-retrieval')) return false;
-    const uzupelnienie = await szukajTavily(queryUzupelniajace, {
+    const uzupelnienie = await searchTavilyFn(queryUzupelniajace, {
       domains: domenyUzupelniajace,
       time_range: aiPlan.retrievalTimeRange || zakresTavilyDlaPytania(pytanie, null),
       _skipRewrite: true,
@@ -2379,7 +2383,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
       const remainingMs = pozostalyCzasMs();
       const timer = setTimeout(() => controller.abort(), remainingMs);
       try {
-        const response = await groq.chat.completions.create({ model, messages: [{ role: 'system', content: overrideSystemPrompt }, ...przygotujHistorieDoModelu(historiaRozmowy, 4), { role: 'user', content: kontekstDoGroq }], temperature, max_tokens: maxTok, reasoning_effort: model === 'openai/gpt-oss-120b' ? 'medium' : 'low', signal: controller.signal });
+        const response = await groqClient.chat.completions.create({ model, messages: [{ role: 'system', content: overrideSystemPrompt }, ...przygotujHistorieDoModelu(historiaRozmowy, 4), { role: 'user', content: kontekstDoGroq }], temperature, max_tokens: maxTok, reasoning_effort: model === 'openai/gpt-oss-120b' ? 'medium' : 'low', signal: controller.signal });
         return ujednolicWynik({ tekst: response.choices?.[0]?.message?.content, ucieta: response.choices?.[0]?.finish_reason === 'length' }, 'groq', model);
       } finally {
         clearTimeout(timer);
@@ -2454,7 +2458,7 @@ function oczyscOdpowiedzPrzedWalidacja(tekst) {
     const maWalidowac = Boolean(daneZewnetrzne)
       && (czyPytanieWymagaPewnychDanych(kategoriaAI) || Boolean(wynikSzukania));
   if (maWalidowac) {
-    let walidacja = await walidujOdpowiedzAI(aiProfile === 'billy' ? 'billy' : aiProfile === 'edzzi' ? 'edzzi' : aiProfile === 'angie' ? 'angie' : 'generic', pytanie, odp, daneDoWalidacji, historiaRozmowy, requestId, aiState, metadaneRequestu);
+    let walidacja = await validateAI(aiProfile === 'billy' ? 'billy' : aiProfile === 'edzzi' ? 'edzzi' : aiProfile === 'angie' ? 'angie' : 'generic', pytanie, odp, daneDoWalidacji, historiaRozmowy, requestId, aiState, metadaneRequestu);
     // Model validatora może omyłkowo zwrócić accepted dla odpowiedzi będącej
     // odmową. Tego nie można zostawić wyłącznie jego ocenie.
     if (walidacja.status === 'accepted' && daneDoWalidacji && AI_POLICY.czyOdpowiedzToJednoznacznaOdmowa(odp)) {
@@ -2501,7 +2505,7 @@ function oczyscOdpowiedzPrzedWalidacja(tekst) {
         const nowaOdp = usunMarkeryWewnetrzneAI(filtrBezpieczenstwa(retry.tekst));
         if (nowaOdp) {
           odp = oczyscOdpowiedzPrzedWalidacja(nowaOdp);
-          walidacja = await walidujOdpowiedzAI(aiProfile === 'billy' ? 'billy' : aiProfile === 'edzzi' ? 'edzzi' : aiProfile === 'angie' ? 'angie' : 'generic', pytanie, odp, daneDoWalidacji, historiaRozmowy, requestId, aiState, metadaneRequestu);
+          walidacja = await validateAI(aiProfile === 'billy' ? 'billy' : aiProfile === 'edzzi' ? 'edzzi' : aiProfile === 'angie' ? 'angie' : 'generic', pytanie, odp, daneDoWalidacji, historiaRozmowy, requestId, aiState, metadaneRequestu);
           if (walidacja.status === 'accepted') {
             walidacja = zastosujDeterministyczneGuards(walidacja, odp, daneDoWalidacji, pytanie, { maxZdania: responseCfg.maxSentences, maxZnakow: 1800 }, routingAI, aiPlan.responseProfile);
           }
@@ -6742,7 +6746,7 @@ const YT_KANALY_ARBUZIK = [
 // =============================================
 //  START
 // =============================================
-(async () => {
+const startBot = async () => {
   console.log('🚀 Uruchamiam CzituchBota (YouTube + Kick + Twitch)...\n');
   console.log('[Wersja] v24.5 AI hardened — GameLore lore + GameFAQs gameplay RAG + unique Tavily source IDs + claim validator | Twitch przez Helix\n');
 
@@ -6817,4 +6821,13 @@ const YT_KANALY_ARBUZIK = [
   ekoStartScheduler(wyslijKick);
 
   console.log('\n🎉 Wszystkie platformy uruchomione!\n');
-})();
+};
+
+if (require.main === module) {
+  startBot().catch(err => {
+    console.error('[START] Nieobsłużony błąd startu bota:', err?.stack || err);
+    process.exitCode = 1;
+  });
+}
+
+module.exports = { zapytajAI, startBot };
