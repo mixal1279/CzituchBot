@@ -78,6 +78,7 @@ const { createAIRequestContext } = require('./ai/requestContext');
 const { sprawdzTwardeFaktyOdpowiedzi, sprawdzFormatOdpowiedzi } = require('./ai/response');
 const { Firestore } = require('@google-cloud/firestore');
 const { ocenJakoscOdpowiedzi } = require('./ai/quality');
+const { AI_MODELS } = require('./ai/modelConfig');
 
 // =============================================
 //  MINECRAFT JAVA 26.1 — LOKALNE RECEPTURY
@@ -497,8 +498,8 @@ const KONFIGURACJA = {
   openrouterKey:      process.env.OPENROUTER_API_KEY,
   // Validator musi używać stabilnego modelu; nie używamy openrouter/free,
   // bo jego model może zmieniać się między requestami.
-  openrouterValidatorModel: process.env.OPENROUTER_VALIDATOR_MODEL || 'openai/gpt-oss-20b',
-  openrouterGeneratorModel: process.env.OPENROUTER_GENERATOR_MODEL || 'openai/gpt-oss-120b',
+  openrouterValidatorModel: process.env.OPENROUTER_VALIDATOR_MODEL || AI_MODELS.validator,
+  openrouterGeneratorModel: process.env.OPENROUTER_GENERATOR_MODEL || AI_MODELS.generatorPrimary,
 
   // ---- Groq AI ----
   groqKey: process.env.GROQ_API_KEY,
@@ -1008,7 +1009,7 @@ async function znajdzGreIGDB(pytanie, requestState = null) {
   try {
     if (requestState?.zarezerwujModel && !requestState.zarezerwujModel('igdb-classifier')) return null;
     const rewrite = await groq.chat.completions.create({
-      model: 'openai/gpt-oss-20b', // lekka klasyfikacja — 20b wystarczy, szybszy/tańszy niż 120b i nie jest wycofywany 16.08.2026 jak llama-3.1-8b-instant
+      model: AI_MODELS.queryRewrite, // lekka klasyfikacja — 20b wystarczy, szybszy/tańszy niż 120b i nie jest wycofywany 16.08.2026 jak llama-3.1-8b-instant
       max_tokens: 60,
       reasoning_effort: 'low',
       temperature: 0,
@@ -1048,7 +1049,7 @@ async function znajdzYoutuberaWPytaniu(pytanie, requestState = null) {
   try {
     if (requestState?.zarezerwujModel && !requestState.zarezerwujModel('youtube-classifier')) return null;
     const rewrite = await groq.chat.completions.create({
-      model: 'openai/gpt-oss-20b',
+      model: AI_MODELS.queryRewrite,
       max_tokens: 40, reasoning_effort: 'low', temperature: 0,
       messages: [
         { role: 'system', content: 'Jeśli pytanie dotyczy konkretnego twórcy YouTube/kanału (np. pyta kim jest, ile ma subskrybentów, o czym jest kanał), odpowiedz TYLKO jego nickiem/nazwą kanału tak jak w pytaniu. Jeśli pytanie nie dotyczy żadnego konkretnego kanału YouTube, odpowiedz dokładnie: NONE.' },
@@ -1858,7 +1859,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
   const [rewriteWynik, miastoPogoda, domeny, youtuberNazwa, gryHLTB] = await Promise.all([
     czyWyszukac
       ? (zarezerwujModel('search-rewrite') ? groq.chat.completions.create({
-          model: 'openai/gpt-oss-20b', // lekka klasyfikacja/rewrite — 20b wystarczy, szybszy/tańszy niż 120b, nie wycofywany 16.08.2026
+          model: AI_MODELS.queryRewrite, // lekka klasyfikacja/rewrite — 20b wystarczy, szybszy/tańszy niż 120b, nie wycofywany 16.08.2026
           max_tokens: 220, reasoning_effort: 'low', include_reasoning: false, temperature: 0,
           messages: [
             { role: 'system', content: 'Na podstawie ewentualnego kontekstu poprzedniej rozmowy oraz nowego pytania, przepisz nowe pytanie jako krótkie, precyzyjne, samodzielne zapytanie do wyszukiwarki. Jeśli nowe pytanie odnosi się do czegoś wspomnianego wcześniej (np. "to", "taki", "coś podobnego"), rozwiąż to odniesienie na podstawie kontekstu. Jeśli dotyczy Minecrafta lub innej gry, przetłumacz nazwy przedmiotów/mechanik na ich oficjalne ANGIELSKIE nazwy (np. "buzdygan" → "Mace Minecraft 1.21", "stół kowalski" → "smithing table") i dodaj nazwę gry — to JEDYNY przypadek, w którym tłumaczysz na angielski. Jeśli pytanie dotyczy osoby, nicku, twórcy internetowego, streamera lub czegokolwiek, co może być polskojęzyczne, zostaw zapytanie PO POLSKU (nie tłumacz nicków ani nazw własnych na angielski) — angielskie zapytanie o polskojęzyczną osobę zwraca gorsze, często niepowiązane wyniki. Jeśli po analizie kontekstu pytanie nadal nie dotyczy żadnego faktu możliwego do wyszukania (np. to żart, opinia, lub coś niezwiązane z żadną konkretną rzeczą/faktem), odpowiedz dokładnie: NONE. Tylko samo zapytanie albo NONE, bez wyjaśnień.' },
@@ -2136,7 +2137,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
         return false;
       }
       const queryUzupelniajaceAI = await groq.chat.completions.create({
-        model: 'openai/gpt-oss-20b',
+        model: AI_MODELS.queryRewrite,
         max_tokens: 80,
         reasoning_effort: 'low',
         temperature: 0,
@@ -2221,7 +2222,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
       if (!response.ok) throw new Error(data?.error?.message || `HTTP ${response.status}`);
       const tekst = (data?.candidates?.[0]?.content?.parts || []).map(part => part?.text || '').join('').trim();
       if (!tekst) throw new Error('Gemini zwrócił pustą odpowiedź');
-      return { tekst, ucieta: data?.candidates?.[0]?.finishReason === 'MAX_TOKENS', provider: 'gemini', model: 'gemini-3.8-flash' };
+      return { tekst, ucieta: data?.candidates?.[0]?.finishReason === 'MAX_TOKENS', provider: 'gemini', model: AI_MODELS.generatorGemini };
     } catch (err) {
       console.error(`[Gemini] Fallback nieudany (${powod}):`, err.message);
       if (/quota|rate.?limit|resource.?exhausted|429|limit:/i.test(err.message || '')) geminiGenerationCooldownUntil = Date.now() + 90_000;
@@ -2254,7 +2255,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
       if (!response.ok) throw new Error(data?.error?.message || `HTTP ${response.status}`);
       const tekst = (data?.candidates?.[0]?.content?.parts || []).map(part => part?.text || '').join('').trim();
       if (!tekst) throw new Error('Gemini Lite zwrócił pustą odpowiedź');
-      return { tekst, ucieta: data?.candidates?.[0]?.finishReason === 'MAX_TOKENS', provider: 'gemini', model: 'gemini-3.5-flash-lite' };
+      return { tekst, ucieta: data?.candidates?.[0]?.finishReason === 'MAX_TOKENS', provider: 'gemini', model: AI_MODELS.generatorGeminiLite };
     } catch (err) {
       console.error(`[Gemini Lite] Fallback nieudany (${powod}):`, err.message);
       if (/quota|rate.?limit|resource.?exhausted|429|limit:/i.test(err.message || '')) geminiGenerationCooldownUntil = Date.now() + 90_000;
@@ -2328,7 +2329,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
   const wynikPusty = (provider, model, error = null) => ({ tekst: '', status: 'unavailable', provider, model, ucieta: false, error });
   const ujednolicWynik = (r, provider, model) => ({ tekst: String(r?.tekst || '').trim(), status: r?.tekst ? 'ok' : 'unavailable', provider: r?.provider || provider, model: r?.model || model, ucieta: Boolean(r?.ucieta), error: r?.error || null });
 
-  async function zapytajGlowny(maxTok, overrideSystemPrompt = systemPrompt, model = 'openai/gpt-oss-120b') {
+  async function zapytajGlowny(maxTok, overrideSystemPrompt = systemPrompt, model = AI_MODELS.generatorPrimary) {
     if (model === 'openai/gpt-oss-120b') {
       if (requestBlokada120b) {
         return wynikPusty('groq', model, '120B blocked for this request after previous limit error');
@@ -2378,10 +2379,10 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
     console.log(`[AI][${requestId}] fallback policy=${failureType || 'unknown'} next=${JSON.stringify(nextFallbacks({ failure: failureType, attempted: ['groq:openai/gpt-oss-120b'] }))}`);
     const attempted = ['groq:openai/gpt-oss-120b'];
     const fallbackSteps = {
-      'groq:openai/gpt-oss-20b': () => zapytajGlowny(Math.max(maxTok, 300), prompt, 'openai/gpt-oss-20b'),
+      `groq:${AI_MODELS.queryRewrite}`: () => zapytajGlowny(Math.max(maxTok, 300), prompt, 'openai/gpt-oss-20b'),
       'mistral:default': () => zapytajMistral(Math.max(maxTok, 300), prompt, powod),
-      'gemini:gemini-3.8-flash': () => zapytajGeminiFallback(Math.max(maxTok, 300), prompt, powod),
-      'gemini:gemini-3.5-flash-lite': () => zapytajGeminiLiteFallback(Math.max(maxTok, 300), prompt, powod),
+      `gemini:${AI_MODELS.generatorGemini}`: () => zapytajGeminiFallback(Math.max(maxTok, 300), prompt, powod),
+      `gemini:${AI_MODELS.generatorGeminiLite}`: () => zapytajGeminiLiteFallback(Math.max(maxTok, 300), prompt, powod),
       'openrouter:default': () => zapytajOpenRouterFallback(Math.max(maxTok, 300), prompt, powod),
     };
     for (const step of nextFallbacks({ failure: failureType, attempted })) {
@@ -2607,7 +2608,7 @@ async function skompresujHistorie(historiaRozmowy) {
       .join('\n');
 
     const podsumowanie = await groq.chat.completions.create({
-      model: 'openai/gpt-oss-20b', // lekka kompresja tekstu — nie potrzeba 120b
+      model: AI_MODELS.queryRewrite, // lekka kompresja tekstu — nie potrzeba 120b
       max_tokens: 100,
       reasoning_effort: 'low',
       temperature: 0,
@@ -3707,7 +3708,7 @@ async function wyodrebnijMiastoPogoda(pytanie, requestState = null) {
   try {
     if (requestState?.zarezerwujModel && !requestState.zarezerwujModel('weather-classifier')) return null;
     const res = await groq.chat.completions.create({
-      model: 'openai/gpt-oss-20b', // lekka klasyfikacja — 20b wystarczy, nie wycofywany 16.08.2026
+      model: AI_MODELS.queryRewrite, // lekka klasyfikacja — 20b wystarczy, nie wycofywany 16.08.2026
       max_tokens: 60,
       reasoning_effort: 'low',
       temperature: 0,
@@ -3841,7 +3842,7 @@ async function pobierzPrawdziwyHoroskop(znakEn, znakPl) {
     if (!tekstEn) throw new Error('Brak treści horoskopu w odpowiedzi API');
 
     const tlumaczenie = await groq.chat.completions.create({
-      model: 'openai/gpt-oss-20b', // lekki model — tylko tłumaczenie, nie trzeba 120b
+      model: AI_MODELS.queryRewrite, // lekki model — tylko tłumaczenie, nie trzeba 120b
       max_tokens: 150, // przy niskim limicie model reasoningowy potrafi zjeść tokeny na "myślenie" i uciąć tekst w połowie zdania
       reasoning_effort: 'low',
       temperature: 0.3,
