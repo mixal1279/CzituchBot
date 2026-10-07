@@ -136,12 +136,12 @@ function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '') {
   if (!Array.isArray(sourceIds) || !sourceIds.length || typeof evidenceQuote !== 'string') return false;
   const quote = evidenceQuote.trim().replace(/\s+/g, ' ').toLocaleLowerCase('pl-PL');
   if (quote.length < 3 || quote.length > 500) return false;
-  const claimNorm = claim ? String(claim).toLocaleLowerCase('pl-PL').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '') : '';
-  const quoteNorm = quote.normalize('NFD').replace(/[\\u0300-\\u036f]/g, '');
-  const quoteCaptured = /captur\\w*|porwan\\w*|uprowadz\\w*|schwyt\\w*/i.test(quoteNorm);
-  const quoteKilled = /kill\\w*|murder\\w*|zabij\\w*|zabil\\w*|zabila\\w*|zabici\\w*|zabity\\w*|zabicie\\w*|smier\\w*/i.test(quoteNorm);
-  const claimCaptured = /captur\\w*|porwan\\w*|uprowadz\\w*|schwyt\\w*/i.test(claimNorm);
-  const claimKilled = /kill\\w*|murder\\w*|zabij\\w*|zabil\\w*|zabila\\w*|zabici\\w*|zabity\\w*|zabicie\\w*|smier\\w*/i.test(claimNorm);
+  const claimNorm = claim ? String(claim).toLocaleLowerCase('pl-PL') : '';
+  const quoteNorm = quote;
+  const quoteCaptured = quoteNorm.includes('captured') || quoteNorm.includes('kidnapped') || quoteNorm.includes('abducted') || quoteNorm.includes('porwan') || quoteNorm.includes('schwyt');
+  const quoteKilled = quoteNorm.includes('killed') || quoteNorm.includes('murdered') || quoteNorm.includes('zabij') || quoteNorm.includes('zabi') || quoteNorm.includes('śmier');
+  const claimCaptured = claimNorm.includes('captured') || claimNorm.includes('kidnapped') || claimNorm.includes('abducted') || claimNorm.includes('porwan') || claimNorm.includes('schwyt');
+  const claimKilled = claimNorm.includes('killed') || claimNorm.includes('murdered') || claimNorm.includes('zabij') || claimNorm.includes('zabi') || claimNorm.includes('śmier');
   if (claimKilled && quoteCaptured && !quoteKilled) return false;
   if (claimCaptured && quoteKilled && !quoteCaptured) return false;
   return sourceIds.some(id => {
