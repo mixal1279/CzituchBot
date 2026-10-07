@@ -70,7 +70,7 @@ const { planAIRequest, responseContract, RESPONSE_PROFILES, buildRetrievalQuerie
 const { resolveGameEntity, scoreExternalGameCandidate, externalGameCandidateMatchesQuery } = require('./ai/entities');
 const { extractExplicitUserMemories, mergeMemoryRecords, buildVerifiedMemoryContext, pruneExpiredMemories } = require('./ai/memory');
 const { parseMemoryCommand, forgetMemories, describeMemories } = require('./ai/memory_manager');
-const { buildAdvancedRetrievalPlan } = require('./ai/retrieval');
+const { decomposeQuestion, buildAdvancedRetrievalPlan } = require('./ai/retrieval');
 const { classifyFailure, nextFallbacks, GENERATION_FALLBACK_CHAIN } = require('./ai/fallback');
 const { createAIMetrics, recordAIMetric, snapshotAIMetrics } = require('./ai/metrics');
 const { sanitizeRequestText } = require('./ai/limits');
@@ -1525,9 +1525,27 @@ Zwróć WYŁĄCZNIE JSON: {"valid":true/false,"reason":"krótki powód","confide
     } finally { clearTimeout(timer); }
   } catch (err) {
     console.error(`[AI][${requestId}] ${model} validator error:`, err.message);
-    const quota = /quota|rate.?limit|resource.?exhausted|429|limit:/i.test(err.message || '');
-    if (quota) geminiValidatorCooldownUntil = Date.now() + 90_000;
-    return { status: 'unavailable', ok: false, technicalError: true, quota, provider: 'gemini', model, unsupported_claims: [], reason: quota ? 'quota Gemini — przełączam validator' : `błąd validatora (${model})`, error: err.message };
+    const message = String(err?.message || '');
+    const quota = /quota|rate.?limit|resource.?exhausted|429|limit:/i.test(message);
+    const transient = quota
+      || /(?:HTTP\s*(?:408|409|429|500|502|503|504)|aborted|abort|timeout|timed out|network|fetch failed|ECONNRESET|ETIMEDOUT)/i.test(message);
+    // Gemini GenerateContent documents caller-side cancellation/timeouts as
+    // transient transport failures. Keep Gemini on a short cooldown and let
+    // the independent OpenRouter validator handle this request instead of
+    // spending another Gemini slot during a regeneration.
+    if (transient) geminiValidatorCooldownUntil = Date.now() + (quota ? 90_000 : 30_000);
+    return {
+      status: 'unavailable',
+      ok: false,
+      technicalError: true,
+      transient,
+      quota,
+      provider: 'gemini',
+      model,
+      unsupported_claims: [],
+      reason: quota ? 'quota Gemini — przełączam validator' : (transient ? `przejściowy błąd validatora (${model}) — fallback` : `błąd validatora (${model})`),
+      error: message,
+    };
   }
 }
 
@@ -1778,7 +1796,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
   const searchTavilyFn = opcje.__testDeps?.searchTavily || szukajTavily;
   const validateAI = opcje.__testDeps?.validateAI || walidujOdpowiedzAI;
   const loadMemory = opcje.__testDeps?.loadMemory || wczytajZweryfikowanaPamiecAI;
-  const testMaxTavilySearches = Number.isInteger(opcje.__testDeps?.maxWyszukanTavily) ? Math.max(2, opcje.__testDeps.maxWyszukanTavily) : 2;
+  const testMaxTavilySearches = Number.isInteger(opcje.__testDeps?.maxWyszukanTavily) ? Math.max(2, opcje.__testDeps.maxWyszukanTavily) : 3;
   const verifiedMemoryUserId = memoryUserId || String(nick || '').toLowerCase();
   const verifiedMemoryPromise = loadMemory(verifiedMemoryUserId);
   systemPrompt = `${systemPrompt}\n\nNie umieszczaj w odpowiedzi nazw źródeł, atrybucji, etykiet „Źródło:” ani URL-i. Źródła są wyłącznie wewnętrznym materiałem RAG i walidacji.`;
@@ -1960,12 +1978,9 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
       console.log(`[Tavily] ✍️ Rewrite zaakceptowany: "${pytanieTavily}"`);
     }
     if (pytanieWieloczlonowe) {
-      const czesci = String(pytanie).split(/\?|\b(?:oraz|a także|a tak[eż]|natomiast|i)\b/i).map(x => x.trim()).filter(x => x.length >= 12);
-      const baza = czesci[0] || pytanieTavily;
-      const prefix = baza.split(/\s+/).slice(0, 10).join(' ');
-      pytaniaAtomoweTavily = [...new Set(czesci.slice(0, 3).map((c, i) => i === 0 ? c : `${prefix} ${c}`))].slice(0, 3);
+      pytaniaAtomoweTavily = decomposeQuestion(pytanie, routingAI).slice(0, 3);
       if (pytaniaAtomoweTavily.length < 2) pytaniaAtomoweTavily = [pytanieTavily];
-      console.log(`[Tavily] 🧩 Pytanie wieloczęściowe rozbite na ${pytaniaAtomoweTavily.length} query`);
+      console.log(`[Tavily] 🧩 Pytanie wieloczęściowe rozbite na ${pytaniaAtomoweTavily.length} niezależne query: ${JSON.stringify(pytaniaAtomoweTavily)}`);
     } else {
       pytaniaAtomoweTavily = [pytanieTavily];
     }
@@ -2024,6 +2039,11 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
     domenySpecjalistyczne = dodajGameLoreDomenę(domeny);
   } else if (pytanieOGameplay) {
     domenySpecjalistyczne = dodajGameFAQsDomenę(domeny);
+  }
+  // Specjalistyczna domena ma być rzeczywiście przekazana do Tavily i mieć
+  // pierwszeństwo w planie, zamiast być tylko sygnałem dla logowania.
+  if ((pytanieOLore || pytanieOGameplay) && Array.isArray(domenySpecjalistyczne)) {
+    domenySpecjalistyczne = [...new Set(domenySpecjalistyczne)];
   }
   if (pytanieOLore) console.log(`[Lore] 📚 Wykryto pytanie lore — preferowane źródło: ${GAMELORE_DOMAIN}`);
   if (pytanieOGameplay) console.log(`[Gameplay] 🎮 Wykryto pytanie gameplay — preferowane źródło: ${GAMEFAQS_DOMAIN}`);

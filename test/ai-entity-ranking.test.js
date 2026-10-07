@@ -122,3 +122,9 @@ test('genitive Johnny Silverhand mention resolves Cyberpunk 2077 without naming 
   assert.equal(externalGameCandidateMatchesQuery(question, 'Cyberpunk 2077').ok, true);
   assert.equal(externalGameCandidateMatchesQuery(question, 'Cyber Daisenryaku').ok, false);
 });
+
+test('natural dative Johnny Silverhand inflection resolves correctly', () => {
+  const resolved = resolveGameEntity('Jak Johnnemu Silverhandowi pomogła Alt Cunningham?');
+  assert.equal(resolved?.name, 'Johnny Silverhand');
+  assert.equal(resolved?.game, 'Cyberpunk 2077');
+});

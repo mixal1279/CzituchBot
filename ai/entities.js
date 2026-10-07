@@ -31,7 +31,7 @@ const CHARACTER_ALIASES = [
   { name: 'Chell', game: 'Portal', aliases: ['chell'] },
   { name: 'Arthur Morgan', game: 'Red Dead Redemption 2', aliases: ['arthur morgan', 'arthur'] },
   { name: 'Dutch van der Linde', game: 'Red Dead Redemption 2', aliases: ['dutch van der linde', 'dutch'] },
-  { name: 'Johnny Silverhand', game: 'Cyberpunk 2077', aliases: ['johnny silverhand', 'johnnyego silverhanda', 'johnnyemu silverhandowi', 'johnnym silverhandem', 'johnny'] },
+  { name: 'Johnny Silverhand', game: 'Cyberpunk 2077', aliases: ['johnny silverhand', 'johnnyego silverhanda', 'johnnemu silverhandowi', 'johnnym silverhandem', 'johnny'] },
   { name: 'Geralt z Rivii', game: 'The Witcher 3: Wild Hunt', aliases: ['geralt', 'geralt z rivii'] },
   { name: 'Ciri', game: 'The Witcher 3: Wild Hunt', aliases: ['ciri'] },
   { name: 'Kratos', game: 'God of War', aliases: ['kratos'] },
