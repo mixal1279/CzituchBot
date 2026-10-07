@@ -46,3 +46,26 @@ test('validator accepts Polish claims against an exact English evidence quote', 
   assert.equal(result.status, 'accepted');
   assert.equal(result.ok, true);
 });
+
+
+test('multilingual evidence does not accept a contradictory action', () => {
+  const english = '[SOURCE 1]\nTYTUŁ: Cyberpunk 2077 lore\nTREŚĆ: Alt Cunningham was kidnapped and seriously injured by gang members during the 2013 incident.';
+  const result = normalizujWynikWalidatora({
+    valid: true,
+    reason: 'confirmed',
+    unsupported_claims: [],
+    supported: true,
+    relevant: true,
+    complete: true,
+    hallucination: false,
+    confidence: 0.96,
+    claims: [{
+      claim: 'Alt Cunningham została zabita przez członków gangu podczas incydentu z 2013 roku.',
+      supported: true,
+      source_ids: ['SOURCE 1'],
+      evidence_quote: 'Alt Cunningham was kidnapped and seriously injured by gang members during the 2013 incident.',
+    }],
+  }, 'test-model', 'test', new Set(['SOURCE 1']), english, 'Alt Cunningham została zabita podczas incydentu z 2013 roku.');
+  assert.equal(result.status, 'rejected');
+  assert.equal(result.diagnostics.localRejectReasons.includes('evidence_not_verified'), true);
+});
