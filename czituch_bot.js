@@ -1643,7 +1643,7 @@ async function walidujOdpowiedzAI(persona, pytanie, odpowiedz, dane, historiaRoz
       return { status: 'unavailable', ok: false, technicalError: true, provider: 'gemini', model: models[i], unsupported_claims: [], reason: 'globalny budżet modeli wyczerpany' };
     }
     const result = await walidujOdpowiedzGeminiModel(models[i], persona, pytanie, odpowiedz, dane, historiaRozmowy, requestId, requestState, requestMeta);
-    if (requestState) requestState.validatorResults.push({ model: models[i], status: result.status, complete: result.complete === true });
+    if (requestState) requestState.validatorResults.push({ model: models[i], status: result.status, complete: result.complete === true, confidence: Number.isFinite(result.confidence) ? result.confidence : null, claimCoverage: Array.isArray(result.claims) && result.claims.length ? result.claims.filter(c => c.supported === true).length / result.claims.length : null });
     console.log(`[AI][${requestId}] validator #${i + 1} ${models[i]} → ${result.status}`);
     if (result.status === 'accepted' || result.status === 'rejected') return result;
     last = result;
@@ -1655,7 +1655,7 @@ async function walidujOdpowiedzAI(persona, pytanie, odpowiedz, dane, historiaRoz
     if (requestState.reserveValidator && !requestState.reserveValidator('validator:openrouter')) {
       return { status: 'unavailable', ok: false, technicalError: true, provider: 'openrouter', model: KONFIGURACJA.openrouterValidatorModel, unsupported_claims: [], reason: 'budżet validatora wyczerpany' };
     }
-    requestState.validatorResults.push({ model: KONFIGURACJA.openrouterValidatorModel, status: 'fallback', complete: false });
+    requestState.validatorResults.push({ model: KONFIGURACJA.openrouterValidatorModel, status: 'fallback', complete: false, confidence: null, claimCoverage: null });
   }
   // Brak Gemini nie jest błędem logicznym: OpenRouter jest pełnoprawnym
   // fallbackiem validatora, a nie tylko ratunkiem po błędzie sieciowym Gemini.
@@ -2583,6 +2583,8 @@ function oczyscOdpowiedzPrzedWalidacja(tekst) {
     fallbackReasons: aiState.fallbackReasons,
     validatorStatuses: aiState.validatorResults.map(v => v.status),
     retrievalStatuses: aiState.tavilyLastStatus ? [aiState.tavilyLastStatus] : [],
+    claimCoverage: aiState.validatorResults.at(-1)?.claimCoverage ?? null,
+    answerQuality: aiState.validatorResults.at(-1)?.confidence ?? (aiState.finalStatus === 'accepted' ? 1 : 0),
   });
   zalogujPodsumowanieAI(aiState.finalStatus);
   const newMemories = extractExplicitUserMemories(pytanie, { sourceRole: 'user', userId: verifiedMemoryUserId, sourceMessageId: requestId });
