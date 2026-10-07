@@ -1804,14 +1804,15 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
   const jestAI_Billy = aiProfile === 'billy' || systemPrompt === AI_SYSTEM_PROMPT_BILLY;
   const jestAI_EdzzI = aiProfile === 'edzzi' || systemPrompt === AI_SYSTEM_PROMPT_EDZZI;
   const jestAI_Angie = aiProfile === 'angie' || systemPrompt === AI_SYSTEM_PROMPT_ANGIE;
-  const pytanieCzyste = sanitizeRequestText(pytanie);
-  if (!pytanieCzyste) return;
-  if (pytanieCzyste.length > 500) {
-    await wyslijFn(`@${nick} pytanie jest za długie — skróć je do 500 znaków.`);
+  const questionInput = sanitizeQuestion(pytanie, sanitizeRequestText, 500);
+  if (!questionInput.ok) {
+    if (questionInput.reason === 'too_long') {
+      await wyslijFn(`@${nick} pytanie jest za długie — skróć je do ${questionInput.maxLength} znaków.`);
+    }
     return;
   }
-  pytanie = pytanieCzyste;
-  const requestId = crypto.randomUUID ? crypto.randomUUID().slice(0, 12) : `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  pytanie = questionInput.value;
+  const requestId = createRequestId(crypto.randomUUID?.bind(crypto));
   // Jeden kontekst kontroluje czas i wszystkie limity całego pipeline'u AI.
   // Nie utrzymujemy osobnych budżetów w generatorze, retrievalu i validatorze.
   const aiState = createAIRequestContext({
@@ -1870,9 +1871,13 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
     await wyslijFn(`@${nick} Nie jestem pewien, o jaki konkretnie fakt chodzi — doprecyzuj proszę pytanie.`);
     return;
   }
-  const aiPlan = planAIRequest(pytanie, routingAI);
+  const { plan: aiPlan, retrievalPlan: advancedRetrievalPlan } = planRequest(
+    pytanie,
+    routingAI,
+    planAIRequest,
+    buildRetrievalQueries,
+  );
   const plannedRetrievalQueries = buildRetrievalQueries(pytanie, routingAI, { maxQueries: 3 });
-  const advancedRetrievalPlan = buildAdvancedRetrievalPlan(pytanie, routingAI, plannedRetrievalQueries);
   const responseCfg = RESPONSE_PROFILES[aiPlan.responseProfile] || RESPONSE_PROFILES.simple;
   max_tokens = Math.max(Number(max_tokens) || 200, responseCfg.maxTokens);
   systemPrompt = `${systemPrompt}\n\n${responseContract(aiPlan.responseProfile)}`;
