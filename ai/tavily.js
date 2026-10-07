@@ -5,7 +5,7 @@ const { scoreSource: scoreCoreSource, diversifySources: diversifyCoreSources } =
 const fs = require('fs');
 const { resolveGameEntity, normalizujEncje } = require('./entities');
 const { AI_MODELS } = require('./modelConfig');
-const { searchSecondaryProviders } = require('./webRetrieval');
+const { searchSecondaryProviders, formatSources } = require('./webRetrieval');
 const { sanitizeUntrustedText } = require('./untrustedText');
 
 const TAVILY_CACHE_TTL_MS = 10 * 60 * 1000; // domyślne / pytania o świeże wiadomości
