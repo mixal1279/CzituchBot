@@ -1,4 +1,5 @@
 'use strict';
+process.env.CZITUCHBOT_SKIP_STARTUP_IO = '1';
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
