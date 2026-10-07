@@ -3533,6 +3533,7 @@ async function obslugaEkonomii(nick, message, wyslijFn, walutaNadpis = null) {
 }
 
 // Czyszczenie pamięci co godzinę – zapobiega wyciekowi przy długim działaniu bota
+if (process.env.CZITUCHBOT_SKIP_STARTUP_IO !== '1') {
 setInterval(() => {
   const klucze = Object.keys(historiaRozmowy);
   if (klucze.length > 500) {
@@ -3556,6 +3557,7 @@ setInterval(() => {
     console.log(`[Bot] 🧹 Czyszczę stare cooldowny (${usunieteCooldowny} wpisów)...`);
   }
 }, 60 * 60 * 1000);
+}
 
 // =============================================
 //  FILTR BEZPIECZEŃSTWA
