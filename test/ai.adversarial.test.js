@@ -4,6 +4,7 @@ const test = require('node:test');
 
 const assert = require('node:assert/strict');
 const { wytnijJsonWalidatora, normalizujWynikWalidatora, wyodrebnijIdentyfikatoryZrodel } = require('../ai/validator');
+const { zgodnoscStrukturalna } = require('../ai/claimValidation');
 
 const base = { valid: true, reason: 'ok', unsupported_claims: [], confidence: 0.95, supported: true, relevant: true, complete: true, hallucination: false, claims: [{ claim: 'Fakt potwierdzony', supported: true, source_ids: ['SOURCE 1'], evidence_quote: 'Fakt potwierdzony' }] };
 const data = '[SOURCE 1]\nTYTUŁ: Źródło testowe\nTREŚĆ: Fakt potwierdzony.';
@@ -88,6 +89,7 @@ test('validator accepts multilingual paraphrased evidence from the same source b
       evidence_quote: 'Their relationship was damaged after Arasaka captured Alt, and Johnny\'s hatred of Arasaka intensified.',
     }],
   }, 'test-model', 'test', new Set(['SOURCE 1']), english, 'Johnny był związany z Alt, a działania Arasaki pogłębiły jego konflikt z korporacją.');
+  console.log('DEBUG multilingual structural:', zgodnoscStrukturalna(english, 'Johnny Silverhand był związany z Alt Cunningham, a porwanie Alt przez Arasakę pogłębiło jego konflikt z Arasaką.', { allowCrossLanguageExactEvidence: true }));
   assert.equal(result.status, 'accepted', JSON.stringify(result.diagnostics));
   assert.equal(result.ok, true);
 });
