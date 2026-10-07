@@ -28,8 +28,13 @@ function decomposeQuestion(question,routing={}) {
   return clauses.slice(0,3).map((clause,index)=>{
     if(index===0) return clause;
     const normalized=clause.toLocaleLowerCase('pl-PL');
-    const missingAnchor=anchor.length && !anchor.some(a=>normalized.includes(a.toLocaleLowerCase('pl-PL')));
-    return missingAnchor ? [...anchor,clause].join(' ') : clause;
+    const previousEntities = extractCarryoverEntities(clauses.slice(0,index).join(' '));
+    const carry = [...anchor, ...previousEntities]
+      .filter(Boolean)
+      .filter((v,i,a)=>a.findIndex(x=>x.toLocaleLowerCase('pl-PL')===v.toLocaleLowerCase('pl-PL'))===i)
+      .filter(v=>!normalized.includes(v.toLocaleLowerCase('pl-PL')))
+      .slice(0,3);
+    return carry.length ? [...carry,clause].join(' ') : clause;
   });
 }
 function extractCarryoverEntities(text) {
