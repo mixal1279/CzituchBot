@@ -3147,7 +3147,7 @@
       "routing": {
         "intent": "web_fact",
         "is_lore": false,
-        "is_gameplay": true
+        "is_gameplay": false
       },
       "expected": {
         "requirements": [
@@ -3165,7 +3165,7 @@
       "routing": {
         "intent": "web_fact",
         "is_lore": false,
-        "is_gameplay": true
+        "is_gameplay": false
       },
       "expected": {
         "requirements": [
@@ -3183,7 +3183,7 @@
       "routing": {
         "intent": "web_fact",
         "is_lore": false,
-        "is_gameplay": true
+        "is_gameplay": false
       },
       "expected": {
         "requirements": [
@@ -3201,7 +3201,7 @@
       "routing": {
         "intent": "web_fact",
         "is_lore": false,
-        "is_gameplay": true
+        "is_gameplay": false
       },
       "expected": {
         "requirements": [
@@ -3219,7 +3219,7 @@
       "routing": {
         "intent": "web_fact",
         "is_lore": false,
-        "is_gameplay": true
+        "is_gameplay": false
       },
       "expected": {
         "requirements": [
@@ -3237,7 +3237,7 @@
       "routing": {
         "intent": "web_fact",
         "is_lore": false,
-        "is_gameplay": true
+        "is_gameplay": false
       },
       "expected": {
         "requirements": [
@@ -3255,7 +3255,7 @@
       "routing": {
         "intent": "web_fact",
         "is_lore": false,
-        "is_gameplay": true
+        "is_gameplay": false
       },
       "expected": {
         "requirements": [
@@ -3273,7 +3273,7 @@
       "routing": {
         "intent": "web_fact",
         "is_lore": false,
-        "is_gameplay": true
+        "is_gameplay": false
       },
       "expected": {
         "requirements": [
@@ -3291,7 +3291,7 @@
       "routing": {
         "intent": "web_fact",
         "is_lore": false,
-        "is_gameplay": true
+        "is_gameplay": false
       },
       "expected": {
         "requirements": [
@@ -3309,7 +3309,7 @@
       "routing": {
         "intent": "web_fact",
         "is_lore": false,
-        "is_gameplay": true
+        "is_gameplay": false
       },
       "expected": {
         "requirements": [
@@ -3327,7 +3327,7 @@
       "routing": {
         "intent": "web_fact",
         "is_lore": false,
-        "is_gameplay": true
+        "is_gameplay": false
       },
       "expected": {
         "requirements": [
@@ -3345,7 +3345,7 @@
       "routing": {
         "intent": "web_fact",
         "is_lore": false,
-        "is_gameplay": true
+        "is_gameplay": false
       },
       "expected": {
         "requirements": [
@@ -3363,7 +3363,7 @@
       "routing": {
         "intent": "web_fact",
         "is_lore": false,
-        "is_gameplay": true
+        "is_gameplay": false
       },
       "expected": {
         "requirements": [
@@ -3381,7 +3381,7 @@
       "routing": {
         "intent": "web_fact",
         "is_lore": false,
-        "is_gameplay": true
+        "is_gameplay": false
       },
       "expected": {
         "requirements": [
@@ -3399,7 +3399,7 @@
       "routing": {
         "intent": "web_fact",
         "is_lore": false,
-        "is_gameplay": true
+        "is_gameplay": false
       },
       "expected": {
         "requirements": [
@@ -3417,7 +3417,7 @@
       "routing": {
         "intent": "web_fact",
         "is_lore": false,
-        "is_gameplay": true
+        "is_gameplay": false
       },
       "expected": {
         "requirements": [
@@ -3435,7 +3435,7 @@
       "routing": {
         "intent": "web_fact",
         "is_lore": false,
-        "is_gameplay": true
+        "is_gameplay": false
       },
       "expected": {
         "requirements": [
@@ -3453,7 +3453,7 @@
       "routing": {
         "intent": "web_fact",
         "is_lore": false,
-        "is_gameplay": true
+        "is_gameplay": false
       },
       "expected": {
         "requirements": [
@@ -3471,7 +3471,7 @@
       "routing": {
         "intent": "web_fact",
         "is_lore": false,
-        "is_gameplay": true
+        "is_gameplay": false
       },
       "expected": {
         "requirements": [
@@ -3489,7 +3489,7 @@
       "routing": {
         "intent": "web_fact",
         "is_lore": false,
-        "is_gameplay": true
+        "is_gameplay": false
       },
       "expected": {
         "requirements": [
@@ -3507,7 +3507,7 @@
       "routing": {
         "intent": "web_fact",
         "is_lore": false,
-        "is_gameplay": true
+        "is_gameplay": false
       },
       "expected": {
         "requirements": [
@@ -3525,7 +3525,7 @@
       "routing": {
         "intent": "web_fact",
         "is_lore": false,
-        "is_gameplay": true
+        "is_gameplay": false
       },
       "expected": {
         "requirements": [
@@ -3543,7 +3543,7 @@
       "routing": {
         "intent": "web_fact",
         "is_lore": false,
-        "is_gameplay": true
+        "is_gameplay": false
       },
       "expected": {
         "requirements": [
@@ -3561,7 +3561,7 @@
       "routing": {
         "intent": "web_fact",
         "is_lore": false,
-        "is_gameplay": true
+        "is_gameplay": false
       },
       "expected": {
         "requirements": [
@@ -3579,7 +3579,7 @@
       "routing": {
         "intent": "web_fact",
         "is_lore": false,
-        "is_gameplay": true
+        "is_gameplay": false
       },
       "expected": {
         "requirements": [
@@ -3597,7 +3597,7 @@
       "routing": {
         "intent": "web_fact",
         "is_lore": false,
-        "is_gameplay": true
+        "is_gameplay": false
       },
       "expected": {
         "requirements": [
@@ -3615,7 +3615,7 @@
       "routing": {
         "intent": "web_fact",
         "is_lore": false,
-        "is_gameplay": true
+        "is_gameplay": false
       },
       "expected": {
         "requirements": [
@@ -3633,7 +3633,7 @@
       "routing": {
         "intent": "web_fact",
         "is_lore": false,
-        "is_gameplay": true
+        "is_gameplay": false
       },
       "expected": {
         "requirements": [
@@ -3651,7 +3651,7 @@
       "routing": {
         "intent": "web_fact",
         "is_lore": false,
-        "is_gameplay": true
+        "is_gameplay": false
       },
       "expected": {
         "requirements": [
@@ -3669,7 +3669,7 @@
       "routing": {
         "intent": "web_fact",
         "is_lore": false,
-        "is_gameplay": true
+        "is_gameplay": false
       },
       "expected": {
         "requirements": [
@@ -3687,7 +3687,7 @@
       "routing": {
         "intent": "web_fact",
         "is_lore": false,
-        "is_gameplay": true
+        "is_gameplay": false
       },
       "expected": {
         "requirements": [
@@ -3705,7 +3705,7 @@
       "routing": {
         "intent": "web_fact",
         "is_lore": false,
-        "is_gameplay": true
+        "is_gameplay": false
       },
       "expected": {
         "requirements": [
@@ -3723,7 +3723,7 @@
       "routing": {
         "intent": "web_fact",
         "is_lore": false,
-        "is_gameplay": true
+        "is_gameplay": false
       },
       "expected": {
         "requirements": [
@@ -3741,7 +3741,7 @@
       "routing": {
         "intent": "web_fact",
         "is_lore": false,
-        "is_gameplay": true
+        "is_gameplay": false
       },
       "expected": {
         "requirements": [
@@ -3759,7 +3759,7 @@
       "routing": {
         "intent": "web_fact",
         "is_lore": false,
-        "is_gameplay": true
+        "is_gameplay": false
       },
       "expected": {
         "requirements": [
@@ -3777,7 +3777,7 @@
       "routing": {
         "intent": "web_fact",
         "is_lore": false,
-        "is_gameplay": true
+        "is_gameplay": false
       },
       "expected": {
         "requirements": [
@@ -3795,7 +3795,7 @@
       "routing": {
         "intent": "web_fact",
         "is_lore": false,
-        "is_gameplay": true
+        "is_gameplay": false
       },
       "expected": {
         "requirements": [
@@ -3813,7 +3813,7 @@
       "routing": {
         "intent": "web_fact",
         "is_lore": false,
-        "is_gameplay": true
+        "is_gameplay": false
       },
       "expected": {
         "requirements": [
@@ -3831,7 +3831,7 @@
       "routing": {
         "intent": "web_fact",
         "is_lore": false,
-        "is_gameplay": true
+        "is_gameplay": false
       },
       "expected": {
         "requirements": [
@@ -3849,7 +3849,7 @@
       "routing": {
         "intent": "web_fact",
         "is_lore": false,
-        "is_gameplay": true
+        "is_gameplay": false
       },
       "expected": {
         "requirements": [
@@ -3867,7 +3867,7 @@
       "routing": {
         "intent": "web_fact",
         "is_lore": false,
-        "is_gameplay": true
+        "is_gameplay": false
       },
       "expected": {
         "requirements": [
@@ -3885,7 +3885,7 @@
       "routing": {
         "intent": "web_fact",
         "is_lore": false,
-        "is_gameplay": true
+        "is_gameplay": false
       },
       "expected": {
         "requirements": [
@@ -3903,7 +3903,7 @@
       "routing": {
         "intent": "web_fact",
         "is_lore": false,
-        "is_gameplay": true
+        "is_gameplay": false
       },
       "expected": {
         "requirements": [
@@ -3921,7 +3921,7 @@
       "routing": {
         "intent": "web_fact",
         "is_lore": false,
-        "is_gameplay": true
+        "is_gameplay": false
       },
       "expected": {
         "requirements": [
@@ -3939,7 +3939,7 @@
       "routing": {
         "intent": "web_fact",
         "is_lore": false,
-        "is_gameplay": true
+        "is_gameplay": false
       },
       "expected": {
         "requirements": [
@@ -3957,7 +3957,7 @@
       "routing": {
         "intent": "web_fact",
         "is_lore": false,
-        "is_gameplay": true
+        "is_gameplay": false
       },
       "expected": {
         "requirements": [
@@ -3975,7 +3975,7 @@
       "routing": {
         "intent": "web_fact",
         "is_lore": false,
-        "is_gameplay": true
+        "is_gameplay": false
       },
       "expected": {
         "requirements": [
@@ -3993,7 +3993,7 @@
       "routing": {
         "intent": "web_fact",
         "is_lore": false,
-        "is_gameplay": true
+        "is_gameplay": false
       },
       "expected": {
         "requirements": [
@@ -4011,7 +4011,7 @@
       "routing": {
         "intent": "web_fact",
         "is_lore": false,
-        "is_gameplay": true
+        "is_gameplay": false
       },
       "expected": {
         "requirements": [
@@ -4029,7 +4029,7 @@
       "routing": {
         "intent": "web_fact",
         "is_lore": false,
-        "is_gameplay": true
+        "is_gameplay": false
       },
       "expected": {
         "requirements": [
@@ -4047,7 +4047,7 @@
       "routing": {
         "intent": "web_fact",
         "is_lore": false,
-        "is_gameplay": true
+        "is_gameplay": false
       },
       "expected": {
         "requirements": [
@@ -4065,7 +4065,7 @@
       "routing": {
         "intent": "web_fact",
         "is_lore": false,
-        "is_gameplay": true
+        "is_gameplay": false
       },
       "expected": {
         "requirements": [
@@ -4083,7 +4083,7 @@
       "routing": {
         "intent": "web_fact",
         "is_lore": false,
-        "is_gameplay": true
+        "is_gameplay": false
       },
       "expected": {
         "requirements": [
@@ -4101,7 +4101,7 @@
       "routing": {
         "intent": "web_fact",
         "is_lore": false,
-        "is_gameplay": true
+        "is_gameplay": false
       },
       "expected": {
         "requirements": [
@@ -4119,7 +4119,7 @@
       "routing": {
         "intent": "web_fact",
         "is_lore": false,
-        "is_gameplay": true
+        "is_gameplay": false
       },
       "expected": {
         "requirements": [
@@ -4137,7 +4137,7 @@
       "routing": {
         "intent": "web_fact",
         "is_lore": false,
-        "is_gameplay": true
+        "is_gameplay": false
       },
       "expected": {
         "requirements": [
