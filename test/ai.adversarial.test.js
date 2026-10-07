@@ -88,7 +88,7 @@ test('validator accepts multilingual paraphrased evidence from the same source b
       evidence_quote: 'Their relationship was damaged after Arasaka captured Alt, and Johnny\'s hatred of Arasaka intensified.',
     }],
   }, 'test-model', 'test', new Set(['SOURCE 1']), english, 'Johnny był związany z Alt, a działania Arasaki pogłębiły jego konflikt z korporacją.');
-  assert.equal(result.status, 'accepted');
+  assert.equal(result.status, 'accepted', JSON.stringify(result.diagnostics));
   assert.equal(result.ok, true);
 });
 
