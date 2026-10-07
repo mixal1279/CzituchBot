@@ -15,11 +15,11 @@ function normalizujStrukturalnePodsumowanie(value) {
   };
   if (!result.entities.length && !result.preferences.length && !result.decisions.length && !result.open_questions.length && !result.recent_context) return null;
   const sections = [];
-  if (result.entities.length) sections.push(`Encje: \${result.entities.join(', ')}`);
-  if (result.preferences.length) sections.push(`Preferencje: \${result.preferences.join('; ')}`);
-  if (result.decisions.length) sections.push(`Ustalenia: \${result.decisions.join('; ')}`);
-  if (result.open_questions.length) sections.push(`Otwarte pytania: \${result.open_questions.join('; ')}`);
-  if (result.recent_context) sections.push(`Kontekst: \${result.recent_context}`);
+  if (result.entities.length) sections.push(`Encje: ${result.entities.join(', ')}`);
+  if (result.preferences.length) sections.push(`Preferencje: ${result.preferences.join('; ')}`);
+  if (result.decisions.length) sections.push(`Ustalenia: ${result.decisions.join('; ')}`);
+  if (result.open_questions.length) sections.push(`Otwarte pytania: ${result.open_questions.join('; ')}`);
+  if (result.recent_context) sections.push(`Kontekst: ${result.recent_context}`);
   return sections.join(' | ').slice(0, 1400);
 }
 function parsujStrukturalnePodsumowanie(text) {
