@@ -69,3 +69,47 @@ test('multilingual evidence does not accept a contradictory action', () => {
   assert.equal(result.status, 'rejected');
   assert.equal(result.diagnostics.localRejectReasons.includes('evidence_not_verified'), true);
 });
+
+test('validator accepts multilingual paraphrased evidence from the same source block', () => {
+  const english = '[SOURCE 1]\nTYTUŁ: Cyberpunk 2077 lore\nTREŚĆ: Johnny Silverhand and Alt Cunningham were romantically involved. Their relationship was damaged after Arasaka captured Alt, and Johnny\'s hatred of Arasaka intensified.';
+  const result = normalizujWynikWalidatora({
+    valid: true,
+    reason: 'confirmed',
+    unsupported_claims: [],
+    supported: true,
+    relevant: true,
+    complete: true,
+    hallucination: false,
+    confidence: 0.96,
+    claims: [{
+      claim: 'Johnny Silverhand był związany z Alt Cunningham, a porwanie Alt przez Arasakę pogłębiło jego konflikt z Arasaką.',
+      supported: true,
+      source_ids: ['SOURCE 1'],
+      evidence_quote: 'Their relationship was damaged after Arasaka captured Alt, and Johnny\'s hatred of Arasaka intensified.',
+    }],
+  }, 'test-model', 'test', new Set(['SOURCE 1']), english, 'Johnny był związany z Alt, a działania Arasaki pogłębiły jego konflikt z korporacją.');
+  assert.equal(result.status, 'accepted');
+  assert.equal(result.ok, true);
+});
+
+test('validator keeps rejecting evidence whose action contradicts the source', () => {
+  const english = '[SOURCE 1]\nTYTUŁ: Cyberpunk 2077 lore\nTREŚĆ: Johnny Silverhand and Alt Cunningham were romantically involved. Arasaka captured Alt, which intensified Johnny\'s hatred of Arasaka.';
+  const result = normalizujWynikWalidatora({
+    valid: true,
+    reason: 'confirmed',
+    unsupported_claims: [],
+    supported: true,
+    relevant: true,
+    complete: true,
+    hallucination: false,
+    confidence: 0.96,
+    claims: [{
+      claim: 'Arasaka zabiła Alt Cunningham.',
+      supported: true,
+      source_ids: ['SOURCE 1'],
+      evidence_quote: 'Arasaka captured Alt.',
+    }],
+  }, 'test-model', 'test', new Set(['SOURCE 1']), english, 'Arasaka zabiła Alt Cunningham.');
+  assert.equal(result.status, 'rejected');
+  assert.equal(result.diagnostics.localRejectReasons.includes('evidence_not_verified'), true);
+});

@@ -4,11 +4,11 @@ const NEGATION_RE = /\b(?:nie|nigdy|brak|bez|żaden|żadna|żadne|never|no|not)\
 const CAUSAL_RE = /\b(?:bo|ponieważ|gdyż|dlatego|z\s+powodu|w\s+celu|żeby|aby|chciał(?:a|o)?|chcia(?:ł|ła|li)|celem|because|therefore|due\s+to)\b/iu;
 const TEMPORAL_RE = /\b(?:19|20)\d{2}\b|\b(?:styczeń|luty|marzec|kwiecień|maj|czerwiec|lipiec|sierpień|wrzesień|październik|listopad|grudzień)\b|\b(?:wczoraj|dzisiaj|jutro|today|yesterday|tomorrow)\b/iu;
 const CROSS_LANGUAGE_CONCEPTS = [
-  ['porwanie', /kidnap\w*|abduct\w*|porwan\w*|uprowadz\w*/i],
+  ['porwanie', /kidnap\w*|abduct\w*|captur\w*|porwan\w*|uprowadz\w*/i],
   ['obrazenia', /injur\w*|wound\w*|hurt\w*|rann\w*|obraż\w*/i],
   ['zabojstwo', /kill\w*|murder\w*|death|dead|zabij\w*|zgin\w*|śmier\w*/i],
-  ['konflikt', /conflict\w*|feud\w*|fight\w*|war\w*|konflikt\w*|walcz\w*|wojn\w*/i],
-  ['zwiazek', /relationship\w*|girlfriend\w*|boyfriend\w*|partner\w*|romanc\w*|zwi[aą]zk\w*|relacj\w*|dziewczyn\w*|chłopak\w*|partner\w*/i],
+  ['konflikt', /conflict\w*|feud\w*|fight\w*|war\w*|hatred|hate\w*|konflikt\w*|walcz\w*|wojn\w*/i],
+  ['zwiazek', /relationship\w*|girlfriend\w*|boyfriend\w*|partner\w*|romanc\w*|romantic\w*|involved|zwi[aą]zk\w*|zwiaz\w*|relacj\w*|dziewczyn\w*|chłopak\w*/i],
   ['pomoc', /help\w*|assist\w*|save\w*|rescu\w*|pomog\w*|pomaga\w*|urat\w*|ocal\w*/i],
   ['kontrola', /control\w*|take[s]?\s+over|command\w*|manipulat\w*|kontrol\w*|przej[aą]ł\w*|manipul\w*/i],
   ['porazka', /defeat\w*|beaten|overcome\w*|pokon\w*|pora[zż]k\w*/i],
@@ -76,6 +76,13 @@ function wyodrebnijNazwyWlasne(value) {
 function wyodrebnijMarkery(value, regex) {
   return regex.test(normalizujClaim(value));
 }
+function czyNazwaWlasnaWystepuje(entity, evidenceNormalized) {
+  if (evidenceNormalized.includes(entity)) return true;
+  const parts = entity.split(' ').filter(Boolean);
+  if (parts.length !== 1 || entity.length < 6) return false;
+  const stem = entity.slice(0, Math.max(5, entity.length - 2));
+  return evidenceNormalized.split(' ').some(token => token.length >= stem.length && token.startsWith(stem));
+}
 function zgodnoscStrukturalna(evidence, claim, options = {}) {
   const e = String(evidence || '');
   const c = String(claim || '');
@@ -109,7 +116,7 @@ function zgodnoscStrukturalna(evidence, claim, options = {}) {
   const claimEntities = wyodrebnijNazwyWlasne(c);
   const evidenceNormalized = normalizujClaim(e);
   if (claimEntities.length) {
-    const missingEntities = claimEntities.filter(entity => !evidenceNormalized.includes(entity));
+    const missingEntities = claimEntities.filter(entity => !czyNazwaWlasnaWystepuje(entity, evidenceNormalized));
     if (missingEntities.length > 0) return { ok: false, reason: 'dowód nie zawiera wszystkich istotnych nazw własnych claimu' };
   }
 
@@ -142,16 +149,28 @@ function tokenyPokrywajaSie(a, b) {
 }
 function sprawdzPokrycieClaimamiOdpowiedzi(answer, claims) {
   const sentences = String(answer || '').split(/(?<=[.!?])\s+|\n+/).map(x => x.trim()).filter(Boolean);
-  const claimTexts = (Array.isArray(claims) ? claims : []).map(c => tokenyPokrycia(c?.claim || '')).filter(t => t.length >= 2);
+  const claimRows = (Array.isArray(claims) ? claims : [])
+    .map(c => ({
+      tokens: tokenyPokrycia(c?.claim || ''),
+      concepts: pojeciaCrossLanguage(c?.claim || ''),
+      entities: wyodrebnijNazwyWlasne(c?.claim || ''),
+    }))
+    .filter(row => row.tokens.length >= 2 || row.concepts.size || row.entities.length);
   const uncovered = [];
   let checkedSentences = 0;
   for (const [sentenceIndex, sentence] of sentences.entries()) {
     const tokens = tokenyPokrycia(sentence);
     if (tokens.length < 2) continue;
     checkedSentences++;
-    const maxCoverage = claimTexts.reduce((best, claimTokens) => {
-      const covered = tokens.filter(t => claimTokens.some(c => tokenyPokrywajaSie(t, c))).length / tokens.length;
-      return Math.max(best, covered);
+    const sentenceConcepts = pojeciaCrossLanguage(sentence);
+    const sentenceEntities = wyodrebnijNazwyWlasne(sentence);
+    const maxCoverage = claimRows.reduce((best, row) => {
+      const covered = tokens.filter(t => row.tokens.some(c => tokenyPokrywajaSie(t, c))).length / Math.max(tokens.length, 1);
+      const sharedConcepts = [...sentenceConcepts].filter(concept => row.concepts.has(concept)).length;
+      const sharedEntities = sentenceEntities.filter(entity => row.entities.includes(entity)).length;
+      const conceptCoverage = row.concepts.size ? sharedConcepts / row.concepts.size : 0;
+      const entityCoverage = row.entities.length ? sharedEntities / row.entities.length : 0;
+      return Math.max(best, covered, conceptCoverage >= 0.5 ? 0.75 : 0, entityCoverage >= 0.5 ? 0.75 : 0);
     }, 0);
     if (maxCoverage < 0.65) uncovered.push({ index: sentenceIndex, text: sentence.slice(0, 180) });
   }
@@ -163,7 +182,7 @@ function sprawdzPokrycieClaimamiOdpowiedzi(answer, claims) {
     uncovered: uncovered.slice(0, 4).map(item => item.text),
   };
 }
-function czyDowodSemantyczniePokrywaClaim(evidence, claim) {
-  return zgodnoscStrukturalna(evidence, claim).ok;
+function czyDowodSemantyczniePokrywaClaim(evidence, claim, options = {}) {
+  return zgodnoscStrukturalna(evidence, claim, options).ok;
 }
 module.exports = { normalizujClaim, tokenyClaim, wyodrebnijLiczbyIDaty, wyodrebnijJednostkoweWartosci, wyodrebnijNazwyWlasne, zgodnoscStrukturalna, sprawdzPokrycieClaimamiOdpowiedzi, czyDowodSemantyczniePokrywaClaim };
