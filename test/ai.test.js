@@ -157,7 +157,7 @@ const policy = (q, recipe) => recipe(q) ? 'minecraft_recipe' : /pogoda/i.test(q)
   assert.equal(sprawdzFormatOdpowiedzi('Sprawdź https://example.com').ok, false);
 }
 
-assert.match(require('fs').readFileSync(require('path').join(__dirname, '..', 'czituch_bot.js'), 'utf8'), /generujOdpowiedz\\(max_tokens, promptRetry, 'soft validation retry', false\\)/);
+assert.match(require('fs').readFileSync(require('path').join(__dirname, '..', 'czituch_bot.js'), 'utf8'), /generujOdpowiedz\(max_tokens, promptRetry, 'soft validation retry', false\)/);
 {
   assert.deepEqual(parseMemoryCommand('co o mnie pamiętasz?'), { type:'list' });
   assert.deepEqual(parseMemoryCommand('zapomnij Czituch'), { type:'forget', query:'Czituch' });
@@ -323,7 +323,7 @@ console.log('AI regression tests: OK');
 
 {
   const source = require('fs').readFileSync(require('path').join(__dirname, '..', 'czituch_bot.js'), 'utf8');
-  assert.match(source, /generujOdpowiedz\\(max_tokens, promptRetry, 'soft validation retry', false\\)/);
+  assert.match(source, /generujOdpowiedz\(max_tokens, promptRetry, 'soft validation retry', false\)/);
   assert.match(source, /const retrievalText = String\(wynik\?\.text \|\| ''\);/);
   assert.match(source, /const retrievalSourceCount = \(retrievalText\.match\(\/\\\[\(\?:SOURCE\|REFERENCE\) \[\^\\\]\]\+\\\]\/g\) \|\| \[\]\)\.length;/);
   assert.match(source, /weakRetrieval = !retrievalText/);
