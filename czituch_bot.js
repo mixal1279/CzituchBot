@@ -518,7 +518,7 @@ const KONFIGURACJA = {
   groqKey: process.env.GROQ_API_KEY,
 
   // ---- Mistral (fallback po Groq 20B) ----
-  mistralKey:   process.env.MISTRAL_API_KEY,
+  mistralKey:   typeof process.env.MISTRAL_API_KEY === 'string' ? process.env.MISTRAL_API_KEY.replace(/[\\r\\n]/g, '').trim() : process.env.MISTRAL_API_KEY,
   mistralModel: process.env.MISTRAL_MODEL || 'mistral-small-latest',
 
   // ---- ITAD ----
