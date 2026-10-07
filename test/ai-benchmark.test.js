@@ -15,7 +15,7 @@ const ANSWERS = Object.freeze({
   how: 'Najpierw wykonaj pierwszy krok, następnie drugi krok, a potem wykonaj kolejną czynność.',
   when: 'W 2020 roku, w odpowiednim momencie historii.',
   where: 'Znajdziesz to w konkretnej lokacji na mapie, przy wskazanym miejscu.',
-  who: 'To postać związana z tą historią i pełniąca określoną rolę.',
+  who: 'Bohater pełni określoną rolę w historii i jest związany z wydarzeniami.',
   quantity: 'To około 20 godzin.',
   comparison: 'Różnią się rolą i zachowaniem, natomiast obie postacie mają znaczenie dla historii.',
   outcome: 'Ostatecznie wydarzenia doprowadziły do określonego wyniku.',
