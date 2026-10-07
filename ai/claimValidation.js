@@ -62,8 +62,10 @@ function zgodnoscStrukturalna(evidence, claim) {
   const ct = tokenyClaim(c);
   const et = new Set(tokenyClaim(e));
   const overlap = ct.length ? ct.filter(t => et.has(t)).length / ct.length : 0;
-  const threshold = ct.length <= 5 ? 0.67 : 0.60;
-  if (overlap < threshold) return { ok: false, reason: `zbyt małe pokrycie semantyczne (\${overlap.toFixed(2)} < \${threshold.toFixed(2)})` };
+  const threshold = claimEntities.length && claimEntities.every(entity => evidenceNormalized.includes(entity))
+    ? 0.50
+    : (ct.length <= 5 ? 0.67 : 0.60);
+  if (overlap < threshold) return { ok: false, reason: `zbyt małe pokrycie semantyczne (${overlap.toFixed(2)} < ${threshold.toFixed(2)})` };
   return { ok: true, overlap };
 }
 function czyDowodSemantyczniePokrywaClaim(evidence, claim) {
