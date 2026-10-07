@@ -6,7 +6,7 @@ const TEMPORAL_RE = /\b(?:19|20)\d{2}\b|\b(?:styczeń|luty|marzec|kwiecień|maj|
 const CROSS_LANGUAGE_CONCEPTS = [
   ['porwanie', /kidnap\w*|abduct\w*|captur\w*|porwan\w*|uprowadz\w*/i],
   ['obrazenia', /injur\w*|wound\w*|hurt\w*|rann\w*|obraż\w*/i],
-  ['zabojstwo', /kill\w*|murder\w*|death|dead|zabij\w*|zgin\w*|śmier\w*/i],
+  ['zabojstwo', /kill\w*|murder\w*|death|dead|zabij\w*|zabil\w*|zabila\w*|zabici\w*|zabity\w*|zabicie\w*|zgin\w*|śmier\w*/i],
   ['konflikt', /conflict\w*|feud\w*|fight\w*|war\w*|hatred|hate\w*|konflikt\w*|walcz\w*|wojn\w*/i],
   ['zwiazek', /relationship\w*|girlfriend\w*|boyfriend\w*|partner\w*|romanc\w*|romantic\w*|involved|zwi[aą]zk\w*|zwiaz\w*|relacj\w*|dziewczyn\w*|chłopak\w*/i],
   ['pomoc', /help\w*|assist\w*|save\w*|rescu\w*|pomog\w*|pomaga\w*|urat\w*|ocal\w*/i],
