@@ -1,6 +1,7 @@
 'use strict';
 
 const fs = require('fs');
+const { resolveGameEntity, normalizujEncje } = require('./entities');
 const { AI_MODELS } = require('./modelConfig');
 const { searchSecondaryProviders } = require('./webRetrieval');
 
@@ -192,18 +193,81 @@ function zbudujRaportKonfliktowTavily(conflicts) {
   ].join('\n');
 }
 function rerankujWynikiTavily(results, sourceQuestion, requestedDomains = [], options = {}) {
+  const input = Array.isArray(results) ? results : [];
   const keywords = slowaKluczoweTavily(sourceQuestion);
-  return [...(Array.isArray(results) ? results : [])].map((result, index) => {
+  const resolvedEntity = resolveGameEntity(sourceQuestion);
+  const entityTerms = resolvedEntity
+    ? [resolvedEntity.name, resolvedEntity.game].filter(Boolean).map(normalizujEncje)
+    : [];
+  const now = Date.now();
+
+  const candidates = input.map((result, index) => {
     const quality = ocenaZrodlaLokalnie(result?.url, requestedDomains);
-    const qualityBonus = quality === 'oficjalne' ? 0.12 : quality === 'wyspecjalizowane' ? 0.12 : quality === 'guide/referencyjne' ? 0.02 : 0;
-    const haystack = normalizujTokenTavily([result?.title, result?.content].filter(Boolean).join(' '));
-    const coverage = keywords.length ? keywords.filter(k => haystack.includes(k)).length / keywords.length : 0;
+    const qualityBonus = quality === 'oficjalne'
+      ? 0.12
+      : quality === 'wyspecjalizowane'
+        ? 0.10
+        : quality === 'guide/referencyjne'
+          ? 0.02
+          : 0;
+
+    const haystack = normalizujTokenTavily(
+      [result?.title, result?.content].filter(Boolean).join(' '),
+    );
+    const coverage = keywords.length
+      ? keywords.filter(k => haystack.includes(k)).length / keywords.length
+      : 0;
     const coverageBonus = Math.min(0.15, coverage * 0.15);
+
+    const entityCoverage = entityTerms.length
+      ? entityTerms.filter(term => haystack.includes(normalizujTokenTavily(term))).length / entityTerms.length
+      : 0;
+    const entityBonus = Math.min(0.10, entityCoverage * 0.10);
+
     const baseScore = typeof result?.score === 'number' ? result.score : 0;
     const published = dataZrodlaTavily(result);
-    const freshnessBonus = options.freshness === 'live' && published ? (published >= Date.now() - 7 * 86400000 ? 0.08 : 0) : 0;
-    return { result, index, rerankScore: baseScore + qualityBonus + coverageBonus + freshnessBonus };
-  }).sort((a, b) => b.rerankScore - a.rerankScore || a.index - b.index).map(x => x.result);
+    let freshnessBonus = 0;
+    if (published && options.freshness === 'live') {
+      const ageMs = Math.max(0, now - published);
+      freshnessBonus = ageMs <= 7 * 86400000 ? 0.08 : ageMs <= 30 * 86400000 ? 0.03 : -0.03;
+    } else if (published && options.freshness === 'recent') {
+      const ageMs = Math.max(0, now - published);
+      freshnessBonus = ageMs <= 7 * 86400000 ? 0.05 : ageMs <= 30 * 86400000 ? 0.02 : -0.02;
+    }
+
+    return {
+      result,
+      index,
+      host: (() => {
+        try { return new URL(result?.url).hostname.toLowerCase().replace(/^www\\./, ''); }
+        catch (_) { return ''; }
+      })(),
+      rerankScore: baseScore + qualityBonus + coverageBonus + entityBonus + freshnessBonus,
+    };
+  });
+
+  // Greedy dobór utrzymuje jakość pierwszego wyniku, ale przy remisach/zbliżonych
+  // wynikach premiuje różne hosty. Dzięki temu ranking nie składa się z czterech
+  // kopii tej samej strony tylko dlatego, że ma minimalnie wyższy score.
+  const ranked = [];
+  const remaining = [...candidates];
+  while (remaining.length) {
+    let bestIndex = 0;
+    let bestAdjusted = -Infinity;
+    for (let i = 0; i < remaining.length; i++) {
+      const candidate = remaining[i];
+      const duplicateHost = candidate.host && ranked.some(x => x.host === candidate.host);
+      const diversityAdjustment = duplicateHost ? -0.025 : (ranked.length ? 0.025 : 0);
+      const adjusted = candidate.rerankScore + diversityAdjustment;
+      if (adjusted > bestAdjusted || (adjusted === bestAdjusted && candidate.index < remaining[bestIndex].index)) {
+        bestAdjusted = adjusted;
+        bestIndex = i;
+      }
+    }
+    ranked.push(remaining.splice(bestIndex, 1)[0]);
+  }
+
+  return ranked.map(x => x.result);
 }
 
 function ocenaZrodlaLokalnie(url, requestedDomains = []) {
