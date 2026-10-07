@@ -14,7 +14,7 @@ const ANSWERS = Object.freeze({
   why: 'Powodem była konkretna sytuacja fabularna. Ponieważ zaszły określone wydarzenia, dlatego postać podjęła tę decyzję.',
   how: 'Najpierw wykonaj pierwszy krok, następnie drugi krok, a potem wykonaj kolejną czynność.',
   when: 'W 2020 roku, w odpowiednim momencie historii.',
-  where: 'Znajdziesz to w odpowiednim miejscu w grze.',
+  where: 'Znajdziesz to w konkretnej lokacji na mapie, przy wskazanym miejscu.',
   who: 'To postać związana z tą historią i pełniąca określoną rolę.',
   quantity: 'To około 20 godzin.',
   comparison: 'Różnią się rolą i zachowaniem, natomiast obie postacie mają znaczenie dla historii.',
