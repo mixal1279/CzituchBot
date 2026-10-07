@@ -107,6 +107,16 @@ function sprawdzTwardeKonflikty(evidence, claim, options = {}) {
 function sprawdzSprzecznosciSemantyczne(evidence, claim) {
   const eConcepts = pojeciaCrossLanguage(evidence);
   const cConcepts = pojeciaCrossLanguage(claim);
+  const eAction = {
+    captured: /captur\\w*|porwan\\w*|uprowadz\\w*|schwyt\\w*/i.test(normalizujClaim(evidence)),
+    killed: /kill\\w*|murder\\w*|zabij\\w*|zabil\\w*|zabila\\w*|zabici\\w*|zabity\\w*|zabicie\\w*|śmier\\w*/i.test(normalizujClaim(evidence)),
+  };
+  const cAction = {
+    captured: /captur\\w*|porwan\\w*|uprowadz\\w*|schwyt\\w*/i.test(normalizujClaim(claim)),
+    killed: /kill\\w*|murder\\w*|zabij\\w*|zabil\\w*|zabila\\w*|zabici\\w*|zabity\\w*|zabicie\\w*|śmier\\w*/i.test(normalizujClaim(claim)),
+  };
+  if (cAction.killed && eAction.captured && !eAction.killed) return { ok: false, reason: 'claim zawiera zabójstwo, a dowód potwierdza jedynie schwytanie/porwanie' };
+  if (cAction.captured && eAction.killed && !eAction.captured) return { ok: false, reason: 'claim zawiera schwytanie/porwanie, a dowód potwierdza zabójstwo' };
   const opposites = [['porwanie','zabojstwo'], ['obrazenia','zabojstwo'], ['pomoc','kontrola'], ['porazka','kontrola']];
   for (const [a,b] of opposites) {
     if (cConcepts.has(b) && eConcepts.has(a) && !eConcepts.has(b)) return { ok: false, reason: 'claim zawiera sprzeczne działanie względem dowodu' };
