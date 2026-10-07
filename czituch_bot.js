@@ -1533,7 +1533,7 @@ Zwróć WYŁĄCZNIE JSON: {"valid":true/false,"reason":"krótki powód","confide
     // transient transport failures. Keep Gemini on a short cooldown and let
     // the independent OpenRouter validator handle this request instead of
     // spending another Gemini slot during a regeneration.
-    if (transient) geminiValidatorCooldownUntil = Date.now() + (quota ? 90_000 : 30_000);
+    if (transient) geminiValidatorCooldownUntil = Date.now() + (quota ? 90_000 : 60_000);
     return {
       status: 'unavailable',
       ok: false,
