@@ -2379,10 +2379,10 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
     console.log(`[AI][${requestId}] fallback policy=${failureType || 'unknown'} next=${JSON.stringify(nextFallbacks({ failure: failureType, attempted: ['groq:openai/gpt-oss-120b'] }))}`);
     const attempted = ['groq:openai/gpt-oss-120b'];
     const fallbackSteps = {
-      `groq:${AI_MODELS.queryRewrite}`: () => zapytajGlowny(Math.max(maxTok, 300), prompt, 'openai/gpt-oss-20b'),
+      'groq:openai/gpt-oss-20b': () => zapytajGlowny(Math.max(maxTok, 300), prompt, 'openai/gpt-oss-20b'),
       'mistral:default': () => zapytajMistral(Math.max(maxTok, 300), prompt, powod),
-      `gemini:${AI_MODELS.generatorGemini}`: () => zapytajGeminiFallback(Math.max(maxTok, 300), prompt, powod),
-      `gemini:${AI_MODELS.generatorGeminiLite}`: () => zapytajGeminiLiteFallback(Math.max(maxTok, 300), prompt, powod),
+      'gemini:gemini-3.8-flash': () => zapytajGeminiFallback(Math.max(maxTok, 300), prompt, powod),
+      'gemini:gemini-3.5-flash-lite': () => zapytajGeminiLiteFallback(Math.max(maxTok, 300), prompt, powod),
       'openrouter:default': () => zapytajOpenRouterFallback(Math.max(maxTok, 300), prompt, powod),
     };
     for (const step of nextFallbacks({ failure: failureType, attempted })) {
