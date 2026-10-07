@@ -124,7 +124,7 @@ test('genitive Johnny Silverhand mention resolves Cyberpunk 2077 without naming 
 });
 
 test('natural dative Johnny Silverhand inflection resolves correctly', () => {
-  const resolved = resolveGameEntity('Jak Johnnyemu Silverhandowi pomogła Alt Cunningham?');
+  const resolved = resolveGameEntity('Jak Johnnemu Silverhandowi pomogła Alt Cunningham?');
   assert.equal(resolved?.name, 'Johnny Silverhand');
   assert.equal(resolved?.game, 'Cyberpunk 2077');
 });
