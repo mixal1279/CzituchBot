@@ -1,4 +1,6 @@
 'use strict';
+
+const { buildRetrievalPlan: buildCoreRetrievalPlan } = require('./core');
 function unique(items){const out=[],seen=new Set();for(const item of Array.isArray(items)?items:[]){const q=String(item||'').replace(/\s+/g,' ').trim(),k=q.toLocaleLowerCase('pl-PL');if(q.length>=8&&!seen.has(k)){seen.add(k);out.push(q);}}return out;}
 function decomposeQuestion(question,routing={}) {
   const q=String(question||'').replace(/\s+/g,' ').trim();
@@ -47,7 +49,30 @@ function extractCarryoverEntities(text) {
       return !stop.has(first) && x.length >= 3;
     }))].slice(0, 3);
 }
-function buildAdvancedRetrievalPlan(question,routing={},baseQueries=[]){const q=String(question||'').trim(),entity=String(routing.game||routing.entity||'').trim(),plan=[...baseQueries],parts=decomposeQuestion(q,routing);if(parts.length>1)for(const part of parts.slice(0,3))plan.push(part);if(routing.is_lore)plan.push((entity||q)+' plot story lore facts');if(routing.is_gameplay)plan.push((entity||q)+' walkthrough guide solution');if(routing.freshness==='live')plan.push((entity||q)+' latest official');if(routing.freshness==='recent')plan.push((entity||q)+' latest');return unique(plan).slice(0,4).map((query,index)=>({query,priority:index===0?'primary':index===1?'secondary':'fallback',reason:index===0?'original':routing.is_lore?'lore':routing.is_gameplay?'gameplay':'coverage'}));}
+function buildAdvancedRetrievalPlan(question, routing = {}, baseQueries = []) {
+  const corePlan = buildCoreRetrievalPlan(question, routing, { maxQueries: 5 });
+  const legacy = Array.isArray(baseQueries) ? baseQueries : [];
+  const merged = [];
+  const seen = new Set();
+  for (const item of [...corePlan, ...legacy.map(query => ({ query, priority: 'fallback', reason: 'legacy' }))]) {
+    const q = String(item?.query || '').replace(/\\s+/g, ' ').trim();
+    const key = normalizujToken(q);
+    if (q.length < 8 || seen.has(key)) continue;
+    seen.add(key);
+    merged.push({
+      query: q,
+      priority: item.priority || (merged.length === 0 ? 'primary' : 'fallback'),
+      reason: item.reason || 'coverage',
+    });
+  }
+  return merged.slice(0, 5);
+}
+function normalizujToken(value) {
+  return String(value || '').toLocaleLowerCase('pl-PL')
+    .normalize('NFD').replace(/[\\u0300-\\u036f]/g, '')
+    .replace(/\\s+/g, ' ').trim();
+}
+
 function sourceHost(url){try{return new URL(url).hostname.toLowerCase().replace(/^www\./,'');}catch(_){return '';}}
 function sourceQualityScore(source={}){const score=Number(source.score);const authority=String(source.authority||'').toLowerCase();const authorityBonus=authority==='oficjalne'?0.25:authority==='wyspecjalizowane'?0.2:authority.includes('guide')?0.08:0;return (Number.isFinite(score)?score:0)+authorityBonus;}
 function sourceTokens(source={}){return [...new Set(String([source.title,source.content,source.snippet].filter(Boolean).join(' ')).toLocaleLowerCase('pl-PL').normalize('NFD').replace(/[\u0300-\u036f]/g,'').match(/[\p{L}\p{N}]{3,}/gu)||[])];}
