@@ -2646,6 +2646,18 @@ function oczyscOdpowiedzPrzedWalidacja(tekst) {
         }
       }
     }
+    if (walidacja.status === 'accepted' && answerJudge?.status === 'repair') {
+      // A known-incomplete answer must never escape merely because the repair
+      // budget was exhausted or repair generation produced no usable text.
+      walidacja = {
+        ...walidacja,
+        status: 'rejected',
+        ok: false,
+        valid: false,
+        complete: false,
+        reason: 'odpowiedź pozostaje niekompletna po wyczerpaniu możliwości naprawy',
+      };
+    }
     const validationDecision = decideValidation(walidacja.status, { allowRetry: false });
     aiState.finalStatus = validationDecision.finalStatus;
     odp = finalizeAIPipelineText(odp, validationDecision.finalStatus, {
