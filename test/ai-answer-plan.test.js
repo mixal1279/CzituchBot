@@ -1,0 +1,9 @@
+'use strict';
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const { buildAnswerPlan } = require('../ai/answer-plan');
+const { judgeAnswer } = require('../ai/answer-judge');
+test('v26 answer plan identifies causal lore requirements', () => { const plan = buildAnswerPlan('Dlaczego Wheatley przejął kontrolę nad GLaDOS w Portal 2?', { intent:'web_fact', is_lore:true, entity:'Wheatley', game:'Portal 2' }); assert.ok(plan.requirements.some(x => x.id === 'why')); assert.ok(plan.requirements.some(x => x.id === 'causal_explanation')); assert.ok(plan.requirements.some(x => x.id === 'entity_context')); });
+test('v26 answer plan detects multiple clauses', () => { const plan = buildAnswerPlan('Dlaczego Wheatley przejął kontrolę nad GLaDOS i co doprowadziło do jego porażki?', { intent:'web_fact', is_lore:true, entity:'Wheatley', game:'Portal 2' }); assert.equal(plan.clauses.length, 2); assert.equal(plan.complexity, 'high'); });
+test('v26 judge detects grounded but incomplete causal answer', () => { const plan = buildAnswerPlan('Dlaczego Wheatley przejął kontrolę nad GLaDOS?', { intent:'web_fact', is_lore:true, entity:'Wheatley', game:'Portal 2' }); const result = judgeAnswer('Wheatley przejął kontrolę nad GLaDOS w Portal 2.', plan); assert.equal(result.status, 'repair'); assert.ok(result.missing.includes('causal_explanation')); });
+test('v26 judge accepts complete causal answer', () => { const plan = buildAnswerPlan('Dlaczego Wheatley przejął kontrolę nad GLaDOS?', { intent:'web_fact', is_lore:true, entity:'Wheatley', game:'Portal 2' }); const result = judgeAnswer('Wheatley przejął kontrolę nad GLaDOS, ponieważ podczas wymiany rdzeni został umieszczony w jej systemie, a następnie wykorzystał swoją pozycję, by przejąć kontrolę.', plan); assert.equal(result.status, 'accepted'); });
