@@ -977,6 +977,27 @@ function domenyDlaPytania(pytanie, domyslnieMinecraft = false) {
 // ALE tylko gdy domenyDlaPytania nie zwróciło już konkretnych domen (np. minecraft.wiki).
 async function wybierzDomenyDlaPytania(pytanie, domyslnieMinecraft = false, requestState = null) {
   let domeny = domenyDlaPytania(pytanie, domyslnieMinecraft);
+
+  // Deterministyczny resolver encji ma pierwszeństwo przed klasyfikatorem
+  // LLM + IGDB. Zapobiega to sytuacji, w której np. „Johnny Silverhand”
+  // zostanie błędnie przepisany przez model na przypadkowy tytuł gry.
+  if (!domeny) {
+    const resolvedEntity = resolveGameEntity(pytanie);
+    if (resolvedEntity?.game && resolvedEntity.confidence >= 0.80) {
+      const resolvedGame = {
+        nazwa: resolvedEntity.game,
+        confidence: resolvedEntity.confidence,
+        resolution: resolvedEntity.resolution,
+        matchedAlias: resolvedEntity.matchedAlias,
+      };
+      console.log(`[Entity] Gra: ${resolvedGame.nazwa} (confidence=${resolvedGame.confidence.toFixed(2)}, resolution=${resolvedGame.resolution})`);
+      domeny = ['ign.com', 'gamespot.com', 'pcgamer.com', 'eurogamer.net', 'fandom.com'];
+      domeny.resolvedGame = resolvedGame;
+    }
+  }
+
+  // IGDB jest tylko fallbackiem dla pytań, których lokalny resolver nie
+  // rozpoznał. Nie pozwalamy mu nadpisywać pewnej encji z pytania.
   if (!domeny && KONFIGURACJA.twitchClientId) {
     try {
       const gra = await znajdzGreIGDB(pytanie, requestState);
