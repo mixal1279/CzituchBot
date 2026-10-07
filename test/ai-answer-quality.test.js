@@ -29,7 +29,7 @@ const fixtures = [
   {
     name: 'Portal 2 relation',
     source: 'GLaDOS przegrywa z Wheatleyem po przejęciu kontroli nad systemem.',
-    claim: 'Wheatley przejmuje kontrolę nad systemem, a GLaDOS przegrywa.',
+    claim: 'GLaDOS przegrywa po przejęciu kontroli nad systemem przez Wheatleya.',
     evidence: 'GLaDOS przegrywa z Wheatleyem po przejęciu kontroli nad systemem.',
     accepted: true,
   },
