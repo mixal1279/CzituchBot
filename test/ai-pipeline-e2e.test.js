@@ -49,6 +49,7 @@ test('actual zapytajAI pipeline survives validator rejection and succeeds after 
         'TYTUŁ: Portal 2 — źródło B',
         'TREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>',
         'Po transferze do ciała GLaDOS Wheatley przejmuje kontrolę nad systemem.',
+        'Dodatkowy kontekst fixture: transfer, system Aperture, GLaDOS i Wheatley są opisane w tym samym źródle testowym. '.repeat(12),
         '<<<END_UNTRUSTED_SOURCE_CONTENT>>>',
       ].join('\\n'),
       meta: { sourceCount: 2 },
