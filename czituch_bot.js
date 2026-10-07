@@ -978,6 +978,14 @@ function domenyDlaPytania(pytanie, domyslnieMinecraft = false) {
 async function wybierzDomenyDlaPytania(pytanie, domyslnieMinecraft = false, requestState = null) {
   let domeny = domenyDlaPytania(pytanie, domyslnieMinecraft);
   if (!domeny && KONFIGURACJA.twitchClientId) {
+    const znanaGra = resolveGameEntity(pytanie);
+    if (znanaGra?.game) {
+      console.log('[IGDB] Pomijam classifier — używam encji deterministycznej:', znanaGra.game);
+      domeny = ['ign.com', 'gamespot.com', 'pcgamer.com', 'eurogamer.net', 'fandom.com'];
+      domeny.resolvedGame = { nazwa: znanaGra.game, confidence: znanaGra.confidence, resolution: 'deterministic' };
+    }
+  }
+  if (!domeny && KONFIGURACJA.twitchClientId) {
     try {
       const gra = await znajdzGreIGDB(pytanie, requestState);
       if (gra) {
