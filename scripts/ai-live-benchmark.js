@@ -11,8 +11,10 @@ if (process.env.AI_LIVE_BENCHMARK !== '1') {
   process.exit(2);
 }
 
-const benchmark = JSON.parse(fs.readFileSync(path.join(__dirname, 'ai-benchmark.json'), 'utf8'));
-const limit = Math.max(1, Math.min(benchmark.cases.length, Number(process.env.AI_BENCHMARK_LIMIT) || benchmark.cases.length));
+const benchmark = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'test', 'ai-benchmark.json'), 'utf8'));
+const defaultLimit = Math.min(20, benchmark.cases.length);
+const requestedLimit = Number(process.env.AI_BENCHMARK_LIMIT);
+const limit = Math.max(1, Math.min(benchmark.cases.length, Number.isFinite(requestedLimit) && requestedLimit > 0 ? requestedLimit : defaultLimit));
 const delayMs = Math.max(0, Number(process.env.AI_BENCHMARK_DELAY_MS) || 0);
 const cases = benchmark.cases.slice(0, limit);
 
