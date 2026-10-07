@@ -432,6 +432,7 @@ function hashAIUserMemoryId(userId) {
 }
 
 async function wczytajZweryfikowanaPamiecAI(userId) {
+  if (process.env.CZITUCHBOT_SKIP_STARTUP_IO === '1') return [];
   try {
     const ref = db.collection(COL_AI_MEMORY).doc(hashAIUserMemoryId(userId));
     const snap = await ref.get();
@@ -448,6 +449,7 @@ async function wczytajZweryfikowanaPamiecAI(userId) {
 }
 
 async function zapiszZweryfikowanaPamiecAI(userId, incoming) {
+  if (process.env.CZITUCHBOT_SKIP_STARTUP_IO === '1') return;
   if (!Array.isArray(incoming) || !incoming.length) return;
   try {
     const ref = db.collection(COL_AI_MEMORY).doc(hashAIUserMemoryId(userId));
