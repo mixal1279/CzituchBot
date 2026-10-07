@@ -21,8 +21,12 @@ test('entity resolver does not treat arbitrary long prefixes as aliases', () => 
   assert.equal(containsAlias('Wiedźminem grałem wczoraj', 'wiedźmin'), true);
 });
 
-test('common character first names require game context', () => {
-  assert.equal(resolveGameEntity('Co robi Arthur?'), null);
+test('common character first names stay compatible but expose lower confidence without context', () => {
+  const ambiguous = resolveGameEntity('Co robi Arthur?');
+  assert.equal(ambiguous?.name, 'Arthur Morgan');
+  assert.equal(ambiguous?.resolution, 'deterministic_ambiguous');
+  assert.ok(ambiguous?.confidence < 0.9);
+
   assert.equal(resolveGameEntity('Co robi Arthur w RDR2?')?.name, 'Arthur Morgan');
   assert.equal(resolveGameEntity('Co robi Arthur Morgan?')?.name, 'Arthur Morgan');
   assert.equal(resolveGameEntity('Co robi Ellie w The Last of Us?')?.name, 'Ellie');
