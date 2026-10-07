@@ -2839,7 +2839,7 @@ let botNaPrzerwie = false;
 
 // Globalna ochrona 120B: równoległe requesty nie mogą każdy osobno zużyć
 // pełnego limitu retry. Quota jest liczona dla całego procesu w ruchomym oknie.
-const MODEL_120B_GLOBAL_MAX_REQUESTS = 6;
+const MODEL_120B_GLOBAL_MAX_REQUESTS = Math.max(1, Number(process.env.AI_120B_GLOBAL_MAX_REQUESTS) || 6);
 const MODEL_120B_GLOBAL_WINDOW_MS = 60 * 60 * 1000;
 let model120bGlobalRequesty = 0;
 let model120bGlobalOknoDo = Date.now() + MODEL_120B_GLOBAL_WINDOW_MS;
