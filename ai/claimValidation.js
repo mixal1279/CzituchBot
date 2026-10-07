@@ -163,7 +163,7 @@ function sprawdzPokrycieClaimamiOdpowiedzi(answer, claims) {
     uncovered: uncovered.slice(0, 4).map(item => item.text),
   };
 }
-function czyDowodSemantyczniePokrywaClaim(evidence, claim) {
-  return zgodnoscStrukturalna(evidence, claim).ok;
+function czyDowodSemantyczniePokrywaClaim(evidence, claim, options = {}) {
+  return zgodnoscStrukturalna(evidence, claim, options).ok;
 }
 module.exports = { normalizujClaim, tokenyClaim, wyodrebnijLiczbyIDaty, wyodrebnijJednostkoweWartosci, wyodrebnijNazwyWlasne, zgodnoscStrukturalna, sprawdzPokrycieClaimamiOdpowiedzi, czyDowodSemantyczniePokrywaClaim };
