@@ -49,8 +49,26 @@ function planRequest(question, routing, plannerFn, retrievalFn) {
   return { plan, retrievalPlan };
 }
 
+function parseEvidenceText(text) {
+  const value = String(text || '');
+  const re = /^\\[(SOURCE \\d+|REFERENCE [^\\]\\r\\n]+)\\]\\s*$/gmi;
+  const matches = [...value.matchAll(re)];
+  return matches.map((m, i) => {
+    const start = m.index + m[0].length;
+    const end = i + 1 < matches.length ? matches[i + 1].index : value.length;
+    const block = value.slice(start, end);
+    return {
+      sourceId: m[1].trim(),
+      title: block.match(/TYTUŁ:\\s*([^\\r\\n]+)/i)?.[1] || m[1],
+      url: block.match(/URL:\\s*(https?:\\/\\/[^\\s\\r\\n]+)/i)?.[1] || '',
+      content: block,
+    };
+  });
+}
+
 function evaluateEvidence(question, routing, sources) {
-  const evidence = assessEvidence(sources, question, routing);
+  const normalizedSources = typeof sources === 'string' ? parseEvidenceText(sources) : sources;
+  const evidence = assessEvidence(normalizedSources, question, routing);
   const policy = decideEvidencePolicy(evidence, routing);
   return { evidence, policy };
 }
@@ -100,4 +118,5 @@ module.exports = {
   shouldValidate,
   decideValidation,
   finalText,
+  parseEvidenceText,
 };
