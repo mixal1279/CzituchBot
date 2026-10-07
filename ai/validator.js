@@ -136,7 +136,6 @@ function parseEvidenceForCore(dane) {
     const end = i + 1 < matches.length ? matches[i + 1].index : text.length;
     const title = block.match(/TYTUŁ:\s*([^\r\n]+)/i)?.[1] || '';
     const url = block.match(/URL:\s*(https?:\/\/[^\s\r\n]+)/i)?.[1] || '';
-    const url = block.match(/URL:\\s*(https?:\\/\\/[^\\s\\r\\n]+)/i)?.[1] || '';
     const content = block.match(/TREŚĆ:\\s*<<<UNTRUSTED_SOURCE_CONTENT>>>\\s*([\\s\\S]*?)<<<END_UNTRUSTED_SOURCE_CONTENT>>>/i)?.[1]
       || block.replace(/^[^\\n]+\\n/, '');
     blocks.push({ sourceId: matches[i][1].trim(), title, url, content });
