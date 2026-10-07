@@ -125,8 +125,8 @@ function pobierzBlokZrodla(dane, sourceId) {
 
 function normalizujDowodTekstowy(value) {
   return String(value || '').toLocaleLowerCase('pl-PL')
-    .normalize('NFD').replace(/[\\u0300-\\u036f]/g, '')
-    .replace(/[^\\p{L}\\p{N}]+/gu, ' ').replace(/\\s+/g, ' ').trim();
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ').replace(/\s+/g, ' ').trim();
 }
 function tokenyDowodu(value) {
   return [...new Set(normalizujDowodTekstowy(value).split(' ').filter(t => t.length >= 4))];
