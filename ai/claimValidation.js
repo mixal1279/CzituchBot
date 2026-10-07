@@ -83,12 +83,12 @@ function czyNazwaWlasnaWystepuje(entity, evidenceNormalized) {
   const stem = entity.slice(0, Math.max(5, entity.length - 2));
   return evidenceNormalized.split(' ').some(token => token.length >= stem.length && token.startsWith(stem));
 }
-function sprawdzTwardeKonflikty(evidence, claim) {
+function sprawdzTwardeKonflikty(evidence, claim, options = {}) {
   const e = String(evidence || '');
   const c = String(claim || '');
   const evidenceNegated = wyodrebnijMarkery(e, NEGATION_RE);
   const claimNegated = wyodrebnijMarkery(c, NEGATION_RE);
-  if (claimNegated !== evidenceNegated) return { ok: false, reason: 'claim i dowód mają inną negację' };
+  if (!options.allowDistributedEvidence && claimNegated !== evidenceNegated) return { ok: false, reason: 'claim i dowód mają inną negację' };
 
   const evidenceNumbers = wyodrebnijLiczbyIDaty(e);
   const claimNumbers = wyodrebnijLiczbyIDaty(c);
@@ -136,7 +136,7 @@ function zgodnoscStrukturalna(evidence, claim, options = {}) {
   const e = String(evidence || '');
   const c = String(claim || '');
   if (!e.trim() || !c.trim()) return { ok: false, reason: 'brak dowodu lub claimu' };
-  const hard = sprawdzTwardeKonflikty(e, c);
+  const hard = sprawdzTwardeKonflikty(e, c, options);
   if (!hard.ok) return hard;
   const semanticConflict = sprawdzSprzecznosciSemantyczne(e, c);
   if (!semanticConflict.ok) return semanticConflict;
