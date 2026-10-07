@@ -67,7 +67,7 @@ const { czyPytanieOGameplay, dodajGameFAQsDomenę, wytnijAtrybucjeGameFAQs, GAME
 const { przygotujHistorieDoModelu, opakujDaneReferencyjne } = AI_POLICY;
 const { classifyAIRequest } = require('./ai/router');
 const { planAIRequest, responseContract, RESPONSE_PROFILES, buildRetrievalQueries } = require('./ai/planner');
-const { resolveGameEntity } = require('./ai/entities');
+const { resolveGameEntity, scoreExternalGameCandidate } = require('./ai/entities');
 const { extractExplicitUserMemories, mergeMemoryRecords, buildVerifiedMemoryContext, pruneExpiredMemories } = require('./ai/memory');
 const { parseMemoryCommand, forgetMemories, describeMemories } = require('./ai/memory_manager');
 const { buildAdvancedRetrievalPlan } = require('./ai/retrieval');
@@ -1039,25 +1039,8 @@ async function znajdzGreIGDB(pytanie, requestState = null) {
     const data = await res.json();
     if (!Array.isArray(data) || !data.length) return null;
 
-    const normalizujNazweIGDB = value => String(value || '')
-      .toLocaleLowerCase('pl-PL')
-      .normalize('NFD').replace(/[\\u0300-\\u036f]/g, '')
-      .replace(/[^a-z0-9 ]/g, ' ').replace(/\\s+/g, ' ').trim();
-    const queryTokens = new Set(normalizujNazweIGDB(nazwaGry).split(' ').filter(Boolean));
-    const ocenKandydata = gra => {
-      const name = normalizujNazweIGDB(gra?.name);
-      if (!name) return 0;
-      if (name === normalizujNazweIGDB(nazwaGry)) return 1;
-      const nameTokens = name.split(' ').filter(Boolean);
-      const overlap = nameTokens.length
-        ? nameTokens.filter(t => queryTokens.has(t)).length / nameTokens.length
-        : 0;
-      return name.includes(normalizujNazweIGDB(nazwaGry)) || normalizujNazweIGDB(nazwaGry).includes(name)
-        ? Math.max(0.82, overlap)
-        : overlap;
-    };
     const kandydaci = data
-      .map(gra => ({ gra, score: ocenKandydata(gra) }))
+      .map(gra => ({ gra, score: scoreExternalGameCandidate(nazwaGry, gra?.name) }))
       .sort((a, b) => b.score - a.score);
     const najlepszy = kandydaci[0];
     if (!najlepszy || najlepszy.score < 0.72) {
