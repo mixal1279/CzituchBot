@@ -1,1 +1,9 @@
+.env
+.env.*
+!.env.example
+*firebase-adminsdk*.json
+service-account*.json
+credentials*.json
 ai_verified_memory.json
+tavily_cache.json
+tavily_cache.json.tmp-*
