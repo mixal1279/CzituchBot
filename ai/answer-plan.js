@@ -28,11 +28,13 @@ function buildAnswerPlan(question, routing = {}) {
 }
 function extractAnswerSignals(answer) {
   const text = normalize(answer);
+  const where = /\b(w|we|na|do|z|ze)\s+[a-ząćęłńóśźż0-9-]+/.test(text);
   return {
     why: /\b(dlaczego|czemu|powod|poniewaz|bo|because|because of|due to)\b/.test(text),
     how: /\b(nalezy|trzeba|mozna|sposob|krok|najpierw|potem|nastepnie|first|then|step)\b/.test(text),
     when: /\b(?:19|20)\d{2}\b|\b(?:w|od|do)\s+(?:styczniu|lutym|marcu|kwietniu|maju|czerwcu|lipcu|sierpniu|wrzesniu|pazdzierniku|listopadzie|grudniu)\b/.test(text),
-    where: /\b(w|we|na|do|z|ze)\s+[a-ząćęłńóśźż0-9-]+/.test(text),
+    where,
+    location: where,
     who: /\b(byl|byla|bylo|byli|jest|sa|jako|osoba|postac|gracz|autor|tworca|bohater)\b/.test(text),
     quantity: /\b\d+(?:[.,]\d+)?\s*(?:godzin|godz|h|min|sekund|dni|lat|%|gb|mb|tb|zł|pln|usd|eur)?\b/.test(text),
     comparison: /\b(roznic|rozni|wiecej|mniej|leps|gors|natomiast|podobn|vs|versus|z kolei)\b/.test(text),
