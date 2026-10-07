@@ -192,6 +192,20 @@ function zbudujRaportKonfliktowTavily(conflicts) {
     '[/SOURCE_CONFLICTS]',
   ].join('\n');
 }
+function sygnalyClaimuTavily(sourceQuestion) {
+  const text = String(sourceQuestion || '');
+  const relation = (text.match(/\b(?:dlaczego|czemu|powod|ponieważ|bo|zdradził|zdradziła|pokonał|pokonała|przejął|przejęła|zabił|zabiła|uratował|uratowała|wydał|wydana|premiera|data|ile|kiedy|gdzie|jak)\w*\b/giu) || [])
+    .map(normalizujTokenTavily);
+  const numbers = (text.match(/\b(?:19|20)\d{2}\b|\b\d+(?:[.,]\d+)?%?\b/g) || []).map(normalizujTokenTavily);
+  return [...new Set([...relation, ...numbers].filter(Boolean))].slice(0, 8);
+}
+
+function claimCoverageTavily(result, signals) {
+  if (!signals.length) return 0;
+  const haystack = normalizujTokenTavily([result?.title, result?.content].filter(Boolean).join(' '));
+  return signals.filter(signal => haystack.includes(signal)).length / signals.length;
+}
+
 function rerankujWynikiTavily(results, sourceQuestion, requestedDomains = [], options = {}) {
   const input = Array.isArray(results) ? results : [];
   const keywords = slowaKluczoweTavily(sourceQuestion);
@@ -224,6 +238,12 @@ function rerankujWynikiTavily(results, sourceQuestion, requestedDomains = [], op
       : 0;
     const entityBonus = Math.min(0.10, entityCoverage * 0.10);
 
+    // Claim-aware tie-breaker: źródło musi nie tylko mówić o encji, ale również
+    // zawierać sygnały relacji/liczb istotnych dla samego pytania.
+    const claimSignals = sygnalyClaimuTavily(sourceQuestion);
+    const claimCoverage = claimCoverageTavily(result, claimSignals);
+    const claimBonus = Math.min(0.14, claimCoverage * 0.14);
+
     const baseScore = typeof result?.score === 'number' ? result.score : 0;
     const published = dataZrodlaTavily(result);
     let freshnessBonus = 0;
@@ -242,7 +262,7 @@ function rerankujWynikiTavily(results, sourceQuestion, requestedDomains = [], op
         try { return new URL(result?.url).hostname.toLowerCase().replace(/^www\\./, ''); }
         catch (_) { return ''; }
       })(),
-      rerankScore: baseScore + qualityBonus + coverageBonus + entityBonus + freshnessBonus,
+      rerankScore: baseScore + qualityBonus + coverageBonus + entityBonus + claimBonus + freshnessBonus,
     };
   });
 
@@ -608,6 +628,8 @@ module.exports = {
   snapshotCacheTavily,
   filtrujPoScore,
   rerankujWynikiTavily,
+  sygnalyClaimuTavily,
+  claimCoverageTavily,
   wykryjKonfliktyZrodelTavily,
   zbudujRaportKonfliktowTavily,
   sanityzujTrescZrodlaTavily,
