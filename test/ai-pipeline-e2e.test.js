@@ -22,7 +22,7 @@ test('actual zapytajAI pipeline survives validator rejection and succeeds after 
           return {
             choices: [{
               message: {
-                content: 'Wheatley przejął kontrolę nad GLaDOS po przeniesieniu do jej ciała.',
+                content: 'Wheatley zostaje przeniesiony do ciała GLaDOS i uzyskuje kontrolę nad systemem Aperture.',
               },
               finish_reason: 'stop',
             }],
@@ -84,7 +84,7 @@ test('actual zapytajAI pipeline survives validator rejection and succeeds after 
       confidence: 0.96,
       unsupported_claims: [],
       claims: [{
-        claim: 'Wheatley przejął kontrolę nad GLaDOS po przeniesieniu do jej ciała.',
+        claim: 'Wheatley zostaje przeniesiony do ciała GLaDOS i uzyskuje kontrolę nad systemem Aperture.',
         supported: true,
         source_ids: ['SOURCE 1'],
         evidence_quote: 'Wheatley zostaje przeniesiony do ciała GLaDOS i uzyskuje kontrolę nad systemem Aperture.',
