@@ -23,3 +23,26 @@ test('malformed JSON nie przechodzi parsera', () => { assert.equal(wytnijJsonWal
 test('parser obsługuje JSON otoczony tekstem', () => { const parsed = wytnijJsonWalidatora('Oto werdykt: {"valid":true,"reason":"ok"}'); assert.deepEqual(parsed, { valid: true, reason: 'ok' }); });
 test('confidence spoza zakresu jest odrzucane', () => { assert.equal(normalizujWynikWalidatora({ ...base, confidence: 1.1 }, 'test', 'test', new Set(['SOURCE 1']), data), null); assert.equal(normalizujWynikWalidatora({ ...base, confidence: NaN }, 'test', 'test', new Set(['SOURCE 1']), data), null); });
 console.log('CzituchBot AI adversarial tests: OK');
+
+
+test('validator accepts Polish claims against an exact English evidence quote', () => {
+  const english = '[SOURCE 1]\nTYTUŁ: Cyberpunk 2077 lore\nTREŚĆ: Alt Cunningham was kidnapped and seriously injured by gang members during the 2013 incident.';
+  const result = normalizujWynikWalidatora({
+    valid: true,
+    reason: 'confirmed',
+    unsupported_claims: [],
+    supported: true,
+    relevant: true,
+    complete: true,
+    hallucination: false,
+    confidence: 0.96,
+    claims: [{
+      claim: 'Alt Cunningham została porwana i ciężko ranna przez członków gangu podczas incydentu z 2013 roku.',
+      supported: true,
+      source_ids: ['SOURCE 1'],
+      evidence_quote: 'Alt Cunningham was kidnapped and seriously injured by gang members during the 2013 incident.',
+    }],
+  }, 'test-model', 'test', new Set(['SOURCE 1']), english, 'Alt Cunningham została porwana i ciężko ranna podczas incydentu z 2013 roku.');
+  assert.equal(result.status, 'accepted');
+  assert.equal(result.ok, true);
+});
