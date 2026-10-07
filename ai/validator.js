@@ -141,7 +141,7 @@ function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '') {
     if (!block) return false;
     const normalizedBlock = block.replace(/\s+/g, ' ').toLocaleLowerCase('pl-PL');
     if (normalizedBlock.includes(quote)) {
-      return zgodnoscStrukturalna(block, claim).ok;
+      return zgodnoscStrukturalna(quote, claim, { skipSemanticOverlap: true }).ok;
     }
     return czyDowodSemantyczniePokrywaClaim(block, quote)
       && zgodnoscStrukturalna(block, claim).ok
