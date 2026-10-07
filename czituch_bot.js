@@ -2447,17 +2447,33 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
     }
   }
 
+  // Fallback state is shared by all generation attempts in this request.
+  // Provider auth/quota failures must not be retried by a later validator/repair cycle.
+  const failedFallbackProviders = new Set();
+
   async function generujOdpowiedz(maxTok, prompt = systemPrompt, powod = 'main', allow120b = true) {
-    let result = allow120b ? await zapytajGlowny(Math.max(maxTok, 300), prompt, 'openai/gpt-oss-120b') : wynikPusty('groq', 'openai/gpt-oss-120b', '120B skipped after validator rejection');
-    const failureType = classifyFailure(result.error || '');
-    if (allow120b && !requestBlokada120b && (!result.tekst || result.ucieta) && liczbaProb120b < 2 && !['quota','auth','invalid_request'].includes(failureType)) {
+    let result = allow120b
+      ? await zapytajGlowny(Math.max(maxTok, 300), prompt, 'openai/gpt-oss-120b')
+      : wynikPusty('groq', 'openai/gpt-oss-120b', '120B skipped for this generation cycle');
+    let failureType = classifyFailure(result.error || '');
+
+    if (allow120b && !requestBlokada120b && (!result.tekst || result.ucieta)
+      && liczbaProb120b < 2 && !['quota', 'auth', 'invalid_request'].includes(failureType)) {
       console.log(`[AI][${requestId}] 120B retry #1 (${powod})`);
       result = await zapytajGlowny(Math.max(maxTok, 300) + 250, prompt, 'openai/gpt-oss-120b');
+      failureType = classifyFailure(result.error || '');
     }
+
     if (result.tekst && !result.ucieta) return result;
+
     aiState.fallbackReasons.push(failureType || 'unknown');
-    console.log(`[AI][${requestId}] fallback policy=${failureType || 'unknown'} next=${JSON.stringify(nextFallbacks({ failure: failureType, attempted: ['groq:openai/gpt-oss-120b'] }))}`);
     const attempted = ['groq:openai/gpt-oss-120b'];
+    console.log(`[AI][${requestId}] fallback policy=${failureType || 'unknown'} next=${JSON.stringify(nextFallbacks({
+      failure: failureType,
+      attempted,
+      failedProviders: [...failedFallbackProviders],
+    }))}`);
+
     const fallbackSteps = {
       'groq:openai/gpt-oss-20b': () => zapytajGlowny(Math.max(maxTok, 300), prompt, 'openai/gpt-oss-20b'),
       'mistral:default': () => zapytajMistral(Math.max(maxTok, 300), prompt, powod),
@@ -2465,10 +2481,16 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
       'gemini:gemini-3.5-flash-lite': () => zapytajGeminiLiteFallback(Math.max(maxTok, 300), prompt, powod),
       'openrouter:default': () => zapytajOpenRouterFallback(Math.max(maxTok, 300), prompt, powod),
     };
-    for (const step of nextFallbacks({ failure: failureType, attempted })) {
+
+    for (const step of nextFallbacks({
+      failure: failureType,
+      attempted,
+      failedProviders: [...failedFallbackProviders],
+    })) {
       if (!GENERATION_FALLBACK_CHAIN.includes(step) || step === 'groq:openai/gpt-oss-120b') continue;
       const fn = fallbackSteps[step];
       if (!fn) continue;
+
       attempted.push(step);
       const candidate = await fn();
       if (candidate.tekst && !candidate.ucieta) {
@@ -2477,8 +2499,22 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
         if (step.startsWith('groq:')) return ujednolicWynik(candidate, 'groq', step.split(':')[1]);
         return candidate;
       }
+
+      const providerFailure = classifyFailure(candidate.error || '');
+      if (['auth', 'quota', 'invalid_request'].includes(providerFailure)) {
+        failedFallbackProviders.add(step);
+        aiState.fallbackReasons.push(providerFailure);
+        console.warn(`[AI][${requestId}] disabling fallback ${step} for this request: ${providerFailure}`);
+      }
     }
-    return wynikPusty('openrouter', KONFIGURACJA.openrouterGeneratorModel, result?.ucieta ? 'OpenRouter response truncated' : (result?.error || 'AI fallback chain exhausted'));
+
+    // Preserve the actual last failure instead of falsely reporting OpenRouter
+    // when OpenRouter was never reached or returned a different error.
+    return wynikPusty(
+      result?.provider || 'groq',
+      result?.model || AI_MODELS.generatorPrimary,
+      result?.error || 'AI fallback chain exhausted',
+    );
   }
 
 function oczyscOdpowiedzPrzedWalidacja(tekst) {
@@ -2552,7 +2588,7 @@ function oczyscOdpowiedzPrzedWalidacja(tekst) {
       const promptRetry = `${systemPrompt}\n\n[SOFT VALIDATION FEEDBACK]\n${feedback}`;
       // Dokładnie jeden cykl retry po odrzuceniu walidacji. Fallbacki providerów
       // pozostają wewnątrz jednego cyklu generacji i nie uruchamiamy kolejnego retry.
-      const retry = await generujOdpowiedz(max_tokens, promptRetry, 'soft validation retry', true);
+      const retry = await generujOdpowiedz(max_tokens, promptRetry, 'soft validation retry', false);
       if (retry.tekst) {
         const nowaOdp = usunMarkeryWewnetrzneAI(filtrBezpieczenstwa(retry.tekst));
         if (nowaOdp) {
