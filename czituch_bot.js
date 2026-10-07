@@ -1884,10 +1884,11 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
     planAIRequest,
     buildRetrievalQueries,
   );
+  const answerPlan = buildAnswerPlan(pytanie, routingAI);
   const plannedRetrievalQueries = buildRetrievalQueries(pytanie, routingAI, { maxQueries: 3 });
   const responseCfg = RESPONSE_PROFILES[aiPlan.responseProfile] || RESPONSE_PROFILES.simple;
   max_tokens = Math.max(Number(max_tokens) || 200, responseCfg.maxTokens);
-  systemPrompt = `${systemPrompt}\n\n${responseContract(aiPlan.responseProfile)}`;
+  systemPrompt = `${systemPrompt}\n\n${responseContract(aiPlan.responseProfile)}\n\n[ANSWER PLAN]\n${answerPlan.instruction}`;
   const kategoriaAI = routingAI.intent;
   console.log(`[AI][${requestId}] routing=${JSON.stringify({ intent: routingAI.intent, entity: routingAI.entity, game: routingAI.game, entity_type: routingAI.entity_type, needs_web: routingAI.needs_web, freshness: routingAI.freshness, source_type: routingAI.source_type, response_profile: aiPlan.responseProfile, confidence: routingAI.confidence })}`);
   console.log(`[AI] kategoria=${kategoriaAI} nick=${nick}`);
@@ -2581,6 +2582,69 @@ function oczyscOdpowiedzPrzedWalidacja(tekst) {
     } else if (walidacja.status === 'unavailable') {
       console.warn(`[AI][${requestId}] validator unavailable — bez retry generowania`);
       odp = 'Chwilowo nie mogę potwierdzić tej informacji, więc nie będę zgadywać.';
+    }
+    // v26: niezależny kontrakt kompletności odpowiedzi. Validator potwierdza
+    // evidence, a answer judge sprawdza, czy odpowiedź rzeczywiście odpowiada
+    // na kształt pytania. Naprawiamy tylko odpowiedzi już ugruntowane w źródłach.
+    let answerJudge = null;
+    if (walidacja.status === 'accepted') {
+      answerJudge = judgeAnswer(odp, answerPlan);
+      console.log(`[AI][${requestId}] answer-judge=${JSON.stringify(answerJudge)}`);
+      if (answerJudge.status === 'repair' && answerJudge.repairable && !budzetPrzekroczony()) {
+        const judgeFeedback = [
+          'Odpowiedź przeszła fact-checking, ale nie odpowiedziała na wszystkie wymagane elementy pytania.',
+          `Brakujące elementy: ${answerJudge.missing.join(', ')}`,
+          'Uzupełnij wyłącznie na podstawie DANYCH REFERENCYJNYCH. Nie dodawaj niepotwierdzonych faktów.',
+          answerPlan.instruction,
+        ].join('\\n');
+        const repairResult = await generujOdpowiedz(
+          max_tokens,
+          `${systemPrompt}\\n\\n[ANSWER COMPLETENESS REPAIR]\\n${judgeFeedback}`,
+          'answer completeness repair',
+          true,
+        );
+        if (repairResult.tekst) {
+          const repaired = oczyscOdpowiedzPrzedWalidacja(
+            ograniczDoPelnychZdanAI(
+              usunMarkeryWewnetrzneAI(filtrBezpieczenstwa(repairResult.tekst)),
+              responseCfg.maxSentences,
+              1800,
+              responseCfg.maxWords,
+            ),
+          );
+          if (repaired) {
+            odp = repaired;
+            walidacja = await validateAI(
+              aiProfile === 'billy' ? 'billy' : aiProfile === 'edzzi' ? 'edzzi' : aiProfile === 'angie' ? 'angie' : 'generic',
+              pytanie,
+              odp,
+              daneDoWalidacji,
+              historiaRozmowy,
+              requestId,
+              aiState,
+              metadaneRequestu,
+            );
+            if (walidacja.status === 'accepted') {
+              answerJudge = judgeAnswer(odp, answerPlan);
+              console.log(`[AI][${requestId}] answer-judge-after-repair=${JSON.stringify(answerJudge)}`);
+              if (answerJudge.status !== 'accepted') {
+                walidacja = {
+                  ...walidacja,
+                  status: 'rejected',
+                  ok: false,
+                  valid: false,
+                  complete: false,
+                  reason: 'odpowiedź po naprawie nadal nie pokrywa wymaganych elementów pytania',
+                  unsupported_claims: [
+                    ...(walidacja.unsupported_claims || []),
+                    ...answerJudge.missing.map(item => `brak odpowiedzi na: ${item}`),
+                  ].slice(0, 8),
+                };
+              }
+            }
+          }
+        }
+      }
     }
     const validationDecision = decideValidation(walidacja.status, { allowRetry: false });
     aiState.finalStatus = validationDecision.finalStatus;
