@@ -117,7 +117,7 @@ function zgodnoscStrukturalna(evidence, claim, options = {}) {
   const et = new Set(tokenyClaim(e));
   const overlap = ct.length ? ct.filter(t => et.has(t)).length / ct.length : 0;
   const threshold = claimEntities.length && claimEntities.every(entity => evidenceNormalized.includes(entity))
-    ? 0.50
+    ? 0.67
     : (ct.length <= 5 ? 0.67 : 0.60);
   if (overlap < threshold) return { ok: false, reason: `zbyt małe pokrycie semantyczne (${overlap.toFixed(2)} < ${threshold.toFixed(2)})` };
   return { ok: true, overlap };
