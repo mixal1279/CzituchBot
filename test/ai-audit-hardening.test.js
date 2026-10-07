@@ -43,12 +43,12 @@ test('retrieval diversity is part of the sufficiency decision', () => {
   assert.equal(shouldRunAdditionalRetrieval({ text: 'x'.repeat(1200), sourceCount: 2, queryCount: 1, results, requireDiversity: true }), false);
 });
 
-test('validator accepts a genuine paraphrased evidence quote without weakening source binding', () => {
+test('validator accepts a genuine paraphrased claim without weakening source binding', () => {
   const data = '[SOURCE 1]\nTYTUŁ: Portal 2\nTREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>\nWheatley zostaje przeniesiony do ciała GLaDOS.\n<<<END_UNTRUSTED_SOURCE_CONTENT>>>';
   const result = normalizujWynikWalidatora({
     valid: true, reason: 'potwierdzone', unsupported_claims: [],
     supported: true, relevant: true, complete: true, hallucination: false, confidence: 0.95,
-    claims: [{ claim: 'Wheatley trafia do ciała GLaDOS.', supported: true, source_ids: ['SOURCE 1'], evidence_quote: 'Wheatley zostaje umieszczony w ciele GLaDOS.' }],
+    claims: [{ claim: 'Wheatley trafia do ciała GLaDOS.', supported: true, source_ids: ['SOURCE 1'], evidence_quote: 'Wheatley zostaje przeniesiony do ciała GLaDOS.' }],
   }, 'test-model', 'test', new Set(['SOURCE 1']), data);
   assert.equal(result.status, 'accepted');
 });
