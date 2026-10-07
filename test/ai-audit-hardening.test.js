@@ -48,7 +48,7 @@ test('validator accepts a genuine paraphrased evidence quote without weakening s
   const result = normalizujWynikWalidatora({
     valid: true, reason: 'potwierdzone', unsupported_claims: [],
     supported: true, relevant: true, complete: true, hallucination: false, confidence: 0.95,
-    claims: [{ claim: 'Wheatley trafia do ciała GLaDOS.', supported: true, source_ids: ['SOURCE 1'], evidence_quote: 'Wheatley zostaje przeniesiony do ciała GLaDOS.' }],
+    claims: [{ claim: 'Wheatley trafia do ciała GLaDOS.', supported: true, source_ids: ['SOURCE 1'], evidence_quote: 'Wheatley zostaje umieszczony w ciele GLaDOS.' }],
   }, 'test-model', 'test', new Set(['SOURCE 1']), data);
   assert.equal(result.status, 'accepted');
 });
