@@ -2677,7 +2677,7 @@ async function skompresujHistorie(historiaRozmowy) {
 // =============================================
 //  INICJALIZACJA
 // =============================================
-const groq            = new Groq({ apiKey: KONFIGURACJA.groqKey });
+const groq            = KONFIGURACJA.groqKey ? new Groq({ apiKey: KONFIGURACJA.groqKey }) : null;
 const szukajTavily = createTavilySearch({
   apiKey: KONFIGURACJA.tavilyKey,
   geminiKey: KONFIGURACJA.geminiKey,
