@@ -261,7 +261,7 @@ function assessEvidence(results = [], question, routing = {}) {
 
   let status = 'weak';
   if (strong.length >= 2 && hosts.size >= 2 && relevant.length >= 2) status = 'strong';
-  else if (strong.length >= 1 && relevant.length >= 1) status = 'usable';
+  else if (strong.length >= 1 && relevant.length >= 1 && hosts.size >= 2) status = 'usable';
 
   return {
     status,
