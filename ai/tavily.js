@@ -244,7 +244,7 @@ function czyWymagaSecondaryRetrieval(results, sourceQuestion = '', timeRange = n
   const lista = Array.isArray(results) ? results : [];
   if (lista.length === 0) return true;
   if (lista.length >= 2) {
-    const hosts = new Set(lista.map(r => { try { return new URL(r?.url).hostname.toLowerCase().replace(/^www\\./, ''); } catch (_) { return ''; } }).filter(Boolean));
+    const hosts = new Set(lista.map(r => { try { return new URL(r?.url).hostname.toLowerCase().replace(/^www\./, ''); } catch (_) { return ''; } }).filter(Boolean));
     const providers = new Set(lista.map(r => String(r?.provider || 'tavily')).filter(Boolean));
     const strong = lista.filter(r => typeof r?.score !== 'number' || r.score >= 0.55).length;
     if (strong >= 1 && (hosts.size >= 2 || providers.size >= 2)) return false;
