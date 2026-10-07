@@ -223,7 +223,7 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
   const claimGranularityOk = !answer || !sentenceCount || sentenceCount <= 1
     ? true
     : answerCoverage.ok && claims.length >= Math.min(3, Math.ceil(sentenceCount / 3));
-\n  const claimContractOk = claims.length > 0
+  const claimContractOk = claims.length > 0
     && claims.every(c => c.supported)
     && !unknownSourceClaim
     && !unsupportedEvidenceClaim
