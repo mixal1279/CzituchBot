@@ -123,7 +123,26 @@ function pobierzBlokZrodla(dane, sourceId) {
   return active ? body.join('\n') : null;
 }
 
-function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote) {
+function normalizujDowodTekstowy(value) {
+  return String(value || '').toLocaleLowerCase('pl-PL')
+    .normalize('NFD').replace(/[\\u0300-\\u036f]/g, '')
+    .replace(/[^\\p{L}\\p{N}]+/gu, ' ').replace(/\\s+/g, ' ').trim();
+}
+function tokenyDowodu(value) {
+  return [...new Set(normalizujDowodTekstowy(value).split(' ').filter(t => t.length >= 4))];
+}
+function czyDowodSemantyczniePokrywaClaim(evidence, claim) {
+  const e = normalizujDowodTekstowy(evidence);
+  const c = normalizujDowodTekstowy(claim);
+  if (!e || !c) return false;
+  if (e.includes(c) || c.includes(e)) return true;
+  const ct = tokenyDowodu(c);
+  if (ct.length < 3) return false;
+  const et = new Set(tokenyDowodu(e));
+  const overlap = ct.filter(t => et.has(t)).length / ct.length;
+  return overlap >= 0.62;
+}
+function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '') {
   if (!Array.isArray(sourceIds) || !sourceIds.length || typeof evidenceQuote !== 'string') return false;
   const quote = evidenceQuote.trim().replace(/\s+/g, ' ').toLocaleLowerCase('pl-PL');
   if (quote.length < 3 || quote.length > 500) return false;
@@ -131,7 +150,8 @@ function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote) {
     const block = pobierzBlokZrodla(dane, id);
     if (!block) return false;
     const normalizedBlock = block.replace(/\s+/g, ' ').toLocaleLowerCase('pl-PL');
-    return normalizedBlock.includes(quote);
+    if (normalizedBlock.includes(quote)) return true;
+    return czyDowodSemantyczniePokrywaClaim(block, quote) && czyDowodSemantyczniePokrywaClaim(block, claim);
   });
 }
 
@@ -174,7 +194,7 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
 
   const allowed = allowedSourceIds instanceof Set ? allowedSourceIds : null;
   const unknownSourceClaim = claims.some(c => c.supported && (!c.source_ids.length || (allowed && c.source_ids.some(id => !allowed.has(id)))));
-  const unsupportedEvidenceClaim = claims.some(c => c.supported && !czyDowodPotwierdzaClaim(dane, c.source_ids, c.evidence_quote));
+  const unsupportedEvidenceClaim = claims.some(c => c.supported && !czyDowodPotwierdzaClaim(dane, c.source_ids, c.evidence_quote, c.claim));
   const unsupportedFromClaims = claims.filter(c => !c.supported).map(c => c.claim).filter(Boolean);
   const unsupported = [...new Set([
     ...unsupportedFromClaims,
