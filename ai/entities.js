@@ -125,6 +125,19 @@ function findAlias(text, entries, options = {}) {
   return best;
 }
 
+function scoreExternalGameCandidate(query, candidateName) {
+  const normalize = value => normalizujEncje(value);
+  const q = normalize(query);
+  const n = normalize(candidateName);
+  if (!q || !n) return 0;
+  if (q === n) return 1;
+  const qt = q.split(' ').filter(Boolean);
+  const nt = n.split(' ').filter(Boolean);
+  const overlap = nt.length ? nt.filter(token => qt.includes(token)).length / nt.length : 0;
+  if (n.includes(q) || q.includes(n)) return Math.max(0.82, overlap);
+  return overlap;
+}
+
 function resolveGameEntity(text) {
   const normalizedText = normalizujEncje(text);
   const game = findAlias(normalizedText, GAME_ALIASES);
@@ -167,5 +180,6 @@ module.exports = {
   normalizujEncje,
   containsAlias,
   containsExactAlias,
+  scoreExternalGameCandidate,
   resolveGameEntity,
 };

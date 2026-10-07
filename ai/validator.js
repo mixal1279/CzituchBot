@@ -1,6 +1,7 @@
 'use strict';
 
 const { sprawdzTwardeFaktyOdpowiedzi } = require('./response');
+const { czyDowodSemantyczniePokrywaClaim, zgodnoscStrukturalna } = require('./claimValidation');
 
 // Kontrakt walidatora jest celowo mały: generator potrzebuje tylko jasnego
 // werdyktu i konkretnej informacji zwrotnej do jednego retry.
@@ -131,17 +132,6 @@ function normalizujDowodTekstowy(value) {
 function tokenyDowodu(value) {
   return [...new Set(normalizujDowodTekstowy(value).split(' ').filter(t => t.length >= 4))];
 }
-function czyDowodSemantyczniePokrywaClaim(evidence, claim) {
-  const e = normalizujDowodTekstowy(evidence);
-  const c = normalizujDowodTekstowy(claim);
-  if (!e || !c) return false;
-  if (e.includes(c) || c.includes(e)) return true;
-  const ct = tokenyDowodu(c);
-  if (ct.length < 3) return false;
-  const et = new Set(tokenyDowodu(e));
-  const overlap = ct.filter(t => et.has(t)).length / ct.length;
-  return overlap >= 0.5;
-}
 function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '') {
   if (!Array.isArray(sourceIds) || !sourceIds.length || typeof evidenceQuote !== 'string') return false;
   const quote = evidenceQuote.trim().replace(/\s+/g, ' ').toLocaleLowerCase('pl-PL');
@@ -150,8 +140,12 @@ function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '') {
     const block = pobierzBlokZrodla(dane, id);
     if (!block) return false;
     const normalizedBlock = block.replace(/\s+/g, ' ').toLocaleLowerCase('pl-PL');
-    if (normalizedBlock.includes(quote)) return true;
-    return czyDowodSemantyczniePokrywaClaim(block, quote) && czyDowodSemantyczniePokrywaClaim(block, claim);
+    if (normalizedBlock.includes(quote)) {
+      return zgodnoscStrukturalna(block, claim).ok;
+    }
+    return czyDowodSemantyczniePokrywaClaim(block, quote)
+      && zgodnoscStrukturalna(block, claim).ok
+      && czyDowodSemantyczniePokrywaClaim(block, claim);
   });
 }
 

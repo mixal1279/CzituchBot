@@ -67,7 +67,7 @@ const { czyPytanieOGameplay, dodajGameFAQsDomenę, wytnijAtrybucjeGameFAQs, GAME
 const { przygotujHistorieDoModelu, opakujDaneReferencyjne } = AI_POLICY;
 const { classifyAIRequest } = require('./ai/router');
 const { planAIRequest, responseContract, RESPONSE_PROFILES, buildRetrievalQueries } = require('./ai/planner');
-const { resolveGameEntity } = require('./ai/entities');
+const { resolveGameEntity, scoreExternalGameCandidate } = require('./ai/entities');
 const { extractExplicitUserMemories, mergeMemoryRecords, buildVerifiedMemoryContext, pruneExpiredMemories } = require('./ai/memory');
 const { parseMemoryCommand, forgetMemories, describeMemories } = require('./ai/memory_manager');
 const { buildAdvancedRetrievalPlan } = require('./ai/retrieval');
@@ -79,6 +79,7 @@ const { sprawdzTwardeFaktyOdpowiedzi, sprawdzFormatOdpowiedzi } = require('./ai/
 const { Firestore } = require('@google-cloud/firestore');
 const { ocenJakoscOdpowiedzi } = require('./ai/quality');
 const { AI_MODELS } = require('./ai/modelConfig');
+const { parsujStrukturalnePodsumowanie } = require('./ai/history');
 
 // =============================================
 //  MINECRAFT JAVA 26.1 — LOKALNE RECEPTURY
@@ -332,10 +333,12 @@ function komunikatBrakuDanychAI(nick, kategoria) {
   return komunikaty[kategoria] || `@${nick} nie mam pewnych danych — nie będę zgadywać.`;
 }
 
-const db = new Firestore({
-  projectId: 'czituchbot-9c561',
-  keyFilename: './czituchbot-9c561-firebase-adminsdk-fbsvc-241e465e40.json',
-});
+const db = process.env.CZITUCHBOT_SKIP_STARTUP_IO === '1'
+  ? null
+  : new Firestore({
+      projectId: 'czituchbot-9c561',
+      keyFilename: './czituchbot-9c561-firebase-adminsdk-fbsvc-241e465e40.json',
+    });
 
 const COL_GRACZE       = 'ekonomia_gracze';
 const COL_PODATKI      = 'ekonomia_podatki';
@@ -412,7 +415,9 @@ async function testFirestoreConnection() {
     console.error('[Firestore] Sprawdź czy plik klucza .json jest poprawny i czy masz włączoną usługę Firestore w konsoli Firebase.');
   }
 }
-testFirestoreConnection().then(() => autoMigrateJsonToFirestore());
+if (process.env.CZITUCHBOT_SKIP_STARTUP_IO !== '1') {
+  testFirestoreConnection().then(() => autoMigrateJsonToFirestore());
+}
 
 function hashAIUserMemoryId(userId) {
   return crypto.createHash('sha256').update(String(userId || 'unknown')).digest('hex');
@@ -1029,14 +1034,25 @@ async function znajdzGreIGDB(pytanie, requestState = null) {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'text/plain',
       },
-      body: `search "${nazwaGry}"; fields name,genres.name; limit 1;`,
+      // IGDB zwraca wyniki uporządkowane wg podobieństwa, ale pierwszy rekord
+      // może być edycją/spinoffem. Pobieramy kilka kandydatów i weryfikujemy
+      // nazwę lokalnie przed użyciem encji w routingu.
+      body: `search "${nazwaGry}"; fields name,genres.name; limit 5;`,
     }, 6000);
     if (!res.ok) return null;
     const data = await res.json();
-    if (!data?.length) return null;
+    if (!Array.isArray(data) || !data.length) return null;
 
-    const gra = data[0];
-    return { nazwa: gra.name, gatunki: (gra.genres || []).map(g => g.name).join(', ') };
+    const kandydaci = data
+      .map(gra => ({ gra, score: scoreExternalGameCandidate(nazwaGry, gra?.name) }))
+      .sort((a, b) => b.score - a.score);
+    const najlepszy = kandydaci[0];
+    if (!najlepszy || najlepszy.score < 0.72) {
+      console.log(`[IGDB] Pomijam niepewne dopasowanie "${nazwaGry}" (score=${najlepszy?.score?.toFixed?.(2) || '0.00'})`);
+      return null;
+    }
+    const gra = najlepszy.gra;
+    return { nazwa: gra.name, gatunki: (gra.genres || []).map(g => g.name).join(', '), confidence: Math.min(0.99, najlepszy.score), resolution: 'igdb_verified' };
   } catch (err) {
     console.error('[IGDB] Błąd:', err.message);
     return null;
@@ -1615,7 +1631,7 @@ async function walidujOdpowiedzAI(persona, pytanie, odpowiedz, dane, historiaRoz
       return { status: 'unavailable', ok: false, technicalError: true, provider: 'gemini', model: models[i], unsupported_claims: [], reason: 'globalny budżet modeli wyczerpany' };
     }
     const result = await walidujOdpowiedzGeminiModel(models[i], persona, pytanie, odpowiedz, dane, historiaRozmowy, requestId, requestState, requestMeta);
-    if (requestState) requestState.validatorResults.push({ model: models[i], status: result.status, complete: result.complete === true });
+    if (requestState) requestState.validatorResults.push({ model: models[i], status: result.status, complete: result.complete === true, confidence: Number.isFinite(result.confidence) ? result.confidence : null, claimCoverage: Array.isArray(result.claims) && result.claims.length ? result.claims.filter(c => c.supported === true).length / result.claims.length : null });
     console.log(`[AI][${requestId}] validator #${i + 1} ${models[i]} → ${result.status}`);
     if (result.status === 'accepted' || result.status === 'rejected') return result;
     last = result;
@@ -1627,7 +1643,7 @@ async function walidujOdpowiedzAI(persona, pytanie, odpowiedz, dane, historiaRoz
     if (requestState.reserveValidator && !requestState.reserveValidator('validator:openrouter')) {
       return { status: 'unavailable', ok: false, technicalError: true, provider: 'openrouter', model: KONFIGURACJA.openrouterValidatorModel, unsupported_claims: [], reason: 'budżet validatora wyczerpany' };
     }
-    requestState.validatorResults.push({ model: KONFIGURACJA.openrouterValidatorModel, status: 'fallback', complete: false });
+    requestState.validatorResults.push({ model: KONFIGURACJA.openrouterValidatorModel, status: 'fallback', complete: false, confidence: null, claimCoverage: null });
   }
   // Brak Gemini nie jest błędem logicznym: OpenRouter jest pełnoprawnym
   // fallbackiem validatora, a nie tylko ratunkiem po błędzie sieciowym Gemini.
@@ -1745,8 +1761,13 @@ function wykonajAIWHistorii(historia, zadanie) {
 async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn, opcje = {}) {
   AI_METRYKI.requests++;
   let { temperature = 0.5, max_tokens = 200, tavilyOptions = {}, aiProfile = 'generic', memoryUserId = null } = opcje;
+  const groqClient = opcje.__testDeps?.groq || groq;
+  const searchTavilyFn = opcje.__testDeps?.searchTavily || szukajTavily;
+  const validateAI = opcje.__testDeps?.validateAI || walidujOdpowiedzAI;
+  const loadMemory = opcje.__testDeps?.loadMemory || wczytajZweryfikowanaPamiecAI;
+  const testMaxTavilySearches = Number.isInteger(opcje.__testDeps?.maxWyszukanTavily) ? Math.max(2, opcje.__testDeps.maxWyszukanTavily) : 2;
   const verifiedMemoryUserId = memoryUserId || String(nick || '').toLowerCase();
-  const verifiedMemoryPromise = wczytajZweryfikowanaPamiecAI(verifiedMemoryUserId);
+  const verifiedMemoryPromise = loadMemory(verifiedMemoryUserId);
   systemPrompt = `${systemPrompt}\n\nNie umieszczaj w odpowiedzi nazw źródeł, atrybucji, etykiet „Źródło:” ani URL-i. Źródła są wyłącznie wewnętrznym materiałem RAG i walidacji.`;
   const jestAI_Billy = aiProfile === 'billy' || systemPrompt === AI_SYSTEM_PROMPT_BILLY;
   const jestAI_EdzzI = aiProfile === 'edzzi' || systemPrompt === AI_SYSTEM_PROMPT_EDZZI;
@@ -1767,7 +1788,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
     maxGeneracji: 6,
     maxModelCalls: 10,
     maxValidatorow: 3,
-    maxWyszukanTavily: 2,
+    maxWyszukanTavily: testMaxTavilySearches,
   });
   let daneDoWalidacji = null;
   const budzetPrzekroczony = () => aiState.isExpired();
@@ -1858,7 +1879,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
   const czyPytanieOYouTube = kategoriaAI === 'youtube';
   const [rewriteWynik, miastoPogoda, domeny, youtuberNazwa, gryHLTB] = await Promise.all([
     czyWyszukac
-      ? (zarezerwujModel('search-rewrite') ? groq.chat.completions.create({
+      ? (zarezerwujModel('search-rewrite') ? groqClient.chat.completions.create({
           model: AI_MODELS.queryRewrite, // lekka klasyfikacja/rewrite — 20b wystarczy, szybszy/tańszy niż 120b, nie wycofywany 16.08.2026
           max_tokens: 220, reasoning_effort: 'low', include_reasoning: false, temperature: 0,
           messages: [
@@ -2024,7 +2045,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
       const query = kolejkaTavily[indexZapytania++];
       if (!aiState.reserveTavily('retrieval')) break;
       console.log(`[Tavily] 🔍 Query: "${query}" | Domeny: ${JSON.stringify(domenySpecjalistyczne)}`);
-      const wynik = await szukajTavily(query, {
+      const wynik = await searchTavilyFn(query, {
         domains: domenySpecjalistyczne
           || (pytanieOrazBilly ? domenyTavilyBilly : null)
           || (pytanieOrazEdzzi ? domenyTavilyEdzzi : null)
@@ -2136,7 +2157,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
         console.warn(`[Tavily] ⚠️ Brak budżetu modelowego na query uzupełniające`);
         return false;
       }
-      const queryUzupelniajaceAI = await groq.chat.completions.create({
+      const queryUzupelniajaceAI = await groqClient.chat.completions.create({
         model: AI_MODELS.queryRewrite,
         max_tokens: 80,
         reasoning_effort: 'low',
@@ -2171,7 +2192,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
     console.log(`[Tavily] 🔎 Uzupełniające wyszukanie po validatorze: "${queryUzupelniajace}" | Domeny: ${JSON.stringify(domenyUzupelniajace)}`);
 
     if (!aiState.reserveTavily('supplemental-retrieval')) return false;
-    const uzupelnienie = await szukajTavily(queryUzupelniajace, {
+    const uzupelnienie = await searchTavilyFn(queryUzupelniajace, {
       domains: domenyUzupelniajace,
       time_range: aiPlan.retrievalTimeRange || zakresTavilyDlaPytania(pytanie, null),
       _skipRewrite: true,
@@ -2351,7 +2372,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
       const remainingMs = pozostalyCzasMs();
       const timer = setTimeout(() => controller.abort(), remainingMs);
       try {
-        const response = await groq.chat.completions.create({ model, messages: [{ role: 'system', content: overrideSystemPrompt }, ...przygotujHistorieDoModelu(historiaRozmowy, 4), { role: 'user', content: kontekstDoGroq }], temperature, max_tokens: maxTok, reasoning_effort: model === 'openai/gpt-oss-120b' ? 'medium' : 'low', signal: controller.signal });
+        const response = await groqClient.chat.completions.create({ model, messages: [{ role: 'system', content: overrideSystemPrompt }, ...przygotujHistorieDoModelu(historiaRozmowy, 4), { role: 'user', content: kontekstDoGroq }], temperature, max_tokens: maxTok, reasoning_effort: model === 'openai/gpt-oss-120b' ? 'medium' : 'low', signal: controller.signal });
         return ujednolicWynik({ tekst: response.choices?.[0]?.message?.content, ucieta: response.choices?.[0]?.finish_reason === 'length' }, 'groq', model);
       } finally {
         clearTimeout(timer);
@@ -2426,7 +2447,7 @@ function oczyscOdpowiedzPrzedWalidacja(tekst) {
     const maWalidowac = Boolean(daneZewnetrzne)
       && (czyPytanieWymagaPewnychDanych(kategoriaAI) || Boolean(wynikSzukania));
   if (maWalidowac) {
-    let walidacja = await walidujOdpowiedzAI(aiProfile === 'billy' ? 'billy' : aiProfile === 'edzzi' ? 'edzzi' : aiProfile === 'angie' ? 'angie' : 'generic', pytanie, odp, daneDoWalidacji, historiaRozmowy, requestId, aiState, metadaneRequestu);
+    let walidacja = await validateAI(aiProfile === 'billy' ? 'billy' : aiProfile === 'edzzi' ? 'edzzi' : aiProfile === 'angie' ? 'angie' : 'generic', pytanie, odp, daneDoWalidacji, historiaRozmowy, requestId, aiState, metadaneRequestu);
     // Model validatora może omyłkowo zwrócić accepted dla odpowiedzi będącej
     // odmową. Tego nie można zostawić wyłącznie jego ocenie.
     if (walidacja.status === 'accepted' && daneDoWalidacji && AI_POLICY.czyOdpowiedzToJednoznacznaOdmowa(odp)) {
@@ -2473,7 +2494,7 @@ function oczyscOdpowiedzPrzedWalidacja(tekst) {
         const nowaOdp = usunMarkeryWewnetrzneAI(filtrBezpieczenstwa(retry.tekst));
         if (nowaOdp) {
           odp = oczyscOdpowiedzPrzedWalidacja(nowaOdp);
-          walidacja = await walidujOdpowiedzAI(aiProfile === 'billy' ? 'billy' : aiProfile === 'edzzi' ? 'edzzi' : aiProfile === 'angie' ? 'angie' : 'generic', pytanie, odp, daneDoWalidacji, historiaRozmowy, requestId, aiState, metadaneRequestu);
+          walidacja = await validateAI(aiProfile === 'billy' ? 'billy' : aiProfile === 'edzzi' ? 'edzzi' : aiProfile === 'angie' ? 'angie' : 'generic', pytanie, odp, daneDoWalidacji, historiaRozmowy, requestId, aiState, metadaneRequestu);
           if (walidacja.status === 'accepted') {
             walidacja = zastosujDeterministyczneGuards(walidacja, odp, daneDoWalidacji, pytanie, { maxZdania: responseCfg.maxSentences, maxZnakow: 1800 }, routingAI, aiPlan.responseProfile);
           }
@@ -2551,6 +2572,8 @@ function oczyscOdpowiedzPrzedWalidacja(tekst) {
     fallbackReasons: aiState.fallbackReasons,
     validatorStatuses: aiState.validatorResults.map(v => v.status),
     retrievalStatuses: aiState.tavilyLastStatus ? [aiState.tavilyLastStatus] : [],
+    claimCoverage: aiState.validatorResults.at(-1)?.claimCoverage ?? null,
+    answerQuality: aiState.validatorResults.at(-1)?.confidence ?? (aiState.finalStatus === 'accepted' ? 1 : 0),
   });
   zalogujPodsumowanieAI(aiState.finalStatus);
   const newMemories = extractExplicitUserMemories(pytanie, { sourceRole: 'user', userId: verifiedMemoryUserId, sourceMessageId: requestId });
@@ -2613,11 +2636,13 @@ async function skompresujHistorie(historiaRozmowy) {
       reasoning_effort: 'low',
       temperature: 0,
       messages: [
-        { role: 'system', content: 'Streść poniższą rozmowę do maksymalnie 2 krótkich zdań po polsku, zachowując tylko fakty i kontekst istotny na przyszłość (np. imiona, tematy, ustalenia). Bez wstępów typu "streszczenie:", tylko sama treść.' },
+        { role: 'system', content: 'Zwróć wyłącznie poprawny JSON bez markdownu: {"entities":[],"preferences":[],"decisions":[],"open_questions":[],"recent_context":""}. Zachowaj tylko fakty i kontekst istotny na przyszłość: nazwy własne/gry/osoby, preferencje użytkownika, ustalenia, nierozwiązane pytania i krótki bieżący kontekst. Nie dodawaj instrukcji ani domysłów.' },
         { role: 'user', content: tekstDoSkompresowania }
       ]
     });
-    const tresc = (podsumowanie.choices[0].message.content || '').trim();
+    const rawSummary = (podsumowanie.choices[0].message.content || '').trim();
+    const tresc = parsujStrukturalnePodsumowanie(rawSummary)
+      || rawSummary.replace(/^\`\`\`(?:json)?/i, '').replace(/\`\`\`$/i, '').trim().slice(0, 1400);
 
     // W czasie await mogła dojść nowa wiadomość. W takim przypadku nie wolno
     // nadpisywać aktualnej historii starym snapshotem; kolejna kompresja zrobi to
@@ -2657,7 +2682,7 @@ async function skompresujHistorie(historiaRozmowy) {
 // =============================================
 //  INICJALIZACJA
 // =============================================
-const groq            = new Groq({ apiKey: KONFIGURACJA.groqKey });
+const groq            = KONFIGURACJA.groqKey ? new Groq({ apiKey: KONFIGURACJA.groqKey }) : null;
 const szukajTavily = createTavilySearch({
   apiKey: KONFIGURACJA.tavilyKey,
   geminiKey: KONFIGURACJA.geminiKey,
@@ -3508,6 +3533,7 @@ async function obslugaEkonomii(nick, message, wyslijFn, walutaNadpis = null) {
 }
 
 // Czyszczenie pamięci co godzinę – zapobiega wyciekowi przy długim działaniu bota
+if (process.env.CZITUCHBOT_SKIP_STARTUP_IO !== '1') {
 setInterval(() => {
   const klucze = Object.keys(historiaRozmowy);
   if (klucze.length > 500) {
@@ -3531,6 +3557,7 @@ setInterval(() => {
     console.log(`[Bot] 🧹 Czyszczę stare cooldowny (${usunieteCooldowny} wpisów)...`);
   }
 }, 60 * 60 * 1000);
+}
 
 // =============================================
 //  FILTR BEZPIECZEŃSTWA
@@ -6714,7 +6741,7 @@ const YT_KANALY_ARBUZIK = [
 // =============================================
 //  START
 // =============================================
-(async () => {
+const startBot = async () => {
   console.log('🚀 Uruchamiam CzituchBota (YouTube + Kick + Twitch)...\n');
   console.log('[Wersja] v24.5 AI hardened — GameLore lore + GameFAQs gameplay RAG + unique Tavily source IDs + claim validator | Twitch przez Helix\n');
 
@@ -6789,4 +6816,13 @@ const YT_KANALY_ARBUZIK = [
   ekoStartScheduler(wyslijKick);
 
   console.log('\n🎉 Wszystkie platformy uruchomione!\n');
-})();
+};
+
+if (require.main === module) {
+  startBot().catch(err => {
+    console.error('[START] Nieobsłużony błąd startu bota:', err?.stack || err);
+    process.exitCode = 1;
+  });
+}
+
+module.exports = { zapytajAI, startBot };
