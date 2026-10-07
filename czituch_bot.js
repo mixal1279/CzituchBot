@@ -81,6 +81,8 @@ const { ocenJakoscOdpowiedzi } = require('./ai/quality');
 const { AI_MODELS } = require('./ai/modelConfig');
 const { parsujStrukturalnePodsumowanie } = require('./ai/history');
 const { createRequestId, sanitizeQuestion, planRequest, evaluateEvidence, shouldValidate, decideValidation, finalText: finalizeAIPipelineText } = require('./ai/pipeline');
+const { buildAnswerPlan } = require('./ai/answer-plan');
+const { judgeAnswer } = require('./ai/answer-judge');
 
 // =============================================
 //  MINECRAFT JAVA 26.1 — LOKALNE RECEPTURY
