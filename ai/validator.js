@@ -145,11 +145,11 @@ function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '') {
       // present elsewhere in the same source block (e.g. "Johnny" vs
       // "Johnny Silverhand"). Bind the claim to the whole verified source
       // block while still requiring the quoted text to come from that block.
-      return zgodnoscStrukturalna(block, claim, { allowCrossLanguageExactEvidence: true }).ok;
+      return zgodnoscStrukturalna(block, claim, { allowCrossLanguageExactEvidence: true, allowDistributedEvidence: true }).ok;
     }
-    return czyDowodSemantyczniePokrywaClaim(block, quote, { allowCrossLanguageExactEvidence: true })
-      && zgodnoscStrukturalna(block, claim, { allowCrossLanguageExactEvidence: true }).ok
-      && czyDowodSemantyczniePokrywaClaim(block, claim, { allowCrossLanguageExactEvidence: true });
+    return czyDowodSemantyczniePokrywaClaim(block, quote, { allowCrossLanguageExactEvidence: true, allowDistributedEvidence: true })
+      && zgodnoscStrukturalna(block, claim, { allowCrossLanguageExactEvidence: true, allowDistributedEvidence: true }).ok
+      && czyDowodSemantyczniePokrywaClaim(block, claim, { allowCrossLanguageExactEvidence: true, allowDistributedEvidence: true });
   });
 }
 
@@ -219,13 +219,18 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
     claimCoverage * (maStarePola ? (wynik.complete === true ? 1 : 0.75) : 0.9)
   ));
 
-  const claimContractOk = claims.length > 0
+  const sentenceCount = answerCoverage.totalSentences ?? null;
+  const claimGranularityOk = !answer || !sentenceCount || sentenceCount <= 1
+    ? true
+    : answerCoverage.ok && claims.length >= Math.min(3, Math.ceil(sentenceCount / 3));
+\n  const claimContractOk = claims.length > 0
     && claims.every(c => c.supported)
     && !unknownSourceClaim
     && !unsupportedEvidenceClaim
     && !tooManyClaims
     && !malformedClaims
     && answerCoverage.ok
+    && claimGranularityOk
     && unsupported.length === 0;
 
   const accepted = validFromModel === true
@@ -268,6 +273,7 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
   if (unsupportedEvidenceClaim) localRejectReasons.push('evidence_not_verified');
   if (claims.some(c => !c.supported) || wynik.unsupported_claims.some(v => typeof v === 'string' && v.trim())) localRejectReasons.push('unsupported_claims_reported');
   if (!answerCoverage.ok) localRejectReasons.push('answer_not_covered_by_claims');
+  if (!claimGranularityOk) localRejectReasons.push('claims_too_coarse_for_answer');
   if (validFromModel !== true) localRejectReasons.push('model_returned_invalid');
   if (confidence < 0.75) localRejectReasons.push('confidence_below_threshold');
   if (maStarePola && wynik.supported !== true) localRejectReasons.push('model_supported_false');
