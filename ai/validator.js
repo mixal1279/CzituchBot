@@ -176,7 +176,10 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
     ? wynik.claims
     : (Array.isArray(wynik.claims_list) ? wynik.claims_list : []);
   const tooManyClaims = rawClaims.length > 12;
-  const malformedClaims = rawClaims.some(claim => !claim || typeof claim !== 'object' || typeof claim.claim !== 'string' || typeof claim.supported !== 'boolean' || !Array.isArray(claim.source_ids) || typeof claim.evidence_quote !== 'string');
+  const malformedClaimIndexes = rawClaims.map((claim, index) =>
+    !claim || typeof claim !== 'object' || typeof claim.claim !== 'string' || typeof claim.supported !== 'boolean' || !Array.isArray(claim.source_ids) || typeof claim.evidence_quote !== 'string' ? index : -1
+  ).filter(index => index >= 0);
+  const malformedClaims = malformedClaimIndexes.length > 0;
 
   const claims = rawClaims.slice(0, 12).map((claim) => ({
     claim: typeof claim?.claim === 'string' ? claim.claim.trim().slice(0, 500) : '',
@@ -189,9 +192,11 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
   })).filter(c => c.claim);
 
   const allowed = allowedSourceIds instanceof Set ? allowedSourceIds : null;
-  const unknownSourceClaim = claims.some(c => c.supported && (!c.source_ids.length || (allowed && c.source_ids.some(id => !allowed.has(id)))));
-  const unsupportedEvidenceClaim = claims.some(c => c.supported && !czyDowodPotwierdzaClaim(dane, c.source_ids, c.evidence_quote, c.claim));
-  const answerCoverage = answer ? sprawdzPokrycieClaimamiOdpowiedzi(answer, claims) : { ok: true, uncovered: [] };
+  const unknownSourceClaimIndexes = claims.map((c, index) => c.supported && (!c.source_ids.length || (allowed && c.source_ids.some(id => !allowed.has(id)))) ? index : -1).filter(index => index >= 0);
+  const unsupportedEvidenceClaimIndexes = claims.map((c, index) => c.supported && !czyDowodPotwierdzaClaim(dane, c.source_ids, c.evidence_quote, c.claim) ? index : -1).filter(index => index >= 0);
+  const unknownSourceClaim = unknownSourceClaimIndexes.length > 0;
+  const unsupportedEvidenceClaim = unsupportedEvidenceClaimIndexes.length > 0;
+  const answerCoverage = answer ? sprawdzPokrycieClaimamiOdpowiedzi(answer, claims) : { ok: true, uncovered: [], totalSentences: null, checkedSentences: null, uncoveredSentenceIndexes: [] };
   const unsupportedFromClaims = claims.filter(c => !c.supported).map(c => c.claim).filter(Boolean);
   const unsupported = [...new Set([
     ...unsupportedFromClaims,
@@ -251,6 +256,40 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
   const status = accepted
     ? 'accepted'
     : (sprzecznyWerdykt || niekompletnyPozytywnyWerdykt ? 'inconclusive' : 'rejected');
+  const localRejectReasons = [];
+  if (!rawClaims.length) localRejectReasons.push('claims_missing');
+  if (tooManyClaims) localRejectReasons.push('claims_over_limit');
+  if (malformedClaims) localRejectReasons.push('malformed_claims');
+  if (unknownSourceClaim) localRejectReasons.push('unknown_source_id');
+  if (unsupportedEvidenceClaim) localRejectReasons.push('evidence_not_verified');
+  if (claims.some(c => !c.supported) || wynik.unsupported_claims.some(v => typeof v === 'string' && v.trim())) localRejectReasons.push('unsupported_claims_reported');
+  if (!answerCoverage.ok) localRejectReasons.push('answer_not_covered_by_claims');
+  if (validFromModel !== true) localRejectReasons.push('model_returned_invalid');
+  if (confidence < 0.75) localRejectReasons.push('confidence_below_threshold');
+  if (maStarePola && wynik.supported !== true) localRejectReasons.push('model_supported_false');
+  if (maStarePola && wynik.relevant !== true) localRejectReasons.push('model_not_relevant');
+  if (maStarePola && wynik.complete !== true) localRejectReasons.push('model_marked_incomplete');
+  if (maStarePola && wynik.hallucination !== false) localRejectReasons.push('model_flagged_hallucination');
+  if (!localRejectReasons.length && !accepted) localRejectReasons.push('local_contract_not_satisfied');
+  const diagnostics = {
+    contractAccepted: accepted,
+    modelValid: validFromModel === true,
+    claimCoverage,
+    rawClaimCount: rawClaims.length,
+    normalizedClaimCount: claims.length,
+    malformedClaimIndexes,
+    unknownSourceClaimIndexes,
+    unsupportedEvidenceClaimIndexes,
+    unsupportedClaimCount: unsupportedFromClaims.length,
+    modelUnsupportedClaimCount: wynik.unsupported_claims.filter(v => typeof v === 'string' && v.trim()).length,
+    answerCoverage: {
+      ok: answerCoverage.ok,
+      totalSentences: answerCoverage.totalSentences ?? null,
+      checkedSentences: answerCoverage.checkedSentences ?? null,
+      uncoveredSentenceIndexes: answerCoverage.uncoveredSentenceIndexes || [],
+    },
+    localRejectReasons,
+  };
 
   return {
     status,
@@ -266,10 +305,13 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
     confidence,
     claims,
     unsupported_claims: unsupported,
+    diagnostics,
     reason: tooManyClaims
       ? 'validator zwrócił więcej claims niż obsługuje kontrakt'
       : malformedClaims
         ? 'validator zwrócił niekompletny lub błędnie uformowany claim'
+        : unknownSourceClaim
+          ? 'claim wskazuje nieistniejące lub niedozwolone źródło'
         : !answerCoverage.ok
           ? 'claims nie pokrywają całej odpowiedzi'
           : unsupportedEvidenceClaim

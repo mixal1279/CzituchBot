@@ -1639,8 +1639,8 @@ async function walidujOdpowiedzAI(persona, pytanie, odpowiedz, dane, historiaRoz
       return { status: 'unavailable', ok: false, technicalError: true, provider: 'gemini', model: models[i], unsupported_claims: [], reason: 'globalny budżet modeli wyczerpany' };
     }
     const result = await walidujOdpowiedzGeminiModel(models[i], persona, pytanie, odpowiedz, dane, historiaRozmowy, requestId, requestState, requestMeta);
-    if (requestState) requestState.validatorResults.push({ model: models[i], status: result.status, complete: result.complete === true, confidence: Number.isFinite(result.confidence) ? result.confidence : null, claimCoverage: Array.isArray(result.claims) && result.claims.length ? result.claims.filter(c => c.supported === true).length / result.claims.length : null });
-    console.log(`[AI][${requestId}] validator #${i + 1} ${models[i]} → ${result.status}`);
+    if (requestState) requestState.validatorResults.push({ model: models[i], status: result.status, complete: result.complete === true, confidence: Number.isFinite(result.confidence) ? result.confidence : null, claimCoverage: Array.isArray(result.claims) && result.claims.length ? result.claims.filter(c => c.supported === true).length / result.claims.length : null, validationDiagnostics: result.diagnostics || null });
+    console.log(`[AI][${requestId}] validator #${i + 1} ${models[i]} → ${result.status}${result.diagnostics ? ` localReject=${JSON.stringify(result.diagnostics.localRejectReasons)} claimCoverage=${result.diagnostics.claimCoverage}` : ''}`);
     if (result.status === 'accepted' || result.status === 'rejected') return result;
     last = result;
   }
@@ -2480,7 +2480,7 @@ function oczyscOdpowiedzPrzedWalidacja(tekst) {
       }
     }
     if (walidacja.status === 'rejected') {
-      console.log(`[AI][${requestId}] validator rejected; reason=${JSON.stringify(walidacja.reason || '')} confidence=${walidacja.confidence ?? 'n/a'} claims=${JSON.stringify(walidacja.unsupported_claims || [])}`);
+      console.log(`[AI][${requestId}] validator rejected; reason=${JSON.stringify(walidacja.reason || '')} confidence=${walidacja.confidence ?? 'n/a'} diagnostics=${JSON.stringify(walidacja.diagnostics || null)} claims=${JSON.stringify(walidacja.unsupported_claims || [])}`);
       const odmowaMimoDanych = AI_POLICY.czyOdpowiedzToJednoznacznaOdmowa(odp);
       // Przy odmowie bez unsupported_claims źródła już istnieją; dodatkowe Tavily
       // tylko powiększa kontekst i może pogorszyć regenerację.

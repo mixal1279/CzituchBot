@@ -29,17 +29,23 @@ const UNIT_ALIASES = new Map([
   ['m','m'], ['meter','m'], ['meters','m'], ['metr','m'], ['metry','m'], ['metrów','m'],
   ['kg','kg'], ['kilogram','kg'], ['kilograms','kg'], ['kilogramów','kg'],
   ['gb','gb'], ['mb','mb'], ['tb','tb'], ['hz','hz'], ['fps','fps'],
-  ['°c','celsius'], ['c','celsius'], ['°f','fahrenheit'], ['zł','pln'], ['pln','pln'], ['usd','usd'], ['eur','eur'], ['%','percent'],
+  ['°c','celsius'], ['°f','fahrenheit'], ['zł','pln'], ['pln','pln'], ['usd','usd'], ['eur','eur'], ['%','percent'],
 ]);
 function wyodrebnijJednostkoweWartosci(value) {
   const text = String(value || '').toLocaleLowerCase('pl-PL').replace(/,/g, '.');
-  const unitPattern = '(?:°c|°f|%|zł|pln|usd|eur|gb|mb|tb|hz|fps|km|kg|m|h|hr|hrs|s|sec|mins?|hours?|minutes?|seconds?|godzin(?:a|y)?|godz|minut(?:a|y)?|sekund(?:a|y)?|days?|dzień|dni|dnia|years?|rok|lata|lat|kilometers?|kilometr(?:ów|y)?|meters?|metr(?:ów|y)?|kilograms?|kilogramów)';
+  const unitPattern = '(?:°c|°f|%|zł|pln|usd|eur|gb|mb|tb|hz|fps|km|kg|h|hr|hrs|sec|mins?|hours?|minutes?|seconds?|godzin(?:a|y)?|godz|minut(?:a|y)?|sekund(?:a|y)?|days?|dzień|dni|dnia|years?|rok|lata|lat|kilometers?|kilometr(?:ów|y)?|meters?|metr(?:ów|y)?|kilograms?|kilogramów)';
   const out = [];
   const re = new RegExp(`(?:\\b(\\d+(?:\\.\\d+)?)\\s*(${unitPattern})(?=$|[^\\p{L}\\p{N}])|(${unitPattern})(?=$|[^\\p{L}\\p{N}])\\s*(\\d+(?:\\.\\d+)?))`, 'giu');
   for (const m of text.matchAll(re)) {
     const amount = Number(m[1] || m[4]);
     const rawUnit = String(m[2] || m[3] || '').toLocaleLowerCase('pl-PL');
     const unit = UNIT_ALIASES.get(rawUnit);
+    if (Number.isFinite(amount) && unit) out.push(`${amount}:${unit}`);
+  }
+  const shortUnitRe = /(?:\b(\d+(?:\.\d+)?)\s+(m|s)\b|\b(m|s)\s+(\d+(?:\.\d+)?))/giu;
+  for (const m of text.matchAll(shortUnitRe)) {
+    const amount = Number(m[1] || m[4]);
+    const unit = UNIT_ALIASES.get(String(m[2] || m[3] || '').toLocaleLowerCase('pl-PL'));
     if (Number.isFinite(amount) && unit) out.push(`${amount}:${unit}`);
   }
   return [...new Set(out)];
@@ -101,20 +107,35 @@ function zgodnoscStrukturalna(evidence, claim) {
 function tokenyPokrycia(value) {
   return [...new Set(normalizujClaim(value).split(' ').filter(t => t.length >= 3 && !COVERAGE_STOPWORDS.has(t)))];
 }
+function tokenyPokrywajaSie(a, b) {
+  if (a === b) return true;
+  if (Math.min(a.length, b.length) < 6) return false;
+  let prefixLength = 0;
+  while (prefixLength < Math.min(a.length, b.length) && a[prefixLength] === b[prefixLength]) prefixLength++;
+  return prefixLength >= 5 && prefixLength / Math.min(a.length, b.length) >= 0.72;
+}
 function sprawdzPokrycieClaimamiOdpowiedzi(answer, claims) {
   const sentences = String(answer || '').split(/(?<=[.!?])\s+|\n+/).map(x => x.trim()).filter(Boolean);
   const claimTexts = (Array.isArray(claims) ? claims : []).map(c => tokenyPokrycia(c?.claim || '')).filter(t => t.length >= 2);
   const uncovered = [];
-  for (const sentence of sentences) {
+  let checkedSentences = 0;
+  for (const [sentenceIndex, sentence] of sentences.entries()) {
     const tokens = tokenyPokrycia(sentence);
-    if (tokens.length < 3) continue;
+    if (tokens.length < 2) continue;
+    checkedSentences++;
     const maxCoverage = claimTexts.reduce((best, claimTokens) => {
-      const covered = tokens.filter(t => claimTokens.includes(t)).length / tokens.length;
+      const covered = tokens.filter(t => claimTokens.some(c => tokenyPokrywajaSie(t, c))).length / tokens.length;
       return Math.max(best, covered);
     }, 0);
-    if (maxCoverage < 0.65) uncovered.push(sentence.slice(0, 180));
+    if (maxCoverage < 0.65) uncovered.push({ index: sentenceIndex, text: sentence.slice(0, 180) });
   }
-  return { ok: uncovered.length === 0, uncovered: uncovered.slice(0, 4) };
+  return {
+    ok: uncovered.length === 0,
+    totalSentences: sentences.length,
+    checkedSentences,
+    uncoveredSentenceIndexes: uncovered.slice(0, 8).map(item => item.index),
+    uncovered: uncovered.slice(0, 4).map(item => item.text),
+  };
 }
 function czyDowodSemantyczniePokrywaClaim(evidence, claim) {
   return zgodnoscStrukturalna(evidence, claim).ok;

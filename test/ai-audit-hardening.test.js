@@ -5,6 +5,7 @@ const assert = require('node:assert/strict');
 const { searchSecondaryProviders } = require('../ai/webRetrieval');
 const { czyWymagaSecondaryRetrieval } = require('../ai/tavily');
 const { normalizujWynikWalidatora } = require('../ai/validator');
+const { wyodrebnijJednostkoweWartosci } = require('../ai/claimValidation');
 const { sourceDiversity, shouldRunAdditionalRetrieval } = require('../ai/retrieval');
 const { createAIRequestContext } = require('../ai/requestContext');
 const { createAIMetrics, recordAIMetric, snapshotAIMetrics } = require('../ai/metrics');
@@ -126,6 +127,25 @@ test('validator rejects a matching number expressed in a different unit', () => 
   }, 'test', 'test', new Set(['SOURCE 1']), data);
   assert.equal(result.status, 'rejected');
   assert.match(result.reason, /jednostkami/);
+});
+
+test('validator accepts a natural Polish inflection when claims fully ground the sentence', () => {
+  const data = '[SOURCE 1]\nTYTUŁ: Portal 2\nTREŚĆ: Wheatley zostaje przeniesiony do ciała GLaDOS i dzięki temu uzyskuje kontrolę nad systemem Aperture.';
+  const answer = 'Wheatley trafił do GLaDOS i zdobył kontrolę nad Aperture.';
+  const result = normalizujWynikWalidatora({
+    valid: true, reason: 'potwierdzone', unsupported_claims: [], supported: true,
+    relevant: true, complete: true, hallucination: false, confidence: 0.96,
+    claims: [{ claim: 'Wheatley trafia do ciała GLaDOS i uzyskuje kontrolę nad Aperture.', supported: true, source_ids: ['SOURCE 1'], evidence_quote: 'Wheatley zostaje przeniesiony do ciała GLaDOS i dzięki temu uzyskuje kontrolę nad systemem Aperture.' }],
+  }, 'test', 'test', new Set(['SOURCE 1']), data, answer);
+  assert.equal(result.status, 'accepted');
+  assert.equal(result.diagnostics.answerCoverage.ok, true);
+  assert.equal(result.diagnostics.answerCoverage.checkedSentences, 1);
+});
+
+test('short compact characters are not misread as measurement units', () => {
+  assert.deepEqual(wyodrebnijJednostkoweWartosci('Tekst ma 10m i 10sztuk, wartość 10c.'), []);
+  assert.deepEqual(wyodrebnijJednostkoweWartosci('Dystans to 10 m, a czas to 10 s.'), ['10:m', '10:second']);
+  assert.deepEqual(wyodrebnijJednostkoweWartosci('Temperatura wynosi 10 °C.'), ['10:celsius']);
 });
 
 test('retrieval asks for more evidence when different hosts syndicate the same text', () => {
