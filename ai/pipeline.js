@@ -59,8 +59,8 @@ function parseEvidenceText(text) {
     const block = value.slice(start, end);
     return {
       sourceId: m[1].trim(),
-      title: block.match(/TYTUŁ:\\s*([^\\r\\n]+)/i)?.[1] || m[1],
-      url: block.match(/URL:\\s*(https?:\\/\\/[^\\s\\r\\n]+)/i)?.[1] || '',
+      title: block.match(/TYTUŁ:\s*([^\r\n]+)/i)?.[1] || m[1],
+      url: block.match(/URL:\s*(https?:\/\/[^\s\r\n]+)/i)?.[1] || '',
       content: block,
     };
   });
