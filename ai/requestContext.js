@@ -27,6 +27,7 @@ function createAIRequestContext(options = {}) {
     validatory: 0,
     tavilySearches: 0,
     validatorResults: [],
+    fallbackReasons: [],
     finalStatus: 'unavailable',
   };
 
@@ -70,6 +71,7 @@ function createAIRequestContext(options = {}) {
     modelCalls: ctx.modelCalls,
     validatory: ctx.validatory,
     tavilySearches: ctx.tavilySearches,
+    fallbackReasons: [...ctx.fallbackReasons],
     finalStatus: ctx.finalStatus,
   });
 
