@@ -32,6 +32,16 @@ function decomposeQuestion(question,routing={}) {
     return missingAnchor ? [...anchor,clause].join(' ') : clause;
   });
 }
+function extractCarryoverEntities(text) {
+  const stop = new Set(['jaki','jaka','jakie','który','która','które','kim','kto','co','czym','dlaczego','czemu','kiedy','gdzie','ile','czy','jak']);
+  const matches = String(text || '').match(/\b[A-ZĄĆĘŁŃÓŚŹŻ][\p{L}\d'’.-]*(?:\s+[A-ZĄĆĘŁŃÓŚŹŻ][\p{L}\d'’.-]*){0,3}/gu) || [];
+  return [...new Set(matches
+    .map(x => x.replace(/\s+/g, ' ').trim())
+    .filter(x => {
+      const first = x.toLocaleLowerCase('pl-PL').split(/\s+/)[0];
+      return !stop.has(first) && x.length >= 3;
+    }))].slice(0, 3);
+}
 function buildAdvancedRetrievalPlan(question,routing={},baseQueries=[]){const q=String(question||'').trim(),entity=String(routing.game||routing.entity||'').trim(),plan=[...baseQueries],parts=decomposeQuestion(q,routing);if(parts.length>1)for(const part of parts.slice(0,3))plan.push(part);if(routing.is_lore)plan.push((entity||q)+' plot story lore facts');if(routing.is_gameplay)plan.push((entity||q)+' walkthrough guide solution');if(routing.freshness==='live')plan.push((entity||q)+' latest official');if(routing.freshness==='recent')plan.push((entity||q)+' latest');return unique(plan).slice(0,4).map((query,index)=>({query,priority:index===0?'primary':index===1?'secondary':'fallback',reason:index===0?'original':routing.is_lore?'lore':routing.is_gameplay?'gameplay':'coverage'}));}
 function sourceHost(url){try{return new URL(url).hostname.toLowerCase().replace(/^www\./,'');}catch(_){return '';}}
 function sourceQualityScore(source={}){const score=Number(source.score);const authority=String(source.authority||'').toLowerCase();const authorityBonus=authority==='oficjalne'?0.25:authority==='wyspecjalizowane'?0.2:authority.includes('guide')?0.08:0;return (Number.isFinite(score)?score:0)+authorityBonus;}
@@ -41,4 +51,4 @@ for(const result of list){const tokens=sourceTokens(result);const tokenSet=new S
 const independentHosts=new Set(independent.map(x=>x.host).filter(Boolean));return {hosts:hosts.size,providers:providers.size,independentSources:independent.length,independentHosts:independentHosts.size,duplicatePairs};}
 function shouldRunAdditionalRetrieval({status='ok',text='',sourceCount=0,queryCount=1,results=[],requireDiversity=false}={}){const list=Array.isArray(results)?results:[];if(status!=='ok'||!String(text).trim()||String(text).length<900||sourceCount<2)return true;if(requireDiversity){const d=sourceDiversity(list);if(d.independentHosts<2)return true;}const strong=list.filter(r=>sourceQualityScore(r)>=0.55).length;if(strong<1)return true;return false;}
 function rankRetrievalNeed({routing={},sourceCount=0,textLength=0,validatorStatus=null,results=[]}={}){let score=0;if(routing.needs_fresh_data)score+=3;if(routing.is_lore||routing.is_gameplay)score+=2;if(sourceCount<2)score+=2;if(textLength<900)score++;if(validatorStatus==='rejected'||validatorStatus==='inconclusive')score+=3;const d=sourceDiversity(results);if(sourceCount>=2&&d.independentHosts<2)score+=2;return score>=5?'high':score>=3?'medium':'low';}
-module.exports={decomposeQuestion,buildAdvancedRetrievalPlan,shouldRunAdditionalRetrieval,rankRetrievalNeed,sourceDiversity,sourceQualityScore};
+module.exports={decomposeQuestion,extractCarryoverEntities,buildAdvancedRetrievalPlan,shouldRunAdditionalRetrieval,rankRetrievalNeed,sourceDiversity,sourceQualityScore};
