@@ -58,7 +58,7 @@ function wyodrebnijNazwyWlasne(value) {
 function wyodrebnijMarkery(value, regex) {
   return regex.test(normalizujClaim(value));
 }
-function zgodnoscStrukturalna(evidence, claim) {
+function zgodnoscStrukturalna(evidence, claim, options = {}) {
   const e = String(evidence || '');
   const c = String(claim || '');
   if (!e.trim() || !c.trim()) return { ok: false, reason: 'brak dowodu lub claimu' };
