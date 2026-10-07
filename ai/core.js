@@ -110,7 +110,7 @@ function normalizeSource(source = {}, index = 0) {
     title,
     content,
     host: hostOf(source.url),
-    authority: source.authority || classifyAuthority(source),
+    authority: AUTHORITY[source.authority] ? source.authority : classifyAuthority(source),
     key: sourceKey(source),
   };
 }
