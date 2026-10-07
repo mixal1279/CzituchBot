@@ -20,7 +20,7 @@ function createAIRequestContext(options = {}) {
     maxGeneracji: clampLimit(options.maxGeneracji, 6),
     maxModelCalls: clampLimit(options.maxModelCalls, 10),
     maxValidatorow: clampLimit(options.maxValidatorow, 3),
-    maxWyszukanTavily: clampLimit(options.maxWyszukanTavily, 2),
+    maxWyszukanTavily: clampLimit(options.maxWyszukanTavily, 3),
 
     generacje: 0,
     modelCalls: 0,
