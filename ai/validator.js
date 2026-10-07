@@ -263,7 +263,7 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
   const claimGranularityOk = !answer || !sentenceCount || sentenceCount <= 1
     ? true
     : answerCoverage.ok && claims.length >= Math.min(3, Math.ceil(sentenceCount / 3));
-  const evidenceContractOk = !dane || !answer || evidenceAssessment.status !== 'weak';
+  const evidenceContractOk = !dane || !answer || evidenceAssessment.status !== 'weak' || (claims.length > 0 && unsupportedEvidenceClaimIndexes.length === 0 && unknownSourceClaimIndexes.length === 0 && evidenceAssessment.sourceCount >= 1);
 
   const claimContractOk = claims.length > 0
     && claims.every(c => c.supported)
