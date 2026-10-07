@@ -33,6 +33,10 @@ function classifyAIRequest(pytanie, policyCategory, recipeDetector = () => false
     else confidence = resolved ? Math.max(0.86, resolved.confidence) : 0.80;
   } else if (category === 'conversation') confidence = 0.88;
 
+  if (resolved?.resolution === 'deterministic_ambiguous') {
+    confidence = Math.min(confidence, 0.68);
+  }
+
   return {
     intent: category, entity, entity_type: resolved?.type || (entity ? 'entity' : null),
     game: resolved?.game || (resolved?.type === 'game' ? resolved.name : null), resolved_entity: resolved,
