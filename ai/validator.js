@@ -136,6 +136,14 @@ function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '') {
   if (!Array.isArray(sourceIds) || !sourceIds.length || typeof evidenceQuote !== 'string') return false;
   const quote = evidenceQuote.trim().replace(/\s+/g, ' ').toLocaleLowerCase('pl-PL');
   if (quote.length < 3 || quote.length > 500) return false;
+  const claimNorm = claim ? String(claim).toLocaleLowerCase('pl-PL').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '') : '';
+  const quoteNorm = quote.normalize('NFD').replace(/[\\u0300-\\u036f]/g, '');
+  const quoteCaptured = /captur\\w*|porwan\\w*|uprowadz\\w*|schwyt\\w*/i.test(quoteNorm);
+  const quoteKilled = /kill\\w*|murder\\w*|zabij\\w*|zabil\\w*|zabila\\w*|zabici\\w*|zabity\\w*|zabicie\\w*|smier\\w*/i.test(quoteNorm);
+  const claimCaptured = /captur\\w*|porwan\\w*|uprowadz\\w*|schwyt\\w*/i.test(claimNorm);
+  const claimKilled = /kill\\w*|murder\\w*|zabij\\w*|zabil\\w*|zabila\\w*|zabici\\w*|zabity\\w*|zabicie\\w*|smier\\w*/i.test(claimNorm);
+  if (claimKilled && quoteCaptured && !quoteKilled) return false;
+  if (claimCaptured && quoteKilled && !quoteCaptured) return false;
   return sourceIds.some(id => {
     const block = pobierzBlokZrodla(dane, id);
     if (!block) return false;
