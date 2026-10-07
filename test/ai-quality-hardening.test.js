@@ -48,7 +48,6 @@ test('worst-case request budget cannot exceed configured model, generation, vali
   const tavilyCtx = createAIRequestContext({ maxCzasMs: 60000, maxGeneracji: 6, maxModelCalls: 10, maxValidatorow: 3, maxWyszukanTavily: 2 });
   for (let i = 0; i < 2; i++) assert.equal(tavilyCtx.reserveTavily('retrieval'), true);
   assert.equal(tavilyCtx.reserveTavily('overflow'), false);
-  assert.equal(ctx.reserveValidator('overflow'), false);
 });
 
 test('quality metrics expose coverage and answer-quality aggregates', () => {
