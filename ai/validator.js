@@ -102,7 +102,7 @@ function wytnijJsonWalidatora(text) {
 function wyodrebnijIdentyfikatoryZrodel(dane) {
   const ids = new Set();
   const text = String(dane || '');
-  for (const match of text.matchAll(/^\[SOURCE (\d+)\]\s*\r?\n(?=TYTUŁ:)/gmi)) ids.add(`SOURCE ${match[1]}`);
+  for (const match of text.matchAll(/^\[SOURCE (\d+)\]\s*\r?\n(?=(?:TYP:\s*UNTRUSTED_WEB_DATA\s*\r?\n)?TYTUŁ:)/gmi)) ids.add(`SOURCE ${match[1]}`);
   for (const match of text.matchAll(/^\[REFERENCE ([^\]\r\n]+)\]\s*$/gmi)) ids.add(`REFERENCE ${match[1].trim()}`);
   return ids;
 }
@@ -279,7 +279,10 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
     normalizedClaimCount: claims.length,
     malformedClaimIndexes,
     unknownSourceClaimIndexes,
+    unknownSourceClaims: unknownSourceClaimIndexes.map(index => ({ claimIndex: index, sourceIds: claims[index]?.source_ids || [] })),
     unsupportedEvidenceClaimIndexes,
+    unsupportedEvidenceClaims: unsupportedEvidenceClaimIndexes.map(index => ({ claimIndex: index, sourceIds: claims[index]?.source_ids || [] })),
+    allowedSourceCount: allowed ? allowed.size : null,
     unsupportedClaimCount: unsupportedFromClaims.length,
     modelUnsupportedClaimCount: wynik.unsupported_claims.filter(v => typeof v === 'string' && v.trim()).length,
     answerCoverage: {
