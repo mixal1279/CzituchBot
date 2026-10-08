@@ -72,7 +72,7 @@ const { extractExplicitUserMemories, mergeMemoryRecords, buildVerifiedMemoryCont
 const { parseMemoryCommand, forgetMemories, describeMemories } = require('./ai/memory_manager');
 const { decomposeQuestion, buildAdvancedRetrievalPlan } = require('./ai/retrieval');
 const { classifyFailure, nextFallbacks, selectRepairFallbacks, repairBudgetBlockReason, GENERATION_FALLBACK_CHAIN } = require('./ai/fallback');
-const { createGroqCompletion, computeValidatorTimeout } = require('./ai/provider-runtime');
+const { createGroqCompletion, computeValidatorTimeout, computeGenerationTimeout } = require('./ai/provider-runtime');
 const { createAIMetrics, recordAIMetric, snapshotAIMetrics } = require('./ai/metrics');
 const { sanitizeRequestText } = require('./ai/limits');
 const { createAIRequestContext } = require('./ai/requestContext');
@@ -1602,7 +1602,7 @@ async function walidujOdpowiedzOpenRouter(persona, pytanie, odpowiedz, dane, req
   const remainingMs = requestState
     ? (typeof requestState.remainingMs === 'function' ? requestState.remainingMs() : requestState.maxCzasMs - (Date.now() - requestState.startedAt))
     : 12000;
-  const validatorTimeoutMs = requestState ? computeValidatorTimeout(remainingMs, { maxTimeoutMs: 9000, reserveMs: 2500, minTimeoutMs: 6000 }) : 12000;
+  const validatorTimeoutMs = requestState ? computeValidatorTimeout(remainingMs, { maxTimeoutMs: 9000, reserveMs: 6500, minTimeoutMs: 4000 }) : 9000;
   if (requestState && validatorTimeoutMs === null) {
     return { status: 'unavailable', ok: false, technicalError: true, transient: true, skipped: true, provider: 'openrouter', model: KONFIGURACJA.openrouterValidatorModel, unsupported_claims: [], reason: 'OpenRouter validator pominięty: zbyt mały pozostały budżet czasu' };
   }
@@ -2078,11 +2078,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
   const pozostalyCzasMs = () => aiState.remainingMs();
   // Dzielimy pozostały deadline między aktualną i potencjalne kolejne próby.
   // Dzięki temu jeden zawieszony provider nie może zjeść całych 25 s i zablokować fallbacku.
-  const timeoutDlaGeneracji = () => {
-    const remaining = pozostalyCzasMs();
-    const remainingSlots = Math.max(1, aiState.maxGeneracji - aiState.generacje + 1);
-    return Math.max(1, Math.min(remaining, Math.floor(remaining / remainingSlots)));
-  };
+  const timeoutDlaGeneracji = () => computeGenerationTimeout(pozostalyCzasMs());
   const zarezerwujModel = (purpose = 'model') => {
     const reserved = aiState.reserveModel(purpose);
     if (!reserved) {
@@ -2093,6 +2089,10 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
   aiState.zarezerwujModel = zarezerwujModel;
   const moznaWykonacGeneracje = (provider, model) => {
     const phase = aiState.generationPhase || 'initial';
+    if (timeoutDlaGeneracji() === null) {
+      console.warn(`[AI][${requestId}] pomijam ${provider}/${model}: za mało czasu na sensowną próbę i zachowanie rezerwy`);
+      return false;
+    }
     const reserved = aiState.reserveGeneration(provider, model, phase);
     if (!reserved) {
       console.warn(`[AI][${requestId}] budżet generacji/modeli wyczerpany (${provider}/${model})`);
@@ -2733,6 +2733,9 @@ Pytanie użytkownika: ${pytanie}`;
   const ujednolicWynik = (r, provider, model) => ({ tekst: String(r?.tekst || '').trim(), status: r?.tekst ? 'ok' : 'unavailable', provider: r?.provider || provider, model: r?.model || model, ucieta: Boolean(r?.ucieta), error: r?.error || null });
 
   async function zapytajGlowny(maxTok, overrideSystemPrompt = systemPrompt, model = AI_MODELS.generatorPrimary) {
+    if (timeoutDlaGeneracji() === null) {
+      return wynikPusty('groq', model, 'AI request deadline too short for generation');
+    }
     if (model === 'openai/gpt-oss-120b') {
       if (requestBlokada120b) {
         return wynikPusty('groq', model, '120B blocked for this request after previous limit error');
