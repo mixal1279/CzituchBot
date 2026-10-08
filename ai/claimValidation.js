@@ -70,7 +70,17 @@ function wyodrebnijJednostkoweWartosci(value) {
 }
 function wyodrebnijNazwyWlasne(value) {
   const raw = String(value || '');
-  const matches = raw.match(/\b[A-ZĄĆĘŁŃÓŚŹŻ][\p{L}\d'’.-]*(?:\s+[A-ZĄĆĘŁŃÓŚŹŻ][\p{L}\d'’.-]*){0,3}/gu) || [];
+  const matches = [];
+  const re = /\b[A-ZĄĆĘŁŃÓŚŹŻ][\p{L}\d'’.-]*(?:\s+[A-ZĄĆĘŁŃÓŚŹŻ][\p{L}\d'’.-]*){0,3}/gu;
+  for (const match of raw.matchAll(re)) {
+    const text = match[0];
+    const index = Number(match.index || 0);
+    const before = raw.slice(0, index);
+    const sentenceStart = !before || /(?:^|[.!?]\s*)$/.test(before);
+    const singleWord = !/\s/.test(text);
+    if (sentenceStart && singleWord && !/\d/.test(text)) continue;
+    matches.push(text);
+  }
   return [...new Set(matches.map(normalizujClaim).filter(x => x.length >= 3))];
 }
 function wyodrebnijMarkery(value, regex) {
@@ -79,9 +89,13 @@ function wyodrebnijMarkery(value, regex) {
 function czyNazwaWlasnaWystepuje(entity, evidenceNormalized) {
   if (evidenceNormalized.includes(entity)) return true;
   const parts = entity.split(' ').filter(Boolean);
-  if (parts.length !== 1 || entity.length < 6) return false;
-  const stem = entity.slice(0, Math.max(5, entity.length - 2));
-  return evidenceNormalized.split(' ').some(token => token.length >= stem.length && token.startsWith(stem));
+  if (parts.length !== 1 || entity.length < 4) return false;
+  const base = entity.replace(/(['’])\p{L}+$/u, '');
+  const stem = base.slice(0, Math.max(4, base.length - 1));
+  return evidenceNormalized.split(' ').some(token => {
+    const normalizedToken = token.replace(/(['’])\p{L}+$/u, '');
+    return normalizedToken === entity || (normalizedToken.length >= stem.length && normalizedToken.startsWith(stem));
+  });
 }
 function sprawdzTwardeKonflikty(evidence, claim, options = {}) {
   const e = String(evidence || '');
