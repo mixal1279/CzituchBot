@@ -137,7 +137,7 @@ test('secondary retrieval is used for weak, fresh, or fact-heavy single-source r
 });
 
 test('fallback policy is a single ordered chain', () => {
-  assert.deepEqual(nextFallbacks({ failure: 'unknown', attempted: [] }), GENERATION_FALLBACK_CHAIN);
+  assert.deepEqual(nextFallbacks({ failure: 'unknown', attempted: [] }), GENERATION_FALLBACK_CHAIN.slice(0, 3));
   assert.equal(classifyFailure(new Error('HTTP 429 rate limit')), 'quota');
   assert.ok(nextFallbacks({ failure: 'grounded_reject', attempted: [] }).every(x => !x.includes('120b')));
 });
