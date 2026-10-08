@@ -71,7 +71,8 @@ const { resolveGameEntity, scoreExternalGameCandidate, externalGameCandidateMatc
 const { extractExplicitUserMemories, mergeMemoryRecords, buildVerifiedMemoryContext, pruneExpiredMemories } = require('./ai/memory');
 const { parseMemoryCommand, forgetMemories, describeMemories } = require('./ai/memory_manager');
 const { decomposeQuestion, buildAdvancedRetrievalPlan } = require('./ai/retrieval');
-const { classifyFailure, nextFallbacks, GENERATION_FALLBACK_CHAIN } = require('./ai/fallback');
+const { classifyFailure, nextFallbacks, selectRepairFallbacks, GENERATION_FALLBACK_CHAIN } = require('./ai/fallback');
+const { createGroqCompletion, computeValidatorTimeout } = require('./ai/provider-runtime');
 const { createAIMetrics, recordAIMetric, snapshotAIMetrics } = require('./ai/metrics');
 const { sanitizeRequestText } = require('./ai/limits');
 const { createAIRequestContext } = require('./ai/requestContext');
@@ -1696,10 +1697,14 @@ SOURCES:
 <<<SOURCES>>>
 ${dane}
 <<<END SOURCES>>>`;
-  const controller = new AbortController();
-  const timeoutMs = requestState
-    ? Math.max(1, Math.min(6000, typeof requestState.remainingMs === 'function' ? requestState.remainingMs() : requestState.maxCzasMs - (Date.now() - requestState.startedAt)))
+  const remainingMs = requestState
+    ? (typeof requestState.remainingMs === 'function' ? requestState.remainingMs() : requestState.maxCzasMs - (Date.now() - requestState.startedAt))
     : 6000;
+  const timeoutMs = computeValidatorTimeout(remainingMs);
+  if (timeoutMs === null) {
+    return { status: 'unavailable', ok: false, technicalError: true, transient: true, skipped: true, provider: 'xkiro', model, unsupported_claims: [], reason: 'xKiro validator pominięty: zbyt mały pozostały budżet czasu' };
+  }
+  const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetch('https://api.xkiro.com/v1/chat/completions', {
@@ -1808,26 +1813,34 @@ async function walidujOdpowiedzAI(persona, pytanie, odpowiedz, dane, historiaRoz
   // że xKiro stabilnie generuje odpowiedź, a lokalny validator nadal wykonuje
   // pełne, deterministyczne sprawdzenie claimów/evidence.
   if (KONFIGURACJA.xkiroKey) {
-    if (requestState?.reserveValidator && !requestState.reserveValidator('validator:xkiro')) {
-      return { ...(last || {}), status: 'unavailable', ok: false, technicalError: true, unsupported_claims: [], reason: 'budżet validatora wyczerpany przed xKiro' };
+    const xkiroRemainingMs = requestState
+      ? (typeof requestState.remainingMs === 'function' ? requestState.remainingMs() : requestState.maxCzasMs - (Date.now() - requestState.startedAt))
+      : 6000;
+    const xkiroTimeoutMs = computeValidatorTimeout(xkiroRemainingMs);
+    if (xkiroTimeoutMs === null) {
+      console.warn(`[AI][${requestId}] xKiro validator pominięty: zbyt mały remaining budget=${xkiroRemainingMs}ms; przechodzę do następnego validatora`);
+    } else {
+      if (requestState?.reserveValidator && !requestState.reserveValidator('validator:xkiro')) {
+        return { ...(last || {}), status: 'unavailable', ok: false, technicalError: true, unsupported_claims: [], reason: 'budżet validatora wyczerpany przed xKiro' };
+      }
+      if (requestState?.zarezerwujModel && !requestState.zarezerwujModel('validator:xkiro')) {
+        return { ...(last || {}), status: 'unavailable', ok: false, technicalError: true, unsupported_claims: [], reason: 'globalny budżet modeli wyczerpany przed xKiro' };
+      }
+      const xkiroResult = await walidujOdpowiedzXKiro(persona, pytanie, odpowiedz, dane, requestId, requestState, requestMeta);
+      if (requestState) requestState.validatorResults.push({
+        model: xkiroResult.model || KONFIGURACJA.xkiroModel,
+        provider: 'xkiro',
+        status: xkiroResult.status,
+        complete: xkiroResult.complete === true,
+        confidence: Number.isFinite(xkiroResult.confidence) ? xkiroResult.confidence : null,
+        claimCoverage: Array.isArray(xkiroResult.claims) && xkiroResult.claims.length
+          ? xkiroResult.claims.filter(c => c.supported === true).length / xkiroResult.claims.length
+          : null,
+        validationDiagnostics: xkiroResult.diagnostics || null,
+      });
+      if (xkiroResult.status === 'accepted' || xkiroResult.status === 'rejected') return xkiroResult;
+      last = xkiroResult;
     }
-    if (requestState?.zarezerwujModel && !requestState.zarezerwujModel('validator:xkiro')) {
-      return { ...(last || {}), status: 'unavailable', ok: false, technicalError: true, unsupported_claims: [], reason: 'globalny budżet modeli wyczerpany przed xKiro' };
-    }
-    const xkiroResult = await walidujOdpowiedzXKiro(persona, pytanie, odpowiedz, dane, requestId, requestState, requestMeta);
-    if (requestState) requestState.validatorResults.push({
-      model: xkiroResult.model || KONFIGURACJA.xkiroModel,
-      provider: 'xkiro',
-      status: xkiroResult.status,
-      complete: xkiroResult.complete === true,
-      confidence: Number.isFinite(xkiroResult.confidence) ? xkiroResult.confidence : null,
-      claimCoverage: Array.isArray(xkiroResult.claims) && xkiroResult.claims.length
-        ? xkiroResult.claims.filter(c => c.supported === true).length / xkiroResult.claims.length
-        : null,
-      validationDiagnostics: xkiroResult.diagnostics || null,
-    });
-    if (xkiroResult.status === 'accepted' || xkiroResult.status === 'rejected') return xkiroResult;
-    last = xkiroResult;
   }
   if (requestState) {
     if (requestState.reserveValidator && !requestState.reserveValidator('validator:openrouter')) {
@@ -1839,7 +1852,7 @@ async function walidujOdpowiedzAI(persona, pytanie, odpowiedz, dane, historiaRoz
   // fallbackiem validatora, a nie tylko ratunkiem po błędzie sieciowym Gemini.
   const fallback = await walidujOdpowiedzOpenRouter(persona, pytanie, odpowiedz, dane, requestId, requestState, requestMeta);
   if (fallback.status === 'accepted' || fallback.status === 'rejected') return fallback;
-  return { ...(last || {}), status: 'unavailable', ok: false, technicalError: true, unsupported_claims: [], reason: 'Gemini i fallback validatora są technicznie niedostępne' };
+  return { ...fallback, status: 'unavailable', ok: false, technicalError: true, unsupported_claims: [], reason: fallback.reason || 'Gemini i fallback validatora są technicznie niedostępne' };
 }
 
 // =============================================
@@ -2725,15 +2738,14 @@ Pytanie użytkownika: ${pytanie}`;
       const timeoutMs = timeoutDlaGeneracji();
       const timer = setTimeout(() => controller.abort(), timeoutMs);
       try {
-        const response = await groqClient.chat.completions.create({
+        const response = await createGroqCompletion(groqClient, {
           model,
           messages: [{ role: 'system', content: overrideSystemPrompt }, ...przygotujHistorieDoModelu(historiaRozmowy, 4), { role: 'user', content: kontekstDoGroq }],
           temperature,
           max_completion_tokens: maxTok,
           reasoning_effort: model === 'openai/gpt-oss-120b' ? 'medium' : 'low',
           include_reasoning: false,
-          signal: controller.signal,
-        });
+        }, { signal: controller.signal });
         const choice = response?.choices?.[0] || {};
         const content = typeof choice?.message?.content === 'string' ? choice.message.content : '';
         if (!content.trim()) {
@@ -2760,7 +2772,6 @@ Pytanie użytkownika: ${pytanie}`;
           reasoning_effort: model === 'openai/gpt-oss-120b' ? 'medium' : 'low',
           include_reasoning: false,
           temperature,
-          signal: true,
         },
       });
       const isLimit = /429|rate.?limit|tokens per day|tokens per minute|TPD|TPM/i.test(diagnostic);
@@ -2786,7 +2797,9 @@ Pytanie użytkownika: ${pytanie}`;
       return Boolean(opcje.__testDeps?.groq || KONFIGURACJA.groqKey || process.env.GROQ_API_KEY);
     }
     if (step === 'gemini:gemini-3.8-flash' || step === 'gemini:gemini-3.5-flash-lite') {
-      return Boolean(KONFIGURACJA.geminiKey || process.env.GEMINI_API_KEY);
+      const model = step.split(':')[1];
+      return Boolean((KONFIGURACJA.geminiKey || process.env.GEMINI_API_KEY)
+        && Date.now() >= geminiGenerationCooldownUntil(model));
     }
     if (step === 'xkiro:default') return Boolean(KONFIGURACJA.xkiroKey || process.env.XKIRO_API_KEY);
     if (step === 'openrouter:default') return Boolean(KONFIGURACJA.openrouterKey || process.env.OPENROUTER_API_KEY);
@@ -2795,12 +2808,12 @@ Pytanie użytkownika: ${pytanie}`;
 
   const selectHealthyFallbacks = ({ failure = 'unknown', attempted = [], failedProviders = [], maxFallbacks = 1, exclude = [] } = {}) => {
     const blocked = new Set([...(failedProviders || []), ...(exclude || [])]);
-    return nextFallbacks({
-      failure,
-      attempted,
+    return selectRepairFallbacks({
       failedProviders: [...blocked],
-      maxFallbacks: GENERATION_FALLBACK_CHAIN.length,
-    }).filter(providerConfiguredForRequest).slice(0, Math.max(0, Number(maxFallbacks) || 0));
+      exclude: attempted,
+      availableProviders: GENERATION_FALLBACK_CHAIN.filter(providerConfiguredForRequest),
+      maxFallbacks,
+    });
   };
 
   const recordGenerationAttempt = (attempt) => {
@@ -2824,7 +2837,7 @@ Pytanie użytkownika: ${pytanie}`;
       ? await zapytajGlowny(Math.max(maxTok, 300), prompt, 'openai/gpt-oss-120b')
       : wynikPusty('groq', 'openai/gpt-oss-120b', '120B skipped for this generation cycle');
     let lastResult = result;
-    let failureType = classifyFailure(result.error || '');
+    let failureType = phase === 'repair' ? 'validator_rejection' : classifyFailure(result.error || '');
     const primaryStep = 'groq:openai/gpt-oss-120b';
 
     if (result.tekst && !result.ucieta) {
@@ -2839,16 +2852,6 @@ Pytanie użytkownika: ${pytanie}`;
 
     aiState.fallbackReasons.push(failureType || 'unknown');
     const attempted = [primaryStep];
-    const remainingGenerationSlots = phase === 'repair'
-      ? 0
-      : Math.max(0, aiState.maxInitialGeneracji - aiState.initialGeneracje);
-    console.log(`[AI][${requestId}] fallback policy=${failureType || 'unknown'} next=${JSON.stringify(nextFallbacks({
-      failure: failureType,
-      attempted,
-      failedProviders: [...failedFallbackProviders],
-      maxFallbacks: remainingGenerationSlots,
-    }))}`);
-
     const fallbackSteps = {
       'groq:openai/gpt-oss-120b': () => zapytajGlowny(Math.max(maxTok, 300), prompt, 'openai/gpt-oss-120b'),
       'groq:openai/gpt-oss-20b': () => zapytajGlowny(Math.max(maxTok, 300), prompt, 'openai/gpt-oss-20b'),
@@ -2878,6 +2881,13 @@ Pytanie użytkownika: ${pytanie}`;
         maxFallbacks: 1,
       });
       candidateSteps = repairFallbacks;
+    }
+
+    const policy = phase === 'repair' ? 'validator_rejection' : (failureType || 'unknown');
+    console.log(`[AI][${requestId}] fallback policy=${policy} next=${JSON.stringify(candidateSteps)}${phase === 'repair' && !candidateSteps.length ? ' reason=no_healthy_provider_or_repair_budget' : ''}`);
+    if (phase === 'repair' && !candidateSteps.length) {
+      aiState.fallbackReasons.push('provider_unavailable');
+      return wynikPusty('pipeline', 'none', 'no_healthy_provider_after_validator_rejection_or_repair_budget_exhausted');
     }
 
     for (const step of candidateSteps) {
@@ -2944,6 +2954,18 @@ function oczyscOdpowiedzPrzedWalidacja(tekst) {
     });
   if (maWalidowac) {
     let walidacja = await validateAI(aiProfile === 'billy' ? 'billy' : aiProfile === 'edzzi' ? 'edzzi' : aiProfile === 'angie' ? 'angie' : 'generic', pytanie, odp, daneDoWalidacji, historiaRozmowy, requestId, aiState, metadaneRequestu);
+    const validationFailure = classifyFailure(walidacja);
+    if (validationFailure) aiState.fallbackReasons.push(validationFailure);
+    if (walidacja.status === 'unavailable' && walidacja.provider) {
+      const unavailableStep = walidacja.provider === 'xkiro'
+        ? 'xkiro:default'
+        : walidacja.provider === 'openrouter'
+          ? 'openrouter:default'
+          : walidacja.provider.startsWith('gemini')
+            ? `gemini:${walidacja.model || AI_MODELS.generatorGeminiLite}`
+            : null;
+      if (unavailableStep) failedFallbackProviders.add(unavailableStep);
+    }
     // Model validatora może omyłkowo zwrócić accepted dla odpowiedzi będącej
     // odmową. Tego nie można zostawić wyłącznie jego ocenie.
     if (walidacja.status === 'accepted' && daneDoWalidacji && AI_POLICY.czyOdpowiedzToJednoznacznaOdmowa(odp)) {
@@ -2998,6 +3020,7 @@ function oczyscOdpowiedzPrzedWalidacja(tekst) {
       // Dokładnie jeden cykl retry po odrzuceniu walidacji. Fallbacki providerów
       // pozostają wewnątrz jednego cyklu generacji i nie uruchamiamy kolejnego retry.
       const retry = await generujOdpowiedz(max_tokens, promptRetry, 'soft validation repair', false);
+      wynikGeneracji = retry;
       if (retry.tekst) {
         const nowaOdp = usunMarkeryWewnetrzneAI(filtrBezpieczenstwa(retry.tekst));
         if (nowaOdp) {
@@ -3057,6 +3080,7 @@ function oczyscOdpowiedzPrzedWalidacja(tekst) {
           'answer completeness repair',
           false,
         );
+        wynikGeneracji = repairResult;
         if (repairResult.tekst) {
           const repaired = oczyscOdpowiedzPrzedWalidacja(
             ograniczDoPelnychZdanAI(

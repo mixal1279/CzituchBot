@@ -189,7 +189,7 @@ assert.match(require('fs').readFileSync(require('path').join(__dirname, '..', 'c
 {
   assert.equal(classifyFailure('429 rate limit'), 'quota');
   assert.equal(classifyFailure('401 invalid API key'), 'auth');
-  assert.equal(classifyFailure('timeout'), 'transient');
+  assert.equal(classifyFailure('timeout'), 'timeout_abort');
   assert.equal(classifyFailure('Gemini generation cooldown: gemini-3.5-flash-lite'), 'provider_cooldown');
   assert.equal(shouldRetryFailure('transient'), true);
   assert.equal(nextFallbacks({failure:'grounded_reject',attempted:['groq:openai/gpt-oss-120b']})[0], 'groq:openai/gpt-oss-20b');
@@ -292,7 +292,7 @@ assert.match(require('fs').readFileSync(require('path').join(__dirname, '..', 'c
 
 {
   assert.equal(classifyFailure('unsupported model parameter'), 'unknown');
-  assert.equal(classifyFailure('aborted'), 'transient');
+  assert.equal(classifyFailure('aborted'), 'timeout_abort');
   assert.equal(shouldRetryFailure('auth'), true);
   assert.deepEqual(nextFallbacks({
     attempted: ['groq:openai/gpt-oss-120b'],
