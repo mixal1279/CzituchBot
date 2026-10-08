@@ -18,6 +18,7 @@ const { rerankujWynikiTavily, wykryjKonfliktyZrodelTavily, zbudujRaportKonflikto
 const { ocenJakoscOdpowiedzi } = require('../ai/quality');
 const { quoteExists } = require('../ai/evidence');
 const { wyodrebnijNazwyWlasne } = require('../ai/claimValidation');
+const { classifyPipelineFailure } = require('../ai/pipeline');
 
 const policy = (q, recipe) => recipe(q) ? 'minecraft_recipe' : /pogoda/i.test(q) ? 'weather' : /ile trwa/i.test(q) ? 'hltb' : /dzisiaj|najnowsz/i.test(q) ? 'web_fact' : 'conversation';
 
@@ -291,7 +292,14 @@ assert.match(require('fs').readFileSync(require('path').join(__dirname, '..', 'c
     'gemini:gemini-3.8-flash',
   ]);
 }
-\nconsole.log('AI regression tests: OK');
+\n{
+  assert.equal(classifyPipelineFailure('rejected'), 'validator_reject');
+  assert.equal(classifyPipelineFailure('inconclusive'), 'validator_inconclusive');
+  assert.equal(classifyPipelineFailure('unavailable', { reason: 'provider_timeout' }), 'provider_timeout');
+  assert.equal(classifyPipelineFailure('accepted'), null);
+}
+
+console.log('AI regression tests: OK');
 
 {
   const source = require('fs').readFileSync(require('path').join(__dirname, '..', 'czituch_bot.js'), 'utf8');
