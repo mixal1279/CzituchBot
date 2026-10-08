@@ -88,7 +88,6 @@ function wyodrebnijNazwyWlasne(value) {
         matches.push(words.join(' '));
         continue;
       }
-      if (singleWord) continue;
     }
     matches.push(text);
   }
