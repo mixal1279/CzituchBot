@@ -314,7 +314,10 @@ function zastosujDeterministyczneGuards(walidacja, odpowiedz, dane, pytanie, for
       reason: `odpowiedź nie spełnia minimalnego kontraktu jakości: ${quality.issues.join('; ')}`,
     };
   }
-  const twardeFakty = sprawdzTwardeFaktyOdpowiedzi(odpowiedz, dane, pytanie);
+  const textForHardFactCheck = partial
+    ? odpowiedz.replace(/\\s*Nie wszystkie szczegóły da się potwierdzić w dostępnych źródłach\\.?\\s*$/iu, '').trim()
+    : odpowiedz;
+  const twardeFakty = sprawdzTwardeFaktyOdpowiedzi(textForHardFactCheck, dane, pytanie);
   if (!twardeFakty.ok) {
     return {
       ...walidacja,
