@@ -246,8 +246,16 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
     const block = pobierzBlokZrodla(dane, id);
     return Boolean(block) && zgodnoscStrukturalna(block, c.claim, { allowCrossLanguageExactEvidence: true, allowDistributedEvidence: true }).ok;
   }));
-  const unsupportedEvidenceClaimIndexes = claims.map((c, index) => c.supported && !claimSourceVerified[index] ? index : -1).filter(index => index >= 0);
-  const unverifiedEvidenceQuoteIndexes = claims.map((c, index) => c.supported && claimSourceVerified[index] && !evidenceQuoteVerified[index] ? index : -1).filter(index => index >= 0);
+  const unsupportedEvidenceClaimIndexes = claims.map((c, index) => c.supported && (!claimSourceVerified[index] || !evidenceQuoteVerified[index]) ? index : -1).filter(index => index >= 0);
+  const unverifiedEvidenceQuoteIndexes = claims.map((c, index) => c.supported && !evidenceQuoteVerified[index] ? index : -1).filter(index => index >= 0);
+  const unsupportedEvidenceReasons = unsupportedEvidenceClaimIndexes.map(index => {
+    const claim = claims[index];
+    const reasons = claim?.source_ids?.map(id => {
+      const block = pobierzBlokZrodla(dane, id);
+      return block ? zgodnoscStrukturalna(block, claim.claim, { allowCrossLanguageExactEvidence: true, allowDistributedEvidence: true }).reason : null;
+    }).filter(Boolean) || [];
+    return { claimIndex: index, reasons };
+  });
 
   const unknownSourceClaim = unknownSourceClaimIndexes.length > 0;
   const unsupportedEvidenceClaim = unsupportedEvidenceClaimIndexes.length > 0;
@@ -280,6 +288,7 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
     && claims.every(c => c.supported)
     && !unknownSourceClaim
     && !unsupportedEvidenceClaim
+    && unverifiedEvidenceQuoteIndexes.length === 0
     && !tooManyClaims
     && !malformedClaims
     && answerCoverage.ok
@@ -346,7 +355,7 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
     unknownSourceClaimIndexes,
     unknownSourceClaims: unknownSourceClaimIndexes.map(index => ({ claimIndex: index, sourceIds: claims[index]?.source_ids || [] })),
     unsupportedEvidenceClaimIndexes,
-    unsupportedEvidenceClaims: unsupportedEvidenceClaimIndexes.map(index => ({ claimIndex: index, sourceIds: claims[index]?.source_ids || [] })),
+    unsupportedEvidenceClaims: unsupportedEvidenceClaimIndexes.map(index => ({ claimIndex: index, sourceIds: claims[index]?.source_ids || [], reasons: unsupportedEvidenceReasons.find(x => x.claimIndex === index)?.reasons || [] })),
     allowedSourceCount: allowed ? allowed.size : null,
     unsupportedClaimCount: unsupportedFromClaims.length,
     modelUnsupportedClaimCount: wynik.unsupported_claims.filter(v => typeof v === 'string' && v.trim()).length,
@@ -386,7 +395,7 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
         : !answerCoverage.ok
           ? 'claims nie pokrywają całej odpowiedzi'
           : unsupportedEvidenceClaim
-            ? 'co najmniej jeden claim nie jest potwierdzony przez wskazane źródło'
+            ? (unsupportedEvidenceReasons.flatMap(x => x.reasons)[0] || 'co najmniej jeden claim nie jest potwierdzony przez wskazane źródło')
           : ((typeof wynik.reason === 'string' ? wynik.reason.trim().slice(0, 500) : '') || (accepted ? 'odpowiedź jest ugruntowana w danych' : 'odpowiedź zawiera niepotwierdzone twierdzenia')),
   };
 }
