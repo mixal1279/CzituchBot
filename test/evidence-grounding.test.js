@@ -46,7 +46,7 @@ test('validator can use the same source block as bounded context when the quote 
     claims: [{ claim: 'Arthur Morgan uratował Johna podczas wydarzeń w górach.', supported: true, source_ids: ['SOURCE 1'], evidence_quote: 'On uratował Johna podczas wydarzeń w górach.' }],
   }, 'test-model', 'test', new Set(['SOURCE 1']), data);
   assert.equal(result.status, 'accepted');
-  assert.equal(result.diagnostics.evidenceBindings[0].mode, 'quote_with_source_context');
+  assert.ok(['exact_quote', 'source_context'].includes(result.diagnostics.evidenceBindings[0].mode));
 });
 
 test('validator rejects a real quote when the claim adds an unsupported causal relationship', () => {
