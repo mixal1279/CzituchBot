@@ -2503,12 +2503,23 @@ Pytanie użytkownika: ${pytanie}`;
       : wynikPusty('groq', 'openai/gpt-oss-120b', '120B skipped for this generation cycle');
     let lastResult = result;
     let failureType = classifyFailure(result.error || '');
+    const primaryStep = 'groq:openai/gpt-oss-120b';
 
-    if (result.tekst && !result.ucieta) return result;
+    if (result.tekst && !result.ucieta) {
+      lastSuccessfulGenerationStep = primaryStep;
+      recordGenerationAttempt({ provider: result.provider, model: result.model, status: 'success', latencyMs: Date.now() - startedGenerationAt });
+      return result;
+    }
+    if (result.error && allow120b) {
+      recordGenerationAttempt({ provider: result.provider, model: result.model, status: 'error', failure: failureType, latencyMs: Date.now() - startedGenerationAt });
+      failedFallbackProviders.add(primaryStep);
+    }
 
     aiState.fallbackReasons.push(failureType || 'unknown');
-    const attempted = ['groq:openai/gpt-oss-120b'];
-    const remainingGenerationSlots = Math.max(0, aiState.maxGeneracji - aiState.generacje);
+    const attempted = [primaryStep];
+    const remainingGenerationSlots = phase === 'repair'
+      ? 0
+      : Math.max(0, aiState.maxInitialGeneracji - aiState.initialGeneracje);
     console.log(`[AI][${requestId}] fallback policy=${failureType || 'unknown'} next=${JSON.stringify(nextFallbacks({
       failure: failureType,
       attempted,
