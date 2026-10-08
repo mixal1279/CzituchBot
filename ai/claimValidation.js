@@ -1,7 +1,7 @@
 'use strict';
 
 const NEGATION_RE = /\b(?:nie|nigdy|brak|bez|żaden|żadna|żadne|never|no|not)\b/iu;
-const CAUSAL_RE = /(?:\b(?:bo|ponieważ|gdyż|dlatego|celem|because|therefore)\b|\bz\s+powodu\b|\bw\s+celu\b|\bżeby\b|\baby\b|\bdzięki\b|\bprzez\b|\bbecause\s+of\b|\bdue\s+to\b|\bspowodowa(?:ł|ła|ło|ły)\b|\bdoprowadzi(?:ł|ła|ło|ły)\b|\bumożliwi(?:ł|ła|ło|ły)\b)/iu;
+const CAUSAL_RE = /(?:\b(?:bo|poniewaz|gdyz|dlatego|celem|because|therefore)\b|\bz\s+powodu\b|\bw\s+celu\b|\bzeby\b|\baby\b|\bdzieki\b|\bprzez\b|\bbecause\s+of\b|\bdue\s+to\b|\bspowodowa(?:l|la|lo|ly)\b|\bdoprowadzi(?:l|la|lo|ly)\b|\bumozliwi(?:l|la|lo|ly)\b)/iu;
 const TEMPORAL_RE = /\b(?:19|20)\d{2}\b|\b(?:styczeń|luty|marzec|kwiecień|maj|czerwiec|lipiec|sierpień|wrzesień|październik|listopad|grudzień)\b|\b(?:wczoraj|dzisiaj|jutro|today|yesterday|tomorrow)\b/iu;
 const CROSS_LANGUAGE_CONCEPTS = [
   ['porwanie', /kidnap\w*|abduct\w*|captur\w*|porwan\w*|uprowadz\w*/i],
@@ -109,7 +109,7 @@ function sprawdzSprzecznosciSemantyczne(evidence, claim) {
   const cConcepts = pojeciaCrossLanguage(claim);
   const eAction = {
     captured: /captur\w*|porwan\w*|uprowadz\w*|schwyt\w*/i.test(normalizujClaim(evidence)),
-    killed: /kill\w*|murder\w*|zabij\w*|zabil\w*|zabila\w*|zabici\w*|zabity\w*|zabicie\w*|śmier\w*/i.test(normalizujClaim(evidence)),
+    killed: /kill\w*|murder\w*|zabij\w*|zabil\w*|zabila\w*|zabita\w*|zabite\w*|zabici\w*|zabity\w*|zabicie\w*|smier\w*/i.test(normalizujClaim(evidence)),
   };
   const cAction = {
     captured: /captur\w*|porwan\w*|uprowadz\w*|schwyt\w*/i.test(normalizujClaim(claim)),
