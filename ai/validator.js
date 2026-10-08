@@ -172,7 +172,7 @@ function czyCytatPotwierdzaRelacjePrzyczynowa(claim, evidenceQuote) {
   const quoteText = String(evidenceQuote || '').toLocaleLowerCase('pl-PL');
   const hasMarker = (text, marker) => marker.includes(' ')
     ? text.includes(marker)
-    : text.split(/\\W+/u).includes(marker);
+    : text.match(/[\\p{L}\\p{N}%]+/gu) || [].includes(marker);
   const claimHasCausal = markery.some(marker => hasMarker(claimText, marker));
   if (!claimHasCausal) return true;
   return markery.some(marker => hasMarker(quoteText, marker));
