@@ -453,6 +453,16 @@ console.log('AI regression tests: OK');
   assert.equal(shouldRetryFailure('unknown'), true);
   assert.equal(shouldRetryFailure('provider_cooldown'), true);
   assert.deepEqual(nextFallbacks({attempted:['groq:openai/gpt-oss-120b','groq:openai/gpt-oss-20b','gemini:gemini-3.8-flash','gemini:gemini-3.5-flash-lite'], maxFallbacks:1}), ['xkiro:default']);
+  assert.deepEqual(nextFallbacks({
+    failure: 'grounded_reject',
+    failedProviders: [
+      'groq:openai/gpt-oss-120b',
+      'groq:openai/gpt-oss-20b',
+      'gemini:gemini-3.8-flash',
+      'gemini:gemini-3.5-flash-lite',
+    ],
+    maxFallbacks: 1,
+  }), ['xkiro:default']);
 }
 
 {
