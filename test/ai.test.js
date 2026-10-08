@@ -326,6 +326,11 @@ assert.match(require('fs').readFileSync(require('path').join(__dirname, '..', 'c
   assert.match(botSource, /OpenRouter validator SCHEMA_REJECT/);
   assert.match(botSource, /failed_generation/);
   assert.match(botSource, /abortLike/);
+  assert.match(botSource, /Object\.getOwnPropertyNames\(value\)/);
+  assert.match(botSource, /requestContract: \{/);
+  assert.match(botSource, /async function walidujOdpowiedzXKiro\(/);
+  assert.match(botSource, /response_format: \{ type: 'json_object' \}/);
+  assert.match(botSource, /validator:xkiro/);
 }
 
 console.log('AI regression tests: OK');
