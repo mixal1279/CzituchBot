@@ -520,7 +520,7 @@ const KONFIGURACJA = {
   groqKey: process.env.GROQ_API_KEY,
 
   // ---- Mistral (fallback po Groq 20B) ----
-  mistralKey:   typeof process.env.MISTRAL_API_KEY === 'string' ? process.env.MISTRAL_API_KEY.replace(/[\\r\\n]/g, '').trim() : process.env.MISTRAL_API_KEY,
+  mistralKey:   typeof process.env.MISTRAL_API_KEY === 'string' ? process.env.MISTRAL_API_KEY.replace(/[\r\n]/g, '').trim() : process.env.MISTRAL_API_KEY,
   mistralModel: process.env.MISTRAL_MODEL || 'mistral-small-latest',
 
   // ---- ITAD ----
@@ -2390,7 +2390,11 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
         signal: controller.signal,
       });
       const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data?.message || data?.error?.message || `HTTP ${response.status}`);
+      if (!response.ok) {
+        const retryAfter = response.headers.get('retry-after');
+        const message = data?.message || data?.error?.message || `HTTP ${response.status}`;
+        throw new Error(`Mistral HTTP ${response.status}: ${message}${retryAfter ? ` (Retry-After=${retryAfter}s)` : ''}`);
+      }
       const choice = data?.choices?.[0];
       const tekst = (typeof choice?.message?.content === 'string' ? choice.message.content : '').trim();
       if (!tekst) throw new Error('Mistral zwrócił pustą odpowiedź');
@@ -2639,7 +2643,7 @@ function oczyscOdpowiedzPrzedWalidacja(tekst) {
           max_tokens,
           `${systemPrompt}\\n\\n[ANSWER COMPLETENESS REPAIR]\\n${judgeFeedback}`,
           'answer completeness repair',
-          true,
+          false,
         );
         if (repairResult.tekst) {
           const repaired = oczyscOdpowiedzPrzedWalidacja(
