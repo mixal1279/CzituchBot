@@ -357,10 +357,28 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
     && !unknownSourceClaim
     && !unsupportedEvidenceClaim;
 
+  const localRejectReasons = [];
+
+  const softEvidenceReasons = new Set([
+    'evidence_not_verified',
+    'evidence_quote_not_exact',
+    'claims_too_coarse_for_answer',
+  ]);
+  const softAccepted = validFromModel === true
+    && confidence >= 0.75
+    && wynik.supported === true
+    && wynik.relevant === true
+    && wynik.complete === true
+    && wynik.hallucination === false
+    && unsupported.length === 0
+    && localRejectReasons.length > 0
+    && localRejectReasons.every(reason => softEvidenceReasons.has(reason));
+
   const status = accepted
     ? 'accepted'
-    : (sprzecznyWerdykt || niekompletnyPozytywnyWerdykt ? 'inconclusive' : 'rejected');
-  const localRejectReasons = [];
+    : (softAccepted
+      ? 'soft_accepted'
+      : (sprzecznyWerdykt || niekompletnyPozytywnyWerdykt ? 'inconclusive' : 'rejected'));
   if (!rawClaims.length) localRejectReasons.push('claims_missing');
   if (tooManyClaims) localRejectReasons.push('claims_over_limit');
   if (malformedClaims) localRejectReasons.push('malformed_claims');
@@ -378,7 +396,7 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
   if (maStarePola && wynik.hallucination !== false) localRejectReasons.push('model_flagged_hallucination');
   if (!localRejectReasons.length && !accepted) localRejectReasons.push('local_contract_not_satisfied');
   const diagnostics = {
-    contractAccepted: accepted,
+    contractAccepted: accepted || softAccepted,
     modelValid: validFromModel === true,
     claimCoverage,
     rawClaimCount: rawClaims.length,
@@ -416,8 +434,8 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
 
   return {
     status,
-    ok: accepted,
-    valid: accepted,
+    ok: accepted || softAccepted,
+    valid: accepted || softAccepted,
     technicalError: false,
     provider,
     model,
