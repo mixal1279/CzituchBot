@@ -1870,7 +1870,6 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
       try { onAISummary(summary); } catch (err) { console.warn(`[AI][${requestId}] summary hook error: ${err.message}`); }
     }
   };
-  };
   console.log(`[AI][${requestId}] start kategoria=pending persona=${aiProfile}`);
 
   const routingAI = wyznaczRoutingAI(pytanie);
