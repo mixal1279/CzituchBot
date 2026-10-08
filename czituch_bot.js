@@ -1511,8 +1511,18 @@ Zwróć WYŁĄCZNIE JSON: {"valid":true/false,"reason":"krótki powód","confide
     const validatorRemainingMs = requestState
       ? (typeof requestState.remainingMs === 'function' ? requestState.remainingMs() : requestState.maxCzasMs - (Date.now() - requestState.startedAt))
       : 9000;
+    // The first validator reserves enough time for one fallback validator
+    // (4 s minimum plus its own 6.5 s reserve). The final permitted validator
+    // can spend more of the remaining deadline because no further validator slot
+    // exists in this request.
+    const isLastValidatorSlot = Boolean(requestState
+      && Number(requestState.validatory) >= Number(requestState.maxValidatorow));
     const validatorTimeoutMs = requestState
-      ? computeValidatorTimeout(validatorRemainingMs, { maxTimeoutMs: 9000, reserveMs: 6500, minTimeoutMs: 4000 })
+      ? computeValidatorTimeout(validatorRemainingMs, {
+          maxTimeoutMs: 9000,
+          reserveMs: isLastValidatorSlot ? 2500 : 10500,
+          minTimeoutMs: 4000,
+        })
       : 9000;
     if (requestState && validatorTimeoutMs === null) {
       return { status: 'unavailable', ok: false, technicalError: true, transient: true, skipped: true, provider: 'gemini', model, unsupported_claims: [], reason: 'Gemini validator pominięty: zbyt mały pozostały budżet czasu' };
@@ -1602,7 +1612,15 @@ async function walidujOdpowiedzOpenRouter(persona, pytanie, odpowiedz, dane, req
   const remainingMs = requestState
     ? (typeof requestState.remainingMs === 'function' ? requestState.remainingMs() : requestState.maxCzasMs - (Date.now() - requestState.startedAt))
     : 12000;
-  const validatorTimeoutMs = requestState ? computeValidatorTimeout(remainingMs, { maxTimeoutMs: 9000, reserveMs: 6500, minTimeoutMs: 4000 }) : 9000;
+  const isLastValidatorSlot = Boolean(requestState
+    && Number(requestState.validatory) >= Number(requestState.maxValidatorow));
+  const validatorTimeoutMs = requestState
+    ? computeValidatorTimeout(remainingMs, {
+        maxTimeoutMs: 9000,
+        reserveMs: isLastValidatorSlot ? 2500 : 10500,
+        minTimeoutMs: 4000,
+      })
+    : 9000;
   if (requestState && validatorTimeoutMs === null) {
     return { status: 'unavailable', ok: false, technicalError: true, transient: true, skipped: true, provider: 'openrouter', model: KONFIGURACJA.openrouterValidatorModel, unsupported_claims: [], reason: 'OpenRouter validator pominięty: zbyt mały pozostały budżet czasu' };
   }
@@ -1711,7 +1729,13 @@ ${dane}
   const remainingMs = requestState
     ? (typeof requestState.remainingMs === 'function' ? requestState.remainingMs() : requestState.maxCzasMs - (Date.now() - requestState.startedAt))
     : 6000;
-  const timeoutMs = computeValidatorTimeout(remainingMs);
+  const isLastValidatorSlot = Boolean(requestState
+    && Number(requestState.validatory) >= Number(requestState.maxValidatorow));
+  const timeoutMs = computeValidatorTimeout(remainingMs, {
+    maxTimeoutMs: 9000,
+    reserveMs: isLastValidatorSlot ? 2500 : 10500,
+    minTimeoutMs: 4000,
+  });
   if (timeoutMs === null) {
     return { status: 'unavailable', ok: false, technicalError: true, transient: true, skipped: true, provider: 'xkiro', model, unsupported_claims: [], reason: 'xKiro validator pominięty: zbyt mały pozostały budżet czasu' };
   }
