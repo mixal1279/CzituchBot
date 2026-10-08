@@ -184,6 +184,16 @@ function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '') {
       continue;
     }
 
+    // Causal synthesis is allowed when the full authorized source block
+    // actually contains the causal relation, even if the selected quote is
+    // only the event sentence. It is rejected when neither does.
+    const blockNorm = String(block.content || '').toLocaleLowerCase('pl-PL')
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    if (claimCausal && !quoteCausal && !causalRe.test(blockNorm)) {
+      reasons.push('claim dodaje relację przyczynową nieobecną w całym źródle: ' + id);
+      continue;
+    }
+
     const quoteStructural = zgodnoscStrukturalna(quote, claim, {
       allowCrossLanguageExactEvidence: true,
       allowDistributedEvidence: false,
