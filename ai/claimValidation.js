@@ -180,6 +180,27 @@ function dopasowanieSemantyczne(evidence, claim) {
   return { ok: false, reason: `zbyt małe pokrycie semantyczne (${overlap.toFixed(2)})` };
 }
 
+function czyRelacjaPrzyczynowaPokrywaClaim(evidence, claim) {
+  const claimText = String(claim || '');
+  const evidenceText = String(evidence || '');
+  const claimEntities = wyodrebnijNazwyWlasne(claimText);
+  const claimTokens = tokenyPokryciaBezStop(claimText);
+  const sentences = evidenceText
+    .replace(/\s+/g, ' ')
+    .split(/(?<=[.!?])\s+/)
+    .map(s => s.trim())
+    .filter(Boolean);
+  const relationRe = /(?:bo|poniewaz|gdyz|dlatego|z powodu|w celu|dzieki|przez|spowod\w*|doprowadz\w*|umozliw\w*|because|therefore|due to|caused|led to|so that)/i;
+  return sentences.some(sentence => {
+    const normalized = normalizujClaim(sentence);
+    if (!relationRe.test(normalized)) return false;
+    const entityOk = !claimEntities.length || claimEntities.every(entity => czyNazwaWlasnaWystepuje(entity, normalized));
+    const evidenceTokens = tokenyPokryciaBezStop(sentence);
+    const matchedTokens = claimTokens.filter(token => evidenceTokens.some(other => tokenyPokrywajaSie(token, other)));
+    const tokenOverlapScore = claimTokens.length ? matchedTokens.length / claimTokens.length : 0;
+    return entityOk && tokenOverlapScore >= 0.22;
+  });
+}
 function zgodnoscStrukturalna(evidence, claim, options = {}) {
   const e = String(evidence || '');
   const c = String(claim || '');
@@ -290,4 +311,4 @@ function sprawdzPokrycieClaimamiOdpowiedzi(answer, claims) {
 function czyDowodSemantyczniePokrywaClaim(evidence, claim, options = {}) {
   return zgodnoscStrukturalna(evidence, claim, options).ok;
 }
-module.exports = { normalizujClaim, tokenyClaim, wyodrebnijLiczbyIDaty, wyodrebnijJednostkoweWartosci, wyodrebnijNazwyWlasne, zgodnoscStrukturalna, sprawdzTwardeKonflikty, sprawdzSprzecznosciSemantyczne, dopasowanieSemantyczne, sprawdzPokrycieClaimamiOdpowiedzi, czyDowodSemantyczniePokrywaClaim };
+module.exports = { normalizujClaim, tokenyClaim, czyRelacjaPrzyczynowaPokrywaClaim, wyodrebnijLiczbyIDaty, wyodrebnijJednostkoweWartosci, wyodrebnijNazwyWlasne, zgodnoscStrukturalna, sprawdzTwardeKonflikty, sprawdzSprzecznosciSemantyczne, dopasowanieSemantyczne, sprawdzPokrycieClaimamiOdpowiedzi, czyDowodSemantyczniePokrywaClaim };

@@ -50,8 +50,33 @@ function tokenOverlap(a, b) {
   return left.filter(t => right.has(t)).length / left.length;
 }
 
+function classifyClaimType(claim) {
+  const text = normalizeEvidenceText(claim);
+  if (/(?:dlaczego|why|powod\w*|przyczyn\w*|motyw\w*|doprowadz\w*|spowod\w*|umożliw\w*|umozliw\w*|poniewa[zż]|dlatego|bo |z powodu|w celu|because|due to|therefore)/i.test(text)) return 'causal';
+  if (/(?:jak |w jaki sposób|how |sposob\w*|instrukcj\w*|krok\w*|walkthrough|guide)/i.test(text)) return 'procedural';
+  if (/(?:kiedy|when |rok\b|data|dzień|today|yesterday|tomorrow)/i.test(text)) return 'temporal';
+  if (/(?:gdzie|where |lokacj\w*|miejsce)/i.test(text)) return 'location';
+  if (/(?:kto |kim |who |postaci|osob\w*)/i.test(text)) return 'entity';
+  if (/(?:ile |how many|how much|cena|liczb\w*|procent)/i.test(text)) return 'quantitative';
+  if (/(?:relacj\w*|relationship|związek|zwiazek|partner\w*|różni|rozni|versus|vs\.?)/i.test(text)) return 'relationship';
+  return 'factual';
+}
+
+function evidenceRelationSignals(value) {
+  const text = normalizeEvidenceText(value);
+  return {
+    causal: /(?:bo|poniewaz|gdyz|dlatego|z powodu|w celu|dzieki|przez|spowod\w*|doprowadz\w*|umozliw\w*|because|therefore|due to|caused|led to|so that)/i.test(text),
+    procedural: /(?:najpierw|następnie|nastepnie|potem|krok|steps?|first|then|after|before|use|użyj|uzyj|kliknij|click|instrukcj|walkthrough)/i.test(text),
+    temporal: /(?:19|20)\d{2}|\b(?:stycz|luty|marzec|kwiec|maj|czerwiec|lipiec|sierp|wrzes|paźdz|pazdz|listop|grudziec|wczoraj|dzisiaj|jutro|today|yesterday|tomorrow)\b/i.test(text),
+    location: /(?:w |na |near |located|znajduj|lokacj|miejsce|location|area|region|city|miasto)/i.test(text),
+    relationship: /(?:relationship|związk|zwiazk|partner|przyjaź|przyjaz|enemy|wróg|wrog|conflict|konflikt|alliance|sojusz)/i.test(text),
+  };
+}
+
 function rankEvidenceForClaim(claim, blocks, allowedSourceIds = null, limit = 3) {
   const rows = [];
+  const claimType = classifyClaimType(claim);
+  const claimSignals = evidenceRelationSignals(claim);
   for (const block of Array.isArray(blocks) ? blocks : []) {
     if (allowedSourceIds instanceof Set && !allowedSourceIds.has(block.sourceId)) continue;
     const sentences = splitEvidenceSentences(block.content);
@@ -59,9 +84,19 @@ function rankEvidenceForClaim(claim, blocks, allowedSourceIds = null, limit = 3)
       const windows = [sentences[i]];
       if (sentences[i + 1]) windows.push(sentences[i] + ' ' + sentences[i + 1]);
       for (const quote of windows) {
-        const score = tokenOverlap(claim, quote);
+        const lexical = tokenOverlap(claim, quote);
+        if (lexical <= 0) continue;
+        const signals = evidenceRelationSignals(quote);
+        let score = lexical;
+        if (claimType === 'causal') score += signals.causal ? 0.35 : -0.25;
+        if (claimType === 'procedural') score += signals.procedural ? 0.18 : -0.08;
+        if (claimType === 'temporal') score += signals.temporal ? 0.15 : -0.05;
+        if (claimType === 'location') score += signals.location ? 0.12 : 0;
+        if (claimType === 'relationship') score += signals.relationship ? 0.20 : -0.08;
+        if (claimType === 'entity' && /\b(?:is|jest|was|był|była|role|postać|character)\b/i.test(quote)) score += 0.08;
+        score = Math.max(0, Math.min(1.25, score));
         if (score <= 0) continue;
-        rows.push({ sourceId: block.sourceId, title: block.title, url: block.url, quote, score });
+        rows.push({ sourceId: block.sourceId, title: block.title, url: block.url, quote, score, claimType, relationMatch: Boolean(claimSignals[claimType] && signals[claimType]) });
       }
     }
   }
@@ -83,11 +118,12 @@ function buildEvidenceRepairContext(claims, blocks, allowedSourceIds = null, max
     // pojedyncze wspólne słowo z claimem. Taki materiał zachęca model do
     // dopowiadania niepotwierdzonych przyczyn, motywacji i nazw własnych.
     const claimText = String(claim.claim || '');
-    const claimIsCausal = /\b(?:bo|ponieważ|poniewaz|dlatego|doprowadz\w*|spowod\w*|przyczyn\w*|motyw\w*|przez)\b/i.test(claimText);
+    const claimType = classifyClaimType(claimText);
+    const claimIsCausal = claimType === 'causal';
     const claimIsSourceMeta = /\b(?:źródł\w*|zrodł\w*|danych|materiał\w*|material\w*|evidence|cytat\w*)\b/i.test(claimText);
     const candidates = rankEvidenceForClaim(claimText, blocks, allowedSourceIds, 6)
       .filter(candidate => Number(candidate.score) >= 0.20)
-      .filter(candidate => !claimIsCausal || /\b(?:bo|ponieważ|poniewaz|dlatego|doprowadz\w*|spowod\w*|przyczyn\w*|motyw\w*|przez|zatem|więc|wiec)\b/i.test(candidate.quote))
+      .filter(candidate => !claimIsCausal || (candidate.relationMatch && evidenceRelationSignals(candidate.quote).causal))
       .filter(candidate => !claimIsSourceMeta)
       .slice(0, 2);
     if (!candidates.length) continue;
@@ -139,4 +175,4 @@ function buildQuestionEvidenceContext(question, blocks, allowedSourceIds = null,
   }).join('\n\n');
 }
 
-module.exports = { normalizeEvidenceText, parseEvidenceBlocks, quoteExists, splitEvidenceSentences, rankEvidenceForClaim, buildEvidenceRepairContext, buildQuestionEvidenceContext };
+module.exports = { normalizeEvidenceText, parseEvidenceBlocks, quoteExists, splitEvidenceSentences, classifyClaimType, evidenceRelationSignals, rankEvidenceForClaim, buildEvidenceRepairContext, buildQuestionEvidenceContext };

@@ -77,6 +77,7 @@ async function run() {
   for (let i = 0; i < cases.length; i++) {
     const item = cases[i];
     let answer = '';
+    let summary = null;
     try {
       await zapytajAI(
         'benchmark',
@@ -89,6 +90,9 @@ async function run() {
           memoryUserId: 'ai-benchmark',
           temperature: 0.2,
           max_tokens: 300,
+          __testDeps: {
+            onSummary: value => { summary = value; },
+          },
         },
       );
 
@@ -106,6 +110,14 @@ async function run() {
         factualPassed: factual.passed,
         factualMissing: factual.missing,
         factualForbidden: factual.forbidden,
+        finalStatus: summary?.finalStatus || null,
+        modelCalls: summary?.modelCalls ?? null,
+        generationAttempts: summary?.generationAttempts || [],
+        generationBudget: summary?.generationBudget || null,
+        validatorResults: summary?.validatorResults || [],
+        fallbackReasons: summary?.fallbackReasons || [],
+        tavilySearches: summary?.tavilySearches ?? null,
+        sourceCount: summary?.sourceCount ?? null,
       });
     } catch (error) {
       results.push({
@@ -119,6 +131,14 @@ async function run() {
         factualPassed: item.expected?.factual?.independentGold ? false : null,
         factualMissing: [],
         factualForbidden: [],
+        finalStatus: summary?.finalStatus || 'error',
+        modelCalls: summary?.modelCalls ?? null,
+        generationAttempts: summary?.generationAttempts || [],
+        generationBudget: summary?.generationBudget || null,
+        validatorResults: summary?.validatorResults || [],
+        fallbackReasons: summary?.fallbackReasons || [],
+        tavilySearches: summary?.tavilySearches ?? null,
+        sourceCount: summary?.sourceCount ?? null,
         error: String(error?.message || error),
       });
     }
@@ -136,6 +156,17 @@ async function run() {
   const factualCases = results.filter(x => x.factualPassed !== null);
   const factualPassed = factualCases.filter(x => x.factualPassed).length;
   const factualAverage = factualCases.length ? factualCases.reduce((sum, x) => sum + x.factualScore, 0) / factualCases.length : null;
+  const diagnostic = {
+    validatorRejected: results.filter(x => x.finalStatus === 'rejected').length,
+    validatorInconclusive: results.filter(x => x.finalStatus === 'inconclusive').length,
+    validatorUnavailable: results.filter(x => x.finalStatus === 'unavailable').length,
+    repairUsed: results.filter(x => Number(x.generationBudget?.repairUsed || 0) > 0).length,
+    repairSkipped: results.filter(x => Number(x.generationBudget?.repairUsed || 0) === 0 && x.finalStatus === 'rejected').length,
+    avgModelCalls: results.filter(x => Number.isFinite(x.modelCalls)).length
+      ? Number((results.filter(x => Number.isFinite(x.modelCalls)).reduce((sum, x) => sum + x.modelCalls, 0) / results.filter(x => Number.isFinite(x.modelCalls)).length).toFixed(2))
+      : null,
+    providerFailures: [...new Set(results.flatMap(x => (x.generationAttempts || []).filter(a => a.status === 'error').map(a => `${a.provider}:${a.model}:${a.failure || 'unknown'}`)))],
+  };
   const report = {
     benchmark: benchmark.name,
     mode: 'live',
@@ -148,6 +179,7 @@ async function run() {
     durationMs: Date.now() - started,
     note: 'Ten testuje produkcyjny pipeline i kompletność odpowiedzi. Nie jest niezależnym pomiarem factual accuracy; do tego potrzebny jest ręcznie zweryfikowany gold answer/fact set.',
     categories: [...new Set(results.map(x => x.category))].sort(),
+    diagnostics: diagnostic,
     failures: results.filter(x => !x.answered || x.judgeStatus !== 'accepted' || x.factualPassed === false).slice(0, 100),
   };
   console.log(JSON.stringify(report, null, 2));

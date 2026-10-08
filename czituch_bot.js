@@ -1788,6 +1788,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
   const validateAI = opcje.__testDeps?.validateAI || walidujOdpowiedzAI;
   const loadMemory = opcje.__testDeps?.loadMemory || wczytajZweryfikowanaPamiecAI;
   const testMaxTavilySearches = Number.isInteger(opcje.__testDeps?.maxWyszukanTavily) ? Math.max(2, opcje.__testDeps.maxWyszukanTavily) : 3;
+  const onAISummary = typeof opcje.__testDeps?.onSummary === 'function' ? opcje.__testDeps.onSummary : null;
   const verifiedMemoryUserId = memoryUserId || String(nick || '').toLowerCase();
   const verifiedMemoryPromise = loadMemory(verifiedMemoryUserId);
   systemPrompt = `${systemPrompt}\n\nNie umieszczaj w odpowiedzi nazw źródeł, atrybucji, etykiet „Źródło:” ani URL-i. Źródła są wyłącznie wewnętrznym materiałem RAG i walidacji.`;
@@ -1843,7 +1844,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
   };
   const zalogujPodsumowanieAI = (status = aiState.finalStatus) => {
     aiState.finalStatus = status;
-    console.log(`[AI][${requestId}] SUMMARY ${JSON.stringify({
+    const summary = {
       requestId, persona: aiProfile, category: kategoriaAI || 'pending',
       generatorAttempts: aiState.generacje, modelCalls: aiState.modelCalls, validatorCalls: aiState.validatory,
       validatorResults: aiState.validatorResults,
@@ -1863,7 +1864,11 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
       sourceCount: daneDoWalidacji ? (daneDoWalidacji.match(/\[(?:SOURCE|REFERENCE) [^\]]+\]/g) || []).length : 0,
       metrics: { ...AI_METRYKI, observability: snapshotAIMetrics(AI_OBSERVABILITY) },
       durationMs: Date.now() - aiState.startedAt, finalStatus: status,
-    })}`);
+    };
+    console.log(`[AI][${requestId}] SUMMARY ${JSON.stringify(summary)}`);
+    if (onAISummary) {
+      try { onAISummary(summary); } catch (err) { console.warn(`[AI][${requestId}] summary hook error: ${err.message}`); }
+    }
   };
   console.log(`[AI][${requestId}] start kategoria=pending persona=${aiProfile}`);
 
@@ -2532,6 +2537,30 @@ Pytanie użytkownika: ${pytanie}`;
   const failedFallbackProviders = new Set();
   let lastSuccessfulGenerationStep = null;
 
+  // Provider availability is evaluated per request. A fallback endpoint without
+  // credentials/capability must never consume the only semantic-repair slot.
+  const providerConfiguredForRequest = step => {
+    if (step === 'groq:openai/gpt-oss-120b' || step === 'groq:openai/gpt-oss-20b') {
+      return Boolean(opcje.__testDeps?.groq || KONFIGURACJA.groqKey || process.env.GROQ_API_KEY);
+    }
+    if (step === 'gemini:gemini-3.8-flash' || step === 'gemini:gemini-3.5-flash-lite') {
+      return Boolean(KONFIGURACJA.geminiKey || process.env.GEMINI_API_KEY);
+    }
+    if (step === 'xkiro:default') return Boolean(KONFIGURACJA.xkiroKey || process.env.XKIRO_API_KEY);
+    if (step === 'openrouter:default') return Boolean(KONFIGURACJA.openrouterKey || process.env.OPENROUTER_API_KEY);
+    return false;
+  };
+
+  const selectHealthyFallbacks = ({ failure = 'unknown', attempted = [], failedProviders = [], maxFallbacks = 1, exclude = [] } = {}) => {
+    const blocked = new Set([...(failedProviders || []), ...(exclude || [])]);
+    return nextFallbacks({
+      failure,
+      attempted,
+      failedProviders: [...blocked],
+      maxFallbacks: GENERATION_FALLBACK_CHAIN.length,
+    }).filter(providerConfiguredForRequest).slice(0, Math.max(0, Number(maxFallbacks) || 0));
+  };
+
   const recordGenerationAttempt = (attempt) => {
     if (!Array.isArray(aiState.generationAttempts)) aiState.generationAttempts = [];
     aiState.generationAttempts.push({
@@ -2599,15 +2628,14 @@ Pytanie użytkownika: ${pytanie}`;
       // Semantic repair should not blindly repeat the model that just produced
       // the rejected answer. Prefer the next healthy provider in the chain,
       // excluding endpoints already known to have failed in this request.
-      const repairFallbacks = nextFallbacks({
+      const repairFallbacks = selectHealthyFallbacks({
         failure: 'grounded_reject',
         attempted: [],
-        failedProviders: [...failedFallbackProviders, ...(lastSuccessfulGenerationStep ? [lastSuccessfulGenerationStep] : [])],
+        failedProviders: [...failedFallbackProviders],
+        exclude: lastSuccessfulGenerationStep ? [lastSuccessfulGenerationStep] : [],
         maxFallbacks: 1,
       });
-      candidateSteps = repairFallbacks.length
-        ? repairFallbacks
-        : (lastSuccessfulGenerationStep ? [lastSuccessfulGenerationStep] : []);
+      candidateSteps = repairFallbacks;
     }
 
     for (const step of candidateSteps) {
