@@ -7,7 +7,7 @@ const { planAIRequest, buildRetrievalQueries } = require('../ai/planner');
 const { czyPytanieOLore } = require('../ai/lore');
 const { przygotujHistorieDoModelu } = require('../ai/policy');
 const { sprawdzTwardeFaktyOdpowiedzi, sprawdzSpojnoscLorePortal2, sprawdzZgodnoscKontekstuGry, sprawdzFormatOdpowiedzi } = require('../ai/response');
-const { normalizujWynikWalidatora } = require('../ai/validator');
+const { normalizujWynikWalidatora, VALIDATOR_JSON_SCHEMA, GEMINI_VALIDATOR_JSON_SCHEMA } = require('../ai/validator');
 const { extractExplicitUserMemories, mergeMemoryRecords, buildVerifiedMemoryContext, isActive } = require('../ai/memory');
 const { parseMemoryCommand, forgetMemories } = require('../ai/memory_manager');
 const { buildAdvancedRetrievalPlan, shouldRunAdditionalRetrieval, rankRetrievalNeed } = require('../ai/retrieval');
@@ -356,11 +356,23 @@ console.log('AI regression tests: OK');
 }
 
 {
-  const source = require('fs').readFileSync(require('path').join(__dirname, '..', 'czituch_bot.js'), 'utf8');
-  assert.match(source, /confidence: \{ type: 'number', minimum: 0, maximum: 1 \}/);
-  assert.match(source, /required: \['valid', 'reason', 'unsupported_claims', 'confidence', 'ok', 'supported', 'relevant', 'complete', 'hallucination', 'claims'\]/);
-  assert.match(source, /AI_TAVILY_CACHE_FILE \|\| path\.join\(process\.env\.AI_CACHE_DIR \|\| __dirname, 'tavily_cache\.json'\)/);
-  assert.match(source, /validatorTimeoutMs = requestState \?/);
+  // Schema jest własnością modułu walidatora i jest używane bezpośrednio przez
+  // Gemini/OpenRouter. Testujemy kontrakt eksportowanego obiektu, a nie jego
+  // przypadkowe położenie w czituch_bot.js.
+  assert.deepEqual(VALIDATOR_JSON_SCHEMA.properties.confidence, {
+    type: 'number', minimum: 0, maximum: 1
+  });
+  assert.deepEqual(
+    VALIDATOR_JSON_SCHEMA.required,
+    ['valid', 'reason', 'confidence', 'unsupported_claims', 'claims', 'supported', 'relevant', 'complete', 'hallucination']
+  );
+  assert.equal(VALIDATOR_JSON_SCHEMA.additionalProperties, false);
+  assert.deepEqual(GEMINI_VALIDATOR_JSON_SCHEMA.properties.confidence, {
+    type: 'number', minimum: 0, maximum: 1
+  });
+  assert.deepEqual(GEMINI_VALIDATOR_JSON_SCHEMA.required, VALIDATOR_JSON_SCHEMA.required);
+  assert.match(require('fs').readFileSync(require('path').join(__dirname, '..', 'czituch_bot.js'), 'utf8'), /AI_TAVILY_CACHE_FILE \|\| path\.join\(process\.env\.AI_CACHE_DIR \|\| __dirname, 'tavily_cache\.json'\)/);
+  assert.match(require('fs').readFileSync(require('path').join(__dirname, '..', 'czituch_bot.js'), 'utf8'), /validatorTimeoutMs = requestState \?/);
 }
 
 {
