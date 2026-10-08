@@ -18,7 +18,7 @@ jobs:
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       EXA_API_KEY: ${{ secrets.EXA_API_KEY }}
       XKIRO_API_KEY: ${{ secrets.XKIRO_API_KEY }}
-      XKIRO_MODEL: "qwen/qwen3.5-flash:free"
+      XKIRO_MODEL: "qwen/qwen3.5-397b-a17b:free"
       OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
 
     steps:
