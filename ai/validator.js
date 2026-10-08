@@ -234,43 +234,10 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
   ).filter(index => index >= 0);
   const malformedClaims = malformedClaimIndexes.length > 0;
 
-  const parsedForRebinding = parseEvidenceBlocks(dane);
-  const allowedForRebinding = allowedSourceIds instanceof Set ? allowedSourceIds : null;
-
-  // Validator może zwrócić parafrazowany lub lekko zmieniony evidence_quote.
-  // Nie ufamy temu polu jako źródłu prawdy. Jeśli quote nie występuje dokładnie
-  // w materiale, próbujemy dobrać rzeczywisty fragment tego samego zbioru źródeł,
-  // ale tylko wtedy, gdy fragment samodzielnie przechodzi structural grounding.
-  const rawClaimsForRebinding = Array.isArray(wynik.claims) ? wynik.claims : (Array.isArray(wynik.claims_list) ? wynik.claims_list : []);
-  const reboundClaims = rawClaimsForRebinding.slice(0, 12).map((claim) => {
-    if (!claim || typeof claim !== 'object' || typeof claim.claim !== 'string') return claim;
-    const originalIds = Array.isArray(claim.source_ids) ? claim.source_ids.map(normalizujIdZrodla) : [];
-    const quote = typeof claim.evidence_quote === 'string' ? claim.evidence_quote.trim() : '';
-    const hasValidQuote = quote && originalIds.some(id => {
-      const block = parsedForRebinding.find(b => b.sourceId === id);
-      return block && (!allowedForRebinding || allowedForRebinding.has(id)) && quoteExists(block.content, quote);
-    });
-    if (hasValidQuote || !claim.supported) return claim;
-
-    const candidates = rankEvidenceForClaim(claim.claim, parsedForRebinding, allowedForRebinding, 6);
-    const verified = candidates.find(candidate => {
-      const sourceOk = !originalIds.length || originalIds.includes(candidate.sourceId);
-      if (!sourceOk) return false;
-      const structural = zgodnoscStrukturalna(candidate.quote, claim.claim, {
-        allowCrossLanguageExactEvidence: true,
-        allowDistributedEvidence: false,
-      });
-      return structural.ok;
-    });
-    if (!verified) return claim;
-    return {
-      ...claim,
-      source_ids: [...new Set([...originalIds, verified.sourceId])],
-      evidence_quote: verified.quote,
-      reason: typeof claim.reason === 'string' ? claim.reason : '',
-    };
-  });
-
+  // Evidence quote is data, not a suggestion. Never replace an invalid quote
+  // with a different candidate: doing so can turn an unsupported validator payload
+  // into an accepted one. Normalization is handled by quoteExists itself.
+  const reboundClaims = rawClaims.slice(0, 12);
   const claims = reboundClaims.map((claim) => ({
     claim: typeof claim?.claim === 'string' ? claim.claim.trim().slice(0, 500) : '',
     supported: claim?.supported === true,
