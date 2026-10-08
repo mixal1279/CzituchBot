@@ -1824,7 +1824,7 @@ function wykonajAIWHistorii(historia, zadanie) {
  * Provider diagnostics must be available to every AI provider path.
  * Keep this at module scope so validators/fallbacks cannot hit a TDZ/scope error.
  */
-function formatProviderError = (provider, model, err, extra = {}) => {
+function formatProviderError(provider, model, err, extra = {}) {
     const message = String(err?.message || err || 'unknown').slice(0, 1200);
     const providerError = err?.error && typeof err.error === 'object' ? err.error : null;
     const responseData = extra.responseData && typeof extra.responseData === 'object' ? extra.responseData : null;
