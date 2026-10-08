@@ -161,6 +161,15 @@ const policy = (q, recipe) => recipe(q) ? 'minecraft_recipe' : /pogoda/i.test(q)
 }
 
 assert.match(require('fs').readFileSync(require('path').join(__dirname, '..', 'czituch_bot.js'), 'utf8'), /generujOdpowiedz\(max_tokens, promptRetry, 'soft validation repair', false\)/);
+{
+  const botSource = require('fs').readFileSync(require('path').join(__dirname, '..', 'czituch_bot.js'), 'utf8');
+  const formatterPos = botSource.indexOf('function formatProviderError(');
+  const aiEntryPos = botSource.indexOf('async function zapytajAI(');
+  assert.ok(formatterPos >= 0, 'formatProviderError musi być dostępny na poziomie modułu');
+  assert.ok(aiEntryPos >= 0 && formatterPos < aiEntryPos, 'formatProviderError musi być zadeklarowany przed zapytajAI');
+  assert.equal((botSource.match(/function formatProviderError\\(/g) || []).length, 1);
+}
+
 assert.match(require('fs').readFileSync(require('path').join(__dirname, '..', 'czituch_bot.js'), 'utf8'), /response_format:\s*\{\s*type: 'json_schema'/);
 {
   assert.deepEqual(parseMemoryCommand('co o mnie pamiętasz?'), { type:'list' });
