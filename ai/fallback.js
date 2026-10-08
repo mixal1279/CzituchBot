@@ -27,9 +27,15 @@ const GENERATION_FALLBACK_CHAIN = [
 
 function nextFallbacks({ failure = 'unknown', attempted = [], failedProviders = [], maxFallbacks = null } = {}) {
   const failed = new Set(Array.isArray(failedProviders) ? failedProviders : []);
-  const remaining = GENERATION_FALLBACK_CHAIN.filter(
+  let remaining = GENERATION_FALLBACK_CHAIN.filter(
     provider => !attempted.includes(provider) && !failed.has(provider),
   );
+  // Validator rejection is a semantic signal, not a provider error. If a caller
+  // explicitly supplies it, skip the expensive 120B retry; classifyFailure()
+  // never manufactures this category from generic API error text.
+  if (failure === 'grounded_reject') {
+    remaining = remaining.filter(provider => !provider.includes('120b'));
+  }
   const limit = Math.max(
     0,
     Number(maxFallbacks ?? process.env.AI_MAX_FALLBACK_STEPS ?? GENERATION_FALLBACK_CHAIN.length),
