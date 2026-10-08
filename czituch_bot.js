@@ -2476,10 +2476,28 @@ Pytanie użytkownika: ${pytanie}`;
   }
 
   // Fallback state is shared by all generation attempts in this request.
-  // Provider auth/quota failures must not be retried by a later validator/repair cycle.
+  // Failed endpoints are remembered for the whole request, including transient
+  // and unknown errors, so repair does not immediately repeat an outage.
   const failedFallbackProviders = new Set();
+  let lastSuccessfulGenerationStep = null;
+
+  const recordGenerationAttempt = (attempt) => {
+    if (!Array.isArray(aiState.generationAttempts)) aiState.generationAttempts = [];
+    aiState.generationAttempts.push({
+      provider: attempt.provider || 'unknown',
+      model: attempt.model || 'unknown',
+      phase: attempt.phase || aiState.generationPhase || 'initial',
+      status: attempt.status || 'unknown',
+      failure: attempt.failure || null,
+      latencyMs: Math.max(0, Number(attempt.latencyMs) || 0),
+    });
+    if (aiState.generationAttempts.length > 32) aiState.generationAttempts.shift();
+  };
 
   async function generujOdpowiedz(maxTok, prompt = systemPrompt, powod = 'main', allow120b = true) {
+    const phase = /repair/i.test(String(powod || '')) ? 'repair' : 'initial';
+    aiState.generationPhase = phase;
+    const startedGenerationAt = Date.now();
     let result = allow120b
       ? await zapytajGlowny(Math.max(maxTok, 300), prompt, 'openai/gpt-oss-120b')
       : wynikPusty('groq', 'openai/gpt-oss-120b', '120B skipped for this generation cycle');
