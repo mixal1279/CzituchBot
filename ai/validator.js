@@ -379,7 +379,7 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
     && wynik.relevant === true
     && claims.length > 0
     && verifiedPartialClaims.length > 0
-    && unsupported.length > 0
+    && (unsupported.length > 0 || unsupportedEvidenceClaimIndexes.length > 0)
     && !unknownSourceClaim
     && !tooManyClaims
     && !malformedClaims
