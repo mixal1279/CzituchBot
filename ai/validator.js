@@ -169,9 +169,12 @@ function czyCytatPotwierdzaRelacjePrzyczynowa(claim, evidenceQuote) {
   const markery = ['ponieważ', 'bo', 'gdyż', 'dlatego', 'z powodu', 'w celu', 'żeby', 'aby', 'celem', 'because', 'therefore', 'due to'];
   const claimText = String(claim || '').toLocaleLowerCase('pl-PL');
   const quoteText = String(evidenceQuote || '').toLocaleLowerCase('pl-PL');
-  const claimHasCausal = markery.some(marker => claimText.includes(marker));
+  const hasMarker = (text, marker) => marker.includes(' ')
+    ? text.includes(marker)
+    : text.split(/\\W+/u).includes(marker);
+  const claimHasCausal = markery.some(marker => hasMarker(claimText, marker));
   if (!claimHasCausal) return true;
-  return markery.some(marker => quoteText.includes(marker));
+  return markery.some(marker => hasMarker(quoteText, marker));
 }
 function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '') {
   if (!Array.isArray(sourceIds) || !sourceIds.length || typeof evidenceQuote !== 'string') return false;
