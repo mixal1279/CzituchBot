@@ -390,7 +390,7 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
   if (tooManyClaims) localRejectReasons.push('claims_over_limit');
   if (malformedClaims) localRejectReasons.push('malformed_claims');
   if (unknownSourceClaim) localRejectReasons.push('unknown_source_id');
-  if (unsupportedEvidenceClaim && !(softEvidenceOnly && softQuoteBindingOnly)) localRejectReasons.push('evidence_not_verified');
+  if (unsupportedEvidenceClaim) localRejectReasons.push('evidence_not_verified');
   if (unverifiedEvidenceQuoteIndexes.length) localRejectReasons.push('evidence_quote_not_exact');
   if (claims.some(c => !c.supported) || wynik.unsupported_claims.some(v => typeof v === 'string' && v.trim())) localRejectReasons.push('unsupported_claims_reported');
   if (!answerCoverage.ok) localRejectReasons.push('answer_not_covered_by_claims');
@@ -414,7 +414,7 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
     && localRejectReasons.length > 0
     && softEvidenceOnly
     && softQuoteBindingOnly
-    && localRejectReasons.every(reason => softEvidenceReasons.has(reason));
+    && localRejectReasons.filter(reason => reason !== 'evidence_not_verified').every(reason => softEvidenceReasons.has(reason));
 
   const status = accepted
     ? 'accepted'
