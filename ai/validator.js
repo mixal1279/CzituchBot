@@ -167,9 +167,9 @@ function tokenyDowodu(value) {
 }
 function czyCytatPotwierdzaRelacjePrzyczynowa(claim, evidenceQuote) {
   const causalRe = /\\b(?:bo|ponieważ|gdyż|dlatego|z\\s+powodu|w\\s+celu|żeby|aby|celem|because|therefore|due\\s+to)\\b/iu;
-  const claimHasCausal = causalRe.test(String(claim || '').normalize('NFD').replace(/[\\u0300-\\u036f]/g, ''));
+  const claimHasCausal = causalRe.test(String(claim || ''));
   if (!claimHasCausal) return true;
-  return causalRe.test(String(evidenceQuote || '').normalize('NFD').replace(/[\\u0300-\\u036f]/g, ''));
+  return causalRe.test(String(evidenceQuote || ''));
 }
 function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '') {
   if (!Array.isArray(sourceIds) || !sourceIds.length || typeof evidenceQuote !== 'string') return false;
