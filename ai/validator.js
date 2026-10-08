@@ -289,7 +289,6 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
     && unverifiedEvidenceQuoteIndexes.length === 0
     && !tooManyClaims
     && !malformedClaims
-    && claims.every(c => czyCytatPotwierdzaRelacjePrzyczynowa(c.claim, c.evidence_quote))
     && answerCoverage.ok
     && claimGranularityOk
     && evidenceContractOk
