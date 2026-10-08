@@ -181,6 +181,7 @@ assert.match(require('fs').readFileSync(require('path').join(__dirname, '..', 'c
   assert.equal(classifyFailure('429 rate limit'), 'quota');
   assert.equal(classifyFailure('401 invalid API key'), 'auth');
   assert.equal(classifyFailure('timeout'), 'transient');
+  assert.equal(classifyFailure('Gemini generation cooldown: gemini-3.5-flash-lite'), 'provider_cooldown');
   assert.equal(shouldRetryFailure('transient'), true);
   assert.equal(nextFallbacks({failure:'grounded_reject',attempted:['groq:openai/gpt-oss-120b']})[0], 'groq:openai/gpt-oss-20b');
 }
@@ -446,10 +447,12 @@ console.log('AI regression tests: OK');
     'groq:openai/gpt-oss-20b',
     'gemini:gemini-3.8-flash',
     'gemini:gemini-3.5-flash-lite',
-    'openrouter:default',
+    'xkiro:default',
   ]);
-  assert.equal(GENERATION_FALLBACK_CHAIN.at(-1), 'xkiro:default');
+  assert.equal(GENERATION_FALLBACK_CHAIN.at(-1), 'openrouter:default');
   assert.equal(shouldRetryFailure('unknown'), true);
+  assert.equal(shouldRetryFailure('provider_cooldown'), true);
+  assert.deepEqual(nextFallbacks({attempted:['groq:openai/gpt-oss-120b','groq:openai/gpt-oss-20b','gemini:gemini-3.8-flash','gemini:gemini-3.5-flash-lite'], maxFallbacks:1}), ['xkiro:default']);
 }
 
 {
