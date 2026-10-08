@@ -520,8 +520,8 @@ const KONFIGURACJA = {
   groqKey: process.env.GROQ_API_KEY,
 
   // ---- Mistral (fallback po Groq 20B) ----
-  mistralKey:   typeof process.env.MISTRAL_API_KEY === 'string' ? process.env.MISTRAL_API_KEY.replace(/[\r\n]/g, '').trim() : process.env.MISTRAL_API_KEY,
-  mistralModel: process.env.MISTRAL_MODEL || 'mistral-small-latest',
+  xkiroKey: typeof process.env.XKIRO_API_KEY === 'string' ? process.env.XKIRO_API_KEY.replace(/[\r\n]/g, '').trim() : process.env.XKIRO_API_KEY,
+  xkiroModel: process.env.XKIRO_MODEL || 'qwen/qwen3.5-flash:free',
 
   // ---- ITAD ----
   itadKey: process.env.ITAD_API_KEY,
@@ -2367,21 +2367,21 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
     } finally { clearTimeout(timer); }
   }
 
-  // Mistral jako dodatkowy fallback po Groq 20B (API zgodne z formatem OpenAI chat/completions).
+  // xKiro jako dodatkowy fallback po Groq 20B (OpenAI-compatible gateway).
   // Bez reasoning_effort — to parametr specyficzny dla Groq. Wlicza się do budżetu generacji requestu.
-  async function zapytajMistral(maxTok = 700, overrideSystemPrompt = systemPrompt, powod = 'main') {
-    const model = KONFIGURACJA.mistralModel;
-    if (!KONFIGURACJA.mistralKey) return wynikPusty('mistral', model, 'brak MISTRAL_API_KEY');
-    if (!moznaWykonacGeneracje('mistral', model)) return wynikPusty('mistral', model, 'AI request budget exceeded');
+  async function zapytajXKiro(maxTok = 700, overrideSystemPrompt = systemPrompt, powod = 'main') {
+    const model = KONFIGURACJA.xkiroModel;
+    if (!KONFIGURACJA.xkiroKey) return wynikPusty('xkiro', model, 'brak XKIRO_API_KEY');
+    if (!moznaWykonacGeneracje('xkiro', model)) return wynikPusty('xkiro', model, 'AI request budget exceeded');
     const remainingMs = pozostalyCzasMs();
-    if (!Number.isFinite(remainingMs) || remainingMs <= 0) return wynikPusty('mistral', model, 'AI request deadline exceeded');
+    if (!Number.isFinite(remainingMs) || remainingMs <= 0) return wynikPusty('xkiro', model, 'AI request deadline exceeded');
     const controller = new AbortController();
     const timeoutMs = Math.max(1, Math.min(30000, remainingMs));
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const response = await fetch('https://api.mistral.ai/v1/chat/completions', {
+      const response = await fetch('https://api.xkiro.com/v1/chat/completions', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${KONFIGURACJA.mistralKey}` },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${KONFIGURACJA.xkiroKey}` },
         body: JSON.stringify({          model,
           messages: [{ role: 'system', content: overrideSystemPrompt }, ...przygotujHistorieDoModelu(historiaRozmowy, 4), { role: 'user', content: String(kontekstAI || '').slice(0, 10000) }],
           temperature,
@@ -2393,15 +2393,15 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
       if (!response.ok) {
         const retryAfter = response.headers.get('retry-after');
         const message = data?.message || data?.error?.message || `HTTP ${response.status}`;
-        throw new Error(`Mistral HTTP ${response.status}: ${message}${retryAfter ? ` (Retry-After=${retryAfter}s)` : ''}`);
+        throw new Error(`xKiro HTTP ${response.status}: ${message}${retryAfter ? ` (Retry-After=${retryAfter}s)` : ''}`);
       }
       const choice = data?.choices?.[0];
       const tekst = (typeof choice?.message?.content === 'string' ? choice.message.content : '').trim();
-      if (!tekst) throw new Error('Mistral zwrócił pustą odpowiedź');
+      if (!tekst) throw new Error('xKiro zwrócił pustą odpowiedź');
       return ujednolicWynik({ tekst, ucieta: choice?.finish_reason === 'length' }, 'mistral', data?.model || model);
     } catch (err) {
-      console.error(`[Mistral] Fallback nieudany (${powod}):`, err.message);
-      return wynikPusty('mistral', model, err.message);
+      console.error(`[xKiro] Fallback nieudany (${powod}):`, err.message);
+      return wynikPusty('xkiro', model, err.message);
     } finally { clearTimeout(timer); }
   }
 
@@ -2480,7 +2480,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
 
     const fallbackSteps = {
       'groq:openai/gpt-oss-20b': () => zapytajGlowny(Math.max(maxTok, 300), prompt, 'openai/gpt-oss-20b'),
-      'mistral:default': () => zapytajMistral(Math.max(maxTok, 300), prompt, powod),
+      'xkiro:default': () => zapytajXKiro(Math.max(maxTok, 300), prompt, powod),
       'gemini:gemini-3.8-flash': () => zapytajGeminiFallback(Math.max(maxTok, 300), prompt, powod),
       'gemini:gemini-3.5-flash-lite': () => zapytajGeminiLiteFallback(Math.max(maxTok, 300), prompt, powod),
       'openrouter:default': () => zapytajOpenRouterFallback(Math.max(maxTok, 300), prompt, powod),
