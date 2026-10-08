@@ -15,7 +15,7 @@ const DETAIL_CLASSIFIERS = Object.freeze([
   ['timeout_abort', /(?:timeout|timed ?out|ETIMEDOUT|AbortError|operation was aborted|abort(?:ed)?)/i],
   ['invalid_json', /(?:invalid json|malformed json|json parse|niepoprawny json)/i],
   ['schema_rejection', SCHEMA_REJECTION],
-  ['truncated_response', /(?:finish_reason.{0,24}(?:length|max_tokens)|MAX_TOKENS|truncated|ucięta odpowiedź|odpowiedź ucięta)/i],
+  ['empty_response', /(?:finish_reason.{0,24}(?:length|max_tokens)|MAX_TOKENS|truncated|ucięta odpowiedź|odpowiedź ucięta|empty content|empty response|pusty content|pusta odpowiedź)/i],
   ['empty_response', /(?:empty content|empty response|pusty content|pusta odpowiedź)/i],
   ['provider_cooldown', /(?:generation cooldown|provider cooldown|temporarily disabled)/i],
   ['transport_error', /(?:transport[_ -]?error|network[_ -]?error|fetch failed|socket hang up|ECONNRESET|connection refused)/i],
@@ -112,7 +112,7 @@ function repairBudgetBlockReason({
 function shouldRetryFailure(failure) {
   // Retry means "try another provider", not "repeat the same failing endpoint".
   // Auth errors are useful only for cross-provider fallback.
-  return ['transient', 'timeout_abort', 'transport_error', 'truncated_response', 'empty_response', 'invalid_json', 'schema_rejection', 'provider_unavailable', 'budget_exhausted', 'quota', 'auth', 'invalid_request', 'provider_cooldown', 'validator_inconclusive', 'unknown'].includes(failure);
+  return ['transient', 'timeout_abort', 'transport_error', 'empty_response', 'invalid_json', 'schema_rejection', 'provider_unavailable', 'budget_exhausted', 'quota', 'auth', 'invalid_request', 'provider_cooldown', 'validator_inconclusive', 'unknown'].includes(failure);
 }
 
 module.exports = {
