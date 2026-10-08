@@ -15,9 +15,9 @@ function createGroqCompletion(groqClient, payload, { signal } = {}) {
  * next validator/fallback to run.
  */
 function computeValidatorTimeout(remainingMs, {
-  maxTimeoutMs = 15000,
-  reserveMs = 2500,
-  minTimeoutMs = 6000,
+  maxTimeoutMs = 9000,
+  reserveMs = 6500,
+  minTimeoutMs = 4000,
 } = {}) {
   const remaining = Number(remainingMs);
   if (!Number.isFinite(remaining) || remaining <= 0) return null;
@@ -26,4 +26,20 @@ function computeValidatorTimeout(remainingMs, {
   return timeoutMs >= minTimeoutMs ? Math.floor(timeoutMs) : null;
 }
 
-module.exports = { createGroqCompletion, computeValidatorTimeout };
+/**
+ * Bound a generation attempt while preserving a minimum reserve for validation
+ * or another provider. Do not start a request that can only run for a tiny
+ * fraction of a second; those attempts create timeout noise without real fallback.
+ */
+function computeGenerationTimeout(remainingMs, {
+  maxTimeoutMs = 9000,
+  reserveMs = 4500,
+  minTimeoutMs = 4000,
+} = {}) {
+  const remaining = Number(remainingMs);
+  if (!Number.isFinite(remaining) || remaining <= reserveMs) return null;
+  const timeoutMs = Math.min(maxTimeoutMs, remaining - reserveMs);
+  return timeoutMs >= minTimeoutMs ? Math.floor(timeoutMs) : null;
+}
+
+module.exports = { createGroqCompletion, computeValidatorTimeout, computeGenerationTimeout };
