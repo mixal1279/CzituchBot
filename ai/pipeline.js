@@ -80,7 +80,7 @@ function shouldValidate({ routing = {}, evidencePolicy = {}, hasExternalData = f
   return Boolean(searched && routing.needs_web);
 }
 
-function decideValidation(status, options = {}) {
+function classifyPipelineFailure(status, options = {}) {\n  const s = String(status || '').toLowerCase();\n  if (s === 'accepted' || s === 'soft_accepted') return null;\n  if (s === 'rejected') return 'validator_reject';\n  if (s === 'inconclusive') return 'validator_inconclusive';\n  if (s === 'unavailable') return options.reason || 'provider_unavailable';\n  return 'unknown';\n}\n\nfunction decideValidation(status, options = {}) {
   const s = String(status || '').toLowerCase();
   if (s === STATUS.ACCEPTED) return { finalStatus: STATUS.ACCEPTED, retry: false };
   if (s === STATUS.SOFT_ACCEPTED) return { finalStatus: STATUS.SOFT_ACCEPTED, retry: false };
