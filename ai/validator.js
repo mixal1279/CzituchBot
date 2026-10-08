@@ -240,7 +240,15 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
   // Weryfikujemy przede wszystkim claim względem wskazanego źródła. `evidence_quote` jest
   // dodatkowym bezpiecznikiem i diagnostyką, ale nie powinien powodować false rejectu,
   // gdy model podał parafrazę zamiast dosłownego fragmentu, a sam claim jest jednoznacznie
-  // potwierdzony przez ten sam, dozwolony blok źródłowy.\n  const evidenceQuoteVerified = claims.map((c) => czyDowodPotwierdzaClaim(dane, c.source_ids, c.evidence_quote, c.claim));\n  const claimSourceVerified = claims.map((c) => c.source_ids.some(id => {\n    const block = pobierzBlokZrodla(dane, id);\n    return Boolean(block) && zgodnoscStrukturalna(block, c.claim, { allowCrossLanguageExactEvidence: true, allowDistributedEvidence: true }).ok;\n  }));\n  const unsupportedEvidenceClaimIndexes = claims.map((c, index) => c.supported && !claimSourceVerified[index] ? index : -1).filter(index => index >= 0);\n  const unverifiedEvidenceQuoteIndexes = claims.map((c, index) => c.supported && claimSourceVerified[index] && !evidenceQuoteVerified[index] ? index : -1).filter(index => index >= 0);
+  // potwierdzony przez ten sam, dozwolony blok źródłowy.
+  const evidenceQuoteVerified = claims.map((c) => czyDowodPotwierdzaClaim(dane, c.source_ids, c.evidence_quote, c.claim));
+  const claimSourceVerified = claims.map((c) => c.source_ids.some(id => {
+    const block = pobierzBlokZrodla(dane, id);
+    return Boolean(block) && zgodnoscStrukturalna(block, c.claim, { allowCrossLanguageExactEvidence: true, allowDistributedEvidence: true }).ok;
+  }));
+  const unsupportedEvidenceClaimIndexes = claims.map((c, index) => c.supported && !claimSourceVerified[index] ? index : -1).filter(index => index >= 0);
+  const unverifiedEvidenceQuoteIndexes = claims.map((c, index) => c.supported && claimSourceVerified[index] && !evidenceQuoteVerified[index] ? index : -1).filter(index => index >= 0);
+
   const unknownSourceClaim = unknownSourceClaimIndexes.length > 0;
   const unsupportedEvidenceClaim = unsupportedEvidenceClaimIndexes.length > 0;
   const answerCoverage = answer ? sprawdzPokrycieClaimamiOdpowiedzi(answer, claims) : { ok: true, uncovered: [], totalSentences: null, checkedSentences: null, uncoveredSentenceIndexes: [] };
