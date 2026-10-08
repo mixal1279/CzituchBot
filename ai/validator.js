@@ -237,7 +237,10 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
     is_lore: /lore|fabuł|histori|kanon|canon/i.test(String(answer || '')),
   });
   const unknownSourceClaimIndexes = claims.map((c, index) => c.supported && (!c.source_ids.length || (allowed && c.source_ids.some(id => !allowed.has(id)))) ? index : -1).filter(index => index >= 0);
-  // Weryfikujemy przede wszystkim claim względem wskazanego źródła. `evidence_quote` jest\n  // dodatkowym bezpiecznikiem i diagnostyką, ale nie powinien powodować false rejectu,\n  // gdy model podał parafrazę zamiast dosłownego fragmentu, a sam claim jest jednoznacznie\n  // potwierdzony przez ten sam, dozwolony blok źródłowy.\n  const evidenceQuoteVerified = claims.map((c) => czyDowodPotwierdzaClaim(dane, c.source_ids, c.evidence_quote, c.claim));\n  const claimSourceVerified = claims.map((c) => c.source_ids.some(id => {\n    const block = pobierzBlokZrodla(dane, id);\n    return Boolean(block) && zgodnoscStrukturalna(block, c.claim, { allowCrossLanguageExactEvidence: true, allowDistributedEvidence: true }).ok;\n  }));\n  const unsupportedEvidenceClaimIndexes = claims.map((c, index) => c.supported && !claimSourceVerified[index] ? index : -1).filter(index => index >= 0);\n  const unverifiedEvidenceQuoteIndexes = claims.map((c, index) => c.supported && claimSourceVerified[index] && !evidenceQuoteVerified[index] ? index : -1).filter(index => index >= 0);
+  // Weryfikujemy przede wszystkim claim względem wskazanego źródła. `evidence_quote` jest
+  // dodatkowym bezpiecznikiem i diagnostyką, ale nie powinien powodować false rejectu,
+  // gdy model podał parafrazę zamiast dosłownego fragmentu, a sam claim jest jednoznacznie
+  // potwierdzony przez ten sam, dozwolony blok źródłowy.\n  const evidenceQuoteVerified = claims.map((c) => czyDowodPotwierdzaClaim(dane, c.source_ids, c.evidence_quote, c.claim));\n  const claimSourceVerified = claims.map((c) => c.source_ids.some(id => {\n    const block = pobierzBlokZrodla(dane, id);\n    return Boolean(block) && zgodnoscStrukturalna(block, c.claim, { allowCrossLanguageExactEvidence: true, allowDistributedEvidence: true }).ok;\n  }));\n  const unsupportedEvidenceClaimIndexes = claims.map((c, index) => c.supported && !claimSourceVerified[index] ? index : -1).filter(index => index >= 0);\n  const unverifiedEvidenceQuoteIndexes = claims.map((c, index) => c.supported && claimSourceVerified[index] && !evidenceQuoteVerified[index] ? index : -1).filter(index => index >= 0);
   const unknownSourceClaim = unknownSourceClaimIndexes.length > 0;
   const unsupportedEvidenceClaim = unsupportedEvidenceClaimIndexes.length > 0;
   const answerCoverage = answer ? sprawdzPokrycieClaimamiOdpowiedzi(answer, claims) : { ok: true, uncovered: [], totalSentences: null, checkedSentences: null, uncoveredSentenceIndexes: [] };
@@ -375,7 +378,7 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
         : !answerCoverage.ok
           ? 'claims nie pokrywają całej odpowiedzi'
           : unsupportedEvidenceClaim
-            ? 'co najmniej jeden claim nie zgadza się z cytowanym dowodem lub jego jednostkami'
+            ? 'co najmniej jeden claim nie jest potwierdzony przez wskazane źródło'
           : ((typeof wynik.reason === 'string' ? wynik.reason.trim().slice(0, 500) : '') || (accepted ? 'odpowiedź jest ugruntowana w danych' : 'odpowiedź zawiera niepotwierdzone twierdzenia')),
   };
 }
