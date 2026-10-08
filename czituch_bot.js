@@ -1849,6 +1849,9 @@ async function walidujOdpowiedzAI(persona, pytanie, odpowiedz, dane, historiaRoz
     if (requestState.reserveValidator && !requestState.reserveValidator('validator:openrouter')) {
       return { status: 'unavailable', ok: false, technicalError: true, provider: 'openrouter', model: KONFIGURACJA.openrouterValidatorModel, unsupported_claims: [], reason: 'budżet validatora wyczerpany' };
     }
+    if (requestState.zarezerwujModel && !requestState.zarezerwujModel('validator:openrouter')) {
+      return { status: 'unavailable', ok: false, technicalError: true, provider: 'openrouter', model: KONFIGURACJA.openrouterValidatorModel, unsupported_claims: [], reason: 'globalny budżet modeli wyczerpany' };
+    }
     requestState.validatorResults.push({ model: KONFIGURACJA.openrouterValidatorModel, status: 'fallback', complete: false, confidence: null, claimCoverage: null });
   }
   // Brak Gemini nie jest błędem logicznym: OpenRouter jest pełnoprawnym
