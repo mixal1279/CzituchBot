@@ -166,7 +166,7 @@ function tokenyDowodu(value) {
   return [...new Set(normalizujDowodTekstowy(value).split(' ').filter(t => t.length >= 4))];
 }
 function czyCytatPotwierdzaRelacjePrzyczynowa(claim, evidenceQuote) {
-  const causalRe = /\\b(?:bo|ponieważ|gdyż|dlatego|z\\s+powodu|w\\s+celu|żeby|aby|celem|because|therefore|due\\s+to)\\b/iu;
+  const causalRe = /\b(?:bo|ponieważ|gdyż|dlatego|z\s+powodu|w\s+celu|żeby|aby|celem|because|therefore|due\s+to)\b/iu;
   const claimHasCausal = causalRe.test(String(claim || ''));
   if (!claimHasCausal) return true;
   return causalRe.test(String(evidenceQuote || ''));
