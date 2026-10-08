@@ -2541,7 +2541,7 @@ Pytanie użytkownika: ${pytanie}`;
   // credentials/capability must never consume the only semantic-repair slot.
   const providerConfiguredForRequest = step => {
     if (step === 'groq:openai/gpt-oss-120b' || step === 'groq:openai/gpt-oss-20b') {
-      return Boolean(KONFIGURACJA.groqKey || process.env.GROQ_API_KEY);
+      return Boolean(opcje.__testDeps?.groq || KONFIGURACJA.groqKey || process.env.GROQ_API_KEY);
     }
     if (step === 'gemini:gemini-3.8-flash' || step === 'gemini:gemini-3.5-flash-lite') {
       return Boolean(KONFIGURACJA.geminiKey || process.env.GEMINI_API_KEY);
