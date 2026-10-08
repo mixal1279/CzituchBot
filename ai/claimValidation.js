@@ -78,7 +78,18 @@ function wyodrebnijNazwyWlasne(value) {
     const before = raw.slice(0, index);
     const sentenceStart = !before || /(?:^|[.!?]\s*)$/.test(before);
     const singleWord = !/\s/.test(text);
-    if (sentenceStart && singleWord && !/\d/.test(text)) continue;
+    const words = text.split(/\s+/).filter(Boolean);
+    if (sentenceStart && !/\d/.test(text)) {
+      const genericFirstWords = new Set(['decyzja','motywuje','nowo','następnie','nastepnie','ponadto','jednak','ogólnie','ogolnie','wtedy','potem','dlatego','artur','arthur']);
+      const first = normalizujClaim(words[0] || '');
+      if (genericFirstWords.has(first)) {
+        words.shift();
+        if (!words.length) continue;
+        matches.push(words.join(' '));
+        continue;
+      }
+      if (singleWord) continue;
+    }
     matches.push(text);
   }
   return [...new Set(matches.map(normalizujClaim).filter(x => x.length >= 3))];
