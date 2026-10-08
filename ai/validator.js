@@ -372,11 +372,11 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
     ? sprawdzKompletnoscOdpowiedzi(partialAnswerCandidate)
     : { ok: false };
   const partialAccepted = !accepted
-    && validFromModel === true
+    // Globalny werdykt może odrzucić całą odpowiedź przez jeden zły claim.
+    // W trybie częściowym rozstrzygają lokalne dowody dla claimów, które zostaną
+    // faktycznie pokazane; nie obniżamy progu confidence ani relevance.
     && confidence >= 0.75
-    && wynik.supported === true
     && wynik.relevant === true
-    && wynik.hallucination === false
     && claims.length > 0
     && verifiedPartialClaims.length > 0
     && unsupported.length > 0
