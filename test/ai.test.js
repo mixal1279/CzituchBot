@@ -429,7 +429,7 @@ console.log('AI regression tests: OK');
   });
   assert.deepEqual(GEMINI_VALIDATOR_JSON_SCHEMA.required, VALIDATOR_JSON_SCHEMA.required);
   assert.match(require('fs').readFileSync(require('path').join(__dirname, '..', 'czituch_bot.js'), 'utf8'), /AI_TAVILY_CACHE_FILE \|\| path\.join\(process\.env\.AI_CACHE_DIR \|\| __dirname, 'tavily_cache\.json'\)/);
-  assert.match(require('fs').readFileSync(require('path').join(__dirname, '..', 'czituch_bot.js'), 'utf8'), /validatorTimeoutMs = requestState \?/);
+  assert.match(require('fs').readFileSync(require('path').join(__dirname, '..', 'czituch_bot.js'), 'utf8'), /computeValidatorTimeout\(remainingMs, \{ maxTimeoutMs: 9000, reserveMs: 2500, minTimeoutMs: 6000 \}\)/);
 }
 
 {
@@ -484,6 +484,7 @@ console.log('AI regression tests: OK');
   assert.equal(GENERATION_FALLBACK_CHAIN.at(-1), 'openrouter:default');
   assert.equal(shouldRetryFailure('unknown'), true);
   assert.equal(shouldRetryFailure('provider_cooldown'), true);
+  assert.equal(shouldRetryFailure('validator_inconclusive'), true);
   assert.deepEqual(nextFallbacks({attempted:['groq:openai/gpt-oss-120b','groq:openai/gpt-oss-20b','gemini:gemini-3.8-flash','gemini:gemini-3.5-flash-lite'], maxFallbacks:1}), ['xkiro:default']);
   assert.deepEqual(nextFallbacks({
     failure: 'grounded_reject',
@@ -548,4 +549,11 @@ console.log('AI regression tests: OK');
     ),
     false
   );
+}
+
+{
+  const runtime = require('../ai/provider-runtime');
+  assert.equal(runtime.computeValidatorTimeout(25000, { maxTimeoutMs: 9000, reserveMs: 2500, minTimeoutMs: 6000 }), 9000);
+  assert.equal(runtime.computeValidatorTimeout(8499, { maxTimeoutMs: 9000, reserveMs: 2500, minTimeoutMs: 6000 }), null);
+  assert.equal(runtime.computeValidatorTimeout(8500, { maxTimeoutMs: 9000, reserveMs: 2500, minTimeoutMs: 6000 }), 6000);
 }
