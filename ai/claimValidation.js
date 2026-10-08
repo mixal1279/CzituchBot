@@ -91,7 +91,13 @@ function wyodrebnijNazwyWlasne(value) {
     }
     matches.push(text);
   }
-  return [...new Set(matches.map(normalizujClaim).filter(x => x.length >= 3))];
+  const normalizujNazwe = (text) => String(text || '')
+    .toLocaleLowerCase('pl-PL')
+    .normalize('NFD').replace(/[\\u0300-\\u036f]/g, '')
+    .replace(/[^\\p{L}\\p{N}'’.-]+/gu, ' ')
+    .replace(/\\s+/g, ' ')
+    .trim();
+  return [...new Set(matches.map(normalizujNazwe).filter(x => x.length >= 3))];
 }
 function wyodrebnijMarkery(value, regex) {
   return regex.test(normalizujClaim(value));
