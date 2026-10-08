@@ -2575,20 +2575,24 @@ function oczyscOdpowiedzPrzedWalidacja(tekst) {
     if (walidacja.status === 'rejected') {
       console.log(`[AI][${requestId}] validator rejected; reason=${JSON.stringify(walidacja.reason || '')} confidence=${walidacja.confidence ?? 'n/a'} diagnostics=${JSON.stringify(walidacja.diagnostics || null)} claims=${JSON.stringify(walidacja.unsupported_claims || [])}`);
       const odmowaMimoDanych = AI_POLICY.czyOdpowiedzToJednoznacznaOdmowa(odp);
-      // Przy odmowie bez unsupported_claims źródła już istnieją; dodatkowe Tavily
-      // tylko powiększa kontekst i może pogorszyć regenerację.
+      const evidenceRepairContext = String(walidacja.diagnostics?.evidenceRepairContext || '').trim();
+      // Reuse already retrieved evidence before paying for another search. Secondary
+      // retrieval is reserved for the case where the current corpus has no repairable span.
       const uzupelniono = odmowaMimoDanych && !(walidacja.unsupported_claims || []).length
         ? false
-        : await uzupelnijDanePoValidatorze(walidacja.unsupported_claims || []);
+        : (evidenceRepairContext ? false : await uzupelnijDanePoValidatorze(walidacja.unsupported_claims || []));
       const unsupported = (walidacja.unsupported_claims || []).slice(0, 4);
       const reason = String(walidacja.reason || 'validator nie potwierdził odpowiedzi').trim().slice(0, 500);
       const feedback = [
         'Twoja poprzednia odpowiedź nie przeszła walidacji.',
         `Powód: ${reason}`,
         unsupported.length ? `Niepotwierdzone twierdzenia: ${unsupported.join(' | ')}` : 'Validator nie wskazał konkretnego twierdzenia.',
+        evidenceRepairContext ? '[EVIDENCE REPAIR MAP]\n' + evidenceRepairContext : '[EVIDENCE REPAIR MAP] Brak bezpiecznego fragmentu do ponownego użycia.',
+        'Jeżeli używasz faktu z danych referencyjnych, oprzyj zdanie na konkretnym fragmencie z EVIDENCE REPAIR MAP lub na innym dosłownym fragmencie danych.',
+        'Nie wymyślaj source_id ani cytatów. Nie dodawaj szczegółu, którego źródło nie potwierdza.',
         'Popraw odpowiedź, korzystając WYŁĄCZNIE z DANYCH REFERENCYJNYCH. Nie zgaduj brakujących informacji.',
         'Jeżeli źródła nadal nie pozwalają odpowiedzieć, powiedz krótko, że brakuje danych.',
-      ].join('\n');
+      ].join('\\n');
       const promptRetry = `${systemPrompt}\n\n[SOFT VALIDATION FEEDBACK]\n${feedback}`;
       // Dokładnie jeden cykl retry po odrzuceniu walidacji. Fallbacki providerów
       // pozostają wewnątrz jednego cyklu generacji i nie uruchamiamy kolejnego retry.
@@ -2633,10 +2637,16 @@ function oczyscOdpowiedzPrzedWalidacja(tekst) {
       answerJudge = judgeAnswer(odp, answerPlan);
       console.log(`[AI][${requestId}] answer-judge=${JSON.stringify(answerJudge)}`);
       if (answerJudge.status === 'repair' && answerJudge.repairable && !budzetPrzekroczony()) {
+        const verifiedEvidenceContext = (walidacja.claims || [])
+          .filter(claim => claim?.supported && claim?.source_ids?.length && claim?.evidence_quote)
+          .slice(0, 6)
+          .map((claim, index) => 'VERIFIED CLAIM ' + (index + 1) + ': ' + claim.claim + '\\nSOURCE: ' + claim.source_ids.join(', ') + '\\nEVIDENCE: ' + claim.evidence_quote)
+          .join('\\n\\n');
         const judgeFeedback = [
           'Odpowiedź przeszła fact-checking, ale nie odpowiedziała na wszystkie wymagane elementy pytania.',
           `Brakujące elementy: ${answerJudge.missing.join(', ')}`,
-          'Uzupełnij wyłącznie na podstawie DANYCH REFERENCYJNYCH. Nie dodawaj niepotwierdzonych faktów.',
+          verifiedEvidenceContext ? '[VERIFIED EVIDENCE MAP]\\n' + verifiedEvidenceContext : '[VERIFIED EVIDENCE MAP] brak',
+          'Uzupełnij wyłącznie na podstawie zweryfikowanego evidence oraz DANYCH REFERENCYJNYCH. Nie dodawaj niepotwierdzonych faktów.',
           answerPlan.instruction,
         ].join('\\n');
         const repairResult = await generujOdpowiedz(
