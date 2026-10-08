@@ -286,7 +286,8 @@ function wyznaczRoutingAI(pytanie) {
 }
 
 function zastosujDeterministyczneGuards(walidacja, odpowiedz, dane, pytanie, formatOptions = {}, routingForQuality = {}, qualityProfile = 'simple') {
-  if (!walidacja || walidacja.status !== 'accepted') return walidacja;
+  if (!walidacja || !['accepted', 'soft_accepted'].includes(walidacja.status)) return walidacja;
+  const partial = walidacja.status === 'soft_accepted' && Boolean(walidacja.partialAnswer);
   const format = sprawdzFormatOdpowiedzi(odpowiedz, formatOptions);
   if (!format.ok) {
     return {
@@ -298,7 +299,9 @@ function zastosujDeterministyczneGuards(walidacja, odpowiedz, dane, pytanie, for
       reason: `odpowiedź nie spełnia kontraktu formatu: ${format.reason}`,
     };
   }
-  const quality = ocenJakoscOdpowiedzi(pytanie, odpowiedz, {
+  // Odpowiedź częściowa celowo nie spełnia pełnego coverage score; nadal
+  // przechodzi kontrolę formatu i twardych faktów, ale nie odpada tylko za braki.
+  const quality = partial ? { ok: true, issues: [] } : ocenJakoscOdpowiedzi(pytanie, odpowiedz, {
     ...routingForQuality,
   }, qualityProfile);
   if (!quality.ok) {
