@@ -356,7 +356,7 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
     claim.supported === true
     && evidenceEvaluations[index]?.ok === true
     && claim.source_ids.length > 0
-    && !/[.!?].+\\S/u.test(claim.claim)
+    && !/[.!?].+\S/u.test(claim.claim)
   );
   const partialBody = verifiedPartialClaims.slice(0, 2)
     .map(claim => claim.claim.trim().replace(/[.!?]+$/u, ''))
