@@ -15,7 +15,7 @@ const DETAIL_CLASSIFIERS = Object.freeze([
   ['timeout_abort', /(?:timeout|timed ?out|ETIMEDOUT|AbortError|operation was aborted|abort(?:ed)?)/i],
   ['invalid_json', /(?:invalid json|malformed json|json parse|niepoprawny json)/i],
   ['schema_rejection', SCHEMA_REJECTION],
-  ['empty_response', /(?:empty content|empty response|pusty content|pusta odpowiedź)/i],
+  ['empty_response', /(?:empty content|empty response|pusty content|pusta odpowiedź|finish_reason.{0,16}(?:length|max_tokens))/i],
   ['provider_cooldown', /(?:generation cooldown|provider cooldown|temporarily disabled)/i],
   ['transport_error', /(?:transport[_ -]?error|network[_ -]?error|fetch failed|socket hang up|ECONNRESET|connection refused)/i],
   ['provider_unavailable', /(?:provider unavailable|brak .*api.?key|provider.*(?:unavailable|niedostęp)|fallback.*niedostęp|validator.*niedostęp|\bunavailable\b)/i],

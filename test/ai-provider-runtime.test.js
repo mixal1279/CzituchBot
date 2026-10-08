@@ -40,11 +40,14 @@ test('Groq request body never contains signal; AbortSignal is passed in SDK tran
 });
 
 test('validator timeout is capped by remaining budget and keeps a reserve for fallback', () => {
-  assert.equal(computeValidatorTimeout(15000), 10000);
+  assert.equal(computeValidatorTimeout(23309), 15000);
+  assert.equal(computeValidatorTimeout(21830), 15000);
+  assert.equal(computeValidatorTimeout(15000), 12500);
+  assert.equal(computeValidatorTimeout(12983), 10483);
   assert.equal(computeValidatorTimeout(12410), 9910);
   assert.equal(computeValidatorTimeout(9849), 7349);
   assert.equal(computeValidatorTimeout(8500), 6000);
-  assert.equal(computeValidatorTimeout(6499), null);
+  assert.equal(computeValidatorTimeout(8499), null);
   assert.equal(computeValidatorTimeout(0), null);
 });
 
@@ -54,6 +57,7 @@ test('provider and validator failures receive distinct categories', () => {
     ['xKiro validator TRANSPORT_ERROR', 'transport_error'],
     ['This operation was aborted', 'timeout_abort'],
     ['OpenRouter empty content', 'empty_response'],
+    ['finish_reason":"length","has_reasoning":false', 'empty_response'],
     ['OpenRouter returned invalid JSON', 'invalid_json'],
     ['validator JSON schema contract rejected', 'schema_rejection'],
     ['validator rejected unsupported claims', 'validator_rejection'],

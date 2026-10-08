@@ -15,7 +15,7 @@ function createGroqCompletion(groqClient, payload, { signal } = {}) {
  * next validator/fallback to run.
  */
 function computeValidatorTimeout(remainingMs, {
-  maxTimeoutMs = 10000,
+  maxTimeoutMs = 15000,
   reserveMs = 2500,
   minTimeoutMs = 6000,
 } = {}) {
