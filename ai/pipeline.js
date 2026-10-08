@@ -133,6 +133,7 @@ module.exports = {
   evaluateEvidence,
   shouldValidate,
   decideValidation,
+  classifyPipelineFailure,
   finalText,
   parseEvidenceText,
 };
