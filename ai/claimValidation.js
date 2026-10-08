@@ -70,34 +70,42 @@ function wyodrebnijJednostkoweWartosci(value) {
 }
 function wyodrebnijNazwyWlasne(value) {
   const raw = String(value || '');
-  const matches = [];
-  const re = /\b[A-ZĄĆĘŁŃÓŚŹŻ][\p{L}\d'’.-]*(?:\s+[A-ZĄĆĘŁŃÓŚŹŻ][\p{L}\d'’.-]*){0,3}/gu;
-  for (const match of raw.matchAll(re)) {
-    const text = match[0];
-    const index = Number(match.index || 0);
-    const before = raw.slice(0, index);
-    const sentenceStart = !before || /(?:^|[.!?]\s*)$/.test(before);
-    const singleWord = !/\s/.test(text);
-    const words = text.split(/\s+/).filter(Boolean);
-    if (sentenceStart && !/\d/.test(text)) {
-      const genericFirstWords = new Set(['decyzja','motywuje','nowo','następnie','nastepnie','ponadto','jednak','ogólnie','ogolnie','wtedy','potem','dlatego','artur','arthur']);
-      const first = normalizujClaim(words[0] || '');
-      if (genericFirstWords.has(first)) {
-        words.shift();
-        if (!words.length) continue;
-        matches.push(words.join(' '));
-        continue;
-      }
+  const genericFirstWords = new Set([
+    'decyzja','motywuje','nowo','następnie','nastepnie','ponadto',
+    'jednak','ogólnie','ogolnie','wtedy','potem','dlatego','artur','arthur'
+  ]);
+  const candidates = [];
+  const sentenceRe = /(^|[.!?]\s*)([^.!?]*)(?=[.!?]|$)/gu;
+  const capitalizedRe = /\b[A-ZĄĆĘŁŃÓŚŹŻ][\p{L}\d'’.-]*/gu;
+
+  for (const sentenceMatch of raw.matchAll(sentenceRe)) {
+    const sentence = sentenceMatch[2] || '';
+    const sentenceOffset = Number(sentenceMatch.index || 0) + String(sentenceMatch[1] || '').length;
+    let firstCandidate = true;
+    for (const match of sentence.matchAll(capitalizedRe)) {
+      const token = match[0];
+      const tokenOffset = Number(match.index || 0);
+      const before = sentence.slice(0, tokenOffset);
+      const atSentenceStart = firstCandidate && !before.trim();
+      firstCandidate = false;
+
+      if (atSentenceStart && genericFirstWords.has(normalizujClaim(token))) continue;
+      candidates.push({ token, offset: sentenceOffset + tokenOffset });
     }
-    matches.push(text);
   }
+
+  // Zachowujemy apostrofy i polskie znaki; normalizacja służy wyłącznie
+  // do porównywania nazw, nie może zmieniać "Johnny'ego" w "johnny ego".
   const normalizujNazwe = (text) => String(text || '')
     .toLocaleLowerCase('pl-PL')
-    .normalize('NFD').replace(/[\\u0300-\\u036f]/g, '')
-    .replace(/[^\\p{L}\\p{N}'’.-]+/gu, ' ')
-    .replace(/\\s+/g, ' ')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\p{L}\p{N}'’.-]+/gu, ' ')
+    .replace(/\s+/g, ' ')
     .trim();
-  return [...new Set(matches.map(normalizujNazwe).filter(x => x.length >= 3))];
+
+  return [...new Set(candidates
+    .map(item => normalizujNazwe(item.token))
+    .filter(name => name.length >= 3))];
 }
 function wyodrebnijMarkery(value, regex) {
   return regex.test(normalizujClaim(value));
