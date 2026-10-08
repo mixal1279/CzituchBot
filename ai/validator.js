@@ -188,7 +188,7 @@ function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '') {
 
     const structural = zgodnoscStrukturalna(block, claim, {
       allowCrossLanguageExactEvidence: true,
-      allowDistributedEvidence: true,
+      allowDistributedEvidence: false,
     });
     if (structural.ok) return true;
 
@@ -197,12 +197,7 @@ function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '') {
     const hard = sprawdzTwardeKonflikty(block, claim, { allowDistributedEvidence: false });
     if (!hard.ok) return false;
 
-    const cTokens = tokenyDowodu(claim);
-    const bTokens = new Set(tokenyDowodu(block));
-    const overlap = cTokens.length
-      ? cTokens.filter(t => [...bTokens].some(bt => bt === t || (t.length >= 6 && bt.startsWith(t.slice(0, 5))))).length / cTokens.length
-      : 0;
-    return overlap >= 0.18;
+    return false;
   });
 }
 
