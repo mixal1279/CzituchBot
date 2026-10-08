@@ -1888,6 +1888,12 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
     buildRetrievalQueries,
   );
   const answerPlan = buildAnswerPlan(pytanie, routingAI);
+  // Pytania "dlaczego" potrzebują osobnego retrievalu przyczynowego. Zwykłe
+  // zapytanie o fabułę często zwraca chronologię wydarzeń, ale nie zdanie
+  // łączące przyczynę ze skutkiem, którego wymaga validator.
+  const causalRetrievalQuery = answerPlan.causalQuestion
+    ? `${pytanie} powód przyczyna motywacja why reason cause motivation`
+    : null;
   const plannedRetrievalQueries = buildRetrievalQueries(pytanie, routingAI, { maxQueries: 3 });
   const responseCfg = RESPONSE_PROFILES[aiPlan.responseProfile] || RESPONSE_PROFILES.simple;
   max_tokens = Math.max(Number(max_tokens) || 200, responseCfg.maxTokens);
@@ -2076,7 +2082,10 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
     const materialyTavily = [];
     let sourceOffset = 0;
     const planowaneQueryRetrieval = (() => {
-      const primary = pytaniaAtomoweTavily.filter(Boolean);
+      const primary = [
+        ...pytaniaAtomoweTavily.filter(Boolean),
+        ...(causalRetrievalQuery ? [causalRetrievalQuery] : []),
+      ];
       const specialized = advancedRetrievalPlan
         .filter(item => aiPlan.responseProfile === 'lore'
           ? item?.reason === 'lore'
@@ -2166,13 +2175,17 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
     policy: evidencePipeline.policy.mode,
   })}`);
   // Dane zewnętrzne są materiałem dowodowym, nigdy instrukcjami dla modelu.
+  const evidenceCandidateQueries = [
+    ...(pytaniaAtomoweTavily.length ? pytaniaAtomoweTavily : [pytanie]),
+    ...(causalRetrievalQuery ? [causalRetrievalQuery] : []),
+  ];
   const evidenceCandidates = daneZewnetrzne
     ? buildQuestionEvidenceContext(
       pytanie,
       parseEvidenceBlocks(daneZewnetrzne),
       null,
       8,
-      pytaniaAtomoweTavily.length ? pytaniaAtomoweTavily : [pytanie],
+      evidenceCandidateQueries,
     )
     : '';
   const kontekst = daneZewnetrzne
@@ -2217,6 +2230,12 @@ Pytanie użytkownika: ${pytanie}`
       .filter(v => typeof v === 'string' && v.trim())
       .slice(0, 4)
       .join('; ');
+    // Dla pytań "dlaczego" supplemental retrieval musi szukać dowodu
+    // przyczynowego nawet wtedy, gdy validator znalazł już zwykłe fragmenty.
+    // Same chronologiczne fakty nie wystarczają do bezpiecznego wyjaśnienia "dlaczego".
+    const opisBraku = answerPlan.causalQuestion
+      ? `${pytanie} powód przyczyna motywacja reason cause motivation`
+      : (claims || 'zweryfikuj wszystkie fakty i każdą część pytania na podstawie źródeł');
     // Niektóre modele zwracają niespójny werdykt (supported=false), ale
     // nie wypełniają unsupported_claims. W takim przypadku wykonujemy jedno
     // celowane wyszukanie całego pytania zamiast kończyć fałszywą odmową.
@@ -2601,11 +2620,15 @@ function oczyscOdpowiedzPrzedWalidacja(tekst) {
       console.log(`[AI][${requestId}] validator rejected; reason=${JSON.stringify(walidacja.reason || '')} confidence=${walidacja.confidence ?? 'n/a'} diagnostics=${JSON.stringify(walidacja.diagnostics || null)} claims=${JSON.stringify(walidacja.unsupported_claims || [])}`);
       const odmowaMimoDanych = AI_POLICY.czyOdpowiedzToJednoznacznaOdmowa(odp);
       const evidenceRepairContext = String(walidacja.diagnostics?.evidenceRepairContext || '').trim();
-      // Reuse already retrieved evidence before paying for another search. Secondary
-      // retrieval is reserved for the case where the current corpus has no repairable span.
-      const uzupelniono = odmowaMimoDanych && !(walidacja.unsupported_claims || []).length
+      // Przy pytaniu przyczynowym sam repair map nie wystarcza: może zawierać
+      // poprawne cytaty o wydarzeniach, ale bez relacji przyczyna -> skutek.
+      // Wymuszamy więc jedno celowane wyszukanie causal evidence.
+      const wymagaCausalRetrieval = Boolean(answerPlan.causalQuestion);
+      const uzupelniono = odmowaMimoDanych && !(walidacja.unsupported_claims || []).length && !wymagaCausalRetrieval
         ? false
-        : (evidenceRepairContext ? false : await uzupelnijDanePoValidatorze(walidacja.unsupported_claims || []));
+        : (evidenceRepairContext && !wymagaCausalRetrieval
+          ? false
+          : await uzupelnijDanePoValidatorze(walidacja.unsupported_claims || []));
       const unsupported = (walidacja.unsupported_claims || []).slice(0, 4);
       const reason = String(walidacja.reason || 'validator nie potwierdził odpowiedzi').trim().slice(0, 500);
       const feedback = [
