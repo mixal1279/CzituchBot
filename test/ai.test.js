@@ -16,6 +16,8 @@ const { createAIMetrics, recordAIMetric, snapshotAIMetrics } = require('../ai/me
 const { createRequestBudget, sanitizeRequestText } = require('../ai/limits');
 const { rerankujWynikiTavily, wykryjKonfliktyZrodelTavily, zbudujRaportKonfliktowTavily, sanityzujTrescZrodlaTavily } = require('../ai/tavily');
 const { ocenJakoscOdpowiedzi } = require('../ai/quality');
+const { quoteExists } = require('../ai/evidence');
+const { wyodrebnijNazwyWlasne } = require('../ai/claimValidation');
 
 const policy = (q, recipe) => recipe(q) ? 'minecraft_recipe' : /pogoda/i.test(q) ? 'weather' : /ile trwa/i.test(q) ? 'hltb' : /dzisiaj|najnowsz/i.test(q) ? 'web_fact' : 'conversation';
 
@@ -379,4 +381,39 @@ console.log('AI regression tests: OK');
   const r = classifyAIRequest('To pytanie bez jednoznacznej encji', () => 'web_fact');
   assert.ok(['normal','retrieve_and_guard','clarify'].includes(r.confidence_policy));
   assert.equal(typeof r.confidence_policy, 'string');
+}
+
+
+{
+  // Pierwszy wyraz zdania nie może być automatycznie traktowany jako nazwa własna.
+  assert.deepEqual(wyodrebnijNazwyWlasne('Decyzja Wheatley była ważna.'), ['wheatley']);
+  assert.ok(wyodrebnijNazwyWlasne('Johnny\'ego spotkał Wheatley.').includes("johnny'ego"));
+}
+
+{
+  // Skrócone cytaty z [...] / ... muszą być możliwe do związania z pełnym źródłem.
+  assert.equal(
+    quoteExists('Wheatley przejął kontrolę. Następnie pokonał GLaDOS i został administratorem.', 'Wheatley przejął kontrolę [...] został administratorem.'),
+    true
+  );
+}
+
+{
+  const { GENERATION_FALLBACK_CHAIN } = require('../ai/fallback');
+  assert.deepEqual(GENERATION_FALLBACK_CHAIN.slice(0, 5), [
+    'groq:openai/gpt-oss-120b',
+    'groq:openai/gpt-oss-20b',
+    'gemini:gemini-3.8-flash',
+    'gemini:gemini-3.5-flash-lite',
+    'openrouter:default',
+  ]);
+  assert.equal(GENERATION_FALLBACK_CHAIN.at(-1), 'xkiro:default');
+  assert.equal(shouldRetryFailure('unknown'), true);
+}
+
+{
+  const budget = createRequestBudget();
+  assert.equal(budget.maxGenerations, 3);
+  assert.equal(budget.requestTimeoutMs, 25000);
+  assert.equal(budget.maxValidators, 2);
 }

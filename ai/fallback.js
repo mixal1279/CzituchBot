@@ -1,7 +1,14 @@
 'use strict';
 const CLASSIFIERS={transient:/(?:429|rate.?limit|timeout|timed? ?out|ETIMEDOUT|ECONNRESET|5\d\d|temporar|overloaded|unavailable|fetch failed)/i,auth:/(?:401|403|unauthori[sz]ed|forbidden|invalid.*key|api.?key)/i,quota:/(?:429|quota|rate.?limit|tokens per day|tokens per minute|TPD|TPM|credit|insufficient)/i,invalid:/(?:invalid.*request|bad request|400|schema|json)/i,grounded_reject:/(?:validator|unsupported|hallucination|not grounded|rejected)/i};
 function classifyFailure(error=''){const text=String(error?.message||error||'');if(CLASSIFIERS.quota.test(text))return'quota';if(CLASSIFIERS.auth.test(text))return'auth';if(CLASSIFIERS.grounded_reject.test(text))return'grounded_reject';if(CLASSIFIERS.invalid.test(text))return'invalid_request';if(CLASSIFIERS.transient.test(text))return'transient';return'unknown';}
-const GENERATION_FALLBACK_CHAIN=['groq:openai/gpt-oss-120b','groq:openai/gpt-oss-20b','xkiro:default','gemini:gemini-3.8-flash','gemini:gemini-3.5-flash-lite','openrouter:default'];
+const GENERATION_FALLBACK_CHAIN=[
+  'groq:openai/gpt-oss-120b',
+  'groq:openai/gpt-oss-20b',
+  'gemini:gemini-3.8-flash',
+  'gemini:gemini-3.5-flash-lite',
+  'openrouter:default',
+  'xkiro:default',
+];
 function nextFallbacks({failure='unknown',attempted=[],failedProviders=[],maxFallbacks=null}={}){const failed=new Set(Array.isArray(failedProviders)?failedProviders:[]);let remaining=GENERATION_FALLBACK_CHAIN.filter(x=>!attempted.includes(x)&&!failed.has(x));if(failure==='grounded_reject')remaining=remaining.filter(x=>!x.includes('120b'));const limit=Math.max(1,Number(maxFallbacks ?? process.env.AI_MAX_FALLBACK_STEPS ?? 3));return remaining.slice(0,limit);}
-function shouldRetryFailure(failure){return failure==='transient'||failure==='quota'||failure==='grounded_reject';}
+function shouldRetryFailure(failure){return failure==='transient'||failure==='quota'||failure==='grounded_reject'||failure==='unknown';}
 module.exports={GENERATION_FALLBACK_CHAIN,classifyFailure,nextFallbacks,shouldRetryFailure};

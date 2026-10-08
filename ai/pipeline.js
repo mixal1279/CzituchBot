@@ -10,6 +10,7 @@ const {
 const STATUS = Object.freeze({
   ACCEPTED: 'accepted',
   REJECTED: 'rejected',
+  SOFT_ACCEPTED: 'soft_accepted',
   INCONCLUSIVE: 'inconclusive',
   UNAVAILABLE: 'unavailable',
 });
@@ -82,6 +83,7 @@ function shouldValidate({ routing = {}, evidencePolicy = {}, hasExternalData = f
 function decideValidation(status, options = {}) {
   const s = String(status || '').toLowerCase();
   if (s === STATUS.ACCEPTED) return { finalStatus: STATUS.ACCEPTED, retry: false };
+  if (s === STATUS.SOFT_ACCEPTED) return { finalStatus: STATUS.SOFT_ACCEPTED, retry: false };
   if (s === STATUS.REJECTED) {
     return {
       finalStatus: STATUS.REJECTED,
@@ -101,6 +103,11 @@ function decideValidation(status, options = {}) {
 
 function finalText(text, status, helpers = {}) {
   if (status === STATUS.REJECTED) return helpers.rejectedMessage || 'Nie mam wystarczających danych, żeby odpowiedzieć na to pewnie.';
+  if (status === STATUS.SOFT_ACCEPTED) {
+    let value = String(text || '');
+    if (typeof helpers.sanitizeResponse === 'function') value = helpers.sanitizeResponse(value);
+    return value.trim();
+  }
   if (status === STATUS.INCONCLUSIVE) return helpers.inconclusiveMessage || 'Chwilowo nie mogę wiarygodnie potwierdzić tej informacji, więc nie będę zgadywać.';
   if (status === STATUS.UNAVAILABLE) return helpers.unavailableMessage || 'Chwilowo nie mogę potwierdzić tej informacji, więc nie będę zgadywać.';
 

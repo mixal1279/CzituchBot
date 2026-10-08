@@ -26,7 +26,13 @@ function parseEvidenceBlocks(data) {
 function quoteExists(sourceContent, quote) {
   const source = normalizeEvidenceText(sourceContent);
   const q = normalizeEvidenceText(quote);
-  return Boolean(source && q && q.length >= 3 && source.includes(q));
+  if (!source || !q || q.length < 3) return false;
+  if (source.includes(q)) return true;
+  const parts = String(quote)
+    .split(/\[\s*(?:\.{3}|…)\s*\]|\.\.\.|…/u)
+    .map(normalizeEvidenceText)
+    .filter(part => part.split(' ').filter(Boolean).length >= 3);
+  return parts.length > 0 && parts.every(part => source.includes(part));
 }
 
 function splitEvidenceSentences(text) {

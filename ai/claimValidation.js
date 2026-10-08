@@ -70,8 +70,42 @@ function wyodrebnijJednostkoweWartosci(value) {
 }
 function wyodrebnijNazwyWlasne(value) {
   const raw = String(value || '');
-  const matches = raw.match(/\b[A-ZĄĆĘŁŃÓŚŹŻ][\p{L}\d'’.-]*(?:\s+[A-ZĄĆĘŁŃÓŚŹŻ][\p{L}\d'’.-]*){0,3}/gu) || [];
-  return [...new Set(matches.map(normalizujClaim).filter(x => x.length >= 3))];
+  const genericFirstWords = new Set([
+    'decyzja','motywuje','nowo','następnie','nastepnie','ponadto',
+    'jednak','ogólnie','ogolnie','wtedy','potem','dlatego','artur','arthur'
+  ]);
+  const candidates = [];
+  const sentenceRe = /(^|[.!?]\s*)([^.!?]*)(?=[.!?]|$)/gu;
+  const capitalizedRe = /\b[A-ZĄĆĘŁŃÓŚŹŻ][\p{L}\d'’.-]*/gu;
+
+  for (const sentenceMatch of raw.matchAll(sentenceRe)) {
+    const sentence = sentenceMatch[2] || '';
+    const sentenceOffset = Number(sentenceMatch.index || 0) + String(sentenceMatch[1] || '').length;
+    let firstCandidate = true;
+    for (const match of sentence.matchAll(capitalizedRe)) {
+      const token = match[0];
+      const tokenOffset = Number(match.index || 0);
+      const before = sentence.slice(0, tokenOffset);
+      const atSentenceStart = firstCandidate && !before.trim();
+      firstCandidate = false;
+
+      if (atSentenceStart && genericFirstWords.has(normalizujClaim(token))) continue;
+      candidates.push({ token, offset: sentenceOffset + tokenOffset });
+    }
+  }
+
+  // Zachowujemy apostrofy i polskie znaki; normalizacja służy wyłącznie
+  // do porównywania nazw, nie może zmieniać "Johnny'ego" w "johnny ego".
+  const normalizujNazwe = (text) => String(text || '')
+    .toLocaleLowerCase('pl-PL')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\p{L}\p{N}'’.-]+/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  return [...new Set(candidates
+    .map(item => normalizujNazwe(item.token))
+    .filter(name => name.length >= 3))];
 }
 function wyodrebnijMarkery(value, regex) {
   return regex.test(normalizujClaim(value));
@@ -79,9 +113,13 @@ function wyodrebnijMarkery(value, regex) {
 function czyNazwaWlasnaWystepuje(entity, evidenceNormalized) {
   if (evidenceNormalized.includes(entity)) return true;
   const parts = entity.split(' ').filter(Boolean);
-  if (parts.length !== 1 || entity.length < 6) return false;
-  const stem = entity.slice(0, Math.max(5, entity.length - 2));
-  return evidenceNormalized.split(' ').some(token => token.length >= stem.length && token.startsWith(stem));
+  if (parts.length !== 1 || entity.length < 4) return false;
+  const base = entity.replace(/(['’])\p{L}+$/u, '');
+  const stem = base.slice(0, Math.max(4, base.length - 1));
+  return evidenceNormalized.split(' ').some(token => {
+    const normalizedToken = token.replace(/(['’])\p{L}+$/u, '');
+    return normalizedToken === entity || (normalizedToken.length >= stem.length && normalizedToken.startsWith(stem));
+  });
 }
 function sprawdzTwardeKonflikty(evidence, claim, options = {}) {
   const e = String(evidence || '');
