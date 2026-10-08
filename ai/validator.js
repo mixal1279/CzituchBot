@@ -3,7 +3,7 @@
 const { assessEvidence } = require('./core');
 
 const { sprawdzTwardeFaktyOdpowiedzi } = require('./response');
-const { czyDowodSemantyczniePokrywaClaim, zgodnoscStrukturalna, sprawdzPokrycieClaimamiOdpowiedzi } = require('./claimValidation');
+const { czyDowodSemantyczniePokrywaClaim, zgodnoscStrukturalna, sprawdzTwardeKonflikty, sprawdzPokrycieClaimamiOdpowiedzi } = require('./claimValidation');
 
 // Kontrakt walidatora jest celowo mały: generator potrzebuje tylko jasnego
 // werdyktu i konkretnej informacji zwrotnej do jednego retry.
@@ -157,6 +157,11 @@ function normalizujDowodTekstowy(value) {
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     .replace(/[^\p{L}\p{N}]+/gu, ' ').replace(/\s+/g, ' ').trim();
 }
+function czyCytatWystepujeWZrodle(source, quote) {
+  const sourceNorm = normalizujDowodTekstowy(source);
+  const quoteNorm = normalizujDowodTekstowy(quote);
+  return Boolean(sourceNorm && quoteNorm && quoteNorm.length >= 3 && sourceNorm.includes(quoteNorm));
+}
 function tokenyDowodu(value) {
   return [...new Set(normalizujDowodTekstowy(value).split(' ').filter(t => t.length >= 4))];
 }
@@ -176,10 +181,22 @@ function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '') {
     const block = pobierzBlokZrodla(dane, id);
     if (!block) return false;
     const normalizedBlock = block.replace(/\s+/g, ' ').toLocaleLowerCase('pl-PL');
-    if (normalizedBlock.includes(quote)) {
-      // The quote must come from the cited source, while the full source block
-      // may provide the surrounding context needed to verify a multi-clause claim.
-      return zgodnoscStrukturalna(block, claim, { allowCrossLanguageExactEvidence: true, allowDistributedEvidence: true }).ok;
+    if (normalizedBlock.includes(quote) || czyCytatWystepujeWZrodle(block, evidenceQuote)) {
+      const structural = zgodnoscStrukturalna(block, claim, {
+        allowCrossLanguageExactEvidence: true,
+        allowDistributedEvidence: true,
+      });
+      if (structural.ok) return true;
+
+      const hard = sprawdzTwardeKonflikty(block, claim, { allowDistributedEvidence: true });
+      if (!hard.ok) return false;
+
+      const cTokens = tokenyDowodu(claim);
+      const bTokens = new Set(tokenyDowodu(block));
+      const overlap = cTokens.length
+        ? cTokens.filter(t => [...bTokens].some(bt => bt === t || (t.length >= 6 && bt.startsWith(t.slice(0, 5))))).length / cTokens.length
+        : 0;
+      return overlap >= 0.18;
     }
     return czyDowodSemantyczniePokrywaClaim(block, quote, { allowCrossLanguageExactEvidence: true, allowDistributedEvidence: true })
       && zgodnoscStrukturalna(block, claim, { allowCrossLanguageExactEvidence: true, allowDistributedEvidence: true }).ok
