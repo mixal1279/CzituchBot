@@ -381,8 +381,10 @@ console.log('AI regression tests: OK');
   // wyłącznie atomowy claim z poprawnym source_id i zweryfikowanym evidence.
   const partial = normalizujWynikWalidatora({
     ...base,
-    valid: true,
+    valid: false,
+    supported: false,
     complete: false,
+    hallucination: true,
     unsupported_claims: ['Zrobił to, ponieważ chciał zemsty.'],
     claims: [
       { claim: 'Wheatley przejął kontrolę nad systemem.', supported: true, source_ids: ['SOURCE 1'], evidence_quote: 'Wheatley przejął kontrolę nad systemem.', reason: 'potwierdzone' },
