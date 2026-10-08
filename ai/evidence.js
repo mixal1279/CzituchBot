@@ -67,7 +67,7 @@ function evidenceRelationSignals(value) {
   return {
     causal: /(?:bo|poniewaz|gdyz|dlatego|z powodu|w celu|dzieki|przez|spowod\w*|doprowadz\w*|umozliw\w*|because|therefore|due to|caused|led to|so that)/i.test(text),
     procedural: /(?:najpierw|następnie|nastepnie|potem|krok|steps?|first|then|after|before|use|użyj|uzyj|kliknij|click|instrukcj|walkthrough)/i.test(text),
-    temporal: /(?:19|20)\\d{2}|\\b(?:stycz|luty|marzec|kwiec|maj|czerwiec|lipiec|sierp|wrzes|paźdz|pazdz|listop|grudziec|wczoraj|dzisiaj|jutro|today|yesterday|tomorrow)\\b/i.test(text),
+    temporal: /(?:19|20)\d{2}|\b(?:stycz|luty|marzec|kwiec|maj|czerwiec|lipiec|sierp|wrzes|paźdz|pazdz|listop|grudziec|wczoraj|dzisiaj|jutro|today|yesterday|tomorrow)\b/i.test(text),
     location: /(?:w |na |near |located|znajduj|lokacj|miejsce|location|area|region|city|miasto)/i.test(text),
     relationship: /(?:relationship|związk|zwiazk|partner|przyjaź|przyjaz|enemy|wróg|wrog|conflict|konflikt|alliance|sojusz)/i.test(text),
   };
@@ -93,7 +93,7 @@ function rankEvidenceForClaim(claim, blocks, allowedSourceIds = null, limit = 3)
         if (claimType === 'temporal') score += signals.temporal ? 0.15 : -0.05;
         if (claimType === 'location') score += signals.location ? 0.12 : 0;
         if (claimType === 'relationship') score += signals.relationship ? 0.20 : -0.08;
-        if (claimType === 'entity' && /\\b(?:is|jest|was|był|była|role|postać|character)\\b/i.test(quote)) score += 0.08;
+        if (claimType === 'entity' && /\b(?:is|jest|was|był|była|role|postać|character)\b/i.test(quote)) score += 0.08;
         score = Math.max(0, Math.min(1.25, score));
         if (score <= 0) continue;
         rows.push({ sourceId: block.sourceId, title: block.title, url: block.url, quote, score, claimType, relationMatch: Boolean(claimSignals[claimType] && signals[claimType]) });
