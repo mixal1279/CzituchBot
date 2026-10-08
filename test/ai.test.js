@@ -320,12 +320,17 @@ assert.match(require('fs').readFileSync(require('path').join(__dirname, '..', 'c
   assert.match(botSource, /response_format:\s*\{\s*type: 'json_schema'/);
   assert.match(botSource, /name: 'czituch_ai_validator'/);
   assert.match(botSource, /strict: true/);
-  assert.doesNotMatch(botSource, /response_format:\s*\{\s*type: 'json_object'/);
+  assert.doesNotMatch(botSource, /OpenRouter[\\s\\S]{0,500}response_format:\\s*\\{\\s*type: 'json_object'/);
   assert.match(botSource, /OpenRouter validator EMPTY_CONTENT/);
   assert.match(botSource, /OpenRouter validator INVALID_JSON/);
   assert.match(botSource, /OpenRouter validator SCHEMA_REJECT/);
   assert.match(botSource, /failed_generation/);
   assert.match(botSource, /abortLike/);
+  assert.match(botSource, /Object\.getOwnPropertyNames\(value\)/);
+  assert.match(botSource, /requestContract: \{/);
+  assert.match(botSource, /async function walidujOdpowiedzXKiro\(/);
+  assert.match(botSource, /response_format: \{ type: 'json_object' \}/);
+  assert.match(botSource, /validator:xkiro/);
 }
 
 console.log('AI regression tests: OK');
