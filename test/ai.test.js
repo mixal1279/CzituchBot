@@ -16,7 +16,7 @@ const { createAIMetrics, recordAIMetric, snapshotAIMetrics } = require('../ai/me
 const { createRequestBudget, sanitizeRequestText } = require('../ai/limits');
 const { rerankujWynikiTavily, wykryjKonfliktyZrodelTavily, zbudujRaportKonfliktowTavily, sanityzujTrescZrodlaTavily } = require('../ai/tavily');
 const { ocenJakoscOdpowiedzi } = require('../ai/quality');
-const { quoteExists } = require('../ai/evidence');
+const { quoteExists, buildEvidenceRepairContext } = require('../ai/evidence');
 const { wyodrebnijNazwyWlasne } = require('../ai/claimValidation');
 const { classifyPipelineFailure } = require('../ai/pipeline');
 
@@ -418,6 +418,25 @@ console.log('AI regression tests: OK');
     quoteExists('Wheatley przejął kontrolę. Następnie pokonał GLaDOS i został administratorem.', 'Wheatley przejął kontrolę [...] został administratorem.'),
     true
   );
+}
+
+{
+  // Repair nie powinien dostawać luźnych fragmentów evidence tylko dlatego,
+  // że dzielą z claimem pojedyncze słowo.
+  const weak = buildEvidenceRepairContext(
+    [{ claim: 'Moc doprowadziła do skorumpowania Wheatleya.' }],
+    [{ sourceId: 'SOURCE 1', title: 'Portal 2', url: '', content: 'GLaDOS szybko przejmuje kontrolę nad swoim ciałem i odcina Wheatleya.' }],
+    new Set(['SOURCE 1'])
+  );
+  assert.equal(weak, '');
+
+  const strong = buildEvidenceRepairContext(
+    [{ claim: 'GLaDOS odcięła Wheatleya od systemu.' }],
+    [{ sourceId: 'SOURCE 1', title: 'Portal 2', url: '', content: 'GLaDOS szybko przejmuje kontrolę nad swoim ciałem i odcina Wheatleya od systemu.' }],
+    new Set(['SOURCE 1'])
+  );
+  assert.match(strong, /CANDIDATE SOURCE: SOURCE 1/);
+  assert.match(strong, /CANDIDATE SCORE:/);
 }
 
 {

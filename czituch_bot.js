@@ -2663,10 +2663,13 @@ function oczyscOdpowiedzPrzedWalidacja(tekst) {
         unsupported.length ? `Niepotwierdzone twierdzenia: ${unsupported.join(' | ')}` : 'Validator nie wskazał konkretnego twierdzenia.',
         evidenceRepairContext ? '[EVIDENCE REPAIR MAP]\n' + evidenceRepairContext : '[EVIDENCE REPAIR MAP] Brak bezpiecznego fragmentu do ponownego użycia.',
         'Każdy fakt przepisz jako osobny, atomowy claim oparty na jednym konkretnym fragmencie. Nie łącz faktu, przyczyny i skutku w jedno zdanie, jeśli dowód nie zawiera całej relacji.',
-        'Jeżeli używasz faktu z danych referencyjnych, oprzyj zdanie na konkretnym fragmencie z EVIDENCE REPAIR MAP lub na innym dosłownym fragmencie danych.',
+        'Używaj EVIDENCE REPAIR MAP wyłącznie wtedy, gdy konkretny candidate rzeczywiście potwierdza cały claim. Samo wspólne słowo, podobny temat albo następstwo wydarzeń NIE jest dowodem.',
+        'Jeżeli candidate nie potwierdza claimu bezpośrednio, USUŃ ten claim z odpowiedzi zamiast go rekonstruować, uzupełniać lub zgadywać.',
+        'Nie twórz claimów typu „źródła nie potwierdzają...”, „brak danych wskazuje...”, ani innych meta-wniosków o źródłach. Odpowiedź ma zawierać wyłącznie fakty, które można bezpośrednio związać z dowodem.',
         'Nie wymyślaj source_id ani cytatów. Nie dodawaj szczegółu, którego źródło nie potwierdza. Nie parafrazuj cytatu jako evidence_quote.',
-        'Popraw odpowiedź, korzystając WYŁĄCZNIE z DANYCH REFERENCYJNYCH. Nie zgaduj brakujących informacji.',
-        'Jeżeli źródła nadal nie pozwalają odpowiedzieć, powiedz krótko, że brakuje danych.',
+        'Przy pytaniu „dlaczego” nie wolno wyprowadzać przyczyny z samej kolejności wydarzeń. Jeśli candidate nie zawiera relacji przyczyna → skutek, pomiń przyczynowe twierdzenie.',
+        'Popraw odpowiedź, korzystając WYŁĄCZNIE z DANYCH REFERENCYJNYCH i zweryfikowanych candidate evidence. Nie zgaduj brakujących informacji.',
+        'Jeżeli po usunięciu niepotwierdzonych claimów odpowiedź nie odpowiada na pytanie, powiedz krótko, że brakuje danych.',
       ].join('\\n');
       const promptRetry = `${systemPrompt}\n\n[SOFT VALIDATION FEEDBACK]\n${feedback}`;
       // Dokładnie jeden cykl retry po odrzuceniu walidacji. Fallbacki providerów
