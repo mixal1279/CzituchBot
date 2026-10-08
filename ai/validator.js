@@ -166,10 +166,12 @@ function tokenyDowodu(value) {
   return [...new Set(normalizujDowodTekstowy(value).split(' ').filter(t => t.length >= 4))];
 }
 function czyCytatPotwierdzaRelacjePrzyczynowa(claim, evidenceQuote) {
-  const causalRe = /\b(?:bo|ponieważ|gdyż|dlatego|z\s+powodu|w\s+celu|żeby|aby|celem|because|therefore|due\s+to)\b/iu;
-  const claimHasCausal = causalRe.test(String(claim || ''));
+  const markery = ['ponieważ', 'bo', 'gdyż', 'dlatego', 'z powodu', 'w celu', 'żeby', 'aby', 'celem', 'because', 'therefore', 'due to'];
+  const claimText = String(claim || '').toLocaleLowerCase('pl-PL');
+  const quoteText = String(evidenceQuote || '').toLocaleLowerCase('pl-PL');
+  const claimHasCausal = markery.some(marker => claimText.includes(marker));
   if (!claimHasCausal) return true;
-  return causalRe.test(String(evidenceQuote || ''));
+  return markery.some(marker => quoteText.includes(marker));
 }
 function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '') {
   if (!Array.isArray(sourceIds) || !sourceIds.length || typeof evidenceQuote !== 'string') return false;
@@ -327,6 +329,7 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
     && unverifiedEvidenceQuoteIndexes.length === 0
     && !tooManyClaims
     && !malformedClaims
+    && claims.every(c => czyCytatPotwierdzaRelacjePrzyczynowa(c.claim, c.evidence_quote))
     && answerCoverage.ok
     && claimGranularityOk
     && evidenceContractOk
