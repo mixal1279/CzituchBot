@@ -362,7 +362,6 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
   const softEvidenceReasons = new Set([
     'evidence_not_verified',
     'evidence_quote_not_exact',
-    'claims_too_coarse_for_answer',
   ]);
   const softAccepted = validFromModel === true
     && confidence >= 0.75
