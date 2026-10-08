@@ -237,7 +237,7 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
     is_lore: /lore|fabuł|histori|kanon|canon/i.test(String(answer || '')),
   });
   const unknownSourceClaimIndexes = claims.map((c, index) => c.supported && (!c.source_ids.length || (allowed && c.source_ids.some(id => !allowed.has(id)))) ? index : -1).filter(index => index >= 0);
-  const unsupportedEvidenceClaimIndexes = claims.map((c, index) => c.supported && !czyDowodPotwierdzaClaim(dane, c.source_ids, c.evidence_quote, c.claim) ? index : -1).filter(index => index >= 0);
+  // Weryfikujemy przede wszystkim claim względem wskazanego źródła. `evidence_quote` jest\n  // dodatkowym bezpiecznikiem i diagnostyką, ale nie powinien powodować false rejectu,\n  // gdy model podał parafrazę zamiast dosłownego fragmentu, a sam claim jest jednoznacznie\n  // potwierdzony przez ten sam, dozwolony blok źródłowy.\n  const evidenceQuoteVerified = claims.map((c) => czyDowodPotwierdzaClaim(dane, c.source_ids, c.evidence_quote, c.claim));\n  const claimSourceVerified = claims.map((c) => c.source_ids.some(id => {\n    const block = pobierzBlokZrodla(dane, id);\n    return Boolean(block) && zgodnoscStrukturalna(block, c.claim, { allowCrossLanguageExactEvidence: true, allowDistributedEvidence: true }).ok;\n  }));\n  const unsupportedEvidenceClaimIndexes = claims.map((c, index) => c.supported && !claimSourceVerified[index] ? index : -1).filter(index => index >= 0);\n  const unverifiedEvidenceQuoteIndexes = claims.map((c, index) => c.supported && claimSourceVerified[index] && !evidenceQuoteVerified[index] ? index : -1).filter(index => index >= 0);
   const unknownSourceClaim = unknownSourceClaimIndexes.length > 0;
   const unsupportedEvidenceClaim = unsupportedEvidenceClaimIndexes.length > 0;
   const answerCoverage = answer ? sprawdzPokrycieClaimamiOdpowiedzi(answer, claims) : { ok: true, uncovered: [], totalSentences: null, checkedSentences: null, uncoveredSentenceIndexes: [] };
@@ -313,7 +313,7 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
   if (tooManyClaims) localRejectReasons.push('claims_over_limit');
   if (malformedClaims) localRejectReasons.push('malformed_claims');
   if (unknownSourceClaim) localRejectReasons.push('unknown_source_id');
-  if (unsupportedEvidenceClaim) localRejectReasons.push('evidence_not_verified');
+  if (unsupportedEvidenceClaim) localRejectReasons.push('evidence_not_verified');\n  if (unverifiedEvidenceQuoteIndexes.length) localRejectReasons.push('evidence_quote_not_exact');
   if (claims.some(c => !c.supported) || wynik.unsupported_claims.some(v => typeof v === 'string' && v.trim())) localRejectReasons.push('unsupported_claims_reported');
   if (!answerCoverage.ok) localRejectReasons.push('answer_not_covered_by_claims');
   if (!claimGranularityOk) localRejectReasons.push('claims_too_coarse_for_answer');
