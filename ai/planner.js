@@ -74,9 +74,9 @@ function buildRetrievalQueries(question, routing = {}, options = {}) {
 const RESPONSE_PROFILES = {
   simple: { maxSentences: 2, maxWords: 60, maxTokens: 220 },
   comparison: { maxSentences: 4, maxWords: 110, maxTokens: 360 },
-  lore: { maxSentences: 9, maxWords: 240, maxTokens: 800 },
-  gameplay: { maxSentences: 8, maxWords: 180, maxTokens: 700 },
-  timeline: { maxSentences: 8, maxWords: 180, maxTokens: 700 },
+  lore: { maxSentences: 3, maxWords: 120, maxTokens: 420 },
+  gameplay: { maxSentences: 4, maxWords: 140, maxTokens: 520 },
+  timeline: { maxSentences: 5, maxWords: 150, maxTokens: 560 },
   technical: { maxSentences: 6, maxWords: 160, maxTokens: 600 },
   chat: { maxSentences: 3, maxWords: 90, maxTokens: 300 },
 };
