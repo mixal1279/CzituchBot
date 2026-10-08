@@ -1795,7 +1795,9 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
   const aiState = createAIRequestContext({
     requestId,
     maxCzasMs: 25000,
-    maxGeneracji: 5,
+    maxGeneracji: 6,
+    maxInitialGeneracji: 5,
+    maxRepairGeneracji: 1,
     maxModelCalls: 8,
     maxValidatorow: 2,
     maxWyszukanTavily: testMaxTavilySearches,
@@ -1819,7 +1821,8 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
   };
   aiState.zarezerwujModel = zarezerwujModel;
   const moznaWykonacGeneracje = (provider, model) => {
-    const reserved = aiState.reserveGeneration(provider, model);
+    const phase = aiState.generationPhase || 'initial';
+    const reserved = aiState.reserveGeneration(provider, model, phase);
     if (!reserved) {
       console.warn(`[AI][${requestId}] budżet generacji/modeli wyczerpany (${provider}/${model})`);
     }
