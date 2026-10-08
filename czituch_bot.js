@@ -1820,6 +1820,34 @@ function wykonajAIWHistorii(historia, zadanie) {
   });
 }
 
+/**
+ * Provider diagnostics must be available to every AI provider path.
+ * Keep this at module scope so validators/fallbacks cannot hit a TDZ/scope error.
+ */
+function formatProviderError(provider, model, err, extra = {}) {
+    const message = String(err?.message || err || 'unknown').slice(0, 1200);
+    const providerError = err?.error && typeof err.error === 'object' ? err.error : null;
+    const responseData = extra.responseData && typeof extra.responseData === 'object' ? extra.responseData : null;
+    const details = {
+      provider, model,
+      message,
+      status: err?.status ?? err?.statusCode ?? extra.status ?? null,
+      code: err?.code ?? providerError?.code ?? responseData?.error?.code ?? extra.code ?? null,
+      type: err?.type ?? providerError?.type ?? responseData?.error?.type ?? extra.type ?? null,
+      param: err?.param ?? providerError?.param ?? responseData?.error?.param ?? extra.param ?? null,
+      failed_generation: err?.failed_generation ?? providerError?.failed_generation ?? responseData?.error?.failed_generation ?? extra.failed_generation ?? null,
+      response_error: responseData?.error ? {
+        message: String(responseData.error.message || '').slice(0, 800),
+        code: responseData.error.code ?? null,
+        type: responseData.error.type ?? null,
+        param: responseData.error.param ?? null,
+        failed_generation: responseData.error.failed_generation ?? null,
+      } : null,
+      extra: Object.keys(extra).filter(key => key !== 'responseData').length ? extra : undefined,
+    };
+    return JSON.stringify(details);
+  };
+
 async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn, opcje = {}) {
   AI_METRYKI.requests++;
   let { temperature = 0.5, max_tokens = 200, tavilyOptions = {}, aiProfile = 'generic', memoryUserId = null } = opcje;
@@ -2574,30 +2602,6 @@ Pytanie użytkownika: ${pytanie}`;
   // Fallback state is shared by all generation attempts in this request.
   // Failed endpoints are remembered for the whole request, including transient
   // and unknown errors, so repair does not immediately repeat an outage.
-  const formatProviderError = (provider, model, err, extra = {}) => {
-    const message = String(err?.message || err || 'unknown').slice(0, 1200);
-    const providerError = err?.error && typeof err.error === 'object' ? err.error : null;
-    const responseData = extra.responseData && typeof extra.responseData === 'object' ? extra.responseData : null;
-    const details = {
-      provider, model,
-      message,
-      status: err?.status ?? err?.statusCode ?? extra.status ?? null,
-      code: err?.code ?? providerError?.code ?? responseData?.error?.code ?? extra.code ?? null,
-      type: err?.type ?? providerError?.type ?? responseData?.error?.type ?? extra.type ?? null,
-      param: err?.param ?? providerError?.param ?? responseData?.error?.param ?? extra.param ?? null,
-      failed_generation: err?.failed_generation ?? providerError?.failed_generation ?? responseData?.error?.failed_generation ?? extra.failed_generation ?? null,
-      response_error: responseData?.error ? {
-        message: String(responseData.error.message || '').slice(0, 800),
-        code: responseData.error.code ?? null,
-        type: responseData.error.type ?? null,
-        param: responseData.error.param ?? null,
-        failed_generation: responseData.error.failed_generation ?? null,
-      } : null,
-      extra: Object.keys(extra).filter(key => key !== 'responseData').length ? extra : undefined,
-    };
-    return JSON.stringify(details);
-  };
-
   const failedFallbackProviders = new Set();
   let lastSuccessfulGenerationStep = null;
 
