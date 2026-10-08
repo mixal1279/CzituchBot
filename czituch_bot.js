@@ -2246,9 +2246,11 @@ Pytanie użytkownika: ${pytanie}`
     // do Tavily długie zdanie z interpretacją validatora.
     let queryUzupelniajace = AI_POLICY.normalizujZapytanieUzupelniajace(`${pytanie} ${opisBraku}`);
     try {
-      if (!zarezerwujModel('supplemental-query')) {
-        console.warn(`[Tavily] ⚠️ Brak budżetu modelowego na query uzupełniające`);
-        return false;
+      if (!answerPlan.causalQuestion) {
+        if (!zarezerwujModel('supplemental-query')) {
+          console.warn(`[Tavily] ⚠️ Brak budżetu modelowego na query uzupełniające`);
+          return false;
+        }
       }
       const queryUzupelniajaceAI = await groqClient.chat.completions.create({
         model: AI_MODELS.queryRewrite,
@@ -2260,11 +2262,13 @@ Pytanie użytkownika: ${pytanie}`
           { role: 'user', content: `Temat: ${pytanie}\nEncja docelowa: ${metadaneRequestu.entity || 'nieustalona'}\nBrakujący fakt: ${opisBraku}` }
         ]
       });
-      const wygenerowane = AI_POLICY.normalizujZapytanieUzupelniajace(queryUzupelniajaceAI.choices?.[0]?.message?.content);
-      if (AI_POLICY.czyZapytanieUzupełniająceJestPoprawne(wygenerowane)) {
-        queryUzupelniajace = wygenerowane;
-      } else if (wygenerowane) {
-        console.warn(`[Tavily] ⚠️ Odrzucono ucięte zapytanie uzupełniające: "${wygenerowane}"`);
+      if (!answerPlan.causalQuestion) {
+        const wygenerowane = AI_POLICY.normalizujZapytanieUzupelniajace(queryUzupelniajaceAI.choices?.[0]?.message?.content);
+        if (AI_POLICY.czyZapytanieUzupełniająceJestPoprawne(wygenerowane)) {
+          queryUzupelniajace = wygenerowane;
+        } else if (wygenerowane) {
+          console.warn(`[Tavily] ⚠️ Odrzucono ucięte zapytanie uzupełniające: "${wygenerowane}"`);
+        }
       }
     } catch (err) {
       console.warn(`[Tavily] ⚠️ Nie udało się wygenerować query uzupełniającego: ${err.message}`);
