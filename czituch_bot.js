@@ -519,7 +519,7 @@ const KONFIGURACJA = {
   // ---- Groq AI ----
   groqKey: process.env.GROQ_API_KEY,
 
-  // ---- Mistral (fallback po Groq 20B) ----
+  // ---- xKiro (fallback po Groq 20B) ----
   xkiroKey: typeof process.env.XKIRO_API_KEY === 'string' ? process.env.XKIRO_API_KEY.replace(/[\r\n]/g, '').trim() : process.env.XKIRO_API_KEY,
   xkiroModel: process.env.XKIRO_MODEL || 'qwen/qwen3.5-flash:free',
 
@@ -2398,7 +2398,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
       const choice = data?.choices?.[0];
       const tekst = (typeof choice?.message?.content === 'string' ? choice.message.content : '').trim();
       if (!tekst) throw new Error('xKiro zwrócił pustą odpowiedź');
-      return ujednolicWynik({ tekst, ucieta: choice?.finish_reason === 'length' }, 'mistral', data?.model || model);
+      return ujednolicWynik({ tekst, ucieta: choice?.finish_reason === 'length' }, 'xkiro', data?.model || model);
     } catch (err) {
       console.error(`[xKiro] Fallback nieudany (${powod}):`, err.message);
       return wynikPusty('xkiro', model, err.message);
