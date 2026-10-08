@@ -165,6 +165,12 @@ function czyCytatWystepujeWZrodle(source, quote) {
 function tokenyDowodu(value) {
   return [...new Set(normalizujDowodTekstowy(value).split(' ').filter(t => t.length >= 4))];
 }
+function czyCytatPotwierdzaRelacjePrzyczynowa(claim, evidenceQuote) {
+  const causalRe = /\\b(?:bo|ponieważ|gdyż|dlatego|z\\s+powodu|w\\s+celu|żeby|aby|celem|because|therefore|due\\s+to)\\b/iu;
+  const claimHasCausal = causalRe.test(String(claim || '').normalize('NFD').replace(/[\\u0300-\\u036f]/g, ''));
+  if (!claimHasCausal) return true;
+  return causalRe.test(String(evidenceQuote || '').normalize('NFD').replace(/[\\u0300-\\u036f]/g, ''));
+}
 function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '') {
   if (!Array.isArray(sourceIds) || !sourceIds.length || typeof evidenceQuote !== 'string') return false;
   const quote = evidenceQuote.trim().replace(/\s+/g, ' ').toLocaleLowerCase('pl-PL');
@@ -185,6 +191,7 @@ function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '') {
     // po normalizacji Unicode, interpunkcji, wielkości liter i białych znaków,
     // ale nie pozwalamy zastąpić go samym podobieństwem semantycznym.
     if (!czyCytatWystepujeWZrodle(block, evidenceQuote)) return false;
+    if (!czyCytatPotwierdzaRelacjePrzyczynowa(claim, evidenceQuote)) return false;
 
     const structural = zgodnoscStrukturalna(block, claim, {
       allowCrossLanguageExactEvidence: true,
