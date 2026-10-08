@@ -134,6 +134,58 @@ function normalizujIdZrodla(value) {
   return match ? `SOURCE ${match[1]}` : raw;
 }
 
+function ocenClaimEvidence(dane, sourceIds, evidenceQuote, claim = '') {
+  if (!Array.isArray(sourceIds) || !sourceIds.length || typeof evidenceQuote !== 'string') {
+    return { ok: false, reason: 'brak poprawnego source_id lub evidence_quote' };
+  }
+  const quote = evidenceQuote.trim();
+  if (quote.length < 3 || quote.length > 500) {
+    return { ok: false, reason: 'evidence_quote ma nieprawidłową długość' };
+  }
+
+  const blocks = parseEvidenceBlocks(dane);
+  const byId = new Map(blocks.map(block => [block.sourceId, block]));
+  const reasons = [];
+
+  for (const id of sourceIds) {
+    const block = byId.get(id);
+    if (!block) {
+      reasons.push('source_id nie istnieje w danych referencyjnych: ' + id);
+      continue;
+    }
+    if (!quoteExists(block.content, quote)) {
+      reasons.push('evidence_quote nie występuje w wskazanym źródle: ' + id);
+      continue;
+    }
+
+    const quoteStructural = zgodnoscStrukturalna(quote, claim, {
+      allowCrossLanguageExactEvidence: true,
+      allowDistributedEvidence: false,
+    });
+    if (quoteStructural.ok) {
+      return { ok: true, sourceId: id, mode: 'exact_quote', reason: 'cytat występuje w źródle i bezpośrednio wspiera claim' };
+    }
+
+    const hardQuote = sprawdzTwardeKonflikty(quote, claim, { allowDistributedEvidence: false });
+    const hardBlock = sprawdzTwardeKonflikty(block.content, claim, { allowDistributedEvidence: false });
+    if (!hardQuote.ok || !hardBlock.ok) {
+      reasons.push(quoteStructural.reason || hardQuote.reason || hardBlock.reason);
+      continue;
+    }
+
+    const contextual = zgodnoscStrukturalna(block.content, claim, {
+      allowCrossLanguageExactEvidence: true,
+      allowDistributedEvidence: false,
+    });
+    if (contextual.ok) {
+      return { ok: true, sourceId: id, mode: 'quote_with_source_context', reason: 'cytat jest rzeczywisty, a claim jest potwierdzony przez ten sam blok źródłowy' };
+    }
+    reasons.push(quoteStructural.reason || contextual.reason || 'evidence nie potwierdza claimu');
+  }
+
+  return { ok: false, reason: reasons[0] || 'brak zweryfikowanego evidence' };
+}
+
 function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSourceIds = null, dane = '', answer = '') {
   if (!wynik || typeof wynik !== 'object' || Array.isArray(wynik)) return null;
 
@@ -176,42 +228,32 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
     is_lore: /lore|fabuł|histori|kanon|canon/i.test(String(answer || '')),
   });
   const unknownSourceClaimIndexes = claims.map((c, index) => c.supported && (!c.source_ids.length || (allowed && c.source_ids.some(id => !allowed.has(id)))) ? index : -1).filter(index => index >= 0);
-  // Weryfikujemy przede wszystkim claim względem wskazanego źródła. `evidence_quote` jest
-  // dodatkowym bezpiecznikiem i diagnostyką, ale nie powinien powodować false rejectu,
-  // gdy model podał parafrazę zamiast dosłownego fragmentu, a sam claim jest jednoznacznie
-  // potwierdzony przez ten sam, dozwolony blok źródłowy.
-  // If the validator model picked a wrong source_id but its exact quote is present
-  // in another allowed source, bind the claim to the source that actually contains
-  // the quote. This keeps source binding strict while avoiding false rejects caused
-  // by an incorrect model-selected source identifier.
+  // Canonical evidence binding: the source id must be authorized, the quote must
+  // exist in that source, and the same claim must be supported by that quote or
+  // tightly bounded context from the same source.
   const parsedEvidenceBlocks = parseEvidenceBlocks(dane);
-  const effectiveClaimSourceIds = claims.map((c) => {
-    const ids = new Set(c.source_ids);
-    if (c.evidence_quote) {
-      const quote = c.evidence_quote.trim().replace(/\\s+/g, ' ').toLocaleLowerCase('pl-PL');
-      for (const block of parsedEvidenceBlocks) {
-        if (allowed && !allowed.has(block.sourceId)) continue;
-        const normalizedBlock = block.content.replace(/\\s+/g, ' ').toLocaleLowerCase('pl-PL');
-        if (quote.length >= 3 && normalizedBlock.includes(quote)) ids.add(block.sourceId);
-      }
-    }
-    return [...ids];
+  const allowedBlocks = allowed
+    ? parsedEvidenceBlocks.filter(block => allowed.has(block.sourceId))
+    : parsedEvidenceBlocks;
+
+  const evidenceEvaluations = claims.map(c => {
+    const candidateIds = Array.isArray(c.source_ids)
+      ? c.source_ids.filter(id => !allowed || allowed.has(id))
+      : [];
+    return ocenClaimEvidence(dane, candidateIds, c.evidence_quote, c.claim);
   });
-  const evidenceQuoteVerified = claims.map((c, index) => czyDowodPotwierdzaClaim(dane, effectiveClaimSourceIds[index], c.evidence_quote, c.claim));
-  const claimSourceVerified = claims.map((c, index) => effectiveClaimSourceIds[index].some(id => {
-    const block = pobierzBlokZrodla(dane, id);
-    return Boolean(block) && zgodnoscStrukturalna(block, c.claim, { allowCrossLanguageExactEvidence: true, allowDistributedEvidence: true }).ok;
+  const evidenceQuoteVerified = evidenceEvaluations.map(result => result.ok);
+  const claimSourceVerified = evidenceEvaluations.map(result => result.ok);
+  const unsupportedEvidenceClaimIndexes = claims
+    .map((c, index) => c.supported && !claimSourceVerified[index] ? index : -1)
+    .filter(index => index >= 0);
+  const unverifiedEvidenceQuoteIndexes = claims
+    .map((c, index) => c.supported && !evidenceQuoteVerified[index] ? index : -1)
+    .filter(index => index >= 0);
+  const unsupportedEvidenceReasons = unsupportedEvidenceClaimIndexes.map(index => ({
+    claimIndex: index,
+    reasons: [evidenceEvaluations[index]?.reason || 'brak zweryfikowanego evidence'],
   }));
-  const unsupportedEvidenceClaimIndexes = claims.map((c, index) => c.supported && (!claimSourceVerified[index] || !evidenceQuoteVerified[index]) ? index : -1).filter(index => index >= 0);
-  const unverifiedEvidenceQuoteIndexes = claims.map((c, index) => c.supported && !evidenceQuoteVerified[index] ? index : -1).filter(index => index >= 0);
-  const unsupportedEvidenceReasons = unsupportedEvidenceClaimIndexes.map(index => {
-    const claim = claims[index];
-    const reasons = claim?.source_ids?.map(id => {
-      const block = pobierzBlokZrodla(dane, id);
-      return block ? zgodnoscStrukturalna(block, claim.claim, { allowCrossLanguageExactEvidence: true, allowDistributedEvidence: true }).reason : null;
-    }).filter(Boolean) || [];
-    return { claimIndex: index, reasons };
-  });
 
   const unknownSourceClaim = unknownSourceClaimIndexes.length > 0;
   const unsupportedEvidenceClaim = unsupportedEvidenceClaimIndexes.length > 0;
@@ -323,9 +365,20 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
       uncoveredSentenceIndexes: answerCoverage.uncoveredSentenceIndexes || [],
     },
     evidenceStatus: evidenceAssessment.status,
+    evidenceBindings: claims.map((c, index) => ({
+      claimIndex: index,
+      sourceIds: c.source_ids,
+      quoteVerified: Boolean(evidenceQuoteVerified[index]),
+      supportVerified: Boolean(evidenceEvaluations[index]?.ok),
+      mode: evidenceEvaluations[index]?.mode || null,
+      reason: evidenceEvaluations[index]?.reason || null,
+    })),
     evidenceSourceCount: evidenceAssessment.sourceCount,
     evidenceIndependentHosts: evidenceAssessment.independentHosts,
     localRejectReasons,
+    evidenceRepairContext: unsupportedEvidenceClaimIndexes.length
+      ? buildEvidenceRepairContext(unsupportedEvidenceClaimIndexes.map(index => claims[index]), allowedBlocks, allowed, 4)
+      : '',
   };
 
   return {
