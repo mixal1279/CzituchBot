@@ -1795,7 +1795,9 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
   const aiState = createAIRequestContext({
     requestId,
     maxCzasMs: 25000,
-    maxGeneracji: 5,
+    maxGeneracji: 6,
+    maxInitialGeneracji: 5,
+    maxRepairGeneracji: 1,
     maxModelCalls: 8,
     maxValidatorow: 2,
     maxWyszukanTavily: testMaxTavilySearches,
@@ -1819,7 +1821,8 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
   };
   aiState.zarezerwujModel = zarezerwujModel;
   const moznaWykonacGeneracje = (provider, model) => {
-    const reserved = aiState.reserveGeneration(provider, model);
+    const phase = aiState.generationPhase || 'initial';
+    const reserved = aiState.reserveGeneration(provider, model, phase);
     if (!reserved) {
       console.warn(`[AI][${requestId}] budżet generacji/modeli wyczerpany (${provider}/${model})`);
     }
@@ -1835,6 +1838,15 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
       finalProvider: wynikGeneracji?.provider || null,
       finalModel: wynikGeneracji?.model || null, tavilySearches: aiState.tavilySearches,
       global120bRequests: model120bGlobalRequesty,
+      generationBudget: {
+        total: aiState.maxGeneracji,
+        initial: aiState.maxInitialGeneracji,
+        repair: aiState.maxRepairGeneracji,
+        used: aiState.generacje,
+        initialUsed: aiState.initialGeneracje,
+        repairUsed: aiState.repairGeneracje,
+      },
+      generationAttempts: aiState.generationAttempts || [],
       sourceCount: daneDoWalidacji ? (daneDoWalidacji.match(/\[(?:SOURCE|REFERENCE) [^\]]+\]/g) || []).length : 0,
       metrics: { ...AI_METRYKI, observability: snapshotAIMetrics(AI_OBSERVABILITY) },
       durationMs: Date.now() - aiState.startedAt, finalStatus: status,
@@ -2336,7 +2348,7 @@ Pytanie użytkownika: ${pytanie}`;
     const messages = buildMessages(overrideSystemPrompt);
     const prompt = messages.user;
     const controller = new AbortController();
-    const timeoutMs = Math.max(1, Math.min(30000, pozostalyCzasMs()));
+    const timeoutMs = timeoutDlaGeneracji();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
       const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=${encodeURIComponent(KONFIGURACJA.geminiKey)}`, {
@@ -2368,7 +2380,7 @@ Pytanie użytkownika: ${pytanie}`;
     const messages = buildOpenRouterMessages(overrideSystemPrompt);
     const prompt = messages[messages.length - 1]?.content || pytanie;
     const controller = new AbortController();
-    const timeoutMs = Math.max(1, Math.min(30000, pozostalyCzasMs()));
+    const timeoutMs = timeoutDlaGeneracji();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
       const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
@@ -2453,8 +2465,8 @@ Pytanie użytkownika: ${pytanie}`;
     try {
       const kontekstDoGroq = String(kontekstAI || '').slice(0, 10000);
       const controller = new AbortController();
-      const remainingMs = pozostalyCzasMs();
-      const timer = setTimeout(() => controller.abort(), remainingMs);
+      const timeoutMs = timeoutDlaGeneracji();
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
       try {
         const response = await groqClient.chat.completions.create({ model, messages: [{ role: 'system', content: overrideSystemPrompt }, ...przygotujHistorieDoModelu(historiaRozmowy, 4), { role: 'user', content: kontekstDoGroq }], temperature, max_tokens: maxTok, reasoning_effort: model === 'openai/gpt-oss-120b' ? 'medium' : 'low', signal: controller.signal });
         return ujednolicWynik({ tekst: response.choices?.[0]?.message?.content, ucieta: response.choices?.[0]?.finish_reason === 'length' }, 'groq', model);
@@ -2473,21 +2485,50 @@ Pytanie użytkownika: ${pytanie}`;
   }
 
   // Fallback state is shared by all generation attempts in this request.
-  // Provider auth/quota failures must not be retried by a later validator/repair cycle.
+  // Failed endpoints are remembered for the whole request, including transient
+  // and unknown errors, so repair does not immediately repeat an outage.
   const failedFallbackProviders = new Set();
+  let lastSuccessfulGenerationStep = null;
+
+  const recordGenerationAttempt = (attempt) => {
+    if (!Array.isArray(aiState.generationAttempts)) aiState.generationAttempts = [];
+    aiState.generationAttempts.push({
+      provider: attempt.provider || 'unknown',
+      model: attempt.model || 'unknown',
+      phase: attempt.phase || aiState.generationPhase || 'initial',
+      status: attempt.status || 'unknown',
+      failure: attempt.failure || null,
+      latencyMs: Math.max(0, Number(attempt.latencyMs) || 0),
+    });
+    if (aiState.generationAttempts.length > 32) aiState.generationAttempts.shift();
+  };
 
   async function generujOdpowiedz(maxTok, prompt = systemPrompt, powod = 'main', allow120b = true) {
+    const phase = /repair/i.test(String(powod || '')) ? 'repair' : 'initial';
+    aiState.generationPhase = phase;
+    const startedGenerationAt = Date.now();
     let result = allow120b
       ? await zapytajGlowny(Math.max(maxTok, 300), prompt, 'openai/gpt-oss-120b')
       : wynikPusty('groq', 'openai/gpt-oss-120b', '120B skipped for this generation cycle');
     let lastResult = result;
     let failureType = classifyFailure(result.error || '');
+    const primaryStep = 'groq:openai/gpt-oss-120b';
 
-    if (result.tekst && !result.ucieta) return result;
+    if (result.tekst && !result.ucieta) {
+      lastSuccessfulGenerationStep = primaryStep;
+      recordGenerationAttempt({ provider: result.provider, model: result.model, status: 'success', latencyMs: Date.now() - startedGenerationAt });
+      return result;
+    }
+    if (result.error && allow120b) {
+      recordGenerationAttempt({ provider: result.provider, model: result.model, status: 'error', failure: failureType, latencyMs: Date.now() - startedGenerationAt });
+      failedFallbackProviders.add(primaryStep);
+    }
 
     aiState.fallbackReasons.push(failureType || 'unknown');
-    const attempted = ['groq:openai/gpt-oss-120b'];
-    const remainingGenerationSlots = Math.max(0, aiState.maxGeneracji - aiState.generacje);
+    const attempted = [primaryStep];
+    const remainingGenerationSlots = phase === 'repair'
+      ? 0
+      : Math.max(0, aiState.maxInitialGeneracji - aiState.initialGeneracje);
     console.log(`[AI][${requestId}] fallback policy=${failureType || 'unknown'} next=${JSON.stringify(nextFallbacks({
       failure: failureType,
       attempted,
@@ -2496,6 +2537,7 @@ Pytanie użytkownika: ${pytanie}`;
     }))}`);
 
     const fallbackSteps = {
+      'groq:openai/gpt-oss-120b': () => zapytajGlowny(Math.max(maxTok, 300), prompt, 'openai/gpt-oss-120b'),
       'groq:openai/gpt-oss-20b': () => zapytajGlowny(Math.max(maxTok, 300), prompt, 'openai/gpt-oss-20b'),
       'xkiro:default': () => zapytajXKiro(Math.max(maxTok, 300), prompt, powod),
       'gemini:gemini-3.8-flash': () => zapytajGeminiFallback(Math.max(maxTok, 300), prompt, powod),
@@ -2503,32 +2545,41 @@ Pytanie użytkownika: ${pytanie}`;
       'openrouter:default': () => zapytajOpenRouterFallback(Math.max(maxTok, 300), prompt, powod),
     };
 
-    for (const step of nextFallbacks({
+    let candidateSteps = nextFallbacks({
       failure: failureType,
       attempted,
       failedProviders: [...failedFallbackProviders],
-      maxFallbacks: Math.max(0, aiState.maxGeneracji - aiState.generacje),
-    })) {
-      if (!GENERATION_FALLBACK_CHAIN.includes(step) || step === 'groq:openai/gpt-oss-120b') continue;
+      maxFallbacks: phase === 'repair'
+        ? 0
+        : Math.max(0, aiState.maxInitialGeneracji - aiState.initialGeneracje),
+    });
+    if (phase === 'repair' && lastSuccessfulGenerationStep) {
+      candidateSteps = [lastSuccessfulGenerationStep];
+    }
+
+    for (const step of candidateSteps) {
+      if (!GENERATION_FALLBACK_CHAIN.includes(step) || (step === 'groq:openai/gpt-oss-120b' && phase !== 'repair')) continue;
       const fn = fallbackSteps[step];
       if (!fn) continue;
 
       attempted.push(step);
+      const attemptStartedAt = Date.now();
       const candidate = await fn();
       lastResult = candidate;
       if (candidate.tekst && !candidate.ucieta) {
+        lastSuccessfulGenerationStep = step;
+        recordGenerationAttempt({ provider: candidate.provider, model: candidate.model, status: 'success', latencyMs: Date.now() - attemptStartedAt });
         if (step.startsWith('gemini:')) return ujednolicWynik(candidate, 'gemini', step.split(':')[1]);
-        if (step.startsWith('openrouter:')) return ujednolicWynik(candidate, 'openrouter', KONFIGURACJA.openrouterGeneratorModel);
+        if (step.startsWith('openrouter:')) return ujednolicWynik(candidate, 'openrouter', candidate.model || KONFIGURACJA.openrouterGeneratorModel);
         if (step.startsWith('groq:')) return ujednolicWynik(candidate, 'groq', step.split(':')[1]);
         return candidate;
       }
 
       const providerFailure = classifyFailure(candidate.error || '');
+      recordGenerationAttempt({ provider: candidate.provider, model: candidate.model, status: 'error', failure: providerFailure, latencyMs: Date.now() - attemptStartedAt });
       aiState.fallbackReasons.push(providerFailure);
-      if (['auth', 'quota', 'invalid_request'].includes(providerFailure)) {
-        failedFallbackProviders.add(step);
-        console.warn(`[AI][${requestId}] disabling fallback ${step} for this request: ${providerFailure}`);
-      }
+      failedFallbackProviders.add(step);
+      console.warn(`[AI][${requestId}] disabling fallback ${step} for this request: ${providerFailure}`);
     }
 
     // Zwracamy rzeczywiście ostatnią próbę, a nie pierwszy 120B.
@@ -2620,7 +2671,7 @@ function oczyscOdpowiedzPrzedWalidacja(tekst) {
       const promptRetry = `${systemPrompt}\n\n[SOFT VALIDATION FEEDBACK]\n${feedback}`;
       // Dokładnie jeden cykl retry po odrzuceniu walidacji. Fallbacki providerów
       // pozostają wewnątrz jednego cyklu generacji i nie uruchamiamy kolejnego retry.
-      const retry = await generujOdpowiedz(max_tokens, promptRetry, 'soft validation retry', false);
+      const retry = await generujOdpowiedz(max_tokens, promptRetry, 'soft validation repair', false);
       if (retry.tekst) {
         const nowaOdp = usunMarkeryWewnetrzneAI(filtrBezpieczenstwa(retry.tekst));
         if (nowaOdp) {

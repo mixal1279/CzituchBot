@@ -16,7 +16,27 @@ const defaultLimit = Math.min(20, benchmark.cases.length);
 const requestedLimit = Number(process.env.AI_BENCHMARK_LIMIT);
 const limit = Math.max(1, Math.min(benchmark.cases.length, Number.isFinite(requestedLimit) && requestedLimit > 0 ? requestedLimit : defaultLimit));
 const delayMs = Math.max(0, Number(process.env.AI_BENCHMARK_DELAY_MS) || 0);
-const cases = benchmark.cases.slice(0, limit);
+function stratifiedCases(all, requested) {
+  if (requested >= all.length) return [...all];
+  const groups = new Map();
+  for (const item of all) {
+    const key = item.category || 'uncategorized';
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(item);
+  }
+  const keys = [...groups.keys()];
+  const selected = [];
+  let cursor = 0;
+  while (selected.length < requested && keys.length) {
+    const key = keys[cursor % keys.length];
+    const bucket = groups.get(key);
+    if (bucket.length) selected.push(bucket.shift());
+    if (!bucket.length) keys.splice(cursor % keys.length, 1);
+    else cursor++;
+  }
+  return selected;
+}
+const cases = stratifiedCases(benchmark.cases, limit);
 
 function normalizeFactText(text) {
   return String(text || '')
@@ -127,6 +147,7 @@ async function run() {
     factualAverageScore: factualAverage === null ? null : Number(factualAverage.toFixed(4)),
     durationMs: Date.now() - started,
     note: 'Ten testuje produkcyjny pipeline i kompletność odpowiedzi. Nie jest niezależnym pomiarem factual accuracy; do tego potrzebny jest ręcznie zweryfikowany gold answer/fact set.',
+    categories: [...new Set(results.map(x => x.category))].sort(),
     failures: results.filter(x => !x.answered || x.judgeStatus !== 'accepted' || x.factualPassed === false).slice(0, 100),
   };
   console.log(JSON.stringify(report, null, 2));

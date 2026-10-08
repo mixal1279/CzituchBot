@@ -18,7 +18,7 @@ function createAIMetrics() {
     retries: 0, retryAccepted: 0, retryRejected: 0, supplementalRetrievals: 0, supplementalSuccesses: 0, sourceDiversityFailures: 0, falseAccepts: 0, falseRejects: 0, claimCoverageSum: 0, answerQualitySum: 0, qualitySamples: 0,
     totalLatencyMs: 0, totalModelCalls: 0, totalTavilySearches: 0,
     providerCalls: {}, fallbackReasons: {}, validatorStatuses: {}, retrievalStatuses: {},
-    recent: [],
+    generationAttempts: [], recent: [],
   };
 }
 
@@ -46,6 +46,17 @@ function recordAIMetric(metrics, event = {}) {
   for (const reason of Array.isArray(event.fallbackReasons) ? event.fallbackReasons : []) boundedIncrement(m.fallbackReasons, reason);
   for (const validatorStatus of Array.isArray(event.validatorStatuses) ? event.validatorStatuses : []) boundedIncrement(m.validatorStatuses, validatorStatus);
   for (const retrievalStatus of Array.isArray(event.retrievalStatuses) ? event.retrievalStatuses : []) boundedIncrement(m.retrievalStatuses, retrievalStatus);
+  for (const attempt of Array.isArray(event.generationAttempts) ? event.generationAttempts.slice(-20) : []) {
+    m.generationAttempts.push({
+      provider: String(attempt.provider || 'unknown'),
+      model: String(attempt.model || 'unknown'),
+      phase: String(attempt.phase || 'initial'),
+      status: String(attempt.status || 'unknown'),
+      failure: attempt.failure ? String(attempt.failure) : null,
+      latencyMs: Math.max(0, Number(attempt.latencyMs) || 0),
+    });
+  }
+  if (m.generationAttempts.length > 200) m.generationAttempts.splice(0, m.generationAttempts.length - 200);
 
   m.recent.push({
     at: Date.now(), status, latencyMs: latency,
@@ -58,6 +69,7 @@ function recordAIMetric(metrics, event = {}) {
     retrievalStatuses: Array.isArray(event.retrievalStatuses) ? event.retrievalStatuses.slice(0, 8) : [],
     claimCoverage: Number.isFinite(Number(event.claimCoverage)) ? Number(event.claimCoverage) : null,
     answerQuality: Number.isFinite(Number(event.answerQuality)) ? Number(event.answerQuality) : null,
+    generationAttempts: Array.isArray(event.generationAttempts) ? event.generationAttempts.slice(-20) : [],
   });
   if (m.recent.length > MAX_RECENT) m.recent.splice(0, m.recent.length - MAX_RECENT);
   return m;

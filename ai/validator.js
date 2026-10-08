@@ -272,16 +272,12 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
   const allowedBlocks = allowed
     ? parsedEvidenceBlocks.filter(block => allowed.has(block.sourceId))
     : parsedEvidenceBlocks;
-  const effectiveClaimSourceIds = claims.map(c => {
-    const ids = new Set(Array.isArray(c.source_ids) ? c.source_ids : []);
-    if (c.evidence_quote) {
-      for (const source of parsedEvidenceBlocks) {
-        if (allowed && !allowed.has(source.sourceId)) continue;
-        if (quoteExists(source.content, c.evidence_quote)) ids.add(source.sourceId);
-      }
-    }
-    return [...ids];
-  });
+  // Never silently rebind a validator claim to a different source just because
+  // the same quote happens to occur there. The model must bind each claim to
+  // the explicitly declared, allowed source IDs.
+  const effectiveClaimSourceIds = claims.map(c =>
+    Array.isArray(c.source_ids) ? c.source_ids : []
+  );
 
   const evidenceEvaluations = claims.map((c, index) =>
     czyDowodPotwierdzaClaim(dane, effectiveClaimSourceIds[index], c.evidence_quote, c.claim)
@@ -367,27 +363,29 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
     && !unknownSourceClaim
     && !unsupportedEvidenceClaim;
 
+  // A quote-binding defect can be repaired safely only when the claim itself
+  // is independently supported by the explicitly declared source block. This
+  // must never cover action/causal contradictions or unsupported synthesis.
+  const softEvidenceOnly = claims.length > 0
+    && unverifiedEvidenceQuoteIndexes.length > 0
+    && claims.every((claim, index) => {
+      if (!claim.supported || !claim.source_ids.length) return false;
+      const sourceBlocks = claim.source_ids
+        .map(id => parsedEvidenceBlocks.find(block => block.sourceId === id))
+        .filter(Boolean);
+      if (!sourceBlocks.length) return false;
+      return sourceBlocks.some(block => zgodnoscStrukturalna(block.content, claim.claim, {
+        allowCrossLanguageExactEvidence: true,
+        allowDistributedEvidence: true,
+      }).ok);
+    });
+
+  const softQuoteBindingOnly = unsupportedEvidenceClaimIndexes.length > 0
+    && unsupportedEvidenceReasons
+      .filter(item => unsupportedEvidenceClaimIndexes.includes(item.claimIndex))
+      .every(item => item.reasons.every(reason => /evidence_quote nie występuje w wskazanym źródle/i.test(reason)));
+
   const localRejectReasons = [];
-
-  const softEvidenceReasons = new Set([
-    'evidence_not_verified',
-    'evidence_quote_not_exact',
-  ]);
-  const softAccepted = validFromModel === true
-    && confidence >= 0.75
-    && wynik.supported === true
-    && wynik.relevant === true
-    && wynik.complete === true
-    && wynik.hallucination === false
-    && unsupported.length === 0
-    && localRejectReasons.length > 0
-    && localRejectReasons.every(reason => softEvidenceReasons.has(reason));
-
-  const status = accepted
-    ? 'accepted'
-    : (softAccepted
-      ? 'soft_accepted'
-      : (sprzecznyWerdykt || niekompletnyPozytywnyWerdykt ? 'inconclusive' : 'rejected'));
   if (!rawClaims.length) localRejectReasons.push('claims_missing');
   if (tooManyClaims) localRejectReasons.push('claims_over_limit');
   if (malformedClaims) localRejectReasons.push('malformed_claims');
@@ -403,6 +401,26 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
   if (maStarePola && wynik.relevant !== true) localRejectReasons.push('model_not_relevant');
   if (maStarePola && wynik.complete !== true) localRejectReasons.push('model_marked_incomplete');
   if (maStarePola && wynik.hallucination !== false) localRejectReasons.push('model_flagged_hallucination');
+
+  const softEvidenceReasons = new Set(['evidence_quote_not_exact']);
+  const softAcceptanceEnabled = process.env.AI_ENABLE_SOFT_ACCEPT === '1';
+  const softAccepted = softAcceptanceEnabled && validFromModel === true
+    && confidence >= 0.75
+    && wynik.supported === true
+    && wynik.relevant === true
+    && wynik.complete === true
+    && wynik.hallucination === false
+    && unsupported.length === 0
+    && localRejectReasons.length > 0
+    && softEvidenceOnly
+    && softQuoteBindingOnly
+    && localRejectReasons.filter(reason => reason !== 'evidence_not_verified').every(reason => softEvidenceReasons.has(reason));
+
+  const status = accepted
+    ? 'accepted'
+    : (softAccepted
+      ? 'soft_accepted'
+      : (sprzecznyWerdykt || niekompletnyPozytywnyWerdykt ? 'inconclusive' : 'rejected'));
   if (!localRejectReasons.length && !accepted) localRejectReasons.push('local_contract_not_satisfied');
   const diagnostics = {
     contractAccepted: accepted || softAccepted,

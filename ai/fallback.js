@@ -4,7 +4,7 @@ const CLASSIFIERS = Object.freeze({
   quota: /(?:429|quota|rate.?limit|tokens per day|tokens per minute|TPD|TPM|credit|insufficient)/i,
   auth: /(?:401|403|unauthori[sz]ed|forbidden|invalid.*key|api.?key|missing.*key|brak .*key)/i,
   invalid_request: /(?:invalid.*request|bad request|400|invalid.*schema|malformed.*json|json.*invalid)/i,
-  transient: /(?:timeout|timed ?out|ETIMEDOUT|ECONNRESET|5\d\d|temporar|overloaded|unavailable|fetch failed|aborted|abort)/i,
+  transient: /(?:timeout|timed ?out|ETIMEDOUT|ECONNRESET|5\d\d|temporar|overloaded|unavailable|fetch failed|aborted|abort|network error|socket hang up)/i,
 });
 
 function classifyFailure(error = '') {
@@ -44,6 +44,8 @@ function nextFallbacks({ failure = 'unknown', attempted = [], failedProviders = 
 }
 
 function shouldRetryFailure(failure) {
+  // Retry means "try another provider", not "repeat the same failing endpoint".
+  // Auth errors are useful only for cross-provider fallback.
   return ['transient', 'quota', 'auth', 'invalid_request', 'unknown'].includes(failure);
 }
 
