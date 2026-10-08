@@ -376,6 +376,37 @@ console.log('AI regression tests: OK');
     ...base,
     claims: [{ claim: 'Fakt', supported: true, source_ids: ['REFERENCE 999'], evidence_quote: 'Fakt źródłowy', reason: 'źródło' }]
   }, 'test', 'test', new Set(['REFERENCE 1']), '[REFERENCE 1]\nFakt źródłowy').status, 'rejected');
+
+  // Gdy pełna odpowiedź zawiera jeden niepoparty szczegół, zachowujemy
+  // wyłącznie atomowy claim z poprawnym source_id i zweryfikowanym evidence.
+  const partial = normalizujWynikWalidatora({
+    ...base,
+    valid: true,
+    complete: false,
+    unsupported_claims: ['Zrobił to, ponieważ chciał zemsty.'],
+    claims: [
+      { claim: 'Wheatley przejął kontrolę nad systemem.', supported: true, source_ids: ['SOURCE 1'], evidence_quote: 'Wheatley przejął kontrolę nad systemem.', reason: 'potwierdzone' },
+      { claim: 'Zrobił to, ponieważ chciał zemsty.', supported: false, source_ids: [], evidence_quote: '', reason: 'brak dowodu' },
+    ],
+  }, 'test', 'test', new Set(['SOURCE 1']), '[SOURCE 1]\nWheatley przejął kontrolę nad systemem.', 'Wheatley przejął kontrolę nad systemem. Zrobił to, ponieważ chciał zemsty.');
+  assert.equal(partial.status, 'soft_accepted');
+  assert.equal(partial.ok, true);
+  assert.match(partial.partialAnswer, /Wheatley przejął kontrolę nad systemem/);
+  assert.match(partial.partialAnswer, /Nie wszystkie szczegóły/);
+  assert.equal(partial.diagnostics.partialAccepted, true);
+  assert.equal(partial.complete, false);
+
+  // Nieznane źródło lub niepoparte liczby nadal blokują akceptację.
+  const unknownPartial = normalizujWynikWalidatora({
+    ...base,
+    complete: false,
+    unsupported_claims: ['drugi szczegół'],
+    claims: [
+      { claim: 'Wheatley przejął kontrolę nad systemem.', supported: true, source_ids: ['SOURCE 99'], evidence_quote: 'Wheatley przejął kontrolę nad systemem.', reason: 'źródło' },
+      { claim: 'drugi szczegół', supported: false, source_ids: [], evidence_quote: '', reason: 'brak dowodu' },
+    ],
+  }, 'test', 'test', new Set(['SOURCE 1']), '[SOURCE 1]\nWheatley przejął kontrolę nad systemem.');
+  assert.equal(unknownPartial.status, 'rejected');
 }
 
 
