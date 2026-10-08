@@ -272,16 +272,12 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
   const allowedBlocks = allowed
     ? parsedEvidenceBlocks.filter(block => allowed.has(block.sourceId))
     : parsedEvidenceBlocks;
-  const effectiveClaimSourceIds = claims.map(c => {
-    const ids = new Set(Array.isArray(c.source_ids) ? c.source_ids : []);
-    if (c.evidence_quote) {
-      for (const source of parsedEvidenceBlocks) {
-        if (allowed && !allowed.has(source.sourceId)) continue;
-        if (quoteExists(source.content, c.evidence_quote)) ids.add(source.sourceId);
-      }
-    }
-    return [...ids];
-  });
+  // Never silently rebind a validator claim to a different source just because
+  // the same quote happens to occur there. The model must bind each claim to
+  // the explicitly declared, allowed source IDs.
+  const effectiveClaimSourceIds = claims.map(c =>
+    Array.isArray(c.source_ids) ? c.source_ids : []
+  );
 
   const evidenceEvaluations = claims.map((c, index) =>
     czyDowodPotwierdzaClaim(dane, effectiveClaimSourceIds[index], c.evidence_quote, c.claim)
@@ -368,6 +364,21 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
     && !unsupportedEvidenceClaim;
 
   const localRejectReasons = [];
+  if (!rawClaims.length) localRejectReasons.push('claims_missing');
+  if (tooManyClaims) localRejectReasons.push('claims_over_limit');
+  if (malformedClaims) localRejectReasons.push('malformed_claims');
+  if (unknownSourceClaim) localRejectReasons.push('unknown_source_id');
+  if (unsupportedEvidenceClaim) localRejectReasons.push('evidence_not_verified');
+  if (unverifiedEvidenceQuoteIndexes.length) localRejectReasons.push('evidence_quote_not_exact');
+  if (claims.some(c => !c.supported) || wynik.unsupported_claims.some(v => typeof v === 'string' && v.trim())) localRejectReasons.push('unsupported_claims_reported');
+  if (!answerCoverage.ok) localRejectReasons.push('answer_not_covered_by_claims');
+  if (!claimGranularityOk) localRejectReasons.push('claims_too_coarse_for_answer');
+  if (validFromModel !== true) localRejectReasons.push('model_returned_invalid');
+  if (confidence < 0.75) localRejectReasons.push('confidence_below_threshold');
+  if (maStarePola && wynik.supported !== true) localRejectReasons.push('model_supported_false');
+  if (maStarePola && wynik.relevant !== true) localRejectReasons.push('model_not_relevant');
+  if (maStarePola && wynik.complete !== true) localRejectReasons.push('model_marked_incomplete');
+  if (maStarePola && wynik.hallucination !== false) localRejectReasons.push('model_flagged_hallucination');
 
   const softEvidenceReasons = new Set([
     'evidence_not_verified',
@@ -388,21 +399,6 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
     : (softAccepted
       ? 'soft_accepted'
       : (sprzecznyWerdykt || niekompletnyPozytywnyWerdykt ? 'inconclusive' : 'rejected'));
-  if (!rawClaims.length) localRejectReasons.push('claims_missing');
-  if (tooManyClaims) localRejectReasons.push('claims_over_limit');
-  if (malformedClaims) localRejectReasons.push('malformed_claims');
-  if (unknownSourceClaim) localRejectReasons.push('unknown_source_id');
-  if (unsupportedEvidenceClaim) localRejectReasons.push('evidence_not_verified');
-  if (unverifiedEvidenceQuoteIndexes.length) localRejectReasons.push('evidence_quote_not_exact');
-  if (claims.some(c => !c.supported) || wynik.unsupported_claims.some(v => typeof v === 'string' && v.trim())) localRejectReasons.push('unsupported_claims_reported');
-  if (!answerCoverage.ok) localRejectReasons.push('answer_not_covered_by_claims');
-  if (!claimGranularityOk) localRejectReasons.push('claims_too_coarse_for_answer');
-  if (validFromModel !== true) localRejectReasons.push('model_returned_invalid');
-  if (confidence < 0.75) localRejectReasons.push('confidence_below_threshold');
-  if (maStarePola && wynik.supported !== true) localRejectReasons.push('model_supported_false');
-  if (maStarePola && wynik.relevant !== true) localRejectReasons.push('model_not_relevant');
-  if (maStarePola && wynik.complete !== true) localRejectReasons.push('model_marked_incomplete');
-  if (maStarePola && wynik.hallucination !== false) localRejectReasons.push('model_flagged_hallucination');
   if (!localRejectReasons.length && !accepted) localRejectReasons.push('local_contract_not_satisfied');
   const diagnostics = {
     contractAccepted: accepted || softAccepted,
