@@ -84,13 +84,39 @@ function buildEvidenceRepairContext(claims, blocks, allowedSourceIds = null, max
   ].join('\n')).join('\n\n');
 }
 
-function buildQuestionEvidenceContext(question, blocks, allowedSourceIds = null, limit = 6) {
-  const candidates = rankEvidenceForClaim(question, blocks, allowedSourceIds, limit);
-  if (!candidates.length) return '';
-  return candidates.map((candidate, index) =>
-    'EVIDENCE CANDIDATE ' + (index + 1) + ': SOURCE ' + candidate.sourceId.replace(/^SOURCE\s+/i, '') +
-    '\nQUOTE: ' + candidate.quote.slice(0, 500)
-  ).join('\n\n');
+function buildQuestionEvidenceContext(question, blocks, allowedSourceIds = null, limit = 6, atomicQuestions = []) {
+  const queries = [...new Set(
+    (Array.isArray(atomicQuestions) ? atomicQuestions : [])
+      .map(value => String(value || '').replace(/\s+/g, ' ').trim())
+      .filter(value => value.length >= 8)
+  )];
+  if (!queries.length) queries.push(String(question || '').replace(/\s+/g, ' ').trim());
+
+  const perQueryLimit = Math.max(1, Math.ceil(limit / Math.min(queries.length, 3)));
+  const rows = [];
+  const seen = new Set();
+  for (const query of queries.slice(0, 3)) {
+    for (const candidate of rankEvidenceForClaim(query, blocks, allowedSourceIds, perQueryLimit)) {
+      const key = candidate.sourceId + '|' + normalizeEvidenceText(candidate.quote);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      rows.push({ ...candidate, query });
+    }
+  }
+  rows.sort((a, b) => b.score - a.score || a.quote.length - b.quote.length);
+  const selected = rows.slice(0, limit);
+  if (!selected.length) return '';
+
+  return selected.map((candidate, index) => {
+    const queryLabel = candidate.query && candidate.query !== question
+      ? '\nQUESTION PART: ' + candidate.query.slice(0, 300)
+      : '';
+    return [
+      'EVIDENCE CANDIDATE ' + (index + 1) + ': SOURCE ' + candidate.sourceId.replace(/^SOURCE\s+/i, ''),
+      queryLabel,
+      'QUOTE: ' + candidate.quote.slice(0, 500),
+    ].filter(Boolean).join('\n');
+  }).join('\n\n');
 }
 
 module.exports = { normalizeEvidenceText, parseEvidenceBlocks, quoteExists, splitEvidenceSentences, rankEvidenceForClaim, buildEvidenceRepairContext, buildQuestionEvidenceContext };
