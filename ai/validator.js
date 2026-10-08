@@ -349,6 +349,43 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
       && wynik.hallucination === false
     ));
 
+  // Częściowa odpowiedź jest dopuszczalna tylko z atomowych claimów, których
+  // source_id, cytat i semantyczne wsparcie przeszły lokalną weryfikację.
+  // Nie obniżamy progów dla sprzeczności, liczb/dat ani nieznanych źródeł.
+  const verifiedPartialClaims = claims.filter((claim, index) =>
+    claim.supported === true
+    && evidenceEvaluations[index]?.ok === true
+    && claim.source_ids.length > 0
+    && !/[.!?].+\\S/u.test(claim.claim)
+  );
+  const partialBody = verifiedPartialClaims.slice(0, 2)
+    .map(claim => claim.claim.trim().replace(/[.!?]+$/u, ''))
+    .filter(Boolean)
+    .join('; ');
+  const partialAnswerCandidate = partialBody
+    ? partialBody + '. Nie wszystkie szczegóły da się potwierdzić w dostępnych źródłach.'
+    : '';
+  const partialHardFacts = partialAnswerCandidate
+    ? sprawdzTwardeFaktyOdpowiedzi(partialAnswerCandidate, dane, '')
+    : { ok: false, unsupported: ['brak bezpiecznego claimu do odpowiedzi częściowej'] };
+  const partialFormat = partialAnswerCandidate
+    ? sprawdzKompletnoscOdpowiedzi(partialAnswerCandidate)
+    : { ok: false };
+  const partialAccepted = !accepted
+    && validFromModel === true
+    && confidence >= 0.75
+    && wynik.supported === true
+    && wynik.relevant === true
+    && wynik.hallucination === false
+    && claims.length > 0
+    && verifiedPartialClaims.length > 0
+    && unsupported.length > 0
+    && !unknownSourceClaim
+    && !tooManyClaims
+    && !malformedClaims
+    && partialHardFacts.ok
+    && partialFormat.ok;
+
   // Model może zwrócić sprzeczny werdykt: valid=false, ale jednocześnie
   // nie wskazać żadnego niepotwierdzonego twierdzenia i wszystkie claims
   // oznaczyć jako supported. To nie jest wiarygodny reject. Oznaczamy to
@@ -423,12 +460,16 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
 
   const status = accepted
     ? 'accepted'
-    : (softAccepted
+    : (partialAccepted
       ? 'soft_accepted'
-      : (sprzecznyWerdykt || niekompletnyPozytywnyWerdykt ? 'inconclusive' : 'rejected'));
+      : (softAccepted
+        ? 'soft_accepted'
+        : (sprzecznyWerdykt || niekompletnyPozytywnyWerdykt ? 'inconclusive' : 'rejected')));
   if (!localRejectReasons.length && !accepted) localRejectReasons.push('local_contract_not_satisfied');
   const diagnostics = {
-    contractAccepted: accepted || softAccepted,
+    contractAccepted: accepted || softAccepted || partialAccepted,
+    partialAccepted,
+    partialClaimCount: verifiedPartialClaims.length,
     modelValid: validFromModel === true,
     claimCoverage,
     rawClaimCount: rawClaims.length,
@@ -466,20 +507,23 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
 
   return {
     status,
-    ok: accepted || softAccepted,
-    valid: accepted || softAccepted,
+    ok: accepted || softAccepted || partialAccepted,
+    valid: accepted || softAccepted || partialAccepted,
+    partialAnswer: partialAccepted ? partialAnswerCandidate : null,
     technicalError: false,
     provider,
     model,
     supported: typeof wynik.supported === 'boolean' ? wynik.supported : accepted,
     relevant: typeof wynik.relevant === 'boolean' ? wynik.relevant : accepted,
-    complete: typeof wynik.complete === 'boolean' ? wynik.complete : accepted,
+    complete: partialAccepted ? false : (typeof wynik.complete === 'boolean' ? wynik.complete : accepted),
     hallucination: typeof wynik.hallucination === 'boolean' ? wynik.hallucination : !accepted,
     confidence,
     claims,
     unsupported_claims: unsupported,
     diagnostics,
-    reason: tooManyClaims
+    reason: partialAccepted
+      ? 'odpowiedź częściowa: pokazano wyłącznie claimy zweryfikowane przez wskazane źródła'
+      : tooManyClaims
       ? 'validator zwrócił więcej claims niż obsługuje kontrakt'
       : malformedClaims
         ? 'validator zwrócił niekompletny lub błędnie uformowany claim'
