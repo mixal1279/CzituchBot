@@ -2239,7 +2239,6 @@ Pytanie użytkownika: ${pytanie}`
     // Niektóre modele zwracają niespójny werdykt (supported=false), ale
     // nie wypełniają unsupported_claims. W takim przypadku wykonujemy jedno
     // celowane wyszukanie całego pytania zamiast kończyć fałszywą odmową.
-    const opisBraku = claims || 'zweryfikuj wszystkie fakty i każdą część pytania na podstawie źródeł';
 
     uzupelnienieTavilyWykonane = true;
     // Skracamy unsupported_claims do keywordowego zapytania, zamiast wysyłać
