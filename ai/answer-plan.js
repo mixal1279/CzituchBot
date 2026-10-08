@@ -74,7 +74,7 @@ function buildAnswerPlan(question, routing = {}) {
     causalQuestion,
     instruction: requirements.length
       ? 'Odpowiedź musi pokryć: ' + requirements.map(r => r.id).join(', ') + '. Każde zdanie faktograficzne ma być atomowym claimem opartym na jednym zweryfikowanym fragmencie evidence. Dla pytania „dlaczego/czemu” oddziel fakt od przyczyny: podaj przyczynę tylko wtedy, gdy konkretny evidence quote wyraźnie łączy przyczynę ze skutkiem. Nie traktuj kolejności wydarzeń jako przyczynowości. Jeśli brak takiego dowodu, powiedz wprost, że źródła nie potwierdzają przyczyny.'
-      : 'Odpowiedz bezpośrednio i nie dodawaj niepotwierdzonych faktów.';
+      : 'Odpowiedz bezpośrednio i nie dodawaj niepotwierdzonych faktów.',
   };
 }
 
