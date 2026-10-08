@@ -195,9 +195,9 @@ function czyRelacjaPrzyczynowaPokrywaClaim(evidence, claim) {
     if (!relationRe.test(sentence)) return false;
     const normalized = normalizujClaim(sentence);
     const entityOk = !claimEntities.length || claimEntities.every(entity => czyNazwaWlasnaWystepuje(entity, normalized));
-    const tokenOverlapScore = claimTokens.length
-      ? claimTokens.filter(token => normalized.split(' ').includes(token)).length / claimTokens.length
-      : 0;
+    const evidenceTokens = tokenyPokryciaBezStop(sentence);
+    const matchedTokens = claimTokens.filter(token => evidenceTokens.some(other => tokenyPokrywajaSie(token, other)));
+    const tokenOverlapScore = claimTokens.length ? matchedTokens.length / claimTokens.length : 0;
     return entityOk && tokenOverlapScore >= 0.22;
   });
 }
