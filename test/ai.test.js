@@ -292,7 +292,8 @@ assert.match(require('fs').readFileSync(require('path').join(__dirname, '..', 'c
     'gemini:gemini-3.8-flash',
   ]);
 }
-\n{
+
+{
   assert.equal(classifyPipelineFailure('rejected'), 'validator_reject');
   assert.equal(classifyPipelineFailure('inconclusive'), 'validator_inconclusive');
   assert.equal(classifyPipelineFailure('unavailable', { reason: 'provider_timeout' }), 'provider_timeout');
