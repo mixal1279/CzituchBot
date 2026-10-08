@@ -5,6 +5,7 @@ const { assessEvidence } = require('./core');
 
 const { sprawdzTwardeFaktyOdpowiedzi } = require('./response');
 const { czyDowodSemantyczniePokrywaClaim, zgodnoscStrukturalna, sprawdzTwardeKonflikty, sprawdzPokrycieClaimamiOdpowiedzi } = require('./claimValidation');
+const { parseEvidenceBlocks, quoteExists, buildEvidenceRepairContext } = require('./evidence');
 
 // Kontrakt walidatora jest celowo mały: generator potrzebuje tylko jasnego
 // werdyktu i konkretnej informacji zwrotnej do jednego retry.
