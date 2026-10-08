@@ -398,6 +398,22 @@ console.log('AI regression tests: OK');
   assert.equal(partial.diagnostics.partialAccepted, true);
   assert.equal(partial.complete, false);
 
+  // Gdy odrzucono tylko binding dowodu jednego claimu, zachowujemy inny
+  // claim z poprawnym źródłem i cytatem. unsupported_claims może być puste,
+  // bo model błędnie oznaczył oba claims jako supported.
+  const partialFromEvidenceFailure = normalizujWynikWalidatora({
+    ...base,
+    claims: [
+      { claim: 'Wheatley przejął kontrolę nad systemem.', supported: true, source_ids: ['SOURCE 1'], evidence_quote: 'Wheatley przejął kontrolę nad systemem.', reason: 'potwierdzone' },
+      { claim: 'Portal 2 opowiada historię Wheatleya.', supported: true, source_ids: ['SOURCE 1'], evidence_quote: 'cytat którego nie ma', reason: 'cytat niezweryfikowany' },
+    ],
+  }, 'test', 'test', new Set(['SOURCE 1']), '[SOURCE 1]\\nWheatley przejął kontrolę nad systemem.', 'Wheatley przejął kontrolę nad systemem. Portal 2 opowiada historię Wheatleya.');
+  assert.equal(partialFromEvidenceFailure.diagnostics.unsupportedClaimCount, 0);
+  assert.deepEqual(partialFromEvidenceFailure.diagnostics.unsupportedEvidenceClaimIndexes, [1]);
+  assert.equal(partialFromEvidenceFailure.status, 'soft_accepted');
+  assert.match(partialFromEvidenceFailure.partialAnswer, /Wheatley przejął kontrolę nad systemem/);
+  assert.doesNotMatch(partialFromEvidenceFailure.partialAnswer, /Portal 2 opowiada historię/);
+
   // Nieznane źródło lub niepoparte liczby nadal blokują akceptację.
   const unknownPartial = normalizujWynikWalidatora({
     ...base,
