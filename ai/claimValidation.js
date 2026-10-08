@@ -146,6 +146,7 @@ function zgodnoscStrukturalna(evidence, claim, options = {}) {
   const e = String(evidence || '');
   const c = String(claim || '');
   if (!e.trim() || !c.trim()) return { ok: false, reason: 'brak dowodu lub claimu' };
+
   const hard = sprawdzTwardeKonflikty(e, c, options);
   if (!hard.ok) return hard;
   const semanticConflict = sprawdzSprzecznosciSemantyczne(e, c);
@@ -164,14 +165,39 @@ function zgodnoscStrukturalna(evidence, claim, options = {}) {
 
   const claimCausal = wyodrebnijMarkery(c, CAUSAL_RE);
   const evidenceCausal = wyodrebnijMarkery(e, CAUSAL_RE);
-  if (claimCausal && !evidenceCausal && !options.allowDistributedEvidence) return { ok: false, reason: 'claim dodaje relację przyczynową nieobecną w dowodzie' };
+  if (claimCausal && !evidenceCausal && !options.allowDistributedEvidence) {
+    return { ok: false, reason: 'claim dodaje relację przyczynową nieobecną w dowodzie' };
+  }
 
   const semantic = dopasowanieSemantyczne(e, c);
   if (semantic.ok) return semantic;
-  if (options.allowCrossLanguageExactEvidence === true && (semantic.sharedConcepts?.length || 0) > 0) {
-    return { ok: true, overlap: semantic.overlap ?? null, mode: 'cross_language_exact_evidence', sharedConcepts: semantic.sharedConcepts };
+
+  const claimTokens = tokenyPokryciaBezStop(c);
+  const evidenceTokens = tokenyPokryciaBezStop(e);
+  const sharedTokens = claimTokens.filter(token => evidenceTokens.some(et => tokenyPokrywajaSie(token, et)));
+  const tokenCoverage = claimTokens.length ? sharedTokens.length / claimTokens.length : 0;
+  const evidenceConcepts = pojeciaCrossLanguage(e);
+  const claimConcepts = pojeciaCrossLanguage(c);
+  const sharedConcepts = [...claimConcepts].filter(x => evidenceConcepts.has(x));
+  const claimEntities = wyodrebnijNazwyWlasne(c);
+  const normalizedEvidence = normalizujClaim(e);
+  const entityCoverage = claimEntities.length
+    ? claimEntities.filter(entity => czyNazwaWlasnaWystepuje(entity, normalizedEvidence)).length / claimEntities.length
+    : 1;
+
+  // Akceptujemy sensowną parafrazę, ale tylko po przejściu twardych
+  // konfliktów/liczb/jednostek. To naprawia false rejecti bez otwierania
+  // walidatora na dowolne podobieństwo tekstowe.
+  if (tokenCoverage >= 0.28 && (sharedConcepts.length > 0 || entityCoverage >= 0.5)) {
+    return { ok: true, mode: 'paraphrase', overlap: tokenCoverage, sharedConcepts, entityCoverage };
+  }
+  if (options.allowCrossLanguageExactEvidence === true && sharedConcepts.length > 0 && tokenCoverage >= 0.18) {
+    return { ok: true, overlap: tokenCoverage, mode: 'cross_language_paraphrase', sharedConcepts, entityCoverage };
   }
   return semantic;
+}
+function tokenyPokryciaBezStop(value) {
+  return [...new Set(normalizujClaim(value).split(' ').filter(t => t.length >= 3 && !COVERAGE_STOPWORDS.has(t)))];
 }
 function tokenyPokrycia(value) {
   return [...new Set(normalizujClaim(value).split(' ').filter(t => t.length >= 3 && !COVERAGE_STOPWORDS.has(t)))];
@@ -206,9 +232,14 @@ function sprawdzPokrycieClaimamiOdpowiedzi(answer, claims) {
       const sharedEntities = sentenceEntities.filter(entity => row.entities.includes(entity)).length;
       const conceptCoverage = row.concepts.size ? sharedConcepts / row.concepts.size : 0;
       const entityCoverage = row.entities.length ? sharedEntities / row.entities.length : 0;
-      return Math.max(best, covered, conceptCoverage >= 0.5 ? 0.75 : 0, entityCoverage >= 0.5 ? 0.75 : 0);
+      const semanticCoverage = Math.max(
+        covered,
+        conceptCoverage >= 0.5 ? 0.62 : 0,
+        entityCoverage >= 0.5 && covered >= 0.25 ? 0.62 : 0
+      );
+      return Math.max(best, semanticCoverage);
     }, 0);
-    if (maxCoverage < 0.65) uncovered.push({ index: sentenceIndex, text: sentence.slice(0, 180) });
+    if (maxCoverage < 0.55) uncovered.push({ index: sentenceIndex, text: sentence.slice(0, 180) });
   }
   return {
     ok: uncovered.length === 0,
