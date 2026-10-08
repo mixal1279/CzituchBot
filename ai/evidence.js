@@ -84,4 +84,13 @@ function buildEvidenceRepairContext(claims, blocks, allowedSourceIds = null, max
   ].join('\n')).join('\n\n');
 }
 
-module.exports = { normalizeEvidenceText, parseEvidenceBlocks, quoteExists, splitEvidenceSentences, rankEvidenceForClaim, buildEvidenceRepairContext };
+function buildQuestionEvidenceContext(question, blocks, allowedSourceIds = null, limit = 6) {
+  const candidates = rankEvidenceForClaim(question, blocks, allowedSourceIds, limit);
+  if (!candidates.length) return '';
+  return candidates.map((candidate, index) =>
+    'EVIDENCE CANDIDATE ' + (index + 1) + ': SOURCE ' + candidate.sourceId.replace(/^SOURCE\s+/i, '') +
+    '\nQUOTE: ' + candidate.quote.slice(0, 500)
+  ).join('\n\n');
+}
+
+module.exports = { normalizeEvidenceText, parseEvidenceBlocks, quoteExists, splitEvidenceSentences, rankEvidenceForClaim, buildEvidenceRepairContext, buildQuestionEvidenceContext };
