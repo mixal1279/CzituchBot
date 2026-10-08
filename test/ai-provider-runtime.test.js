@@ -40,10 +40,11 @@ test('Groq request body never contains signal; AbortSignal is passed in SDK tran
 });
 
 test('validator timeout is capped by remaining budget and keeps a reserve for fallback', () => {
-  assert.equal(computeValidatorTimeout(12000), 6000);
-  assert.equal(computeValidatorTimeout(7500), 6000);
-  assert.equal(computeValidatorTimeout(5000), 3500);
-  assert.equal(computeValidatorTimeout(2999), null);
+  assert.equal(computeValidatorTimeout(15000), 10000);
+  assert.equal(computeValidatorTimeout(12410), 9910);
+  assert.equal(computeValidatorTimeout(9849), 7349);
+  assert.equal(computeValidatorTimeout(8500), 6000);
+  assert.equal(computeValidatorTimeout(6499), null);
   assert.equal(computeValidatorTimeout(0), null);
 });
 
