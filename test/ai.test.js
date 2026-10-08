@@ -557,3 +557,60 @@ console.log('AI regression tests: OK');
   assert.equal(runtime.computeValidatorTimeout(8499, { maxTimeoutMs: 9000, reserveMs: 2500, minTimeoutMs: 6000 }), null);
   assert.equal(runtime.computeValidatorTimeout(8500, { maxTimeoutMs: 9000, reserveMs: 2500, minTimeoutMs: 6000 }), 6000);
 }
+
+
+{
+  // Partial acceptance must return only individually verified claims, never
+  // the unsupported remainder of the original answer.
+  const source = '[SOURCE 1]\\nWheatley przejął kontrolę nad systemem.';
+  const partial = normalizujWynikWalidatora({
+    valid: true,
+    reason: 'Jedno twierdzenie jest potwierdzone, drugie nie.',
+    confidence: 0.92,
+    unsupported_claims: ['GLaDOS została całkowicie wyłączona.'],
+    supported: true,
+    relevant: true,
+    complete: false,
+    hallucination: false,
+    claims: [
+      {
+        claim: 'Wheatley przejął kontrolę nad systemem.',
+        supported: true,
+        source_ids: ['SOURCE 1'],
+        evidence_quote: 'Wheatley przejął kontrolę nad systemem.',
+        reason: 'zgodne ze źródłem',
+      },
+      {
+        claim: 'GLaDOS została całkowicie wyłączona.',
+        supported: false,
+        source_ids: [],
+        evidence_quote: '',
+        reason: 'brak potwierdzenia',
+      },
+    ],
+  }, 'test-model', 'gemini', new Set(['SOURCE 1']), source,
+  'Wheatley przejął kontrolę nad systemem. GLaDOS została całkowicie wyłączona.');
+  assert.equal(partial.status, 'soft_accepted');
+  assert.equal(partial.ok, true);
+  assert.equal(partial.complete, false);
+  assert.match(partial.partialAnswer, /Wheatley przejął kontrolę nad systemem/);
+  assert.doesNotMatch(partial.partialAnswer, /GLaDOS/);
+  assert.match(partial.partialAnswer, /Nie wszystkie szczegóły/);
+}
+
+{
+  // Unknown source IDs remain a hard failure even when another claim is valid.
+  const source = '[SOURCE 1]\\nWheatley przejął kontrolę nad systemem.';
+  const result = normalizujWynikWalidatora({
+    valid: true, reason: 'mixed sources', confidence: 0.95,
+    unsupported_claims: ['drugi claim'],
+    supported: true, relevant: true, complete: false, hallucination: false,
+    claims: [
+      { claim: 'Wheatley przejął kontrolę nad systemem.', supported: true, source_ids: ['SOURCE 1'], evidence_quote: 'Wheatley przejął kontrolę nad systemem.', reason: 'ok' },
+      { claim: 'Drugi claim jest prawdziwy.', supported: true, source_ids: ['SOURCE 999'], evidence_quote: 'Drugi claim', reason: 'źródło' },
+    ],
+  }, 'test-model', 'gemini', new Set(['SOURCE 1']), source,
+  'Wheatley przejął kontrolę nad systemem. Drugi claim jest prawdziwy.');
+  assert.equal(result.status, 'rejected');
+  assert.equal(result.partialAnswer, null);
+}
