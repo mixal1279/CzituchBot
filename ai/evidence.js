@@ -82,8 +82,13 @@ function buildEvidenceRepairContext(claims, blocks, allowedSourceIds = null, max
     // Repair nie może dostawać przypadkowych fragmentów, które mają tylko
     // pojedyncze wspólne słowo z claimem. Taki materiał zachęca model do
     // dopowiadania niepotwierdzonych przyczyn, motywacji i nazw własnych.
-    const candidates = rankEvidenceForClaim(claim.claim, blocks, allowedSourceIds, 4)
+    const claimText = String(claim.claim || '');
+    const claimIsCausal = /\b(?:bo|ponieważ|poniewaz|dlatego|doprowadz\w*|spowod\w*|przyczyn\w*|motyw\w*|przez)\b/i.test(claimText);
+    const claimIsSourceMeta = /\b(?:źródł\w*|zrodł\w*|danych|materiał\w*|material\w*|evidence|cytat\w*)\b/i.test(claimText);
+    const candidates = rankEvidenceForClaim(claimText, blocks, allowedSourceIds, 6)
       .filter(candidate => Number(candidate.score) >= 0.20)
+      .filter(candidate => !claimIsCausal || /\b(?:bo|ponieważ|poniewaz|dlatego|doprowadz\w*|spowod\w*|przyczyn\w*|motyw\w*|przez|zatem|więc|wiec)\b/i.test(candidate.quote))
+      .filter(candidate => !claimIsSourceMeta)
       .slice(0, 2);
     if (!candidates.length) continue;
     rows.push({ claim: String(claim.claim).slice(0, 500), candidates: candidates.map(candidate => ({ source_id: candidate.sourceId, evidence_quote: candidate.quote.slice(0, 500), score: candidate.score })) });
