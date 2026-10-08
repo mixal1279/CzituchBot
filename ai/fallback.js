@@ -5,6 +5,7 @@ const CLASSIFIERS = Object.freeze({
   auth: /(?:401|403|unauthori[sz]ed|forbidden|invalid.*key|api.?key|missing.*key|brak .*key)/i,
   invalid_request: /(?:invalid.*request|bad request|400|invalid.*schema|malformed.*json|json.*invalid)/i,
   transient: /(?:timeout|timed ?out|ETIMEDOUT|ECONNRESET|5\d\d|temporar|overloaded|unavailable|fetch failed|aborted|abort|network error|socket hang up)/i,
+  provider_cooldown: /(?:generation cooldown|provider cooldown|temporarily disabled)/i,
 });
 
 function classifyFailure(error = '') {
@@ -13,6 +14,7 @@ function classifyFailure(error = '') {
   if (CLASSIFIERS.auth.test(text)) return 'auth';
   if (CLASSIFIERS.invalid_request.test(text)) return 'invalid_request';
   if (CLASSIFIERS.transient.test(text)) return 'transient';
+  if (CLASSIFIERS.provider_cooldown.test(text)) return 'provider_cooldown';
   return 'unknown';
 }
 
@@ -21,8 +23,8 @@ const GENERATION_FALLBACK_CHAIN = [
   'groq:openai/gpt-oss-20b',
   'gemini:gemini-3.8-flash',
   'gemini:gemini-3.5-flash-lite',
-  'openrouter:default',
   'xkiro:default',
+  'openrouter:default',
 ];
 
 function nextFallbacks({ failure = 'unknown', attempted = [], failedProviders = [], maxFallbacks = null } = {}) {
@@ -46,7 +48,7 @@ function nextFallbacks({ failure = 'unknown', attempted = [], failedProviders = 
 function shouldRetryFailure(failure) {
   // Retry means "try another provider", not "repeat the same failing endpoint".
   // Auth errors are useful only for cross-provider fallback.
-  return ['transient', 'quota', 'auth', 'invalid_request', 'unknown'].includes(failure);
+  return ['transient', 'quota', 'auth', 'invalid_request', 'provider_cooldown', 'unknown'].includes(failure);
 }
 
 module.exports = {
