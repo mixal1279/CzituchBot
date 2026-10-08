@@ -380,6 +380,11 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
       }).ok);
     });
 
+  const softQuoteBindingOnly = unsupportedEvidenceClaimIndexes.length > 0
+    && unsupportedEvidenceReasons
+      .filter(item => unsupportedEvidenceClaimIndexes.includes(item.claimIndex))
+      .every(item => item.reasons.every(reason => /evidence_quote nie występuje w wskazanym źródle/i.test(reason)));
+
   const localRejectReasons = [];
   if (!rawClaims.length) localRejectReasons.push('claims_missing');
   if (tooManyClaims) localRejectReasons.push('claims_over_limit');
@@ -407,6 +412,7 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
     && unsupported.length === 0
     && localRejectReasons.length > 0
     && softEvidenceOnly
+    && softQuoteBindingOnly
     && localRejectReasons.every(reason => softEvidenceReasons.has(reason));
 
   const status = accepted
