@@ -254,6 +254,9 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
   // Semantic support is evaluated against that same source block, while quote integrity
   // and high-risk causal/action mismatches are checked deterministically.
   const parsedEvidenceBlocks = parseEvidenceBlocks(dane);
+  const allowedBlocks = allowed
+    ? parsedEvidenceBlocks.filter(block => allowed.has(block.sourceId))
+    : parsedEvidenceBlocks;
   const effectiveClaimSourceIds = claims.map(c => {
     const ids = new Set(Array.isArray(c.source_ids) ? c.source_ids : []);
     if (c.evidence_quote) {
