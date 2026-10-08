@@ -1,4 +1,5 @@
 'use strict';
+// CI regression: causal evidence contract.
 
 const { assessEvidence } = require('./core');
 
