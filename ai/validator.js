@@ -4,7 +4,7 @@
 const { assessEvidence } = require('./core');
 
 const { sprawdzTwardeFaktyOdpowiedzi } = require('./response');
-const { czyDowodSemantyczniePokrywaClaim, zgodnoscStrukturalna, sprawdzTwardeKonflikty, sprawdzPokrycieClaimamiOdpowiedzi } = require('./claimValidation');
+const { czyDowodSemantyczniePokrywaClaim, czyRelacjaPrzyczynowaPokrywaClaim, zgodnoscStrukturalna, sprawdzTwardeKonflikty, sprawdzPokrycieClaimamiOdpowiedzi } = require('./claimValidation');
 const { parseEvidenceBlocks, quoteExists, rankEvidenceForClaim, buildEvidenceRepairContext } = require('./evidence');
 
 // Kontrakt walidatora jest celowo mały: generator potrzebuje tylko jasnego
@@ -191,6 +191,10 @@ function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '') {
       .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
     if (claimCausal && !quoteCausal && !causalRe.test(blockNorm)) {
       reasons.push('claim dodaje relację przyczynową nieobecną w całym źródle: ' + id);
+      continue;
+    }
+    if (claimCausal && !quoteCausal && !czyRelacjaPrzyczynowaPokrywaClaim(block.content, claim)) {
+      reasons.push('źródło zawiera sygnał przyczynowy, ale nie wiąże go bezpośrednio z claimem: ' + id);
       continue;
     }
 
