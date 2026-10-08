@@ -2528,6 +2528,7 @@ Pytanie użytkownika: ${pytanie}`;
     }))}`);
 
     const fallbackSteps = {
+      'groq:openai/gpt-oss-120b': () => zapytajGlowny(Math.max(maxTok, 300), prompt, 'openai/gpt-oss-120b'),
       'groq:openai/gpt-oss-20b': () => zapytajGlowny(Math.max(maxTok, 300), prompt, 'openai/gpt-oss-20b'),
       'xkiro:default': () => zapytajXKiro(Math.max(maxTok, 300), prompt, powod),
       'gemini:gemini-3.8-flash': () => zapytajGeminiFallback(Math.max(maxTok, 300), prompt, powod),
@@ -2535,32 +2536,41 @@ Pytanie użytkownika: ${pytanie}`;
       'openrouter:default': () => zapytajOpenRouterFallback(Math.max(maxTok, 300), prompt, powod),
     };
 
-    for (const step of nextFallbacks({
+    let candidateSteps = nextFallbacks({
       failure: failureType,
       attempted,
       failedProviders: [...failedFallbackProviders],
-      maxFallbacks: Math.max(0, aiState.maxGeneracji - aiState.generacje),
-    })) {
-      if (!GENERATION_FALLBACK_CHAIN.includes(step) || step === 'groq:openai/gpt-oss-120b') continue;
+      maxFallbacks: phase === 'repair'
+        ? 0
+        : Math.max(0, aiState.maxInitialGeneracji - aiState.initialGeneracje),
+    });
+    if (phase === 'repair' && lastSuccessfulGenerationStep) {
+      candidateSteps = [lastSuccessfulGenerationStep];
+    }
+
+    for (const step of candidateSteps) {
+      if (!GENERATION_FALLBACK_CHAIN.includes(step) || (step === 'groq:openai/gpt-oss-120b' && phase !== 'repair')) continue;
       const fn = fallbackSteps[step];
       if (!fn) continue;
 
       attempted.push(step);
+      const attemptStartedAt = Date.now();
       const candidate = await fn();
       lastResult = candidate;
       if (candidate.tekst && !candidate.ucieta) {
+        lastSuccessfulGenerationStep = step;
+        recordGenerationAttempt({ provider: candidate.provider, model: candidate.model, status: 'success', latencyMs: Date.now() - attemptStartedAt });
         if (step.startsWith('gemini:')) return ujednolicWynik(candidate, 'gemini', step.split(':')[1]);
-        if (step.startsWith('openrouter:')) return ujednolicWynik(candidate, 'openrouter', KONFIGURACJA.openrouterGeneratorModel);
+        if (step.startsWith('openrouter:')) return ujednolicWynik(candidate, 'openrouter', candidate.model || KONFIGURACJA.openrouterGeneratorModel);
         if (step.startsWith('groq:')) return ujednolicWynik(candidate, 'groq', step.split(':')[1]);
         return candidate;
       }
 
       const providerFailure = classifyFailure(candidate.error || '');
+      recordGenerationAttempt({ provider: candidate.provider, model: candidate.model, status: 'error', failure: providerFailure, latencyMs: Date.now() - attemptStartedAt });
       aiState.fallbackReasons.push(providerFailure);
-      if (['auth', 'quota', 'invalid_request'].includes(providerFailure)) {
-        failedFallbackProviders.add(step);
-        console.warn(`[AI][${requestId}] disabling fallback ${step} for this request: ${providerFailure}`);
-      }
+      failedFallbackProviders.add(step);
+      console.warn(`[AI][${requestId}] disabling fallback ${step} for this request: ${providerFailure}`);
     }
 
     // Zwracamy rzeczywiście ostatnią próbę, a nie pierwszy 120B.
