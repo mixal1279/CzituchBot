@@ -1561,8 +1561,21 @@ Zwróć WYŁĄCZNIE JSON: {"valid":true/false,"reason":"krótki powód","confide
 }
 
 let geminiValidatorCooldownUntil = 0;
-let geminiGenerationCooldownUntil = 0;
+let geminiGenerationCooldowns = Object.create(null);
 let groqHistoryCooldownUntil = 0;
+
+function geminiGenerationCooldownUntil(model) {
+  return Number(geminiGenerationCooldowns[String(model || '')] || 0);
+}
+
+function ustawGeminiGenerationCooldown(model, ms) {
+  const key = String(model || 'unknown');
+  geminiGenerationCooldowns[key] = Date.now() + Math.max(0, Number(ms) || 0);
+}
+
+function wyczyscGeminiGenerationCooldown(model) {
+  delete geminiGenerationCooldowns[String(model || '')];
+}
 
 async function walidujOdpowiedzOpenRouter(persona, pytanie, odpowiedz, dane, requestId = '-', requestState = null, requestMeta = null) {
   if (!KONFIGURACJA.openrouterKey || !dane) {
@@ -2311,7 +2324,7 @@ Pytanie użytkownika: ${pytanie}`;
   async function zapytajGeminiFallback(maxTok = 700, overrideSystemPrompt = systemPrompt, powod = 'Groq') {
     if (!moznaWykonacGeneracje('gemini', 'gemini-3.8-flash')) return wynikPusty('gemini', 'gemini-3.8-flash', 'AI request budget exceeded');
     if (!KONFIGURACJA.geminiKey) return wynikPusty('gemini', 'gemini-3.8-flash', 'brak GEMINI_API_KEY');
-    if (Date.now() < geminiGenerationCooldownUntil) return wynikPusty('gemini', 'gemini-3.8-flash', 'Gemini generation cooldown');
+    if (Date.now() < geminiGenerationCooldownUntil('gemini-3.8-flash')) return wynikPusty('gemini', 'gemini-3.8-flash', 'Gemini generation cooldown: gemini-3.8-flash');
     const messages = buildMessages(overrideSystemPrompt);
     const prompt = messages.user;
     const controller = new AbortController();
@@ -2336,7 +2349,7 @@ Pytanie użytkownika: ${pytanie}`;
       return { tekst, ucieta: data?.candidates?.[0]?.finishReason === 'MAX_TOKENS', provider: 'gemini', model: AI_MODELS.generatorGemini };
     } catch (err) {
       console.error(`[Gemini] Fallback nieudany (${powod}):`, err.message);
-      if (/quota|rate.?limit|resource.?exhausted|429|limit:/i.test(err.message || '')) geminiGenerationCooldownUntil = Date.now() + 90_000;
+      if (/quota|rate.?limit|resource.?exhausted|429|limit:/i.test(err.message || '')) ustawGeminiGenerationCooldown('gemini-3.8-flash', 90_000);
       return wynikPusty('gemini', 'gemini-3.8-flash', err.message);
     } finally { clearTimeout(timer); }
   }
@@ -2344,7 +2357,7 @@ Pytanie użytkownika: ${pytanie}`;
   async function zapytajGeminiLiteFallback(maxTok = 700, overrideSystemPrompt = systemPrompt, powod = 'Gemini 3.8 Flash') {
     if (!moznaWykonacGeneracje('gemini', 'gemini-3.5-flash-lite')) return wynikPusty('gemini', 'gemini-3.5-flash-lite', 'AI request budget exceeded');
     if (!KONFIGURACJA.geminiKey) return wynikPusty('gemini', 'gemini-3.5-flash-lite', 'brak GEMINI_API_KEY');
-    if (Date.now() < geminiGenerationCooldownUntil) return wynikPusty('gemini', 'gemini-3.5-flash-lite', 'Gemini generation cooldown');
+    if (Date.now() < geminiGenerationCooldownUntil('gemini-3.5-flash-lite')) return wynikPusty('gemini', 'gemini-3.5-flash-lite', 'Gemini generation cooldown: gemini-3.5-flash-lite');
     const messages = buildMessages(overrideSystemPrompt);
     const prompt = messages.user;
     const controller = new AbortController();
@@ -2369,7 +2382,7 @@ Pytanie użytkownika: ${pytanie}`;
       return { tekst, ucieta: data?.candidates?.[0]?.finishReason === 'MAX_TOKENS', provider: 'gemini', model: AI_MODELS.generatorGeminiLite };
     } catch (err) {
       console.error(`[Gemini Lite] Fallback nieudany (${powod}):`, err.message);
-      if (/quota|rate.?limit|resource.?exhausted|429|limit:/i.test(err.message || '')) geminiGenerationCooldownUntil = Date.now() + 90_000;
+      if (/quota|rate.?limit|resource.?exhausted|429|limit:/i.test(err.message || '')) ustawGeminiGenerationCooldown('gemini-3.5-flash-lite', 90_000);
       return wynikPusty('gemini', 'gemini-3.5-flash-lite', err.message);
     } finally { clearTimeout(timer); }
   }
@@ -2391,12 +2404,21 @@ Pytanie użytkownika: ${pytanie}`;
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data?.error?.message || `HTTP ${response.status}`);
-      const tekst = (data?.choices?.[0]?.message?.content || '').trim();
-      if (!tekst) throw new Error('OpenRouter zwrócił pustą odpowiedź');
+      const choice = data?.choices?.[0] || null;
+      const message = choice?.message || null;
+      const tekst = (typeof message?.content === 'string' ? message.content : '').trim();
+      if (!tekst) {
+        const detail = formatProviderError('openrouter', data?.model || KONFIGURACJA.openrouterGeneratorModel, null, {
+          status: response.status,
+          code: data?.error?.code,
+          type: data?.error?.type,
+        });
+        throw new Error(`OpenRouter empty content; response=${detail}; finish_reason=${choice?.finish_reason || 'none'}; has_reasoning=${Boolean(message?.reasoning || message?.reasoning_content)}`);
+      }
       return { tekst, ucieta: data?.choices?.[0]?.finish_reason === 'length', provider: 'openrouter', model: data?.model || KONFIGURACJA.openrouterGeneratorModel };
     } catch (err) {
       console.error(`[OpenRouter] Fallback nieudany (${powod}):`, err.message);
-      return wynikPusty('openrouter', KONFIGURACJA.openrouterGeneratorModel, err.message);
+      return wynikPusty('openrouter', KONFIGURACJA.openrouterGeneratorModel, formatProviderError('openrouter', KONFIGURACJA.openrouterGeneratorModel, err));
     } finally { clearTimeout(timer); }
   }
 
@@ -2480,13 +2502,25 @@ Pytanie użytkownika: ${pytanie}`;
         requestBlokada120b = true;
         zablokuj120BGlobalnie(err.message);
       }
-      return wynikPusty('groq', model, err.message);
+      return wynikPusty('groq', model, formatProviderError('groq', model, err));
     }
   }
 
   // Fallback state is shared by all generation attempts in this request.
   // Failed endpoints are remembered for the whole request, including transient
   // and unknown errors, so repair does not immediately repeat an outage.
+  const formatProviderError = (provider, model, err, extra = {}) => {
+    const message = String(err?.message || err || 'unknown').slice(0, 1200);
+    const details = {
+      provider, model,
+      message,
+      status: err?.status ?? err?.statusCode ?? extra.status ?? null,
+      code: err?.code ?? extra.code ?? null,
+      type: err?.type ?? extra.type ?? null,
+    };
+    return JSON.stringify(details);
+  };
+
   const failedFallbackProviders = new Set();
   let lastSuccessfulGenerationStep = null;
 
