@@ -2,7 +2,7 @@
 
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { createGroqCompletion, computeValidatorTimeout } = require('../ai/provider-runtime');
+const { createGroqCompletion, computeValidatorTimeout, computeGenerationTimeout } = require('../ai/provider-runtime');
 const { classifyFailure, shouldRetryFailure, nextFallbacks, selectRepairFallbacks, repairBudgetBlockReason } = require('../ai/fallback');
 
 test('Groq request body never contains signal; AbortSignal is passed in SDK transport options', async () => {
@@ -39,16 +39,25 @@ test('Groq request body never contains signal; AbortSignal is passed in SDK tran
   assert.equal(timedOut, true, 'aborting the request must still cancel the in-flight SDK request');
 });
 
-test('validator timeout is capped by remaining budget and keeps a reserve for fallback', () => {
-  assert.equal(computeValidatorTimeout(23309), 15000);
-  assert.equal(computeValidatorTimeout(21830), 15000);
-  assert.equal(computeValidatorTimeout(15000), 12500);
-  assert.equal(computeValidatorTimeout(12983), 10483);
-  assert.equal(computeValidatorTimeout(12410), 9910);
-  assert.equal(computeValidatorTimeout(9849), 7349);
-  assert.equal(computeValidatorTimeout(8500), 6000);
-  assert.equal(computeValidatorTimeout(8499), null);
+test('validator timeout is capped and reserves time for fallback', () => {
+  assert.equal(computeValidatorTimeout(23309), 9000);
+  assert.equal(computeValidatorTimeout(21830), 9000);
+  assert.equal(computeValidatorTimeout(15000), 8500);
+  assert.equal(computeValidatorTimeout(12983), 6483);
+  assert.equal(computeValidatorTimeout(12410), 5910);
+  assert.equal(computeValidatorTimeout(10500), 4000);
+  assert.equal(computeValidatorTimeout(10499), null);
   assert.equal(computeValidatorTimeout(0), null);
+});
+
+test('generation timeout skips calls that cannot run for long enough while preserving fallback reserve', () => {
+  assert.equal(computeGenerationTimeout(25000), 9000);
+  assert.equal(computeGenerationTimeout(16000), 9000);
+  assert.equal(computeGenerationTimeout(10000), 5500);
+  assert.equal(computeGenerationTimeout(8500), 4000);
+  assert.equal(computeGenerationTimeout(8499), null);
+  assert.equal(computeGenerationTimeout(4499), null);
+  assert.equal(computeGenerationTimeout(Number.NaN), null);
 });
 
 test('provider and validator failures receive distinct categories', () => {

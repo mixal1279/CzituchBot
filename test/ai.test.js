@@ -429,7 +429,7 @@ console.log('AI regression tests: OK');
   });
   assert.deepEqual(GEMINI_VALIDATOR_JSON_SCHEMA.required, VALIDATOR_JSON_SCHEMA.required);
   assert.match(require('fs').readFileSync(require('path').join(__dirname, '..', 'czituch_bot.js'), 'utf8'), /AI_TAVILY_CACHE_FILE \|\| path\.join\(process\.env\.AI_CACHE_DIR \|\| __dirname, 'tavily_cache\.json'\)/);
-  assert.match(require('fs').readFileSync(require('path').join(__dirname, '..', 'czituch_bot.js'), 'utf8'), /computeValidatorTimeout\(remainingMs, \{ maxTimeoutMs: 9000, reserveMs: 2500, minTimeoutMs: 6000 \}\)/);
+  assert.match(require('fs').readFileSync(require('path').join(__dirname, '..', 'czituch_bot.js'), 'utf8'), /computeValidatorTimeout\(remainingMs, \{[\s\S]*?reserveMs: isLastValidatorSlot \? 2500 : 10500,[\s\S]*?minTimeoutMs: 4000/);
 }
 
 {
