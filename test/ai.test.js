@@ -562,7 +562,7 @@ console.log('AI regression tests: OK');
 {
   // Partial acceptance must return only individually verified claims, never
   // the unsupported remainder of the original answer.
-  const source = '[SOURCE 1]\\nWheatley przejął kontrolę nad systemem.';
+  const source = '[SOURCE 1]\nWheatley przejął kontrolę nad systemem.';
   const partial = normalizujWynikWalidatora({
     valid: true,
     reason: 'Jedno twierdzenie jest potwierdzone, drugie nie.',
@@ -600,7 +600,7 @@ console.log('AI regression tests: OK');
 
 {
   // Unknown source IDs remain a hard failure even when another claim is valid.
-  const source = '[SOURCE 1]\\nWheatley przejął kontrolę nad systemem.';
+  const source = '[SOURCE 1]\nWheatley przejął kontrolę nad systemem.';
   const result = normalizujWynikWalidatora({
     valid: true, reason: 'mixed sources', confidence: 0.95,
     unsupported_claims: ['drugi claim'],
