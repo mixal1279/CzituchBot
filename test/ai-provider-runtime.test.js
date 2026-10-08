@@ -3,7 +3,7 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
 const { createGroqCompletion, computeValidatorTimeout } = require('../ai/provider-runtime');
-const { classifyFailure, shouldRetryFailure, nextFallbacks, selectRepairFallbacks } = require('../ai/fallback');
+const { classifyFailure, shouldRetryFailure, nextFallbacks, selectRepairFallbacks, repairBudgetBlockReason } = require('../ai/fallback');
 
 test('Groq request body never contains signal; AbortSignal is passed in SDK transport options', async () => {
   const controller = new AbortController();
@@ -50,6 +50,7 @@ test('validator timeout is capped by remaining budget and keeps a reserve for fa
 test('provider and validator failures receive distinct categories', () => {
   const cases = [
     ['network transport error: fetch failed', 'transport_error'],
+    ['xKiro validator TRANSPORT_ERROR', 'transport_error'],
     ['This operation was aborted', 'timeout_abort'],
     ['OpenRouter empty content', 'empty_response'],
     ['OpenRouter returned invalid JSON', 'invalid_json'],
@@ -61,6 +62,7 @@ test('provider and validator failures receive distinct categories', () => {
   ];
   for (const [message, expected] of cases) assert.equal(classifyFailure(message), expected, message);
   assert.equal(classifyFailure({ status: 'rejected', reason: 'unsupported claims' }), 'validator_rejection');
+  assert.equal(classifyFailure({ status: 'rejected', reason: 'invalid JSON schema from validator' }), 'schema_rejection');
   assert.equal(classifyFailure({ status: 'accepted', reason: 'grounded' }), null);
   assert.equal(classifyFailure({ status: 'inconclusive', reason: 'insufficient evidence' }), 'validator_inconclusive');
   assert.equal(classifyFailure({ status: 'unavailable', reason: 'fallback validator niedostępny' }), 'provider_unavailable');
@@ -100,4 +102,19 @@ test('repair after validator rejection selects only configured healthy providers
     availableProviders: [],
     maxFallbacks: 1,
   }), []);
+});
+
+test('repair checks shared model-call and generation limits before selecting a provider', () => {
+  const budget = {
+    remainingMs: 5000,
+    generations: 5,
+    maxGenerations: 6,
+    repairGenerations: 0,
+    maxRepairGenerations: 1,
+    modelCalls: 8,
+    maxModelCalls: 8,
+  };
+  assert.equal(repairBudgetBlockReason(budget), 'model_calls_exhausted');
+  assert.equal(repairBudgetBlockReason({ ...budget, modelCalls: 7 }), null);
+  assert.equal(repairBudgetBlockReason({ ...budget, modelCalls: 7, remainingMs: 0 }), 'request_deadline_exhausted');
 });

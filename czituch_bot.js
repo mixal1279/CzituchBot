@@ -71,7 +71,7 @@ const { resolveGameEntity, scoreExternalGameCandidate, externalGameCandidateMatc
 const { extractExplicitUserMemories, mergeMemoryRecords, buildVerifiedMemoryContext, pruneExpiredMemories } = require('./ai/memory');
 const { parseMemoryCommand, forgetMemories, describeMemories } = require('./ai/memory_manager');
 const { decomposeQuestion, buildAdvancedRetrievalPlan } = require('./ai/retrieval');
-const { classifyFailure, nextFallbacks, selectRepairFallbacks, GENERATION_FALLBACK_CHAIN } = require('./ai/fallback');
+const { classifyFailure, nextFallbacks, selectRepairFallbacks, repairBudgetBlockReason, GENERATION_FALLBACK_CHAIN } = require('./ai/fallback');
 const { createGroqCompletion, computeValidatorTimeout } = require('./ai/provider-runtime');
 const { createAIMetrics, recordAIMetric, snapshotAIMetrics } = require('./ai/metrics');
 const { sanitizeRequestText } = require('./ai/limits');
@@ -2861,6 +2861,15 @@ Pytanie użytkownika: ${pytanie}`;
       'openrouter:default': () => zapytajOpenRouterFallback(Math.max(maxTok, 300), prompt, powod),
     };
 
+    const repairBudgetFailure = phase === 'repair' ? repairBudgetBlockReason({
+      remainingMs: typeof aiState.remainingMs === 'function' ? aiState.remainingMs() : null,
+      generations: aiState.generacje,
+      maxGenerations: aiState.maxGeneracji,
+      repairGenerations: aiState.repairGeneracje,
+      maxRepairGenerations: aiState.maxRepairGeneracji,
+      modelCalls: aiState.modelCalls,
+      maxModelCalls: aiState.maxModelCalls,
+    }) : null;
     let candidateSteps = nextFallbacks({
       failure: failureType,
       attempted,
@@ -2873,21 +2882,23 @@ Pytanie użytkownika: ${pytanie}`;
       // Semantic repair should not blindly repeat the model that just produced
       // the rejected answer. Prefer the next healthy provider in the chain,
       // excluding endpoints already known to have failed in this request.
-      const repairFallbacks = selectHealthyFallbacks({
-        failure: 'grounded_reject',
-        attempted: [],
-        failedProviders: [...failedFallbackProviders],
-        exclude: lastSuccessfulGenerationStep ? [lastSuccessfulGenerationStep] : [],
-        maxFallbacks: 1,
-      });
-      candidateSteps = repairFallbacks;
+      candidateSteps = repairBudgetFailure ? [] : selectHealthyFallbacks({
+          failure: 'grounded_reject',
+          attempted: [],
+          failedProviders: [...failedFallbackProviders],
+          exclude: lastSuccessfulGenerationStep ? [lastSuccessfulGenerationStep] : [],
+          maxFallbacks: 1,
+        });
     }
 
     const policy = phase === 'repair' ? 'validator_rejection' : (failureType || 'unknown');
-    console.log(`[AI][${requestId}] fallback policy=${policy} next=${JSON.stringify(candidateSteps)}${phase === 'repair' && !candidateSteps.length ? ' reason=no_healthy_provider_or_repair_budget' : ''}`);
+    const repairEmptyReason = repairBudgetFailure || 'no_healthy_provider';
+    console.log(`[AI][${requestId}] fallback policy=${policy} next=${JSON.stringify(candidateSteps)}${phase === 'repair' && !candidateSteps.length ? ` reason=${repairEmptyReason}` : ''}`);
     if (phase === 'repair' && !candidateSteps.length) {
-      aiState.fallbackReasons.push('provider_unavailable');
-      return wynikPusty('pipeline', 'none', 'no_healthy_provider_after_validator_rejection_or_repair_budget_exhausted');
+      aiState.fallbackReasons.push(repairBudgetFailure ? 'budget_exhausted' : 'provider_unavailable');
+      return wynikPusty('pipeline', 'none', repairBudgetFailure
+        ? `repair_${repairBudgetFailure}`
+        : 'no_healthy_provider_after_validator_rejection');
     }
 
     for (const step of candidateSteps) {

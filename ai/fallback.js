@@ -8,14 +8,16 @@ const CLASSIFIERS = Object.freeze({
   provider_cooldown: /(?:generation cooldown|provider cooldown|temporarily disabled)/i,
 });
 
+const SCHEMA_REJECTION = /(?:schema.{0,24}(?:reject|invalid|fail)|(?:reject|invalid|fail).{0,24}schema|invalid json|malformed json|json parse|niespełniający lokalnego kontraktu)/i;
+
 const DETAIL_CLASSIFIERS = Object.freeze([
   ['budget_exhausted', /(?:budget|budżet|limit(?:e|u)? (?:model|generation)|model calls exhausted)/i],
   ['timeout_abort', /(?:timeout|timed ?out|ETIMEDOUT|AbortError|operation was aborted|abort(?:ed)?)/i],
   ['invalid_json', /(?:invalid json|malformed json|json parse|niepoprawny json)/i],
-  ['schema_rejection', /(?:schema.{0,24}(?:reject|invalid|fail)|(?:reject|invalid|fail).{0,24}schema|niespełniający lokalnego kontraktu|validator JSON.*contract rejection)/i],
+  ['schema_rejection', SCHEMA_REJECTION],
   ['empty_response', /(?:empty content|empty response|pusty content|pusta odpowiedź)/i],
   ['provider_cooldown', /(?:generation cooldown|provider cooldown|temporarily disabled)/i],
-  ['transport_error', /(?:transport error|network error|fetch failed|socket hang up|ECONNRESET|connection refused)/i],
+  ['transport_error', /(?:transport[_ -]?error|network[_ -]?error|fetch failed|socket hang up|ECONNRESET|connection refused)/i],
   ['provider_unavailable', /(?:provider unavailable|brak .*api.?key|provider.*(?:unavailable|niedostęp)|fallback.*niedostęp|validator.*niedostęp|\bunavailable\b)/i],
   ['validator_rejection', /(?:validator rejected|validator rejection|grounded_reject|unsupported_or_unverified_claims)/i],
 ]);
@@ -23,7 +25,10 @@ const DETAIL_CLASSIFIERS = Object.freeze([
 function classifyFailure(error = '') {
   const status = error && typeof error === 'object' ? String(error.status || '').toLowerCase() : '';
   if (status === 'accepted' || status === 'soft_accepted') return null;
-  if (status === 'rejected') return 'validator_rejection';
+  if (status === 'rejected') {
+    const rejectionText = [error.message, error.reason, error.error, error.diagnostic].filter(Boolean).join(' ');
+    return SCHEMA_REJECTION.test(rejectionText) ? 'schema_rejection' : 'validator_rejection';
+  }
   if (status === 'inconclusive') return 'validator_inconclusive';
   if (status === 'unavailable' && ![error.message, error.reason, error.error, error.diagnostic].some(Boolean)) {
     return 'provider_unavailable';
@@ -81,6 +86,28 @@ function selectRepairFallbacks({ failedProviders = [], exclude = [], availablePr
     .slice(0, Math.max(0, Number(maxFallbacks) || 0));
 }
 
+function repairBudgetBlockReason({
+  remainingMs,
+  generations,
+  maxGenerations,
+  repairGenerations,
+  maxRepairGenerations,
+  modelCalls,
+  maxModelCalls,
+} = {}) {
+  if (Number.isFinite(Number(remainingMs)) && Number(remainingMs) <= 0) return 'request_deadline_exhausted';
+  if (Number.isFinite(Number(modelCalls)) && Number.isFinite(Number(maxModelCalls)) && Number(modelCalls) >= Number(maxModelCalls)) {
+    return 'model_calls_exhausted';
+  }
+  if (Number.isFinite(Number(generations)) && Number.isFinite(Number(maxGenerations)) && Number(generations) >= Number(maxGenerations)) {
+    return 'generation_budget_exhausted';
+  }
+  if (Number.isFinite(Number(repairGenerations)) && Number.isFinite(Number(maxRepairGenerations)) && Number(repairGenerations) >= Number(maxRepairGenerations)) {
+    return 'repair_generation_budget_exhausted';
+  }
+  return null;
+}
+
 function shouldRetryFailure(failure) {
   // Retry means "try another provider", not "repeat the same failing endpoint".
   // Auth errors are useful only for cross-provider fallback.
@@ -92,5 +119,6 @@ module.exports = {
   classifyFailure,
   nextFallbacks,
   selectRepairFallbacks,
+  repairBudgetBlockReason,
   shouldRetryFailure,
 };
