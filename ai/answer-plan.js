@@ -42,7 +42,13 @@ function buildAnswerPlan(question, routing = {}) {
   }
   if (routing.is_lore) slots.add('entity_context');
   if (routing.is_gameplay) slots.add('steps');
-  if (slots.has('why')) slots.add('causal_explanation');
+  if (slots.has('why')) {
+    slots.add('causal_explanation');
+    slots.add('cause_evidence');
+  }
+  // Pytania przyczynowe wymagają osobnego dowodu dla faktu i dla przyczyny.
+  // Sam fakt, że wydarzenie A poprzedza B, nie jest dowodem relacji A -> B.
+  const causalQuestion = slots.has('why');
 
   const clauses = q.split(
     /\s+(?=(?:i|oraz|a także|natomiast)\s+(?:jak|dlaczego|czemu|kiedy|gdzie|ile|czy|kto|kim|co|czym|jaki|jaka|jakie)\b)/iu,
@@ -65,9 +71,10 @@ function buildAnswerPlan(question, routing = {}) {
     complexity: requirements.length >= 4 || clauses.length >= 2
       ? 'high'
       : requirements.length >= 2 ? 'medium' : 'low',
+    causalQuestion,
     instruction: requirements.length
-      ? 'Odpowiedź musi pokryć: ' + requirements.map(r => r.id).join(', ') + '. Nie dodawaj niepotwierdzonych faktów.'
-      : 'Odpowiedz bezpośrednio i nie dodawaj niepotwierdzonych faktów.',
+      ? 'Odpowiedź musi pokryć: ' + requirements.map(r => r.id).join(', ') + '. Każde zdanie faktograficzne ma być atomowym claimem opartym na jednym zweryfikowanym fragmencie evidence. Dla pytania „dlaczego/czemu” oddziel fakt od przyczyny: podaj przyczynę tylko wtedy, gdy konkretny evidence quote wyraźnie łączy przyczynę ze skutkiem. Nie traktuj kolejności wydarzeń jako przyczynowości. Jeśli brak takiego dowodu, powiedz wprost, że źródła nie potwierdzają przyczyny.'
+      : 'Odpowiedz bezpośrednio i nie dodawaj niepotwierdzonych faktów.';
   };
 }
 
