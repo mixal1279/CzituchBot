@@ -186,11 +186,11 @@ function czyRelacjaPrzyczynowaPokrywaClaim(evidence, claim) {
   const claimEntities = wyodrebnijNazwyWlasne(claimText);
   const claimTokens = tokenyPokryciaBezStop(claimText);
   const sentences = evidenceText
-    .replace(/\\s+/g, ' ')
-    .split(/(?<=[.!?])\\s+/)
+    .replace(/\s+/g, ' ')
+    .split(/(?<=[.!?])\s+/)
     .map(s => s.trim())
     .filter(Boolean);
-  const relationRe = /(?:bo|poniewaz|gdyz|dlatego|z powodu|w celu|dzieki|przez|spowod\\w*|doprowadz\\w*|umozliw\\w*|because|therefore|due to|caused|led to|so that)/i;
+  const relationRe = /(?:bo|poniewaz|gdyz|dlatego|z powodu|w celu|dzieki|przez|spowod\w*|doprowadz\w*|umozliw\w*|because|therefore|due to|caused|led to|so that)/i;
   return sentences.some(sentence => {
     if (!relationRe.test(sentence)) return false;
     const normalized = normalizujClaim(sentence);
@@ -201,7 +201,6 @@ function czyRelacjaPrzyczynowaPokrywaClaim(evidence, claim) {
     return entityOk && tokenOverlapScore >= 0.22;
   });
 }
-
 function zgodnoscStrukturalna(evidence, claim, options = {}) {
   const e = String(evidence || '');
   const c = String(claim || '');
