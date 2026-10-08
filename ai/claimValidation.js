@@ -96,7 +96,7 @@ function sprawdzTwardeKonflikty(evidence, claim, options = {}) {
 
   const evidenceQuantities = wyodrebnijJednostkoweWartosci(e);
   const claimQuantities = wyodrebnijJednostkoweWartosci(c);
-  if (claimQuantities.some(q => !evidenceQuantities.includes(q))) return { ok: false, reason: 'claim zawiera wartość liczbową z niezgodną lub niepotwierdzoną jednostką' };
+  if (claimQuantities.some(q => !evidenceQuantities.includes(q))) return { ok: false, reason: 'claim zawiera wartość liczbową z niezgodnymi lub niepotwierdzonymi jednostkami' };
 
   const claimTemporal = wyodrebnijMarkery(c, TEMPORAL_RE);
   const evidenceTemporal = wyodrebnijMarkery(e, TEMPORAL_RE);
@@ -159,7 +159,7 @@ function zgodnoscStrukturalna(evidence, claim, options = {}) {
   const evidenceQuantities = wyodrebnijJednostkoweWartosci(e);
   const claimQuantities = wyodrebnijJednostkoweWartosci(c);
   if (claimQuantities.some(q => !evidenceQuantities.includes(q))) {
-    return { ok: false, reason: 'claim zawiera wartość liczbową z niezgodną lub niepotwierdzoną jednostką' };
+    return { ok: false, reason: 'claim zawiera wartość liczbową z niezgodnymi lub niepotwierdzonymi jednostkami' };
   }
 
   const claimCausal = wyodrebnijMarkery(c, CAUSAL_RE);
