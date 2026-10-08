@@ -1795,7 +1795,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
   const aiState = createAIRequestContext({
     requestId,
     maxCzasMs: 25000,
-    maxGeneracji: 3,
+    maxGeneracji: 5,
     maxModelCalls: 8,
     maxValidatorow: 2,
     maxWyszukanTavily: testMaxTavilySearches,
@@ -1803,6 +1803,13 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
   let daneDoWalidacji = null;
   const budzetPrzekroczony = () => aiState.isExpired();
   const pozostalyCzasMs = () => aiState.remainingMs();
+  // Dzielimy pozostały deadline między aktualną i potencjalne kolejne próby.
+  // Dzięki temu jeden zawieszony provider nie może zjeść całych 25 s i zablokować fallbacku.
+  const timeoutDlaGeneracji = () => {
+    const remaining = pozostalyCzasMs();
+    const remainingSlots = Math.max(1, aiState.maxGeneracji - aiState.generacje + 1);
+    return Math.max(1, Math.min(remaining, Math.floor(remaining / remainingSlots)));
+  };
   const zarezerwujModel = (purpose = 'model') => {
     const reserved = aiState.reserveModel(purpose);
     if (!reserved) {
@@ -2296,7 +2303,7 @@ Pytanie użytkownika: ${pytanie}`;
     const messages = buildMessages(overrideSystemPrompt);
     const prompt = messages.user;
     const controller = new AbortController();
-    const timeoutMs = Math.max(1, Math.min(30000, pozostalyCzasMs()));
+    const timeoutMs = timeoutDlaGeneracji();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
       const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${encodeURIComponent(KONFIGURACJA.geminiKey)}`, {
@@ -2390,7 +2397,7 @@ Pytanie użytkownika: ${pytanie}`;
     const remainingMs = pozostalyCzasMs();
     if (!Number.isFinite(remainingMs) || remainingMs <= 0) return wynikPusty('xkiro', model, 'AI request deadline exceeded');
     const controller = new AbortController();
-    const timeoutMs = Math.max(1, Math.min(30000, remainingMs));
+    const timeoutMs = timeoutDlaGeneracji();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
       const response = await fetch('https://api.xkiro.com/v1/chat/completions', {
@@ -2473,23 +2480,19 @@ Pytanie użytkownika: ${pytanie}`;
     let result = allow120b
       ? await zapytajGlowny(Math.max(maxTok, 300), prompt, 'openai/gpt-oss-120b')
       : wynikPusty('groq', 'openai/gpt-oss-120b', '120B skipped for this generation cycle');
+    let lastResult = result;
     let failureType = classifyFailure(result.error || '');
-
-    // Nie zużywamy drugiego slotu na retry 120B przy budżecie 3 generacji.
-    // Pusty/ucięty wynik przechodzi od razu do fallback chain, dzięki czemu
-    // limit 120B nie blokuje Gemini w tym samym requestcie.
-    if (allow120b && result.ucieta && !['quota', 'auth', 'invalid_request'].includes(failureType)) {
-      console.log('[AI][' + requestId + '] 120B response truncated; przechodzę do fallbacku bez retry 120B');
-    }
 
     if (result.tekst && !result.ucieta) return result;
 
     aiState.fallbackReasons.push(failureType || 'unknown');
     const attempted = ['groq:openai/gpt-oss-120b'];
+    const remainingGenerationSlots = Math.max(0, aiState.maxGeneracji - aiState.generacje);
     console.log(`[AI][${requestId}] fallback policy=${failureType || 'unknown'} next=${JSON.stringify(nextFallbacks({
       failure: failureType,
       attempted,
       failedProviders: [...failedFallbackProviders],
+      maxFallbacks: remainingGenerationSlots,
     }))}`);
 
     const fallbackSteps = {
@@ -2504,6 +2507,7 @@ Pytanie użytkownika: ${pytanie}`;
       failure: failureType,
       attempted,
       failedProviders: [...failedFallbackProviders],
+      maxFallbacks: Math.max(0, aiState.maxGeneracji - aiState.generacje),
     })) {
       if (!GENERATION_FALLBACK_CHAIN.includes(step) || step === 'groq:openai/gpt-oss-120b') continue;
       const fn = fallbackSteps[step];
@@ -2511,6 +2515,7 @@ Pytanie użytkownika: ${pytanie}`;
 
       attempted.push(step);
       const candidate = await fn();
+      lastResult = candidate;
       if (candidate.tekst && !candidate.ucieta) {
         if (step.startsWith('gemini:')) return ujednolicWynik(candidate, 'gemini', step.split(':')[1]);
         if (step.startsWith('openrouter:')) return ujednolicWynik(candidate, 'openrouter', KONFIGURACJA.openrouterGeneratorModel);
@@ -2519,16 +2524,16 @@ Pytanie użytkownika: ${pytanie}`;
       }
 
       const providerFailure = classifyFailure(candidate.error || '');
+      aiState.fallbackReasons.push(providerFailure);
       if (['auth', 'quota', 'invalid_request'].includes(providerFailure)) {
         failedFallbackProviders.add(step);
-        aiState.fallbackReasons.push(providerFailure);
         console.warn(`[AI][${requestId}] disabling fallback ${step} for this request: ${providerFailure}`);
       }
     }
 
-    // Preserve the actual last failure instead of falsely reporting OpenRouter
-    // when OpenRouter was never reached or returned a different error.
-    return wynikPusty(
+    // Zwracamy rzeczywiście ostatnią próbę, a nie pierwszy 120B.
+    // Dzięki temu SUMMARY pokazuje prawdziwy provider/model/error po wyczerpaniu fallbacku.
+    return lastResult || wynikPusty(
       result?.provider || 'groq',
       result?.model || AI_MODELS.generatorPrimary,
       result?.error || 'AI fallback chain exhausted',
