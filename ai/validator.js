@@ -365,8 +365,8 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
   const partialAnswerCandidate = partialBody
     ? partialBody + '. Nie wszystkie szczegóły da się potwierdzić w dostępnych źródłach.'
     : '';
-  const partialHardFacts = partialAnswerCandidate
-    ? sprawdzTwardeFaktyOdpowiedzi(partialAnswerCandidate, dane, '')
+  const partialHardFacts = partialBody
+    ? sprawdzTwardeFaktyOdpowiedzi(partialBody + '.', dane, '')
     : { ok: false, unsupported: ['brak bezpiecznego claimu do odpowiedzi częściowej'] };
   const partialFormat = partialAnswerCandidate
     ? sprawdzKompletnoscOdpowiedzi(partialAnswerCandidate)
