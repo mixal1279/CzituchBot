@@ -278,7 +278,20 @@ assert.match(require('fs').readFileSync(require('path').join(__dirname, '..', 'c
   assert.equal(bad.ok, false);
 }
 
-console.log('AI regression tests: OK');
+
+{
+  assert.equal(classifyFailure('unsupported model parameter'), 'unknown');
+  assert.equal(classifyFailure('aborted'), 'transient');
+  assert.equal(shouldRetryFailure('auth'), true);
+  assert.deepEqual(nextFallbacks({
+    attempted: ['groq:openai/gpt-oss-120b'],
+    maxFallbacks: 2,
+  }), [
+    'groq:openai/gpt-oss-20b',
+    'gemini:gemini-3.8-flash',
+  ]);
+}
+\nconsole.log('AI regression tests: OK');
 
 {
   const source = require('fs').readFileSync(require('path').join(__dirname, '..', 'czituch_bot.js'), 'utf8');
@@ -413,7 +426,7 @@ console.log('AI regression tests: OK');
 
 {
   const budget = createRequestBudget();
-  assert.equal(budget.maxGenerations, 3);
+  assert.equal(budget.maxGenerations, 5);
   assert.equal(budget.requestTimeoutMs, 25000);
   assert.equal(budget.maxValidators, 2);
 }
