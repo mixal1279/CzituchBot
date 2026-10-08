@@ -1836,7 +1836,7 @@ async function walidujOdpowiedzAI(persona, pytanie, odpowiedz, dane, historiaRoz
     const result = await walidujOdpowiedzGeminiModel(models[i], persona, pytanie, odpowiedz, dane, historiaRozmowy, requestId, requestState, requestMeta);
     if (requestState) requestState.validatorResults.push({ model: models[i], status: result.status, complete: result.complete === true, confidence: Number.isFinite(result.confidence) ? result.confidence : null, claimCoverage: Array.isArray(result.claims) && result.claims.length ? result.claims.filter(c => c.supported === true).length / result.claims.length : null, validationDiagnostics: result.diagnostics || null });
     console.log(`[AI][${requestId}] validator #${i + 1} ${models[i]} → ${result.status}${result.diagnostics ? ` localReject=${JSON.stringify(result.diagnostics.localRejectReasons)} claimCoverage=${result.diagnostics.claimCoverage}` : ''}`);
-    if (result.status === 'accepted' || result.status === 'rejected') return result;
+    if (result.status === 'accepted' || result.status === 'soft_accepted' || result.status === 'rejected') return result;
     last = result;
   }
   if (requestState && budzetValidatoraPrzekroczony()) {
@@ -1873,7 +1873,7 @@ async function walidujOdpowiedzAI(persona, pytanie, odpowiedz, dane, historiaRoz
           : null,
         validationDiagnostics: xkiroResult.diagnostics || null,
       });
-      if (xkiroResult.status === 'accepted' || xkiroResult.status === 'rejected') return xkiroResult;
+      if (xkiroResult.status === 'accepted' || xkiroResult.status === 'soft_accepted' || xkiroResult.status === 'rejected') return xkiroResult;
       last = xkiroResult;
     }
   }
@@ -1889,7 +1889,7 @@ async function walidujOdpowiedzAI(persona, pytanie, odpowiedz, dane, historiaRoz
   // Brak Gemini nie jest błędem logicznym: OpenRouter jest pełnoprawnym
   // fallbackiem validatora, a nie tylko ratunkiem po błędzie sieciowym Gemini.
   const fallback = await walidujOdpowiedzOpenRouter(persona, pytanie, odpowiedz, dane, requestId, requestState, requestMeta);
-  if (fallback.status === 'accepted' || fallback.status === 'rejected') return fallback;
+  if (fallback.status === 'accepted' || fallback.status === 'soft_accepted' || fallback.status === 'rejected') return fallback;
   return { ...fallback, status: 'unavailable', ok: false, technicalError: true, unsupported_claims: [], reason: fallback.reason || 'Gemini i fallback validatora są technicznie niedostępne' };
 }
 
@@ -3008,6 +3008,10 @@ function oczyscOdpowiedzPrzedWalidacja(tekst) {
     });
   if (maWalidowac) {
     let walidacja = await validateAI(aiProfile === 'billy' ? 'billy' : aiProfile === 'edzzi' ? 'edzzi' : aiProfile === 'angie' ? 'angie' : 'generic', pytanie, odp, daneDoWalidacji, historiaRozmowy, requestId, aiState, metadaneRequestu);
+    if (walidacja.status === 'soft_accepted' && walidacja.partialAnswer) {
+      odp = walidacja.partialAnswer;
+      console.log(`[AI][${requestId}] partial answer accepted with ${walidacja.diagnostics?.partialClaimCount || 0} verified claims`);
+    }
     const validationFailure = classifyFailure(walidacja);
     if (validationFailure) aiState.fallbackReasons.push(validationFailure);
     if (walidacja.status === 'unavailable' && walidacja.provider) {
@@ -3034,7 +3038,7 @@ function oczyscOdpowiedzPrzedWalidacja(tekst) {
         reason: 'odpowiedź odmawia mimo dostępnych danych referencyjnych',
       };
     }
-    if (walidacja.status === 'accepted') {
+    if (walidacja.status === 'accepted' || walidacja.status === 'soft_accepted') {
       const beforeGuard = walidacja;
       walidacja = zastosujDeterministyczneGuards(walidacja, odp, daneDoWalidacji, pytanie, { maxZdania: responseCfg.maxSentences, maxZnakow: 1800 }, routingAI, aiPlan.responseProfile);
       if (walidacja.status !== beforeGuard.status) {
@@ -3087,7 +3091,8 @@ function oczyscOdpowiedzPrzedWalidacja(tekst) {
         if (nowaOdp) {
           odp = oczyscOdpowiedzPrzedWalidacja(nowaOdp);
           walidacja = await validateAI(aiProfile === 'billy' ? 'billy' : aiProfile === 'edzzi' ? 'edzzi' : aiProfile === 'angie' ? 'angie' : 'generic', pytanie, odp, daneDoWalidacji, historiaRozmowy, requestId, aiState, metadaneRequestu);
-          if (walidacja.status === 'accepted') {
+          if (walidacja.status === 'soft_accepted' && walidacja.partialAnswer) odp = walidacja.partialAnswer;
+          if (walidacja.status === 'accepted' || walidacja.status === 'soft_accepted') {
             walidacja = zastosujDeterministyczneGuards(walidacja, odp, daneDoWalidacji, pytanie, { maxZdania: responseCfg.maxSentences, maxZnakow: 1800 }, routingAI, aiPlan.responseProfile);
           }
           if (walidacja.status === 'accepted' && daneDoWalidacji && AI_POLICY.czyOdpowiedzToJednoznacznaOdmowa(odp)) {
