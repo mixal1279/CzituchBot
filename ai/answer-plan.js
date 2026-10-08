@@ -44,7 +44,7 @@ function buildAnswerPlan(question, routing = {}) {
   if (routing.is_gameplay) slots.add('steps');
   if (slots.has('why')) {
     slots.add('causal_explanation');
-    slots.add('cause_evidence');
+    // Dowód przyczyny jest wymaganiem wewnętrznego kontraktu, nie osobnym sygnałem odpowiedzi.
   }
   // Pytania przyczynowe wymagają osobnego dowodu dla faktu i dla przyczyny.
   // Sam fakt, że wydarzenie A poprzedza B, nie jest dowodem relacji A -> B.
