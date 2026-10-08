@@ -134,13 +134,37 @@ function normalizujIdZrodla(value) {
   return match ? `SOURCE ${match[1]}` : raw;
 }
 
-function ocenClaimEvidence(dane, sourceIds, evidenceQuote, claim = '') {
+function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '') {
   if (!Array.isArray(sourceIds) || !sourceIds.length || typeof evidenceQuote !== 'string') {
     return { ok: false, reason: 'brak poprawnego source_id lub evidence_quote' };
   }
   const quote = evidenceQuote.trim();
   if (quote.length < 3 || quote.length > 500) {
     return { ok: false, reason: 'evidence_quote ma nieprawidłową długość' };
+  }
+
+  const claimNorm = String(claim || '').toLocaleLowerCase('pl-PL')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const quoteNorm = claimNorm ? String(quote).toLocaleLowerCase('pl-PL')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '') : '';
+
+  const causalRe = /(?:\b(?:bo|poniewaz|gdyz|dlatego|celem|because|therefore)\b|\bz\s+powodu\b|\bw\s+celu\b|\bzeby\b|\baby\b|\bdzieki\b|\bbecause\s+of\b|\bdue\s+to\b|\bspowodow\w*\b|\bdoprowadz\w*\b|\bumozliw\w*\b)/iu;
+  const claimCausal = causalRe.test(claimNorm);
+  const quoteCausal = causalRe.test(quoteNorm);
+
+  const quoteCaptured = /captur\w*|kidnapp\w*|abduct\w*|porwan\w*|schwyt\w*/i.test(quoteNorm);
+  const quoteKilled = /kill\w*|murder\w*|zabij\w*|zabil\w*|zabila\w*|zabita\w*|zabite\w*|zabici\w*|zabity\w*|zabicie\w*|smier\w*/i.test(quoteNorm);
+  const claimCaptured = /captur\w*|kidnapp\w*|abduct\w*|porwan\w*|schwyt\w*/i.test(claimNorm);
+  const claimKilled = /kill\w*|murder\w*|zabij\w*|zabil\w*|zabila\w*|zabita\w*|zabite\w*|zabici\w*|zabity\w*|zabicie\w*|smier\w*/i.test(claimNorm);
+
+  if (claimKilled && quoteCaptured && !quoteKilled) {
+    return { ok: false, reason: 'claim zawiera zabójstwo, a evidence wskazuje jedynie schwytanie/porwanie' };
+  }
+  if (claimCaptured && quoteKilled && !quoteCaptured) {
+    return { ok: false, reason: 'claim zawiera schwytanie/porwanie, a evidence wskazuje zabójstwo' };
+  }
+  if (claimCausal && !quoteCausal) {
+    return { ok: false, reason: 'claim dodaje relację przyczynową, której nie zawiera wskazany evidence_quote' };
   }
 
   const blocks = parseEvidenceBlocks(dane);
@@ -158,29 +182,19 @@ function ocenClaimEvidence(dane, sourceIds, evidenceQuote, claim = '') {
       continue;
     }
 
-    const quoteStructural = zgodnoscStrukturalna(quote, claim, {
+    const supported = zgodnoscStrukturalna(block.content, claim, {
       allowCrossLanguageExactEvidence: true,
-      allowDistributedEvidence: false,
+      allowDistributedEvidence: true,
     });
-    if (quoteStructural.ok) {
-      return { ok: true, sourceId: id, mode: 'exact_quote', reason: 'cytat występuje w źródle i bezpośrednio wspiera claim' };
+    if (supported.ok) {
+      return {
+        ok: true,
+        sourceId: id,
+        mode: 'source_context',
+        reason: 'cytat jest rzeczywistym fragmentem źródła, a ten sam source block wspiera claim',
+      };
     }
-
-    const hardQuote = sprawdzTwardeKonflikty(quote, claim, { allowDistributedEvidence: false });
-    const hardBlock = sprawdzTwardeKonflikty(block.content, claim, { allowDistributedEvidence: false });
-    if (!hardQuote.ok || !hardBlock.ok) {
-      reasons.push(quoteStructural.reason || hardQuote.reason || hardBlock.reason);
-      continue;
-    }
-
-    const contextual = zgodnoscStrukturalna(block.content, claim, {
-      allowCrossLanguageExactEvidence: true,
-      allowDistributedEvidence: false,
-    });
-    if (contextual.ok) {
-      return { ok: true, sourceId: id, mode: 'quote_with_source_context', reason: 'cytat jest rzeczywisty, a claim jest potwierdzony przez ten sam blok źródłowy' };
-    }
-    reasons.push(quoteStructural.reason || contextual.reason || 'evidence nie potwierdza claimu');
+    reasons.push(supported.reason || 'evidence nie potwierdza claimu');
   }
 
   return { ok: false, reason: reasons[0] || 'brak zweryfikowanego evidence' };
@@ -228,20 +242,24 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
     is_lore: /lore|fabuł|histori|kanon|canon/i.test(String(answer || '')),
   });
   const unknownSourceClaimIndexes = claims.map((c, index) => c.supported && (!c.source_ids.length || (allowed && c.source_ids.some(id => !allowed.has(id)))) ? index : -1).filter(index => index >= 0);
-  // Canonical evidence binding: the source id must be authorized, the quote must
-  // exist in that source, and the same claim must be supported by that quote or
-  // tightly bounded context from the same source.
+  // Canonical evidence binding: the quoted span must resolve to an allowed source.
+  // Semantic support is evaluated against that same source block, while quote integrity
+  // and high-risk causal/action mismatches are checked deterministically.
   const parsedEvidenceBlocks = parseEvidenceBlocks(dane);
-  const allowedBlocks = allowed
-    ? parsedEvidenceBlocks.filter(block => allowed.has(block.sourceId))
-    : parsedEvidenceBlocks;
-
-  const evidenceEvaluations = claims.map(c => {
-    const candidateIds = Array.isArray(c.source_ids)
-      ? c.source_ids.filter(id => !allowed || allowed.has(id))
-      : [];
-    return ocenClaimEvidence(dane, candidateIds, c.evidence_quote, c.claim);
+  const effectiveClaimSourceIds = claims.map(c => {
+    const ids = new Set(Array.isArray(c.source_ids) ? c.source_ids : []);
+    if (c.evidence_quote) {
+      for (const source of parsedEvidenceBlocks) {
+        if (allowed && !allowed.has(source.sourceId)) continue;
+        if (quoteExists(source.content, c.evidence_quote)) ids.add(source.sourceId);
+      }
+    }
+    return [...ids];
   });
+
+  const evidenceEvaluations = claims.map((c, index) =>
+    czyDowodPotwierdzaClaim(dane, effectiveClaimSourceIds[index], c.evidence_quote, c.claim)
+  );
   const evidenceQuoteVerified = evidenceEvaluations.map(result => result.ok);
   const claimSourceVerified = evidenceEvaluations.map(result => result.ok);
   const unsupportedEvidenceClaimIndexes = claims
