@@ -1811,7 +1811,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
     maxGeneracji: 6,
     maxInitialGeneracji: 5,
     maxRepairGeneracji: 1,
-    maxModelCalls: 8,
+    maxModelCalls: 12,
     maxValidatorow: 2,
     maxWyszukanTavily: testMaxTavilySearches,
   });
@@ -2490,7 +2490,15 @@ Pytanie użytkownika: ${pytanie}`;
       const timeoutMs = timeoutDlaGeneracji();
       const timer = setTimeout(() => controller.abort(), timeoutMs);
       try {
-        const response = await groqClient.chat.completions.create({ model, messages: [{ role: 'system', content: overrideSystemPrompt }, ...przygotujHistorieDoModelu(historiaRozmowy, 4), { role: 'user', content: kontekstDoGroq }], temperature, max_tokens: maxTok, reasoning_effort: model === 'openai/gpt-oss-120b' ? 'medium' : 'low', signal: controller.signal });
+        const response = await groqClient.chat.completions.create({
+          model,
+          messages: [{ role: 'system', content: overrideSystemPrompt }, ...przygotujHistorieDoModelu(historiaRozmowy, 4), { role: 'user', content: kontekstDoGroq }],
+          temperature,
+          max_completion_tokens: maxTok,
+          reasoning_effort: model === 'openai/gpt-oss-120b' ? 'medium' : 'low',
+          include_reasoning: false,
+          signal: controller.signal,
+        });
         return ujednolicWynik({ tekst: response.choices?.[0]?.message?.content, ucieta: response.choices?.[0]?.finish_reason === 'length' }, 'groq', model);
       } finally {
         clearTimeout(timer);
@@ -2587,8 +2595,19 @@ Pytanie użytkownika: ${pytanie}`;
         ? 0
         : Math.max(0, aiState.maxInitialGeneracji - aiState.initialGeneracje),
     });
-    if (phase === 'repair' && lastSuccessfulGenerationStep) {
-      candidateSteps = [lastSuccessfulGenerationStep];
+    if (phase === 'repair') {
+      // Semantic repair should not blindly repeat the model that just produced
+      // the rejected answer. Prefer the next healthy provider in the chain,
+      // excluding endpoints already known to have failed in this request.
+      const repairFallbacks = nextFallbacks({
+        failure: 'grounded_reject',
+        attempted: [],
+        failedProviders: [...failedFallbackProviders, ...(lastSuccessfulGenerationStep ? [lastSuccessfulGenerationStep] : [])],
+        maxFallbacks: 1,
+      });
+      candidateSteps = repairFallbacks.length
+        ? repairFallbacks
+        : (lastSuccessfulGenerationStep ? [lastSuccessfulGenerationStep] : []);
     }
 
     for (const step of candidateSteps) {

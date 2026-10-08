@@ -453,6 +453,16 @@ console.log('AI regression tests: OK');
   assert.equal(shouldRetryFailure('unknown'), true);
   assert.equal(shouldRetryFailure('provider_cooldown'), true);
   assert.deepEqual(nextFallbacks({attempted:['groq:openai/gpt-oss-120b','groq:openai/gpt-oss-20b','gemini:gemini-3.8-flash','gemini:gemini-3.5-flash-lite'], maxFallbacks:1}), ['xkiro:default']);
+  assert.deepEqual(nextFallbacks({
+    failure: 'grounded_reject',
+    failedProviders: [
+      'groq:openai/gpt-oss-120b',
+      'groq:openai/gpt-oss-20b',
+      'gemini:gemini-3.8-flash',
+      'gemini:gemini-3.5-flash-lite',
+    ],
+    maxFallbacks: 1,
+  }), ['xkiro:default']);
 }
 
 {
@@ -462,4 +472,12 @@ console.log('AI regression tests: OK');
   assert.equal(budget.maxRepairGenerations, 1);
   assert.equal(budget.requestTimeoutMs, 25000);
   assert.equal(budget.maxValidators, 2);
+  assert.equal(budget.maxModelCalls, 12);
+  {
+    const { createAIRequestContext } = require('../ai/requestContext');
+    const ctx = createAIRequestContext({ maxModelCalls: 12 });
+    assert.equal(ctx.maxModelCalls, 12);
+    assert.equal(ctx.reserveModel('aux-1'), true);
+    assert.equal(ctx.reserveModel('aux-2'), true);
+  }
 }
