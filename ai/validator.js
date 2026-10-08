@@ -180,27 +180,29 @@ function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '') {
   return sourceIds.some(id => {
     const block = pobierzBlokZrodla(dane, id);
     if (!block) return false;
-    const normalizedBlock = block.replace(/\s+/g, ' ').toLocaleLowerCase('pl-PL');
-    if (normalizedBlock.includes(quote) || czyCytatWystepujeWZrodle(block, evidenceQuote)) {
-      const structural = zgodnoscStrukturalna(block, claim, {
-        allowCrossLanguageExactEvidence: true,
-        allowDistributedEvidence: true,
-      });
-      if (structural.ok) return true;
 
-      const hard = sprawdzTwardeKonflikty(block, claim, { allowDistributedEvidence: true });
-      if (!hard.ok) return false;
+    // Cytat jest obowiązkowym dowodem po stronie źródła. Porównujemy go
+    // po normalizacji Unicode, interpunkcji, wielkości liter i białych znaków,
+    // ale nie pozwalamy zastąpić go samym podobieństwem semantycznym.
+    if (!czyCytatWystepujeWZrodle(block, evidenceQuote)) return false;
 
-      const cTokens = tokenyDowodu(claim);
-      const bTokens = new Set(tokenyDowodu(block));
-      const overlap = cTokens.length
-        ? cTokens.filter(t => [...bTokens].some(bt => bt === t || (t.length >= 6 && bt.startsWith(t.slice(0, 5))))).length / cTokens.length
-        : 0;
-      return overlap >= 0.18;
-    }
-    return czyDowodSemantyczniePokrywaClaim(block, quote, { allowCrossLanguageExactEvidence: true, allowDistributedEvidence: true })
-      && zgodnoscStrukturalna(block, claim, { allowCrossLanguageExactEvidence: true, allowDistributedEvidence: true }).ok
-      && czyDowodSemantyczniePokrywaClaim(block, claim, { allowCrossLanguageExactEvidence: true, allowDistributedEvidence: true });
+    const structural = zgodnoscStrukturalna(block, claim, {
+      allowCrossLanguageExactEvidence: true,
+      allowDistributedEvidence: true,
+    });
+    if (structural.ok) return true;
+
+    // Nie pozwalamy ścieżce parafrazy obchodzić kontroli przyczynowości.
+    // Claim typu "X zrobił Y, ponieważ Z" wymaga dowodu relacji przyczynowej.
+    const hard = sprawdzTwardeKonflikty(block, claim, { allowDistributedEvidence: false });
+    if (!hard.ok) return false;
+
+    const cTokens = tokenyDowodu(claim);
+    const bTokens = new Set(tokenyDowodu(block));
+    const overlap = cTokens.length
+      ? cTokens.filter(t => [...bTokens].some(bt => bt === t || (t.length >= 6 && bt.startsWith(t.slice(0, 5))))).length / cTokens.length
+      : 0;
+    return overlap >= 0.18;
   });
 }
 
