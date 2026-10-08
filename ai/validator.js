@@ -363,12 +363,29 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
     && !unknownSourceClaim
     && !unsupportedEvidenceClaim;
 
+  // A quote-binding defect can be repaired safely only when the claim itself
+  // is independently supported by the explicitly declared source block. This
+  // must never cover action/causal contradictions or unsupported synthesis.
+  const softEvidenceOnly = claims.length > 0
+    && unverifiedEvidenceQuoteIndexes.length > 0
+    && claims.every((claim, index) => {
+      if (!claim.supported || !claim.source_ids.length) return false;
+      const sourceBlocks = claim.source_ids
+        .map(id => parsedEvidenceBlocks.find(block => block.sourceId === id))
+        .filter(Boolean);
+      if (!sourceBlocks.length) return false;
+      return sourceBlocks.some(block => zgodnoscStrukturalna(block.content, claim.claim, {
+        allowCrossLanguageExactEvidence: true,
+        allowDistributedEvidence: true,
+      }).ok);
+    });
+
   const localRejectReasons = [];
   if (!rawClaims.length) localRejectReasons.push('claims_missing');
   if (tooManyClaims) localRejectReasons.push('claims_over_limit');
   if (malformedClaims) localRejectReasons.push('malformed_claims');
   if (unknownSourceClaim) localRejectReasons.push('unknown_source_id');
-  if (unsupportedEvidenceClaim) localRejectReasons.push('evidence_not_verified');
+  if (unsupportedEvidenceClaim && !softEvidenceOnly) localRejectReasons.push('evidence_not_verified');
   if (unverifiedEvidenceQuoteIndexes.length) localRejectReasons.push('evidence_quote_not_exact');
   if (claims.some(c => !c.supported) || wynik.unsupported_claims.some(v => typeof v === 'string' && v.trim())) localRejectReasons.push('unsupported_claims_reported');
   if (!answerCoverage.ok) localRejectReasons.push('answer_not_covered_by_claims');
@@ -380,10 +397,7 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
   if (maStarePola && wynik.complete !== true) localRejectReasons.push('model_marked_incomplete');
   if (maStarePola && wynik.hallucination !== false) localRejectReasons.push('model_flagged_hallucination');
 
-  const softEvidenceReasons = new Set([
-    'evidence_not_verified',
-    'evidence_quote_not_exact',
-  ]);
+  const softEvidenceReasons = new Set(['evidence_quote_not_exact']);
   const softAccepted = validFromModel === true
     && confidence >= 0.75
     && wynik.supported === true
@@ -392,6 +406,7 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
     && wynik.hallucination === false
     && unsupported.length === 0
     && localRejectReasons.length > 0
+    && softEvidenceOnly
     && localRejectReasons.every(reason => softEvidenceReasons.has(reason));
 
   const status = accepted
