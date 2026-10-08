@@ -521,7 +521,7 @@ const KONFIGURACJA = {
 
   // ---- xKiro (fallback po Groq 20B) ----
   xkiroKey: typeof process.env.XKIRO_API_KEY === 'string' ? process.env.XKIRO_API_KEY.replace(/[\r\n]/g, '').trim() : process.env.XKIRO_API_KEY,
-  xkiroModel: process.env.XKIRO_MODEL || 'qwen/qwen3.5-flash:free',
+  xkiroModel: process.env.XKIRO_MODEL || 'qwen/qwen3.5-397b-a17b:free',
 
   // ---- ITAD ----
   itadKey: process.env.ITAD_API_KEY,
