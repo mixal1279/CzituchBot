@@ -1788,6 +1788,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
   const validateAI = opcje.__testDeps?.validateAI || walidujOdpowiedzAI;
   const loadMemory = opcje.__testDeps?.loadMemory || wczytajZweryfikowanaPamiecAI;
   const testMaxTavilySearches = Number.isInteger(opcje.__testDeps?.maxWyszukanTavily) ? Math.max(2, opcje.__testDeps.maxWyszukanTavily) : 3;
+  const onAISummary = typeof opcje.__testDeps?.onSummary === 'function' ? opcje.__testDeps.onSummary : null;
   const verifiedMemoryUserId = memoryUserId || String(nick || '').toLowerCase();
   const verifiedMemoryPromise = loadMemory(verifiedMemoryUserId);
   systemPrompt = `${systemPrompt}\n\nNie umieszczaj w odpowiedzi nazw źródeł, atrybucji, etykiet „Źródło:” ani URL-i. Źródła są wyłącznie wewnętrznym materiałem RAG i walidacji.`;
@@ -1843,7 +1844,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
   };
   const zalogujPodsumowanieAI = (status = aiState.finalStatus) => {
     aiState.finalStatus = status;
-    console.log(`[AI][${requestId}] SUMMARY ${JSON.stringify({
+    const summary = {
       requestId, persona: aiProfile, category: kategoriaAI || 'pending',
       generatorAttempts: aiState.generacje, modelCalls: aiState.modelCalls, validatorCalls: aiState.validatory,
       validatorResults: aiState.validatorResults,
@@ -1863,7 +1864,12 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
       sourceCount: daneDoWalidacji ? (daneDoWalidacji.match(/\[(?:SOURCE|REFERENCE) [^\]]+\]/g) || []).length : 0,
       metrics: { ...AI_METRYKI, observability: snapshotAIMetrics(AI_OBSERVABILITY) },
       durationMs: Date.now() - aiState.startedAt, finalStatus: status,
-    })}`);
+    };
+    console.log(`[AI][${requestId}] SUMMARY ${JSON.stringify(summary)}`);
+    if (onAISummary) {
+      try { onAISummary(summary); } catch (err) { console.warn(`[AI][${requestId}] summary hook error: ${err.message}`); }
+    }
+  };
   };
   console.log(`[AI][${requestId}] start kategoria=pending persona=${aiProfile}`);
 
