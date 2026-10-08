@@ -481,3 +481,39 @@ console.log('AI regression tests: OK');
     assert.equal(ctx.reserveModel('aux-2'), true);
   }
 }
+
+
+{
+  const { rankEvidenceForClaim, classifyClaimType, evidenceRelationSignals } = require('../ai/evidence');
+  assert.equal(classifyClaimType('Dlaczego Wheatley przejął kontrolę nad GLaDOS?'), 'causal');
+  assert.equal(evidenceRelationSignals('Wheatley przejął kontrolę, ponieważ zamienił rdzenie.').causal, true);
+  const causal = rankEvidenceForClaim(
+    'Wheatley przejął kontrolę, ponieważ zamienił rdzenie.',
+    [
+      { sourceId: 'SOURCE 1', title: 'Portal 2', url: '', content: 'Wheatley przejął kontrolę nad systemem.' },
+      { sourceId: 'SOURCE 2', title: 'Portal 2', url: '', content: 'Wheatley przejął kontrolę, ponieważ zamienił rdzenie.' },
+    ],
+    new Set(['SOURCE 1', 'SOURCE 2']),
+    2,
+  );
+  assert.equal(causal[0].sourceId, 'SOURCE 2');
+  assert.ok(causal[0].score > causal[1].score);
+}
+
+{
+  const { czyRelacjaPrzyczynowaPokrywaClaim } = require('../ai/claimValidation');
+  assert.equal(
+    czyRelacjaPrzyczynowaPokrywaClaim(
+      'Wheatley przejął kontrolę, ponieważ zamienił rdzenie.',
+      'Wheatley przejął kontrolę, ponieważ zamienił rdzenie.'
+    ),
+    true
+  );
+  assert.equal(
+    czyRelacjaPrzyczynowaPokrywaClaim(
+      'Wheatley przejął kontrolę. GLaDOS wcześniej miała inne ciało, ponieważ coś się wydarzyło.',
+      'Wheatley przejął kontrolę, ponieważ zamienił rdzenie.'
+    ),
+    false
+  );
+}
