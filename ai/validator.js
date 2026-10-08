@@ -32,7 +32,7 @@ const GEMINI_VALIDATOR_JSON_SCHEMA = {
           evidence_quote: { type: 'string' },
           reason: { type: 'string' },
         },
-        required: ['claim', 'supported', 'source_ids', 'evidence_quote'],
+        required: ['claim', 'supported', 'source_ids', 'evidence_quote', 'reason'],
       },
     },
   },
@@ -49,6 +49,7 @@ const VALIDATOR_JSON_SCHEMA = {
       items: {
         ...GEMINI_VALIDATOR_JSON_SCHEMA.properties.claims.items,
         additionalProperties: false,
+        required: ['claim', 'supported', 'source_ids', 'evidence_quote', 'reason'],
       },
     },
   },

@@ -161,7 +161,7 @@ const policy = (q, recipe) => recipe(q) ? 'minecraft_recipe' : /pogoda/i.test(q)
 }
 
 assert.match(require('fs').readFileSync(require('path').join(__dirname, '..', 'czituch_bot.js'), 'utf8'), /generujOdpowiedz\(max_tokens, promptRetry, 'soft validation repair', false\)/);
-assert.match(require('fs').readFileSync(require('path').join(__dirname, '..', 'czituch_bot.js'), 'utf8'), /response_format: \{ type: 'json_object' \}/);
+assert.match(require('fs').readFileSync(require('path').join(__dirname, '..', 'czituch_bot.js'), 'utf8'), /response_format:\s*\{\s*type: 'json_schema'/);
 {
   assert.deepEqual(parseMemoryCommand('co o mnie pamiętasz?'), { type:'list' });
   assert.deepEqual(parseMemoryCommand('zapomnij Czituch'), { type:'forget', query:'Czituch' });
@@ -299,6 +299,24 @@ assert.match(require('fs').readFileSync(require('path').join(__dirname, '..', 'c
   assert.equal(classifyPipelineFailure('inconclusive'), 'validator_inconclusive');
   assert.equal(classifyPipelineFailure('unavailable', { reason: 'provider_timeout' }), 'provider_timeout');
   assert.equal(classifyPipelineFailure('accepted'), null);
+}
+
+
+{
+  const validatorSource = require('fs').readFileSync(require('path').join(__dirname, '..', 'ai', 'validator.js'), 'utf8');
+  assert.match(validatorSource, /required: \['claim', 'supported', 'source_ids', 'evidence_quote', 'reason'\]/);
+  assert.match(validatorSource, /additionalProperties: false/);
+
+  const botSource = require('fs').readFileSync(require('path').join(__dirname, '..', 'czituch_bot.js'), 'utf8');
+  assert.match(botSource, /response_format:\s*\{\s*type: 'json_schema'/);
+  assert.match(botSource, /name: 'czituch_ai_validator'/);
+  assert.match(botSource, /strict: true/);
+  assert.doesNotMatch(botSource, /response_format:\s*\{\s*type: 'json_object'/);
+  assert.match(botSource, /OpenRouter validator EMPTY_CONTENT/);
+  assert.match(botSource, /OpenRouter validator INVALID_JSON/);
+  assert.match(botSource, /OpenRouter validator SCHEMA_REJECT/);
+  assert.match(botSource, /failed_generation/);
+  assert.match(botSource, /abortLike/);
 }
 
 console.log('AI regression tests: OK');

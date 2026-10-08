@@ -1535,15 +1535,20 @@ Zwróć WYŁĄCZNIE JSON: {"valid":true/false,"reason":"krótki powód","confide
       return normalized;
     } finally { clearTimeout(timer); }
   } catch (err) {
-    console.error(`[AI][${requestId}] ${model} validator error:`, err.message);
     const message = String(err?.message || '');
+    const abortLike = err?.name === 'AbortError' || /aborted|abort|cancelled|canceled/i.test(message);
     const quota = /quota|rate.?limit|resource.?exhausted|429|limit:/i.test(message);
     const transient = quota
-      || /(?:HTTP\s*(?:408|409|429|500|502|503|504)|aborted|abort|timeout|timed out|network|fetch failed|ECONNRESET|ETIMEDOUT)/i.test(message);
-    // Gemini GenerateContent documents caller-side cancellation/timeouts as
-    // transient transport failures. Keep Gemini on a short cooldown and let
-    // the independent OpenRouter validator handle this request instead of
-    // spending another Gemini slot during a regeneration.
+      || abortLike
+      || /(?:HTTP\s*(?:408|409|429|500|502|503|504)|timeout|timed out|network|fetch failed|ECONNRESET|ETIMEDOUT)/i.test(message);
+    const elapsedMs = requestState?.startedAt ? Math.max(0, Date.now() - requestState.startedAt) : null;
+    const diagnostic = formatProviderError('gemini', model, err, {
+      elapsedMs,
+      abortLike,
+      quota,
+      remainingMs: typeof requestState?.remainingMs === 'function' ? requestState.remainingMs() : null,
+    });
+    console.error(`[AI][${requestId}] ${model} validator TRANSPORT_ERROR: ${diagnostic}`);
     if (transient) geminiValidatorCooldownUntil = Date.now() + (quota ? 90_000 : 60_000);
     return {
       status: 'unavailable',
@@ -1554,8 +1559,9 @@ Zwróć WYŁĄCZNIE JSON: {"valid":true/false,"reason":"krótki powód","confide
       provider: 'gemini',
       model,
       unsupported_claims: [],
-      reason: quota ? 'quota Gemini — przełączam validator' : (transient ? `przejściowy błąd validatora (${model}) — fallback` : `błąd validatora (${model})`),
-      error: message,
+      reason: quota ? 'quota Gemini — przełączam validator' : (abortLike ? `Gemini validator został anulowany (${model}) — fallback` : (transient ? `przejściowy błąd validatora (${model}) — fallback` : `błąd validatora (${model})`)),
+      error: diagnostic,
+      diagnostic,
     };
   }
 }
@@ -1599,35 +1605,69 @@ async function walidujOdpowiedzOpenRouter(persona, pytanie, odpowiedz, dane, req
         temperature: 0,
         max_tokens: 500,
         reasoning: { effort: 'low', exclude: true },
-        include_reasoning: false,
-        // Nie wymuszamy json_schema: część modeli OpenRouter (w tym fallback
-        // validatora) nie obsługuje tego parametru w identyczny sposób. Kontrakt
-        // nadal jest egzekwowany przez wytnijJsonWalidatora + normalizujWynikWalidatora.
-        // json_object daje modelowi prosty, szeroko wspierany tryb strukturyzacji.
-        response_format: { type: 'json_object' },
+        response_format: {
+          type: 'json_schema',
+          json_schema: {
+            name: 'czituch_ai_validator',
+            strict: true,
+            schema: VALIDATOR_JSON_SCHEMA,
+          },
+        },
       }), signal: controller.signal,
     });
     const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(data?.error?.message || `HTTP ${response.status}`);
-    const message = data?.choices?.[0]?.message || {};
+    if (!response.ok) {
+      throw new Error(formatProviderError('openrouter', data?.model || KONFIGURACJA.openrouterValidatorModel, null, {
+        status: response.status,
+        code: data?.error?.code,
+        type: data?.error?.type,
+        param: data?.error?.param,
+        responseData: data,
+      }));
+    }
+    const choice = data?.choices?.[0] || {};
+    const message = choice?.message || {};
     const rawContent = message?.content;
     const content = Array.isArray(rawContent)
       ? rawContent.map(part => typeof part === 'string' ? part : (part?.text || '')).join('').trim()
       : (typeof rawContent === 'string' ? rawContent.trim() : '');
+    if (!content) {
+      const diagnostic = formatProviderError('openrouter', data?.model || KONFIGURACJA.openrouterValidatorModel, null, {
+        status: response.status,
+        finish_reason: choice?.finish_reason || null,
+        refusal: message?.refusal ? String(message.refusal).slice(0, 500) : null,
+        has_reasoning: Boolean(message?.reasoning || message?.reasoning_content || message?.reasoning_details),
+        usage: data?.usage || null,
+      });
+      console.warn(`[AI][${requestId}] OpenRouter validator EMPTY_CONTENT: ${diagnostic}`);
+      return { status: 'unavailable', ok: false, technicalError: true, provider: 'openrouter', model: data?.model || KONFIGURACJA.openrouterValidatorModel, unsupported_claims: [], reason: 'OpenRouter validator zwrócił pusty content', error: diagnostic, diagnostic };
+    }
     const parsed = wytnijJsonWalidatora(content);
-    if (!content && message?.refusal) {
-      console.warn(`[AI][${requestId}] OpenRouter validator refusal: ${String(message.refusal).slice(0, 300)}`);
+    if (!parsed) {
+      const diagnostic = formatProviderError('openrouter', data?.model || KONFIGURACJA.openrouterValidatorModel, null, {
+        status: response.status,
+        finish_reason: choice?.finish_reason || null,
+        content_preview: content.slice(0, 700),
+      });
+      console.warn(`[AI][${requestId}] OpenRouter validator INVALID_JSON: ${diagnostic}`);
+      return { status: 'unavailable', ok: false, technicalError: true, provider: 'openrouter', model: data?.model || KONFIGURACJA.openrouterValidatorModel, unsupported_claims: [], reason: 'OpenRouter validator zwrócił niepoprawny JSON', error: diagnostic, diagnostic };
     }
     const normalized = normalizujWynikWalidatora(parsed, data?.model || KONFIGURACJA.openrouterValidatorModel, 'openrouter', wyodrebnijIdentyfikatoryZrodel(dane), dane, odpowiedz);
     if (!normalized) {
-      console.warn(`[AI][${requestId}] OpenRouter validator zwrócił JSON poza kontraktem (raw=${content.slice(0, 700)})`);
-      throw new Error('niepoprawna struktura JSON fallbacku');
+      const diagnostic = formatProviderError('openrouter', data?.model || KONFIGURACJA.openrouterValidatorModel, null, {
+        status: response.status,
+        finish_reason: choice?.finish_reason || null,
+        content_preview: content.slice(0, 700),
+      });
+      console.warn(`[AI][${requestId}] OpenRouter validator SCHEMA_REJECT: ${diagnostic}`);
+      return { status: 'unavailable', ok: false, technicalError: true, provider: 'openrouter', model: data?.model || KONFIGURACJA.openrouterValidatorModel, unsupported_claims: [], reason: 'OpenRouter validator zwrócił JSON niespełniający lokalnego kontraktu', error: diagnostic, diagnostic };
     }
     console.log(`[AI][${requestId}] OpenRouter validator: status=${normalized.status} supported=${normalized.supported} complete=${normalized.complete}`);
     return normalized;
   } catch (err) {
-    console.error(`[AI][${requestId}] OpenRouter validator error:`, err.message);
-    return { status: 'unavailable', ok: false, technicalError: true, provider: 'openrouter', model: KONFIGURACJA.openrouterValidatorModel, unsupported_claims: [], reason: 'fallback validator niedostępny', error: err.message };
+    const diagnostic = formatProviderError('openrouter', KONFIGURACJA.openrouterValidatorModel, err);
+    console.error(`[AI][${requestId}] OpenRouter validator TRANSPORT_ERROR: ${diagnostic}`);
+    return { status: 'unavailable', ok: false, technicalError: true, provider: 'openrouter', model: KONFIGURACJA.openrouterValidatorModel, unsupported_claims: [], reason: 'fallback validator niedostępny', error: diagnostic, diagnostic };
   } finally { clearTimeout(timer); }
 }
 
@@ -2504,7 +2544,19 @@ Pytanie użytkownika: ${pytanie}`;
           include_reasoning: false,
           signal: controller.signal,
         });
-        return ujednolicWynik({ tekst: response.choices?.[0]?.message?.content, ucieta: response.choices?.[0]?.finish_reason === 'length' }, 'groq', model);
+        const choice = response?.choices?.[0] || {};
+        const content = typeof choice?.message?.content === 'string' ? choice.message.content : '';
+        if (!content.trim()) {
+          throw new Error(formatProviderError('groq', model, null, {
+            status: response?.status ?? null,
+            code: response?.error?.code ?? null,
+            type: response?.error?.type ?? null,
+            finish_reason: choice?.finish_reason ?? null,
+            has_reasoning: Boolean(choice?.message?.reasoning || choice?.message?.reasoning_content),
+            responseData: response?.error ? response : null,
+          }));
+        }
+        return ujednolicWynik({ tekst: content, ucieta: choice?.finish_reason === 'length' }, 'groq', model);
       } finally {
         clearTimeout(timer);
       }
@@ -2524,12 +2576,24 @@ Pytanie użytkownika: ${pytanie}`;
   // and unknown errors, so repair does not immediately repeat an outage.
   const formatProviderError = (provider, model, err, extra = {}) => {
     const message = String(err?.message || err || 'unknown').slice(0, 1200);
+    const providerError = err?.error && typeof err.error === 'object' ? err.error : null;
+    const responseData = extra.responseData && typeof extra.responseData === 'object' ? extra.responseData : null;
     const details = {
       provider, model,
       message,
       status: err?.status ?? err?.statusCode ?? extra.status ?? null,
-      code: err?.code ?? extra.code ?? null,
-      type: err?.type ?? extra.type ?? null,
+      code: err?.code ?? providerError?.code ?? responseData?.error?.code ?? extra.code ?? null,
+      type: err?.type ?? providerError?.type ?? responseData?.error?.type ?? extra.type ?? null,
+      param: err?.param ?? providerError?.param ?? responseData?.error?.param ?? extra.param ?? null,
+      failed_generation: err?.failed_generation ?? providerError?.failed_generation ?? responseData?.error?.failed_generation ?? extra.failed_generation ?? null,
+      response_error: responseData?.error ? {
+        message: String(responseData.error.message || '').slice(0, 800),
+        code: responseData.error.code ?? null,
+        type: responseData.error.type ?? null,
+        param: responseData.error.param ?? null,
+        failed_generation: responseData.error.failed_generation ?? null,
+      } : null,
+      extra: Object.keys(extra).filter(key => key !== 'responseData').length ? extra : undefined,
     };
     return JSON.stringify(details);
   };
