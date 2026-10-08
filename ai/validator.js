@@ -170,7 +170,7 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
   })).filter(c => c.claim);
 
   const allowed = allowedSourceIds instanceof Set ? allowedSourceIds : null;
-  const evidenceAssessment = assessEvidence(parseEvidenceForCore(dane), answer || '', {
+  const evidenceAssessment = assessEvidence(parseEvidenceBlocks(dane), answer || '', {
     intent: 'web_fact',
     is_lore: /lore|fabuł|histori|kanon|canon/i.test(String(answer || '')),
   });
@@ -183,7 +183,7 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
   // in another allowed source, bind the claim to the source that actually contains
   // the quote. This keeps source binding strict while avoiding false rejects caused
   // by an incorrect model-selected source identifier.
-  const parsedEvidenceBlocks = parseEvidenceForCore(dane);
+  const parsedEvidenceBlocks = parseEvidenceBlocks(dane);
   const effectiveClaimSourceIds = claims.map((c) => {
     const ids = new Set(c.source_ids);
     if (c.evidence_quote) {
