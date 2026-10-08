@@ -18,11 +18,15 @@ function createAIRequestContext(options = {}) {
     startedAt: Number.isFinite(options.startedAt) ? options.startedAt : Date.now(),
     maxCzasMs: clampLimit(options.maxCzasMs, 60000),
     maxGeneracji: clampLimit(options.maxGeneracji, 5),
+    maxInitialGeneracji: clampLimit(options.maxInitialGeneracji, Math.max(0, clampLimit(options.maxGeneracji, 5) - 1)),
+    maxRepairGeneracji: clampLimit(options.maxRepairGeneracji, 1),
     maxModelCalls: clampLimit(options.maxModelCalls, 10),
     maxValidatorow: clampLimit(options.maxValidatorow, 3),
     maxWyszukanTavily: clampLimit(options.maxWyszukanTavily, 3),
 
     generacje: 0,
+    initialGeneracje: 0,
+    repairGeneracje: 0,
     modelCalls: 0,
     validatory: 0,
     tavilySearches: 0,
@@ -44,10 +48,15 @@ function createAIRequestContext(options = {}) {
   ctx.reserveModel = (purpose = 'model') =>
     ctx.reserve('modelCalls', ctx.maxModelCalls, purpose);
 
-  ctx.reserveGeneration = (provider, model) => {
+  ctx.reserveGeneration = (provider, model, phase = 'initial') => {
     if (ctx.isExpired() || ctx.generacje >= ctx.maxGeneracji) return false;
-    if (!ctx.reserveModel(`generation:${provider}/${model}`)) return false;
+    const isRepair = phase === 'repair';
+    if (isRepair && ctx.repairGeneracje >= ctx.maxRepairGeneracji) return false;
+    if (!isRepair && ctx.initialGeneracje >= ctx.maxInitialGeneracji) return false;
+    if (!ctx.reserveModel(`generation:${phase}:${provider}/${model}`)) return false;
     ctx.generacje++;
+    if (isRepair) ctx.repairGeneracje++;
+    else ctx.initialGeneracje++;
     return true;
   };
 
@@ -64,6 +73,10 @@ function createAIRequestContext(options = {}) {
     remainingMs: ctx.remainingMs(),
     maxCzasMs: ctx.maxCzasMs,
     maxGeneracji: ctx.maxGeneracji,
+    maxInitialGeneracji: ctx.maxInitialGeneracji,
+    maxRepairGeneracji: ctx.maxRepairGeneracji,
+    initialGeneracje: ctx.initialGeneracje,
+    repairGeneracje: ctx.repairGeneracje,
     maxModelCalls: ctx.maxModelCalls,
     maxValidatorow: ctx.maxValidatorow,
     maxWyszukanTavily: ctx.maxWyszukanTavily,
