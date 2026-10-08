@@ -111,7 +111,7 @@ function repairBudgetBlockReason({
 function shouldRetryFailure(failure) {
   // Retry means "try another provider", not "repeat the same failing endpoint".
   // Auth errors are useful only for cross-provider fallback.
-  return ['transient', 'timeout_abort', 'transport_error', 'empty_response', 'invalid_json', 'schema_rejection', 'provider_unavailable', 'budget_exhausted', 'quota', 'auth', 'invalid_request', 'provider_cooldown', 'unknown'].includes(failure);
+  return ['transient', 'timeout_abort', 'transport_error', 'empty_response', 'invalid_json', 'schema_rejection', 'provider_unavailable', 'budget_exhausted', 'quota', 'auth', 'invalid_request', 'provider_cooldown', 'validator_inconclusive', 'unknown'].includes(failure);
 }
 
 module.exports = {
