@@ -17,7 +17,7 @@ function createAIRequestContext(options = {}) {
     requestId: String(options.requestId || '-'),
     startedAt: Number.isFinite(options.startedAt) ? options.startedAt : Date.now(),
     maxCzasMs: clampLimit(options.maxCzasMs, 60000),
-    maxGeneracji: clampLimit(options.maxGeneracji, 6),
+    maxGeneracji: clampLimit(options.maxGeneracji, 5),
     maxModelCalls: clampLimit(options.maxModelCalls, 10),
     maxValidatorow: clampLimit(options.maxValidatorow, 3),
     maxWyszukanTavily: clampLimit(options.maxWyszukanTavily, 3),

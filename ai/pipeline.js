@@ -80,6 +80,15 @@ function shouldValidate({ routing = {}, evidencePolicy = {}, hasExternalData = f
   return Boolean(searched && routing.needs_web);
 }
 
+function classifyPipelineFailure(status, options = {}) {
+  const s = String(status || '').toLowerCase();
+  if (s === 'accepted' || s === 'soft_accepted') return null;
+  if (s === 'rejected') return 'validator_reject';
+  if (s === 'inconclusive') return 'validator_inconclusive';
+  if (s === 'unavailable') return options.reason || 'provider_unavailable';
+  return 'unknown';
+}
+
 function decideValidation(status, options = {}) {
   const s = String(status || '').toLowerCase();
   if (s === STATUS.ACCEPTED) return { finalStatus: STATUS.ACCEPTED, retry: false };
@@ -124,6 +133,7 @@ module.exports = {
   evaluateEvidence,
   shouldValidate,
   decideValidation,
+  classifyPipelineFailure,
   finalText,
   parseEvidenceText,
 };
