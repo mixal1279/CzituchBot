@@ -177,11 +177,11 @@ function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '') {
     if (!block) return false;
     const normalizedBlock = block.replace(/\s+/g, ' ').toLocaleLowerCase('pl-PL');
     if (normalizedBlock.includes(quote)) {
-      // The quote may be only a partial excerpt and omit a full entity name
-      // present elsewhere in the same source block (e.g. "Johnny" vs
-      // "Johnny Silverhand"). Bind the claim to the whole verified source
-      // block while still requiring the quoted text to come from that block.
-      return zgodnoscStrukturalna(block, claim, { allowCrossLanguageExactEvidence: true, allowDistributedEvidence: true }).ok;
+      // The quote itself is the verified evidence. Validate the claim against
+      // that exact excerpt instead of the whole source block; large source
+      // blocks contain unrelated entities and facts that can cause false
+      // negatives in structural matching.
+      return zgodnoscStrukturalna(evidenceQuote, claim, { allowCrossLanguageExactEvidence: true, allowDistributedEvidence: true }).ok;
     }
     return czyDowodSemantyczniePokrywaClaim(block, quote, { allowCrossLanguageExactEvidence: true, allowDistributedEvidence: true })
       && zgodnoscStrukturalna(block, claim, { allowCrossLanguageExactEvidence: true, allowDistributedEvidence: true }).ok
