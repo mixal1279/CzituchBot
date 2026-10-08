@@ -192,8 +192,8 @@ function czyRelacjaPrzyczynowaPokrywaClaim(evidence, claim) {
     .filter(Boolean);
   const relationRe = /(?:bo|poniewaz|gdyz|dlatego|z powodu|w celu|dzieki|przez|spowod\w*|doprowadz\w*|umozliw\w*|because|therefore|due to|caused|led to|so that)/i;
   return sentences.some(sentence => {
-    if (!relationRe.test(sentence)) return false;
     const normalized = normalizujClaim(sentence);
+    if (!relationRe.test(normalized)) return false;
     const entityOk = !claimEntities.length || claimEntities.every(entity => czyNazwaWlasnaWystepuje(entity, normalized));
     const evidenceTokens = tokenyPokryciaBezStop(sentence);
     const matchedTokens = claimTokens.filter(token => evidenceTokens.some(other => tokenyPokrywajaSie(token, other)));
