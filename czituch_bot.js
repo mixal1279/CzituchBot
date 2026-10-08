@@ -1794,10 +1794,10 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
   // Nie utrzymujemy osobnych budżetów w generatorze, retrievalu i validatorze.
   const aiState = createAIRequestContext({
     requestId,
-    maxCzasMs: 60000,
-    maxGeneracji: 6,
-    maxModelCalls: 10,
-    maxValidatorow: 3,
+    maxCzasMs: 25000,
+    maxGeneracji: 3,
+    maxModelCalls: 8,
+    maxValidatorow: 2,
     maxWyszukanTavily: testMaxTavilySearches,
   });
   let daneDoWalidacji = null;
@@ -2475,11 +2475,11 @@ Pytanie użytkownika: ${pytanie}`;
       : wynikPusty('groq', 'openai/gpt-oss-120b', '120B skipped for this generation cycle');
     let failureType = classifyFailure(result.error || '');
 
-    if (allow120b && !requestBlokada120b && (!result.tekst || result.ucieta)
-      && liczbaProb120b < 2 && !['quota', 'auth', 'invalid_request'].includes(failureType)) {
-      console.log(`[AI][${requestId}] 120B retry #1 (${powod})`);
-      result = await zapytajGlowny(Math.max(maxTok, 300) + 250, prompt, 'openai/gpt-oss-120b');
-      failureType = classifyFailure(result.error || '');
+    // Nie zużywamy drugiego slotu na retry 120B przy budżecie 3 generacji.
+    // Pusty/ucięty wynik przechodzi od razu do fallback chain, dzięki czemu
+    // limit 120B nie blokuje Gemini w tym samym requestcie.
+    if (allow120b && result.ucieta && !['quota', 'auth', 'invalid_request'].includes(failureType)) {
+      console.log('[AI][' + requestId + '] 120B response truncated; przechodzę do fallbacku bez retry 120B');
     }
 
     if (result.tekst && !result.ucieta) return result;
