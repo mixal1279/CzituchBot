@@ -177,11 +177,9 @@ function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '') {
     if (!block) return false;
     const normalizedBlock = block.replace(/\s+/g, ' ').toLocaleLowerCase('pl-PL');
     if (normalizedBlock.includes(quote)) {
-      // The quote itself is the verified evidence. Validate the claim against
-      // that exact excerpt instead of the whole source block; large source
-      // blocks contain unrelated entities and facts that can cause false
-      // negatives in structural matching.
-      return zgodnoscStrukturalna(evidenceQuote, claim, { allowCrossLanguageExactEvidence: true, allowDistributedEvidence: true }).ok;
+      // The quote must come from the cited source, while the full source block
+      // may provide the surrounding context needed to verify a multi-clause claim.
+      return zgodnoscStrukturalna(block, claim, { allowCrossLanguageExactEvidence: true, allowDistributedEvidence: true }).ok;
     }
     return czyDowodSemantyczniePokrywaClaim(block, quote, { allowCrossLanguageExactEvidence: true, allowDistributedEvidence: true })
       && zgodnoscStrukturalna(block, claim, { allowCrossLanguageExactEvidence: true, allowDistributedEvidence: true }).ok
@@ -241,8 +239,25 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
   // dodatkowym bezpiecznikiem i diagnostyką, ale nie powinien powodować false rejectu,
   // gdy model podał parafrazę zamiast dosłownego fragmentu, a sam claim jest jednoznacznie
   // potwierdzony przez ten sam, dozwolony blok źródłowy.
-  const evidenceQuoteVerified = claims.map((c) => czyDowodPotwierdzaClaim(dane, c.source_ids, c.evidence_quote, c.claim));
-  const claimSourceVerified = claims.map((c) => c.source_ids.some(id => {
+  // If the validator model picked a wrong source_id but its exact quote is present
+  // in another allowed source, bind the claim to the source that actually contains
+  // the quote. This keeps source binding strict while avoiding false rejects caused
+  // by an incorrect model-selected source identifier.
+  const parsedEvidenceBlocks = parseEvidenceForCore(dane);
+  const effectiveClaimSourceIds = claims.map((c) => {
+    const ids = new Set(c.source_ids);
+    if (c.evidence_quote) {
+      const quote = c.evidence_quote.trim().replace(/\\s+/g, ' ').toLocaleLowerCase('pl-PL');
+      for (const block of parsedEvidenceBlocks) {
+        if (allowed && !allowed.has(block.sourceId)) continue;
+        const normalizedBlock = block.content.replace(/\\s+/g, ' ').toLocaleLowerCase('pl-PL');
+        if (quote.length >= 3 && normalizedBlock.includes(quote)) ids.add(block.sourceId);
+      }
+    }
+    return [...ids];
+  });
+  const evidenceQuoteVerified = claims.map((c, index) => czyDowodPotwierdzaClaim(dane, effectiveClaimSourceIds[index], c.evidence_quote, c.claim));
+  const claimSourceVerified = claims.map((c, index) => effectiveClaimSourceIds[index].some(id => {
     const block = pobierzBlokZrodla(dane, id);
     return Boolean(block) && zgodnoscStrukturalna(block, c.claim, { allowCrossLanguageExactEvidence: true, allowDistributedEvidence: true }).ok;
   }));
