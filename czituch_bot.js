@@ -1838,6 +1838,15 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
       finalProvider: wynikGeneracji?.provider || null,
       finalModel: wynikGeneracji?.model || null, tavilySearches: aiState.tavilySearches,
       global120bRequests: model120bGlobalRequesty,
+      generationBudget: {
+        total: aiState.maxGeneracji,
+        initial: aiState.maxInitialGeneracji,
+        repair: aiState.maxRepairGeneracji,
+        used: aiState.generacje,
+        initialUsed: aiState.initialGeneracje,
+        repairUsed: aiState.repairGeneracje,
+      },
+      generationAttempts: aiState.generationAttempts || [],
       sourceCount: daneDoWalidacji ? (daneDoWalidacji.match(/\[(?:SOURCE|REFERENCE) [^\]]+\]/g) || []).length : 0,
       metrics: { ...AI_METRYKI, observability: snapshotAIMetrics(AI_OBSERVABILITY) },
       durationMs: Date.now() - aiState.startedAt, finalStatus: status,
@@ -2339,7 +2348,7 @@ Pytanie użytkownika: ${pytanie}`;
     const messages = buildMessages(overrideSystemPrompt);
     const prompt = messages.user;
     const controller = new AbortController();
-    const timeoutMs = Math.max(1, Math.min(30000, pozostalyCzasMs()));
+    const timeoutMs = timeoutDlaGeneracji();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
       const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=${encodeURIComponent(KONFIGURACJA.geminiKey)}`, {
@@ -2371,7 +2380,7 @@ Pytanie użytkownika: ${pytanie}`;
     const messages = buildOpenRouterMessages(overrideSystemPrompt);
     const prompt = messages[messages.length - 1]?.content || pytanie;
     const controller = new AbortController();
-    const timeoutMs = Math.max(1, Math.min(30000, pozostalyCzasMs()));
+    const timeoutMs = timeoutDlaGeneracji();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
       const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
@@ -2456,8 +2465,8 @@ Pytanie użytkownika: ${pytanie}`;
     try {
       const kontekstDoGroq = String(kontekstAI || '').slice(0, 10000);
       const controller = new AbortController();
-      const remainingMs = pozostalyCzasMs();
-      const timer = setTimeout(() => controller.abort(), remainingMs);
+      const timeoutMs = timeoutDlaGeneracji();
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
       try {
         const response = await groqClient.chat.completions.create({ model, messages: [{ role: 'system', content: overrideSystemPrompt }, ...przygotujHistorieDoModelu(historiaRozmowy, 4), { role: 'user', content: kontekstDoGroq }], temperature, max_tokens: maxTok, reasoning_effort: model === 'openai/gpt-oss-120b' ? 'medium' : 'low', signal: controller.signal });
         return ujednolicWynik({ tekst: response.choices?.[0]?.message?.content, ucieta: response.choices?.[0]?.finish_reason === 'length' }, 'groq', model);
@@ -2662,7 +2671,7 @@ function oczyscOdpowiedzPrzedWalidacja(tekst) {
       const promptRetry = `${systemPrompt}\n\n[SOFT VALIDATION FEEDBACK]\n${feedback}`;
       // Dokładnie jeden cykl retry po odrzuceniu walidacji. Fallbacki providerów
       // pozostają wewnątrz jednego cyklu generacji i nie uruchamiamy kolejnego retry.
-      const retry = await generujOdpowiedz(max_tokens, promptRetry, 'soft validation retry', false);
+      const retry = await generujOdpowiedz(max_tokens, promptRetry, 'soft validation repair', false);
       if (retry.tekst) {
         const nowaOdp = usunMarkeryWewnetrzneAI(filtrBezpieczenstwa(retry.tekst));
         if (nowaOdp) {
