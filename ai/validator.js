@@ -155,7 +155,8 @@ function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '') {
   const quoteCaptured = /captur\w*|kidnapp\w*|abduct\w*|porwan\w*|schwyt\w*/i.test(quoteNorm);
   const quoteKilled = /kill\w*|murder\w*|zabij\w*|zabil\w*|zabila\w*|zabita\w*|zabite\w*|zabici\w*|zabity\w*|zabicie\w*|smier\w*/i.test(quoteNorm);
   const claimCaptured = /captur\w*|kidnapp\w*|abduct\w*|porwan\w*|schwyt\w*/i.test(claimNorm);
-  const claimKilled = /kill\w*|murder\w*|zabij\w*|zabil\w*|zabila\w*|zabita\w*|zabite\w*|zabici\w*|zabity\w*|zabicie\w*|smier\w*/i.test(claimNorm);
+  const claimKilled = /kill\w*|murder\w*|zabij\w*|zabil\w*|zabila\w*|zabita\w*|zabite\w*|zabici\w*|zabity\w*|zabicie\w*|smier\w*/i.test(claimNorm)
+    || claimNorm.includes('zabi');
 
   if (claimKilled && quoteCaptured && !quoteKilled) {
     return { ok: false, reason: 'claim zawiera zabójstwo, a evidence wskazuje jedynie schwytanie/porwanie' };
@@ -182,6 +183,13 @@ function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '') {
       continue;
     }
 
+    const quoteStructural = zgodnoscStrukturalna(quote, claim, {
+      allowCrossLanguageExactEvidence: true,
+      allowDistributedEvidence: false,
+    });
+    if (quoteStructural.ok) {
+      return { ok: true, sourceId: id, mode: 'exact_quote', reason: 'cytat występuje w źródle i bezpośrednio wspiera claim' };
+    }
     const supported = zgodnoscStrukturalna(block.content, claim, {
       allowCrossLanguageExactEvidence: true,
       allowDistributedEvidence: true,
