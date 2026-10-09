@@ -53,7 +53,7 @@ function wyodrebnijJednostkoweWartosci(value) {
   const text = String(value || '').toLocaleLowerCase('pl-PL').replace(/,/g, '.');
   const unitPattern = '(?:°c|°f|%|zł|pln|usd|eur|gb|mb|tb|hz|fps|km|kg|h|hr|hrs|sec|mins?|hours?|minutes?|seconds?|godzin(?:a|y)?|godz|minut(?:a|y)?|sekund(?:a|y)?|days?|dzień|dni|dnia|years?|rok|lata|lat|kilometers?|kilometr(?:ów|y)?|meters?|metr(?:ów|y)?|kilograms?|kilogramów)';
   const out = [];
-  const re = new RegExp(`(?:\\b(\\d+(?:\\.\\d+)?)\\s*(${unitPattern})(?=$|[^\p{L}\p{N}])|(${unitPattern})(?=$|[^\p{L}\p{N}])\\s*(\\d+(?:\\.\\d+)?))`, 'giu');
+  const re = new RegExp(`(?:\\b(\\d+(?:\\.\\d+)?)\\s*(${unitPattern})(?=$|[^\\p{L}\\p{N}])|(${unitPattern})(?=$|[^\\p{L}\\p{N}])\\s*(\\d+(?:\\.\\d+)?))`, 'giu');
   for (const m of text.matchAll(re)) {
     const amount = Number(m[1] || m[4]);
     const rawUnit = String(m[2] || m[3] || '').toLocaleLowerCase('pl-PL');
