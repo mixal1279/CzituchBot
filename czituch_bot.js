@@ -2100,7 +2100,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
     maxInitialGeneracji: 5,
     maxRepairGeneracji: 1,
     maxModelCalls: 12,
-    maxValidatorow: 2,
+    maxValidatorow: 3,
     maxWyszukanTavily: testMaxTavilySearches,
   });
   let daneDoWalidacji = null;
@@ -2936,7 +2936,10 @@ Pytanie użytkownika: ${pytanie}`;
           attempted: [],
           failedProviders: [...failedFallbackProviders],
           exclude: lastSuccessfulGenerationStep ? [lastSuccessfulGenerationStep] : [],
-          maxFallbacks: 1,
+          // Repair has one generation cycle, but may try several providers
+          // if an endpoint fails quickly (e.g. quota). Each provider still obeys
+          // the shared deadline and model-call budget.
+          maxFallbacks: GENERATION_FALLBACK_CHAIN.length,
         });
     }
 
