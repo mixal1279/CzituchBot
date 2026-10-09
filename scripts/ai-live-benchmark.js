@@ -102,6 +102,7 @@ async function run() {
       results.push({
         id: item.id,
         category: item.category,
+        summaryPresent: Boolean(summary),
         answered: Boolean(answer.trim()) && !isFailureText(answer),
         completeness: judge.score,
         judgeStatus: judge.status,
@@ -123,6 +124,7 @@ async function run() {
       results.push({
         id: item.id,
         category: item.category,
+        summaryPresent: Boolean(summary),
         answered: false,
         completeness: 0,
         judgeStatus: 'error',
@@ -157,11 +159,19 @@ async function run() {
   const factualPassed = factualCases.filter(x => x.factualPassed).length;
   const factualAverage = factualCases.length ? factualCases.reduce((sum, x) => sum + x.factualScore, 0) / factualCases.length : null;
   const diagnostic = {
+    validatorAccepted: results.filter(x => x.finalStatus === 'accepted').length,
+    validatorSoftAccepted: results.filter(x => x.finalStatus === 'soft_accepted').length,
     validatorRejected: results.filter(x => x.finalStatus === 'rejected').length,
     validatorInconclusive: results.filter(x => x.finalStatus === 'inconclusive').length,
     validatorUnavailable: results.filter(x => x.finalStatus === 'unavailable').length,
     repairUsed: results.filter(x => Number(x.generationBudget?.repairUsed || 0) > 0).length,
     repairSkipped: results.filter(x => Number(x.generationBudget?.repairUsed || 0) === 0 && x.finalStatus === 'rejected').length,
+    acceptedButIncomplete: results.filter(x => ['accepted', 'soft_accepted'].includes(x.finalStatus) && x.judgeStatus !== 'accepted').map(x => ({ id: x.id, finalStatus: x.finalStatus, judgeStatus: x.judgeStatus, missing: x.missing })),
+    missingSummaryCases: results.filter(x => !x.summaryPresent).map(x => x.id),
+    missingFinalStatusCases: results.filter(x => !x.finalStatus).map(x => x.id),
+    missingModelCallTelemetryCases: results.filter(x => !Number.isFinite(x.modelCalls)).map(x => x.id),
+    generationAttemptsMissing: results.filter(x => !Array.isArray(x.generationAttempts)).map(x => x.id),
+    telemetryCoverage: Number((results.filter(x => x.summaryPresent && Boolean(x.finalStatus) && Number.isFinite(x.modelCalls)).length / results.length).toFixed(4)),
     avgModelCalls: results.filter(x => Number.isFinite(x.modelCalls)).length
       ? Number((results.filter(x => Number.isFinite(x.modelCalls)).reduce((sum, x) => sum + x.modelCalls, 0) / results.filter(x => Number.isFinite(x.modelCalls)).length).toFixed(2))
       : null,
