@@ -414,6 +414,19 @@ console.log('AI regression tests: OK');
   assert.match(partialFromEvidenceFailure.partialAnswer, /Wheatley przejął kontrolę nad systemem/);
   assert.doesNotMatch(partialFromEvidenceFailure.partialAnswer, /Portal 2 opowiada historię/);
 
+  // Brak istotnej nazwy własnej w dowodzie jest twardym mismatch, a nie
+  // samym błędem wiązania cytatu; nie wolno użyć go jako triggera partial-accept.
+  const partialFromEntityMismatch = normalizujWynikWalidatora({
+    ...base,
+    claims: [
+      { claim: 'Wheatley przejął kontrolę nad systemem.', supported: true, source_ids: ['SOURCE 1'], evidence_quote: 'Wheatley przejął kontrolę nad systemem.', reason: 'potwierdzone' },
+      { claim: 'Portal 2 opowiada historię Wheatleya.', supported: true, source_ids: ['SOURCE 1'], evidence_quote: 'Wheatley przejął kontrolę nad systemem.', reason: 'brak nazwy własnej w dowodzie' },
+    ],
+  }, 'test', 'test', new Set(['SOURCE 1']), '[SOURCE 1]\\nWheatley przejął kontrolę nad systemem.', 'Wheatley przejął kontrolę nad systemem. Portal 2 opowiada historię Wheatleya.');
+  assert.deepEqual(partialFromEntityMismatch.diagnostics.unsupportedEvidenceClaimIndexes, [1]);
+  assert.deepEqual(partialFromEntityMismatch.diagnostics.partialEligibleEvidenceFailureIndexes, []);
+  assert.equal(partialFromEntityMismatch.status, 'rejected');
+
   // Nieznane źródło lub niepoparte liczby nadal blokują akceptację.
   const unknownPartial = normalizujWynikWalidatora({
     ...base,
