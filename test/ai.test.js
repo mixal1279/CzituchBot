@@ -11,7 +11,7 @@ const { normalizujWynikWalidatora, VALIDATOR_JSON_SCHEMA, GEMINI_VALIDATOR_JSON_
 const { extractExplicitUserMemories, mergeMemoryRecords, buildVerifiedMemoryContext, isActive } = require('../ai/memory');
 const { parseMemoryCommand, forgetMemories } = require('../ai/memory_manager');
 const { buildAdvancedRetrievalPlan, shouldRunAdditionalRetrieval, rankRetrievalNeed } = require('../ai/retrieval');
-const { classifyFailure, nextFallbacks, shouldRetryFailure } = require('../ai/fallback');
+const { classifyFailure, nextFallbacks, selectRepairFallbacks, shouldRetryFailure, GENERATION_FALLBACK_CHAIN } = require('../ai/fallback');
 const { createAIMetrics, recordAIMetric, snapshotAIMetrics } = require('../ai/metrics');
 const { createRequestBudget, sanitizeRequestText } = require('../ai/limits');
 const { rerankujWynikiTavily, wykryjKonfliktyZrodelTavily, zbudujRaportKonfliktowTavily, sanityzujTrescZrodlaTavily } = require('../ai/tavily');
@@ -534,6 +534,22 @@ console.log('AI regression tests: OK');
   assert.equal(shouldRetryFailure('unknown'), true);
   assert.equal(shouldRetryFailure('provider_cooldown'), true);
   assert.equal(shouldRetryFailure('validator_inconclusive'), true);
+  assert.deepEqual(selectRepairFallbacks({
+    failedProviders: ['groq:openai/gpt-oss-120b'],
+    exclude: ['groq:openai/gpt-oss-20b'],
+    availableProviders: [
+      'gemini:gemini-3.8-flash',
+      'gemini:gemini-3.5-flash-lite',
+      'xkiro:default',
+      'openrouter:default',
+    ],
+    maxFallbacks: GENERATION_FALLBACK_CHAIN.length,
+  }), [
+    'gemini:gemini-3.8-flash',
+    'gemini:gemini-3.5-flash-lite',
+    'xkiro:default',
+    'openrouter:default',
+  ]);
   assert.deepEqual(nextFallbacks({attempted:['groq:openai/gpt-oss-120b','groq:openai/gpt-oss-20b','gemini:gemini-3.8-flash','gemini:gemini-3.5-flash-lite'], maxFallbacks:1}), ['xkiro:default']);
   assert.deepEqual(nextFallbacks({
     failure: 'grounded_reject',
@@ -553,7 +569,7 @@ console.log('AI regression tests: OK');
   assert.equal(budget.maxInitialGenerations, 5);
   assert.equal(budget.maxRepairGenerations, 1);
   assert.equal(budget.requestTimeoutMs, 25000);
-  assert.equal(budget.maxValidators, 2);
+  assert.equal(budget.maxValidators, 3);
   assert.equal(budget.maxModelCalls, 12);
   {
     const { createAIRequestContext } = require('../ai/requestContext');
