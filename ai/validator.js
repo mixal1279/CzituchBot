@@ -371,6 +371,18 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
   const partialFormat = partialAnswerCandidate
     ? sprawdzKompletnoscOdpowiedzi(partialAnswerCandidate)
     : { ok: false };
+  // Evidence failures are not interchangeable: quote-binding/format defects
+  // may be omitted safely, but entity, negation, numeric, temporal, action, or
+  // causal mismatches must not become a partial-acceptance trigger.
+  const partialEligibleEvidenceFailureIndexes = unsupportedEvidenceClaimIndexes.filter(index => {
+    const reasons = unsupportedEvidenceReasons.find(item => item.claimIndex === index)?.reasons || [];
+    return reasons.length > 0 && reasons.every(reason =>
+      /evidence_quote nie występuje w wskazanym źródle|evidence_quote ma nieprawidłową długość/i.test(reason)
+    );
+  });
+  const hasPartialFailureTrigger = unsupported.length > 0
+    || partialEligibleEvidenceFailureIndexes.length > 0;
+
   const partialAccepted = !accepted
     // Globalny werdykt może odrzucić całą odpowiedź przez jeden zły claim.
     // W trybie częściowym rozstrzygają lokalne dowody dla claimów, które zostaną
@@ -379,7 +391,7 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
     && wynik.relevant === true
     && claims.length > 0
     && verifiedPartialClaims.length > 0
-    && (unsupported.length > 0 || unsupportedEvidenceClaimIndexes.length > 0)
+    && hasPartialFailureTrigger
     && !unknownSourceClaim
     && !tooManyClaims
     && !malformedClaims
@@ -478,6 +490,7 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
     unknownSourceClaimIndexes,
     unknownSourceClaims: unknownSourceClaimIndexes.map(index => ({ claimIndex: index, sourceIds: claims[index]?.source_ids || [] })),
     unsupportedEvidenceClaimIndexes,
+    partialEligibleEvidenceFailureIndexes,
     unsupportedEvidenceClaims: unsupportedEvidenceClaimIndexes.map(index => ({ claimIndex: index, sourceIds: claims[index]?.source_ids || [], reasons: unsupportedEvidenceReasons.find(x => x.claimIndex === index)?.reasons || [] })),
     allowedSourceCount: allowed ? allowed.size : null,
     unsupportedClaimCount: unsupportedFromClaims.length,
