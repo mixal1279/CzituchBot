@@ -11,7 +11,11 @@ function createGroqCompletion(groqClient, payload, { timeoutMs = null } = {}) {
   // the provider request or allowing a hung request to block the fallback chain.
   const request = Promise.resolve().then(() => groqClient.chat.completions.create(payload));
   const timeout = Number(timeoutMs);
-  if (!Number.isFinite(timeout) || timeout <= 0) return request;
+  if (!Number.isFinite(timeout) || timeout <= 0) {
+    const error = new Error('Groq request skipped: no generation time budget remains');
+    error.code = 'ETIMEDOUT';
+    return Promise.reject(error);
+  }
 
   let timer;
   const deadline = new Promise((_, reject) => {
