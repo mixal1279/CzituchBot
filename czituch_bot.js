@@ -2783,34 +2783,28 @@ Pytanie użytkownika: ${pytanie}`;
     if (model === 'openai/gpt-oss-120b') liczbaProb120b++;
     try {
       const kontekstDoGroq = String(kontekstAI || '').slice(0, 10000);
-      const controller = new AbortController();
       const timeoutMs = timeoutDlaGeneracji();
-      const timer = setTimeout(() => controller.abort(), timeoutMs);
-      try {
-        const response = await createGroqCompletion(groqClient, {
-          model,
-          messages: [{ role: 'system', content: overrideSystemPrompt }, ...przygotujHistorieDoModelu(historiaRozmowy, 4), { role: 'user', content: kontekstDoGroq }],
-          temperature,
-          max_completion_tokens: maxTok,
-          reasoning_effort: 'low',
-          include_reasoning: false,
-        });
-        const choice = response?.choices?.[0] || {};
-        const content = typeof choice?.message?.content === 'string' ? choice.message.content : '';
-        if (!content.trim()) {
-          throw new Error(formatProviderError('groq', model, null, {
-            status: response?.status ?? null,
-            code: response?.error?.code ?? null,
-            type: response?.error?.type ?? null,
-            finish_reason: choice?.finish_reason ?? null,
-            has_reasoning: Boolean(choice?.message?.reasoning || choice?.message?.reasoning_content),
-            responseData: response?.error ? response : null,
-          }));
-        }
-        return ujednolicWynik({ tekst: content, ucieta: choice?.finish_reason === 'length' }, 'groq', model);
-      } finally {
-        clearTimeout(timer);
+      const response = await createGroqCompletion(groqClient, {
+        model,
+        messages: [{ role: 'system', content: overrideSystemPrompt }, ...przygotujHistorieDoModelu(historiaRozmowy, 4), { role: 'user', content: kontekstDoGroq }],
+        temperature,
+        max_completion_tokens: maxTok,
+        reasoning_effort: 'low',
+        include_reasoning: false,
+      }, { timeoutMs });
+      const choice = response?.choices?.[0] || {};
+      const content = typeof choice?.message?.content === 'string' ? choice.message.content : '';
+      if (!content.trim()) {
+        throw new Error(formatProviderError('groq', model, null, {
+          status: response?.status ?? null,
+          code: response?.error?.code ?? null,
+          type: response?.error?.type ?? null,
+          finish_reason: choice?.finish_reason ?? null,
+          has_reasoning: Boolean(choice?.message?.reasoning || choice?.message?.reasoning_content),
+          responseData: response?.error ? response : null,
+        }));
       }
+      return ujednolicWynik({ tekst: content, ucieta: choice?.finish_reason === 'length' }, 'groq', model);
       return ujednolicWynik({ tekst: response.choices?.[0]?.message?.content, ucieta: response.choices?.[0]?.finish_reason === 'length' }, 'groq', model);
     } catch (err) {
       const diagnostic = formatProviderError('groq', model, err, {
