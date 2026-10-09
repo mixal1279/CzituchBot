@@ -4,7 +4,6 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
   wyodrebnijNazwyWlasne,
-  dopasowanieSemantyczne,
   zgodnoscStrukturalna,
 } = require('../ai/claimValidation');
 
@@ -24,7 +23,7 @@ test('real first-word names Artur and Arthur remain detectable', () => {
 });
 
 test('apostrophe and Polish inflection variants match source name tokens', () => {
-  const result = dopasowanieSemantyczne(
+  const result = zgodnoscStrukturalna(
     'Johnny Silverhand jest znanym najemnikiem z Night City.',
     'Johnny’ego Silverhanda opisano jako znanego najemnika.',
   );
@@ -32,7 +31,7 @@ test('apostrophe and Polish inflection variants match source name tokens', () =>
 });
 
 test('generic sentence start no longer causes a false proper-name rejection', () => {
-  const result = dopasowanieSemantyczne(
+  const result = zgodnoscStrukturalna(
     'Decyzja ta wynikała z wcześniejszych wydarzeń w systemie.',
     'Decyzja ta wynikała z wcześniejszych wydarzeń w systemie.',
   );
