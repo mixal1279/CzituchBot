@@ -11,7 +11,7 @@ const { normalizujWynikWalidatora, VALIDATOR_JSON_SCHEMA, GEMINI_VALIDATOR_JSON_
 const { extractExplicitUserMemories, mergeMemoryRecords, buildVerifiedMemoryContext, isActive } = require('../ai/memory');
 const { parseMemoryCommand, forgetMemories } = require('../ai/memory_manager');
 const { buildAdvancedRetrievalPlan, shouldRunAdditionalRetrieval, rankRetrievalNeed } = require('../ai/retrieval');
-const { classifyFailure, nextFallbacks, shouldRetryFailure } = require('../ai/fallback');
+const { classifyFailure, nextFallbacks, selectRepairFallbacks, shouldRetryFailure, GENERATION_FALLBACK_CHAIN } = require('../ai/fallback');
 const { createAIMetrics, recordAIMetric, snapshotAIMetrics } = require('../ai/metrics');
 const { createRequestBudget, sanitizeRequestText } = require('../ai/limits');
 const { rerankujWynikiTavily, wykryjKonfliktyZrodelTavily, zbudujRaportKonfliktowTavily, sanityzujTrescZrodlaTavily } = require('../ai/tavily');
@@ -398,6 +398,35 @@ console.log('AI regression tests: OK');
   assert.equal(partial.diagnostics.partialAccepted, true);
   assert.equal(partial.complete, false);
 
+  // Gdy odrzucono tylko binding dowodu jednego claimu, zachowujemy inny
+  // claim z poprawnym źródłem i cytatem. unsupported_claims może być puste,
+  // bo model błędnie oznaczył oba claims jako supported.
+  const partialFromEvidenceFailure = normalizujWynikWalidatora({
+    ...base,
+    claims: [
+      { claim: 'Wheatley przejął kontrolę nad systemem.', supported: true, source_ids: ['SOURCE 1'], evidence_quote: 'Wheatley przejął kontrolę nad systemem.', reason: 'potwierdzone' },
+      { claim: 'Portal 2 opowiada historię Wheatleya.', supported: true, source_ids: ['SOURCE 1'], evidence_quote: 'cytat którego nie ma', reason: 'cytat niezweryfikowany' },
+    ],
+  }, 'test', 'test', new Set(['SOURCE 1']), '[SOURCE 1]\nWheatley przejął kontrolę nad systemem.', 'Wheatley przejął kontrolę nad systemem. Portal 2 opowiada historię Wheatleya.');
+  assert.equal(partialFromEvidenceFailure.diagnostics.unsupportedClaimCount, 0);
+  assert.deepEqual(partialFromEvidenceFailure.diagnostics.unsupportedEvidenceClaimIndexes, [1]);
+  assert.equal(partialFromEvidenceFailure.status, 'soft_accepted');
+  assert.match(partialFromEvidenceFailure.partialAnswer, /Wheatley przejął kontrolę nad systemem/);
+  assert.doesNotMatch(partialFromEvidenceFailure.partialAnswer, /Portal 2 opowiada historię/);
+
+  // Brak istotnej nazwy własnej w dowodzie jest twardym mismatch, a nie
+  // samym błędem wiązania cytatu; nie wolno użyć go jako triggera partial-accept.
+  const partialFromEntityMismatch = normalizujWynikWalidatora({
+    ...base,
+    claims: [
+      { claim: 'Wheatley przejął kontrolę nad systemem.', supported: true, source_ids: ['SOURCE 1'], evidence_quote: 'Wheatley przejął kontrolę nad systemem.', reason: 'potwierdzone' },
+      { claim: 'Portal 2 opowiada historię Wheatleya.', supported: true, source_ids: ['SOURCE 1'], evidence_quote: 'Wheatley przejął kontrolę nad systemem.', reason: 'brak nazwy własnej w dowodzie' },
+    ],
+  }, 'test', 'test', new Set(['SOURCE 1']), '[SOURCE 1]\nWheatley przejął kontrolę nad systemem.', 'Wheatley przejął kontrolę nad systemem. Portal 2 opowiada historię Wheatleya.');
+  assert.deepEqual(partialFromEntityMismatch.diagnostics.unsupportedEvidenceClaimIndexes, [1]);
+  assert.deepEqual(partialFromEntityMismatch.diagnostics.partialEligibleEvidenceFailureIndexes, []);
+  assert.equal(partialFromEntityMismatch.status, 'rejected');
+
   // Nieznane źródło lub niepoparte liczby nadal blokują akceptację.
   const unknownPartial = normalizujWynikWalidatora({
     ...base,
@@ -518,6 +547,22 @@ console.log('AI regression tests: OK');
   assert.equal(shouldRetryFailure('unknown'), true);
   assert.equal(shouldRetryFailure('provider_cooldown'), true);
   assert.equal(shouldRetryFailure('validator_inconclusive'), true);
+  assert.deepEqual(selectRepairFallbacks({
+    failedProviders: ['groq:openai/gpt-oss-120b'],
+    exclude: ['groq:openai/gpt-oss-20b'],
+    availableProviders: [
+      'gemini:gemini-3.8-flash',
+      'gemini:gemini-3.5-flash-lite',
+      'xkiro:default',
+      'openrouter:default',
+    ],
+    maxFallbacks: GENERATION_FALLBACK_CHAIN.length,
+  }), [
+    'gemini:gemini-3.8-flash',
+    'gemini:gemini-3.5-flash-lite',
+    'xkiro:default',
+    'openrouter:default',
+  ]);
   assert.deepEqual(nextFallbacks({attempted:['groq:openai/gpt-oss-120b','groq:openai/gpt-oss-20b','gemini:gemini-3.8-flash','gemini:gemini-3.5-flash-lite'], maxFallbacks:1}), ['xkiro:default']);
   assert.deepEqual(nextFallbacks({
     failure: 'grounded_reject',
@@ -535,9 +580,9 @@ console.log('AI regression tests: OK');
   const budget = createRequestBudget();
   assert.equal(budget.maxGenerations, 6);
   assert.equal(budget.maxInitialGenerations, 5);
-  assert.equal(budget.maxRepairGenerations, 1);
+  assert.equal(budget.maxRepairGenerations, 4);
   assert.equal(budget.requestTimeoutMs, 25000);
-  assert.equal(budget.maxValidators, 2);
+  assert.equal(budget.maxValidators, 3);
   assert.equal(budget.maxModelCalls, 12);
   {
     const { createAIRequestContext } = require('../ai/requestContext');
