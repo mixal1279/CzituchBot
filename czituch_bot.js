@@ -2792,9 +2792,9 @@ Pytanie użytkownika: ${pytanie}`;
           messages: [{ role: 'system', content: overrideSystemPrompt }, ...przygotujHistorieDoModelu(historiaRozmowy, 4), { role: 'user', content: kontekstDoGroq }],
           temperature,
           max_completion_tokens: maxTok,
-          reasoning_effort: model === 'openai/gpt-oss-120b' ? 'medium' : 'low',
+          reasoning_effort: 'low',
           include_reasoning: false,
-        }, { signal: controller.signal });
+        });
         const choice = response?.choices?.[0] || {};
         const content = typeof choice?.message?.content === 'string' ? choice.message.content : '';
         if (!content.trim()) {
