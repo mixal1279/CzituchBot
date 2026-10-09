@@ -43,7 +43,7 @@ test('validator accepts Polish claims against an exact English evidence quote', 
       evidence_quote: 'Alt Cunningham was kidnapped and seriously injured by gang members during the 2013 incident.',
     }],
   }, 'test-model', 'test', new Set(['SOURCE 1']), english, 'Alt Cunningham została porwana i ciężko ranna podczas incydentu z 2013 roku.');
-  assert.equal(result.status, 'accepted');
+  assert.equal(result.status, 'accepted', JSON.stringify(result.diagnostics));
   assert.equal(result.ok, true);
 });
 

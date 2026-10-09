@@ -70,9 +70,18 @@ function wyodrebnijJednostkoweWartosci(value) {
 }
 function wyodrebnijNazwyWlasne(value) {
   const raw = String(value || '');
+  // Pomijamy częste słowa opisowe na początku zdania, ale nie imiona.
+  // Wcześniejsze wykluczenie Artur/Arthur odrzucało poprawne nazwy własne.
   const genericFirstWords = new Set([
-    'decyzja','motywuje','nowo','następnie','nastepnie','ponadto',
-    'jednak','ogólnie','ogolnie','wtedy','potem','dlatego','artur','arthur'
+    'decyzja', 'motywuje', 'nowo', 'następnie', 'nastepnie', 'ponadto',
+    'jednak', 'ogólnie', 'ogolnie', 'wtedy', 'potem', 'dlatego',
+    'obecnie', 'później', 'pozniej', 'wcześniej', 'wczesniej',
+    'ponieważ', 'poniewaz', 'chociaż', 'chociaz', 'choć', 'choc',
+    'jeśli', 'jesli', 'gdy', 'kiedy', 'podczas', 'wreszcie',
+    'większość', 'wiekszosc', 'część', 'czesc', 'każdy', 'kazdy',
+    'pierwszy', 'drugi', 'trzeci', 'można', 'mozna', 'może', 'moze',
+    'jest', 'są', 'sa', 'był', 'byla', 'było', 'bylo', 'byli',
+    'to', 'ten', 'ta', 'te', 'jego', 'jej', 'oni', 'one'
   ]);
   const candidates = [];
   const sentenceRe = /(^|[.!?]\s*)([^.!?]*)(?=[.!?]|$)/gu;
@@ -110,17 +119,46 @@ function wyodrebnijNazwyWlasne(value) {
 function wyodrebnijMarkery(value, regex) {
   return regex.test(normalizujClaim(value));
 }
+function normalizujTokenNazwy(value) {
+  return String(value || '')
+    .toLocaleLowerCase('pl-PL')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\p{L}\p{N}'’.-]+/gu, '')
+    .trim();
+}
+
+function wariantyNazwyDoDopasowania(entity) {
+  const token = normalizujTokenNazwy(entity);
+  if (!token) return [];
+  const variants = new Set([token]);
+
+  // Apostrof w odmianie obcego imienia oddziela rdzeń od końcówki:
+  // Johnny’ego -> Johnny.
+  const apostropheBase = token.replace(/['’]\p{L}+$/u, '');
+  if (apostropheBase.length >= 4 && apostropheBase !== token) variants.add(apostropheBase);
+
+  // Ograniczona obsługa odmiany nazw obcych: wymagamy dokładnego rdzenia
+  // w źródle zamiast ryzykownego dopasowania dowolnego prefiksu.
+  const suffixes = ['owego', 'owej', 'owym', 'owie', 'ami', 'ach', 'ego', 'emu', 'owi', 'iego', 'iej', 'ów', 'om', 'em', 'ie', 'a', 'ę', 'ą', 'y', 'i', 'u', 'e'];
+  for (const suffix of suffixes) {
+    if (token.endsWith(suffix) && token.length - suffix.length >= 4) {
+      variants.add(token.slice(0, -suffix.length));
+    }
+  }
+  return [...variants];
+}
+
 function czyNazwaWlasnaWystepuje(entity, evidenceNormalized) {
-  if (evidenceNormalized.includes(entity)) return true;
-  const parts = entity.split(' ').filter(Boolean);
-  if (parts.length !== 1 || entity.length < 4) return false;
-  const base = entity.replace(/(['’])\p{L}+$/u, '');
-  const stem = base.slice(0, Math.max(4, base.length - 1));
-  return evidenceNormalized.split(' ').some(token => {
-    const normalizedToken = token.replace(/(['’])\p{L}+$/u, '');
-    return normalizedToken === entity || (normalizedToken.length >= stem.length && normalizedToken.startsWith(stem));
+  const evidenceTokens = normalizujClaim(evidenceNormalized).split(' ').filter(Boolean);
+  if (!evidenceTokens.length) return false;
+  return wariantyNazwyDoDopasowania(entity).some(variant => {
+    // NormalizujClaim usuwa apostrofy i łączniki; porównujemy tokeny
+    // po identycznej normalizacji po obu stronach.
+    const normalized = normalizujClaim(variant).split(' ').filter(Boolean);
+    return normalized.length === 1 && evidenceTokens.includes(normalized[0]);
   });
 }
+
 function sprawdzTwardeKonflikty(evidence, claim, options = {}) {
   const e = String(evidence || '');
   const c = String(claim || '');
@@ -247,7 +285,10 @@ function zgodnoscStrukturalna(evidence, claim, options = {}) {
   // Akceptujemy sensowną parafrazę, ale tylko po przejściu twardych
   // konfliktów/liczb/jednostek. To naprawia false rejecti bez otwierania
   // walidatora na dowolne podobieństwo tekstowe.
-  if (tokenCoverage >= 0.28 && (sharedConcepts.length > 0 || entityCoverage >= 0.5)) {
+  // Minimalnie niższy próg parafrazy, przy zachowaniu pełnego pokrycia
+  // encji albo wspólnego pojęcia. Twarde kontrole liczb, negacji i przyczyn
+  // wykonują się wcześniej i pozostają bez zmian.
+  if (tokenCoverage >= 0.26 && (sharedConcepts.length > 0 || (claimEntities.length > 0 && entityCoverage === 1))) {
     return { ok: true, mode: 'paraphrase', overlap: tokenCoverage, sharedConcepts, entityCoverage };
   }
   if (options.allowCrossLanguageExactEvidence === true && sharedConcepts.length > 0 && tokenCoverage >= 0.18) {
