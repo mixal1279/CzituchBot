@@ -192,6 +192,19 @@ async function run() {
     diagnostics: diagnostic,
     failures: results.filter(x => !x.answered || x.judgeStatus !== 'accepted' || x.factualPassed === false).slice(0, 100),
   };
+  console.log('\n=== LIVE BENCHMARK SUMMARY ===');
+  console.log(`Cases: ${report.total}`);
+  console.log(`Answered: ${answered}/${results.length} (${(report.answeredAccuracy * 100).toFixed(1)}%)`);
+  console.log(`Complete: ${complete}/${results.length} (${(report.completenessAccuracy * 100).toFixed(1)}%)`);
+  console.log(`Factual gold: ${factualCases.length ? `${factualPassed}/${factualCases.length} (${(report.factualAccuracy * 100).toFixed(1)}%)` : 'not measured'}`);
+  console.log(`Duration: ${(report.durationMs / 1000).toFixed(1)}s`);
+  console.log(`Validator: accepted=${diagnostic.validatorAccepted}, soft_accepted=${diagnostic.validatorSoftAccepted}, rejected=${diagnostic.validatorRejected}, inconclusive=${diagnostic.validatorInconclusive}, unavailable=${diagnostic.validatorUnavailable}`);
+  console.log(`Telemetry coverage: ${(diagnostic.telemetryCoverage * 100).toFixed(1)}%`);
+  if (diagnostic.missingSummaryCases.length) console.log(`Missing summaries: ${diagnostic.missingSummaryCases.join(', ')}`);
+  if (diagnostic.missingFinalStatusCases.length) console.log(`Missing final status: ${diagnostic.missingFinalStatusCases.join(', ')}`);
+  if (diagnostic.missingModelCallTelemetryCases.length) console.log(`Missing model-call telemetry: ${diagnostic.missingModelCallTelemetryCases.join(', ')}`);
+  if (diagnostic.providerFailures.length) console.log(`Provider failures: ${diagnostic.providerFailures.join(' | ')}`);
+  console.log('=== FULL JSON REPORT (logs) ===');
   console.log(JSON.stringify(report, null, 2));
 }
 
