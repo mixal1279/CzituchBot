@@ -34,6 +34,7 @@ test('Groq request body never contains signal; AbortSignal is passed in SDK tran
   assert.equal(observedPayload, payload);
   assert.equal(Object.hasOwn(observedPayload, 'signal'), false);
   assert.equal(observedOptions.signal, controller.signal);
+  assert.equal(observedOptions.maxRetries, 0, 'the SDK must not hide retries inside the request deadline');
   controller.abort();
   await assert.rejects(pending, { name: 'AbortError' });
   assert.equal(timedOut, true, 'aborting the request must still cancel the in-flight SDK request');
