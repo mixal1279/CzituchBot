@@ -2095,7 +2095,10 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
   // Nie utrzymujemy osobnych budżetów w generatorze, retrievalu i validatorze.
   const aiState = createAIRequestContext({
     requestId,
-    maxCzasMs: 25000,
+    // Live benchmark can reserve more time for provider fallback; production remains capped at 25s.
+    maxCzasMs: Number.isFinite(Number(opcje.__testDeps?.maxCzasMs))
+      ? Math.max(25000, Math.min(45000, Number(opcje.__testDeps.maxCzasMs)))
+      : 25000,
     maxGeneracji: 6,
     maxInitialGeneracji: 5,
     maxRepairGeneracji: 4,
