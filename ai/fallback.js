@@ -11,7 +11,7 @@ const CLASSIFIERS = Object.freeze({
 const SCHEMA_REJECTION = /(?:schema.{0,24}(?:reject|invalid|fail)|(?:reject|invalid|fail).{0,24}schema|invalid json|malformed json|json parse|niespełniający lokalnego kontraktu)/i;
 
 const DETAIL_CLASSIFIERS = Object.freeze([
-  ['budget_exhausted', /(?:budget|budżet|limit(?:e|u)? (?:model|generation)|model calls exhausted)/i],
+  ['budget_exhausted', /(?:budget|budżet|limit(?:e|u)? (?:model|generation)|model calls exhausted|(?:120b|global).*(?:request cap|request quota|circuit breaker|quota wyczerpana))/i],
   ['timeout_abort', /(?:timeout|timed ?out|ETIMEDOUT|AbortError|operation was aborted|abort(?:ed)?)/i],
   ['invalid_json', /(?:invalid json|malformed json|json parse|niepoprawny json)/i],
   ['schema_rejection', SCHEMA_REJECTION],
@@ -72,13 +72,12 @@ function quotaCooldownMsFromError(error) {
 }
 
 function markProviderQuota(provider, cooldownMs = Number(process.env.AI_PROVIDER_QUOTA_COOLDOWN_MS) || 60_000) {
-  const name = String(provider || '').split(':')[0];
-  if (!name) return [];
+  const endpoint = String(provider || '');
+  if (!GENERATION_FALLBACK_CHAIN.includes(endpoint)) return [];
   const duration = Math.max(1_000, Number(cooldownMs) || 60_000);
   const until = Date.now() + duration;
-  const blocked = GENERATION_FALLBACK_CHAIN.filter(step => step.startsWith(`${name}:`));
-  for (const step of blocked) quotaBlockedUntil.set(step, until);
-  return blocked;
+  quotaBlockedUntil.set(endpoint, until);
+  return [endpoint];
 }
 
 function isProviderQuotaBlocked(provider, now = Date.now()) {

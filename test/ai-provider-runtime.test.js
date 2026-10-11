@@ -73,6 +73,7 @@ test('provider and validator failures receive distinct categories', () => {
     ['provider unavailable: OpenRouter', 'provider_unavailable'],
     ['Gemini generation cooldown', 'provider_cooldown'],
     ['AI request budget exceeded', 'budget_exhausted'],
+    ['120B global circuit breaker/request quota', 'budget_exhausted'],
   ];
   for (const [message, expected] of cases) assert.equal(classifyFailure(message), expected, message);
   assert.equal(classifyFailure({ status: 'rejected', reason: 'unsupported claims' }), 'validator_rejection');
@@ -98,15 +99,28 @@ test('fallback selection excludes failed and repeated providers', () => {
   assert.ok(!selected.includes('openrouter:default'));
 });
 
-test('quota circuit blocks sibling models at the same provider and expires', () => {
+test('quota circuit blocks only the exhausted endpoint and expires', () => {
   resetProviderQuotaCooldowns();
   const blocked = markProviderQuota('groq:openai/gpt-oss-120b', 10_000);
-  assert.deepEqual(blocked, ['groq:openai/gpt-oss-120b', 'groq:openai/gpt-oss-20b']);
-  assert.equal(isProviderQuotaBlocked('groq:openai/gpt-oss-20b'), true);
+  assert.deepEqual(blocked, ['groq:openai/gpt-oss-120b']);
+  assert.equal(isProviderQuotaBlocked('groq:openai/gpt-oss-120b'), true);
+  assert.equal(isProviderQuotaBlocked('groq:openai/gpt-oss-20b'), false);
   const next = nextFallbacks({ maxFallbacks: 10 });
-  assert.ok(!next.some(provider => provider.startsWith('groq:')));
+  assert.ok(!next.includes('groq:openai/gpt-oss-120b'));
+  assert.ok(next.includes('groq:openai/gpt-oss-20b'));
   assert.ok(next.includes('gemini:gemini-3.8-flash'));
-  assert.equal(isProviderQuotaBlocked('groq:openai/gpt-oss-20b', Date.now() + 11_000), false);
+  assert.equal(isProviderQuotaBlocked('groq:openai/gpt-oss-120b', Date.now() + 11_000), false);
+  resetProviderQuotaCooldowns();
+});
+
+test('quota in one Gemini model leaves the sibling model available', () => {
+  resetProviderQuotaCooldowns();
+  markProviderQuota('gemini:gemini-3.8-flash', 10_000);
+  assert.equal(isProviderQuotaBlocked('gemini:gemini-3.8-flash'), true);
+  assert.equal(isProviderQuotaBlocked('gemini:gemini-3.5-flash-lite'), false);
+  const next = nextFallbacks({ maxFallbacks: 10 });
+  assert.ok(!next.includes('gemini:gemini-3.8-flash'));
+  assert.ok(next.includes('gemini:gemini-3.5-flash-lite'));
   resetProviderQuotaCooldowns();
 });
 

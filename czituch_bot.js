@@ -71,7 +71,7 @@ const { resolveGameEntity, scoreExternalGameCandidate, externalGameCandidateMatc
 const { extractExplicitUserMemories, mergeMemoryRecords, buildVerifiedMemoryContext, pruneExpiredMemories } = require('./ai/memory');
 const { parseMemoryCommand, forgetMemories, describeMemories } = require('./ai/memory_manager');
 const { decomposeQuestion, buildAdvancedRetrievalPlan } = require('./ai/retrieval');
-const { classifyFailure, nextFallbacks, selectRepairFallbacks, repairBudgetBlockReason, GENERATION_FALLBACK_CHAIN, markProviderQuota, quotaCooldownMsFromError } = require('./ai/fallback');
+const { classifyFailure, nextFallbacks, selectRepairFallbacks, repairBudgetBlockReason, GENERATION_FALLBACK_CHAIN, markProviderQuota, isProviderQuotaBlocked, quotaCooldownMsFromError } = require('./ai/fallback');
 const { createGroqCompletion, computeValidatorTimeout, computeGenerationTimeout } = require('./ai/provider-runtime');
 const { createAIMetrics, recordAIMetric, snapshotAIMetrics } = require('./ai/metrics');
 const { sanitizeRequestText } = require('./ai/limits');
@@ -1574,6 +1574,12 @@ Zwróć WYŁĄCZNIE JSON: {"valid":true/false,"reason":"krótki powód","confide
       remainingMs: typeof requestState?.remainingMs === 'function' ? requestState.remainingMs() : null,
     });
     console.error(`[AI][${requestId}] ${model} validator TRANSPORT_ERROR: ${diagnostic}`);
+    if (quota) {
+      const endpoint = `gemini:${model}`;
+      const cooldownMs = quotaCooldownMsFromError(message);
+      markProviderQuota(endpoint, cooldownMs);
+      console.warn(`[AI][${requestId}] quota circuit opened for ${endpoint} for ${cooldownMs}ms`);
+    }
     if (transient) geminiValidatorCooldownUntil = Date.now() + (quota ? 90_000 : 60_000);
     return {
       status: 'unavailable',
@@ -1829,7 +1835,11 @@ async function walidujOdpowiedzAI(persona, pytanie, odpowiedz, dane, historiaRoz
   }
   // Jeden stabilny model wystarcza do prostego JSON fact-checkera i nie
   // zużywa potrójnie darmowego limitu Gemini przy każdym pytaniu.
-  const models = KONFIGURACJA.geminiKey && Date.now() >= geminiValidatorCooldownUntil ? ['gemini-3.5-flash-lite'] : [];
+  const models = KONFIGURACJA.geminiKey
+    && Date.now() >= geminiValidatorCooldownUntil
+    && !isProviderQuotaBlocked('gemini:gemini-3.5-flash-lite')
+    ? ['gemini-3.5-flash-lite']
+    : [];
   if (!models.length) console.warn(`[AI][${requestId}] Gemini validator w cooldownie — używam fallbacku OpenRouter`);
   let last = null;
   for (let i = 0; i < models.length; i++) {
@@ -2960,6 +2970,10 @@ Pytanie użytkownika: ${pytanie}`;
 
     for (const step of candidateSteps) {
       if (!GENERATION_FALLBACK_CHAIN.includes(step) || (step === 'groq:openai/gpt-oss-120b' && phase !== 'repair')) continue;
+      if (isProviderQuotaBlocked(step)) {
+        console.warn(`[AI][${requestId}] skipping already quota-blocked endpoint ${step}`);
+        continue;
+      }
       const fn = fallbackSteps[step];
       if (!fn) continue;
 
