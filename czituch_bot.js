@@ -2099,9 +2099,9 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
     maxCzasMs: Number.isFinite(Number(opcje.__testDeps?.maxCzasMs))
       ? Math.max(25000, Math.min(45000, Number(opcje.__testDeps.maxCzasMs)))
       : 25000,
-    maxGeneracji: 6,
-    maxInitialGeneracji: 5,
-    maxRepairGeneracji: 4,
+    maxGeneracji: Number.isInteger(opcje.__testDeps?.maxGeneracji) ? Math.max(6, Math.min(10, opcje.__testDeps.maxGeneracji)) : 6,
+    maxInitialGeneracji: Number.isInteger(opcje.__testDeps?.maxInitialGeneracji) ? Math.max(5, Math.min(8, opcje.__testDeps.maxInitialGeneracji)) : 5,
+    maxRepairGeneracji: Number.isInteger(opcje.__testDeps?.maxRepairGeneracji) ? Math.max(4, Math.min(6, opcje.__testDeps.maxRepairGeneracji)) : 4,
     maxModelCalls: Number.isInteger(opcje.__testDeps?.maxModelCalls) ? Math.max(12, Math.min(24, opcje.__testDeps.maxModelCalls)) : 12,
     maxValidatorow: 3,
     maxWyszukanTavily: testMaxTavilySearches,
