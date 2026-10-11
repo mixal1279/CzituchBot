@@ -66,3 +66,30 @@ test('request context snapshot is stable and exposes one shared budget', () => {
   assert.ok(snapshot.remainingMs >= 0);
   assert.ok(snapshot.remainingMs <= snapshot.maxCzasMs);
 });
+
+
+test('request context can reserve generation slots for semantic repair', () => {
+  const ctx = createAIRequestContext({
+    requestId: 'repair-reserve',
+    maxCzasMs: 60000,
+    maxGeneracji: 7,
+    maxInitialGeneracji: 4,
+    maxRepairGeneracji: 3,
+    maxModelCalls: 12,
+  });
+
+  for (let i = 0; i < 4; i++) {
+    assert.equal(ctx.reserveGeneration('groq', `initial-${i}`, 'initial'), true);
+  }
+  assert.equal(ctx.reserveGeneration('groq', 'initial-overflow', 'initial'), false);
+  assert.equal(ctx.repairGeneracje, 0);
+
+  for (let i = 0; i < 3; i++) {
+    assert.equal(ctx.reserveGeneration('gemini', `repair-${i}`, 'repair'), true);
+  }
+  assert.equal(ctx.reserveGeneration('openrouter', 'repair-overflow', 'repair'), false);
+  assert.equal(ctx.generacje, 7);
+  assert.equal(ctx.initialGeneracje, 4);
+  assert.equal(ctx.repairGeneracje, 3);
+  assert.equal(ctx.modelCalls, 7);
+});
