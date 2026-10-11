@@ -3,7 +3,7 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
 const { createGroqCompletion, computeValidatorTimeout, computeGenerationTimeout } = require('../ai/provider-runtime');
-const { classifyFailure, shouldRetryFailure, nextFallbacks, selectRepairFallbacks, repairBudgetBlockReason } = require('../ai/fallback');
+const { classifyFailure, shouldRetryFailure, nextFallbacks, selectRepairFallbacks, repairBudgetBlockReason, resetProviderQuotaCooldowns, markProviderQuota, isProviderQuotaBlocked, quotaCooldownMsFromError } = require('../ai/fallback');
 
 test('Groq request body never contains signal; AbortSignal is passed in SDK transport options', async () => {
   const controller = new AbortController();
@@ -96,6 +96,30 @@ test('fallback selection excludes failed and repeated providers', () => {
   assert.ok(!selected.includes('groq:openai/gpt-oss-120b'));
   assert.ok(!selected.includes('xkiro:default'));
   assert.ok(!selected.includes('openrouter:default'));
+});
+
+test('quota circuit blocks sibling models at the same provider and expires', () => {
+  resetProviderQuotaCooldowns();
+  const blocked = markProviderQuota('groq:openai/gpt-oss-120b', 10_000);
+  assert.deepEqual(blocked, ['groq:openai/gpt-oss-120b', 'groq:openai/gpt-oss-20b']);
+  assert.equal(isProviderQuotaBlocked('groq:openai/gpt-oss-20b'), true);
+  const next = nextFallbacks({ maxFallbacks: 10 });
+  assert.ok(!next.some(provider => provider.startsWith('groq:')));
+  assert.ok(next.includes('gemini:gemini-3.8-flash'));
+  assert.equal(isProviderQuotaBlocked('groq:openai/gpt-oss-20b', Date.now() + 11_000), false);
+  resetProviderQuotaCooldowns();
+});
+
+test('quota cooldown respects Retry-After and never goes below the configured backoff', () => {
+  const previous = process.env.AI_PROVIDER_QUOTA_COOLDOWN_MS;
+  process.env.AI_PROVIDER_QUOTA_COOLDOWN_MS = '5000';
+  try {
+    assert.equal(quotaCooldownMsFromError('HTTP 429 (Retry-After=12s)'), 12_000);
+    assert.equal(quotaCooldownMsFromError('HTTP 429 rate limit'), 5_000);
+  } finally {
+    if (previous === undefined) delete process.env.AI_PROVIDER_QUOTA_COOLDOWN_MS;
+    else process.env.AI_PROVIDER_QUOTA_COOLDOWN_MS = previous;
+  }
 });
 
 test('repair after validator rejection selects only configured healthy providers and terminates deterministically otherwise', () => {

@@ -12,6 +12,8 @@ test('sentence-initial generic words are not treated as proper names', () => {
     'Decyzja ta wynikała z wcześniejszych wydarzeń.',
     'Motywuje go to do dalszego działania.',
     'Nowo uzyskana potęga zmienia sytuację.',
+    'Aby rozpocząć romans, zwiększ poziom aprobaty.',
+    'Dodatkowo pojawia się nowa, ważna postać.',
   ]) {
     assert.deepEqual(wyodrebnijNazwyWlasne(claim), []);
   }
@@ -20,6 +22,7 @@ test('sentence-initial generic words are not treated as proper names', () => {
 test('real first-word names Artur and Arthur remain detectable', () => {
   assert.ok(wyodrebnijNazwyWlasne('Artur opuścił miasto.').includes('artur'));
   assert.ok(wyodrebnijNazwyWlasne('Arthur opuścił miasto.').includes('arthur'));
+  assert.ok(wyodrebnijNazwyWlasne('Dodatkowo Alex ma zielone oczy.').includes('alex'));
 });
 
 test('apostrophe and Polish inflection variants match source name tokens', () => {

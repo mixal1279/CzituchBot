@@ -4,9 +4,10 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { buildAnswerPlan } = require('../ai/answer-plan');
 const { judgeAnswer } = require('../ai/answer-judge');
-const { zapytajAI } = require('../czituch_bot');
+const { normalizeFactText, scoreGoldenFacts } = require('../ai/benchmark-scorer');
+const { resetProviderQuotaCooldowns } = require('../ai/fallback');
 
-if (process.env.AI_LIVE_BENCHMARK !== '1') {
+if (require.main === module && process.env.AI_LIVE_BENCHMARK !== '1') {
   console.error('Live benchmark jest celowo zablokowany. Ustaw AI_LIVE_BENCHMARK=1.');
   process.exit(2);
 }
@@ -38,31 +39,6 @@ function stratifiedCases(all, requested) {
 }
 const cases = stratifiedCases(benchmark.cases, limit);
 
-function normalizeFactText(text) {
-  return String(text || '')
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\\u0300-\\u036f]/g, '')
-    .replace(/ł/g, 'l')
-    .replace(/[^a-z0-9\\s]/g, ' ')
-    .replace(/\\s+/g, ' ')
-    .trim();
-}
-
-function scoreGoldenFacts(answer, factual) {
-  if (!factual?.independentGold) return { applicable: false, score: null, passed: null, missing: [], forbidden: [] };
-  const text = normalizeFactText(answer);
-  const missing = [];
-  for (const group of factual.mustInclude || []) {
-    const ok = group.every(phrase => normalizeFactText(phrase).split(' ').every(token => text.includes(token)));
-    if (!ok) missing.push(group);
-  }
-  const forbidden = (factual.mustNot || []).filter(phrase => text.includes(normalizeFactText(phrase)));
-  const total = (factual.mustInclude || []).length;
-  const score = total ? (total - missing.length) / total : 1;
-  return { applicable: true, score, passed: missing.length === 0 && forbidden.length === 0, missing, forbidden };
-}
-
 function isFailureText(text) {
   return /nie mam wystarczających danych|nie mogę wiarygodnie potwierdzić|nie mogę potwierdzić tej informacji|nie będę zgadywać/i.test(String(text || ''));
 }
@@ -72,6 +48,8 @@ async function sleep(ms) {
 }
 
 async function run() {
+  const { zapytajAI } = require('../czituch_bot');
+  resetProviderQuotaCooldowns();
   const started = Date.now();
   const results = [];
   for (let i = 0; i < cases.length; i++) {
@@ -183,9 +161,20 @@ async function run() {
     failures: results.filter(x => !x.answered || x.judgeStatus !== 'accepted' || x.factualPassed === false).slice(0, 100),
   };
   console.log(JSON.stringify(report, null, 2));
+  if (process.env.AI_BENCHMARK_REQUIRE_PERFECT === '1') {
+    const factualOk = factualCases.length > 0 && factualPassed === factualCases.length;
+    if (answered !== results.length || complete !== results.length || !factualOk) {
+      console.error(`[LIVE BENCHMARK] wymagane 10/10; odpowiedzi=${answered}/${results.length}, kompletność=${complete}/${results.length}, factual=${factualPassed}/${factualCases.length}`);
+      process.exitCode = 1;
+    }
+  }
 }
 
-run().catch(error => {
-  console.error(error?.stack || error);
-  process.exitCode = 1;
-});
+module.exports = { normalizeFactText, scoreGoldenFacts, stratifiedCases, run };
+
+if (require.main === module) {
+  run().catch(error => {
+    console.error(error?.stack || error);
+    process.exitCode = 1;
+  });
+}

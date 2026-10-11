@@ -57,10 +57,44 @@ const GENERATION_FALLBACK_CHAIN = [
   'openrouter:default',
 ];
 
+const quotaBlockedUntil = new Map();
+
+function resetProviderQuotaCooldowns() {
+  quotaBlockedUntil.clear();
+}
+
+function quotaCooldownMsFromError(error) {
+  const configured = Number(process.env.AI_PROVIDER_QUOTA_COOLDOWN_MS) || 60_000;
+  const match = String(error?.message || error || '').match(/retry[- ]after\s*[=:]\s*(\d+(?:\.\d+)?)\s*(?:s|sec(?:ond)?s?)?/i);
+  if (!match) return configured;
+  const retryAfterMs = Math.max(0, Number(match[1])) * 1000;
+  return Math.max(configured, Math.ceil(retryAfterMs), 1_000);
+}
+
+function markProviderQuota(provider, cooldownMs = Number(process.env.AI_PROVIDER_QUOTA_COOLDOWN_MS) || 60_000) {
+  const name = String(provider || '').split(':')[0];
+  if (!name) return [];
+  const duration = Math.max(1_000, Number(cooldownMs) || 60_000);
+  const until = Date.now() + duration;
+  const blocked = GENERATION_FALLBACK_CHAIN.filter(step => step.startsWith(`${name}:`));
+  for (const step of blocked) quotaBlockedUntil.set(step, until);
+  return blocked;
+}
+
+function isProviderQuotaBlocked(provider, now = Date.now()) {
+  const until = quotaBlockedUntil.get(provider);
+  if (!until) return false;
+  if (until <= now) {
+    quotaBlockedUntil.delete(provider);
+    return false;
+  }
+  return true;
+}
+
 function nextFallbacks({ failure = 'unknown', attempted = [], failedProviders = [], maxFallbacks = null } = {}) {
   const failed = new Set(Array.isArray(failedProviders) ? failedProviders : []);
   let remaining = GENERATION_FALLBACK_CHAIN.filter(
-    provider => !attempted.includes(provider) && !failed.has(provider),
+    provider => !attempted.includes(provider) && !failed.has(provider) && !isProviderQuotaBlocked(provider),
   );
   // Validator rejection is a semantic signal, not a provider error. If a caller
   // explicitly supplies it, skip the expensive 120B retry; classifyFailure()
@@ -117,6 +151,10 @@ function shouldRetryFailure(failure) {
 
 module.exports = {
   GENERATION_FALLBACK_CHAIN,
+  resetProviderQuotaCooldowns,
+  quotaCooldownMsFromError,
+  markProviderQuota,
+  isProviderQuotaBlocked,
   classifyFailure,
   nextFallbacks,
   selectRepairFallbacks,

@@ -71,7 +71,7 @@ const { resolveGameEntity, scoreExternalGameCandidate, externalGameCandidateMatc
 const { extractExplicitUserMemories, mergeMemoryRecords, buildVerifiedMemoryContext, pruneExpiredMemories } = require('./ai/memory');
 const { parseMemoryCommand, forgetMemories, describeMemories } = require('./ai/memory_manager');
 const { decomposeQuestion, buildAdvancedRetrievalPlan } = require('./ai/retrieval');
-const { classifyFailure, nextFallbacks, selectRepairFallbacks, repairBudgetBlockReason, GENERATION_FALLBACK_CHAIN } = require('./ai/fallback');
+const { classifyFailure, nextFallbacks, selectRepairFallbacks, repairBudgetBlockReason, GENERATION_FALLBACK_CHAIN, markProviderQuota, quotaCooldownMsFromError } = require('./ai/fallback');
 const { createGroqCompletion, computeValidatorTimeout, computeGenerationTimeout } = require('./ai/provider-runtime');
 const { createAIMetrics, recordAIMetric, snapshotAIMetrics } = require('./ai/metrics');
 const { sanitizeRequestText } = require('./ai/limits');
@@ -2897,6 +2897,11 @@ Pytanie użytkownika: ${pytanie}`;
     if (result.error && allow120b) {
       recordGenerationAttempt({ provider: result.provider, model: result.model, status: 'error', failure: failureType, latencyMs: Date.now() - startedGenerationAt });
       failedFallbackProviders.add(primaryStep);
+      if (failureType === 'quota') {
+        const cooldownMs = quotaCooldownMsFromError(result.error);
+        const blocked = markProviderQuota(primaryStep, cooldownMs);
+        console.warn(`[AI][${requestId}] quota circuit opened for ${blocked.join(', ')} for ${cooldownMs}ms`);
+      }
     }
 
     aiState.fallbackReasons.push(failureType || 'unknown');
@@ -2975,6 +2980,11 @@ Pytanie użytkownika: ${pytanie}`;
       recordGenerationAttempt({ provider: candidate.provider, model: candidate.model, status: 'error', failure: providerFailure, latencyMs: Date.now() - attemptStartedAt });
       aiState.fallbackReasons.push(providerFailure);
       failedFallbackProviders.add(step);
+      if (providerFailure === 'quota') {
+        const cooldownMs = quotaCooldownMsFromError(candidate.error);
+        const blocked = markProviderQuota(step, cooldownMs);
+        console.warn(`[AI][${requestId}] quota circuit opened for ${blocked.join(', ')} for ${cooldownMs}ms`);
+      }
       console.warn(`[AI][${requestId}] disabling fallback ${step} for this request: ${providerFailure}`);
     }
 
