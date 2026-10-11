@@ -113,7 +113,7 @@ function extractAnswerSignals(answer) {
     outcome: /\b(wynik|skutek|konsekwenc|ostatecznie|pozniej|potem|nastepnie|umar\w*|zgin\w*|gin\w*|zabij\w*|smier\w*|zostal\w*|zostaj\w*)\b/.test(text)
       && text.split(/\s+/).length >= 4,
     relationship: Boolean(relationshipMarker)
-      && /\b(?:wspolprac|konflikt|przyjazn|zauf|zdrad|sojusz|wrog|partner|towarzysz|romans|relacj|lacz|dziel)\p{L}*/u.test(text),
+      && /\b(?:wspolprac|konflikt|przyjazn|zauf|zdrad|sojusz|wrog|partner|towarzysz|romans|lacz|dziel)\p{L}*/u.test(text),
     entity_context: text.length > 0,
     causal_explanation: Boolean(causalMarker) && hasMeaningfulTail(text, causalMarker),
   };
