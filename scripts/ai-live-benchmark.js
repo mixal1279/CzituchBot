@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { buildAnswerPlan } = require('../ai/answer-plan');
 const { judgeAnswer } = require('../ai/answer-judge');
+const { scoreGoldenFacts } = require('./benchmark-scoring');
 const { zapytajAI } = require('../czituch_bot');
 
 if (process.env.AI_LIVE_BENCHMARK !== '1') {
@@ -15,7 +16,7 @@ const benchmark = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'test', 
 const defaultLimit = Math.min(10, benchmark.cases.length);
 const requestedLimit = Number(process.env.AI_BENCHMARK_LIMIT);
 const limit = Math.max(1, Math.min(benchmark.cases.length, Number.isFinite(requestedLimit) && requestedLimit > 0 ? requestedLimit : defaultLimit));
-// Domyślnie 2 s przerwy, żeby nie wpadać w limity darmowych providerów (Groq/Mistral).
+// Domyślnie 2 s przerwy; przy limitach minutowych/tokenowych providera zwiększ AI_BENCHMARK_DELAY_MS.
 const envDelay = Number(process.env.AI_BENCHMARK_DELAY_MS);
 const delayMs = Math.max(0, Number.isFinite(envDelay) ? envDelay : 2000);
 // Na streamie bot zna grę; benchmark też ją przekazuje (AI_BENCHMARK_GAME_CONTEXT=0 wyłącza).
@@ -42,44 +43,6 @@ function stratifiedCases(all, requested) {
   return selected;
 }
 const cases = stratifiedCases(benchmark.cases, limit);
-
-function normalizeFactText(text) {
-  return String(text || '')
-    .toLowerCase()
-    .replace(/ł/g, 'l')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9\s]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-// Token z frazy złotej pasuje, gdy jakiekolwiek słowo odpowiedzi zaczyna się od tego tokenu
-// (obsługa polskiej fleksji, np. "drużyn" -> "drużyny"). Tokeny 1-2 znakowe wymagają całego słowa.
-function tokenMatches(token, words) {
-  if (!token) return true;
-  if (token.length <= 2) return words.includes(token);
-  return words.some(word => word.startsWith(token));
-}
-
-function phraseMatches(phrase, words) {
-  return normalizeFactText(phrase).split(' ').filter(Boolean).every(token => tokenMatches(token, words));
-}
-
-function scoreGoldenFacts(answer, factual) {
-  if (!factual?.independentGold) return { applicable: false, score: null, passed: null, missing: [], forbidden: [] };
-  const text = normalizeFactText(answer);
-  const words = text.split(' ').filter(Boolean);
-  const missing = [];
-  for (const group of factual.mustInclude || []) {
-    const ok = group.every(phrase => phraseMatches(phrase, words));
-    if (!ok) missing.push(group);
-  }
-  const forbidden = (factual.mustNot || []).filter(phrase => phraseMatches(phrase, words));
-  const total = (factual.mustInclude || []).length;
-  const score = total ? (total - missing.length) / total : 1;
-  return { applicable: true, score, passed: missing.length === 0 && forbidden.length === 0, missing, forbidden };
-}
 
 function isFailureText(text) {
   return /nie mam wystarczających danych|nie mogę wiarygodnie potwierdzić|nie mogę potwierdzić tej informacji|nie będę zgadywać/i.test(String(text || ''));
@@ -161,6 +124,7 @@ async function run() {
         fallbackReasons: summary?.fallbackReasons || [],
         tavilySearches: summary?.tavilySearches ?? null,
         sourceCount: summary?.sourceCount ?? null,
+        answerPreview: answer.slice(0, 400),
         error: String(error?.message || error),
       });
     }
@@ -178,14 +142,15 @@ async function run() {
   const factualCases = results.filter(x => x.factualPassed !== null);
   const factualPassed = factualCases.filter(x => x.factualPassed).length;
   const factualAverage = factualCases.length ? factualCases.reduce((sum, x) => sum + x.factualScore, 0) / factualCases.length : null;
+  const modelCallValues = results.filter(x => Number.isFinite(x.modelCalls));
   const diagnostic = {
     validatorRejected: results.filter(x => x.finalStatus === 'rejected').length,
     validatorInconclusive: results.filter(x => x.finalStatus === 'inconclusive').length,
     validatorUnavailable: results.filter(x => x.finalStatus === 'unavailable').length,
     repairUsed: results.filter(x => Number(x.generationBudget?.repairUsed || 0) > 0).length,
     repairSkipped: results.filter(x => Number(x.generationBudget?.repairUsed || 0) === 0 && x.finalStatus === 'rejected').length,
-    avgModelCalls: results.filter(x => Number.isFinite(x.modelCalls)).length
-      ? Number((results.filter(x => Number.isFinite(x.modelCalls)).reduce((sum, x) => sum + x.modelCalls, 0) / results.filter(x => Number.isFinite(x.modelCalls)).length).toFixed(2))
+    avgModelCalls: modelCallValues.length
+      ? Number((modelCallValues.reduce((sum, x) => sum + x.modelCalls, 0) / modelCallValues.length).toFixed(2))
       : null,
     providerFailures: [...new Set(results.flatMap(x => (x.generationAttempts || []).filter(a => a.status === 'error').map(a => `${a.provider}:${a.model}:${a.failure || 'unknown'}`)))],
   };

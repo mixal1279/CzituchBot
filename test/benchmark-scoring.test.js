@@ -11,10 +11,8 @@ test('normalizacja zachowuje cyfry i usuwa polskie znaki', () => {
 });
 
 test('krótki token "nie" nie pasuje do prefiksu "niezależnie"', () => {
-  const r = scoreGoldenFacts('Niezależnie od tego Ciri uciekła.', gold([['Ciri', 'nie']]));
-  assert.equal(r.passed, false);
-  const ok = scoreGoldenFacts('Ciri nie chciała tego.', gold([['Ciri', 'nie']]));
-  assert.equal(ok.passed, false, 'frazy Ciri i nie to osobne słowa nieadjacentne -> fraza wielowyrazowa wymaga sąsiedztwa');
+  assert.equal(scoreGoldenFacts('Niezależnie od tego Ciri uciekła.', gold([['Ciri', 'nie']])).passed, false);
+  assert.equal(scoreGoldenFacts('Ciri nie chciała tego.', gold([['Ciri', 'nie']])).passed, true);
 });
 
 test('fraza wielowyrazowa wymaga kolejności i sąsiedztwa', () => {
@@ -25,12 +23,12 @@ test('fraza wielowyrazowa wymaga kolejności i sąsiedztwa', () => {
 
 test('fleksja: dłuższy rdzeń pasuje do słowa z krótką końcówką', () => {
   assert.equal(scoreGoldenFacts('Astarion dołączył do drużyny.', gold([['drużyn']])).passed, true);
-  assert.equal(scoreGoldenFacts('Astarion dołączył do drużynowego rajdu na koniec świata.', gold([['drużyn']])).passed, false);
+  assert.equal(scoreGoldenFacts('Astarion dołączył do drużynowego rajdu.', gold([['drużyn']])).passed, false);
 });
 
-test('mustNot wykrywa zakazaną frazę jako całość', () => {
-  const r = scoreGoldenFacts('To był Wheatley.', { independentGold: true, mustInclude: [['Wheatley']], mustNot: ['Chell'] });
-  assert.equal(r.passed, true);
+test('mustNot wykrywa zakazaną frazę', () => {
+  const ok = scoreGoldenFacts('To był Wheatley.', { independentGold: true, mustInclude: [['Wheatley']], mustNot: ['Chell'] });
+  assert.equal(ok.passed, true);
   const bad = scoreGoldenFacts('To była Chell.', { independentGold: true, mustInclude: [['Chell']], mustNot: ['Chell'] });
   assert.equal(bad.passed, false);
   assert.deepEqual(bad.forbidden, ['Chell']);
