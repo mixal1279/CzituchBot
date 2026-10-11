@@ -208,3 +208,12 @@ test('Tavily cache entry limit evicts oldest entries first', () => {
   ograniczCacheTavily(cache, 2);
   assert.deepEqual([...cache.keys()], ['b', 'c']);
 });
+
+
+test('fallback chain tries OpenRouter before Xkiro when later providers are needed', () => {
+  const openrouter = GENERATION_FALLBACK_CHAIN.indexOf('openrouter:default');
+  const xkiro = GENERATION_FALLBACK_CHAIN.indexOf('xkiro:default');
+  assert.ok(openrouter >= 0);
+  assert.ok(xkiro >= 0);
+  assert.ok(openrouter < xkiro);
+});
