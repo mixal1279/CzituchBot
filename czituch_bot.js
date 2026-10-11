@@ -2098,10 +2098,10 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
     maxCzasMs: 25000,
     // Rezerwujemy miejsce na semantic repair zamiast pozwolić, by initial
     // fallback chain zużył cały budżet generacji przed walidacją.
-    maxGeneracji: 7,
+    maxGeneracji: 8,
     maxInitialGeneracji: 4,
-    maxRepairGeneracji: 3,
-    maxModelCalls: 12,
+    maxRepairGeneracji: 4,
+    maxModelCalls: 14,
     maxValidatorow: 3,
     maxWyszukanTavily: testMaxTavilySearches,
   });
