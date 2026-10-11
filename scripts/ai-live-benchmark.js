@@ -67,8 +67,14 @@ async function run() {
           temperature: 0.2,
           max_tokens: 300,
           __testDeps: {
+            // Live quality runs get enough room for grounded repair and provider fallback.
+            // These limits are test-only; production requests keep their conservative defaults.
             maxCzasMs: 40000,
-          onSummary: value => { summary = value; },
+            maxModelCalls: 18,
+            maxGeneracji: 8,
+            maxInitialGeneracji: 6,
+            maxRepairGeneracji: 5,
+            onSummary: value => { summary = value; },
           },
         },
       );
