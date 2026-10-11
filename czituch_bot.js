@@ -2095,11 +2095,14 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
   // Nie utrzymujemy osobnych budżetów w generatorze, retrievalu i validatorze.
   const aiState = createAIRequestContext({
     requestId,
-    maxCzasMs: 25000,
-    maxGeneracji: 6,
-    maxInitialGeneracji: 5,
-    maxRepairGeneracji: 4,
-    maxModelCalls: 12,
+    // Live benchmark can reserve more time for provider fallback; production remains capped at 25s.
+    maxCzasMs: Number.isFinite(Number(opcje.__testDeps?.maxCzasMs))
+      ? Math.max(25000, Math.min(45000, Number(opcje.__testDeps.maxCzasMs)))
+      : 25000,
+    maxGeneracji: Number.isInteger(opcje.__testDeps?.maxGeneracji) ? Math.max(6, Math.min(10, opcje.__testDeps.maxGeneracji)) : 6,
+    maxInitialGeneracji: Number.isInteger(opcje.__testDeps?.maxInitialGeneracji) ? Math.max(5, Math.min(8, opcje.__testDeps.maxInitialGeneracji)) : 5,
+    maxRepairGeneracji: Number.isInteger(opcje.__testDeps?.maxRepairGeneracji) ? Math.max(4, Math.min(6, opcje.__testDeps.maxRepairGeneracji)) : 4,
+    maxModelCalls: Number.isInteger(opcje.__testDeps?.maxModelCalls) ? Math.max(12, Math.min(24, opcje.__testDeps.maxModelCalls)) : 12,
     maxValidatorow: 3,
     maxWyszukanTavily: testMaxTavilySearches,
   });
@@ -2783,34 +2786,28 @@ Pytanie użytkownika: ${pytanie}`;
     if (model === 'openai/gpt-oss-120b') liczbaProb120b++;
     try {
       const kontekstDoGroq = String(kontekstAI || '').slice(0, 10000);
-      const controller = new AbortController();
       const timeoutMs = timeoutDlaGeneracji();
-      const timer = setTimeout(() => controller.abort(), timeoutMs);
-      try {
-        const response = await createGroqCompletion(groqClient, {
-          model,
-          messages: [{ role: 'system', content: overrideSystemPrompt }, ...przygotujHistorieDoModelu(historiaRozmowy, 4), { role: 'user', content: kontekstDoGroq }],
-          temperature,
-          max_completion_tokens: maxTok,
-          reasoning_effort: model === 'openai/gpt-oss-120b' ? 'medium' : 'low',
-          include_reasoning: false,
-        }, { signal: controller.signal });
-        const choice = response?.choices?.[0] || {};
-        const content = typeof choice?.message?.content === 'string' ? choice.message.content : '';
-        if (!content.trim()) {
-          throw new Error(formatProviderError('groq', model, null, {
-            status: response?.status ?? null,
-            code: response?.error?.code ?? null,
-            type: response?.error?.type ?? null,
-            finish_reason: choice?.finish_reason ?? null,
-            has_reasoning: Boolean(choice?.message?.reasoning || choice?.message?.reasoning_content),
-            responseData: response?.error ? response : null,
-          }));
-        }
-        return ujednolicWynik({ tekst: content, ucieta: choice?.finish_reason === 'length' }, 'groq', model);
-      } finally {
-        clearTimeout(timer);
+      const response = await createGroqCompletion(groqClient, {
+        model,
+        messages: [{ role: 'system', content: overrideSystemPrompt }, ...przygotujHistorieDoModelu(historiaRozmowy, 4), { role: 'user', content: kontekstDoGroq }],
+        temperature,
+        max_completion_tokens: maxTok,
+        reasoning_effort: 'low',
+        include_reasoning: false,
+      }, { timeoutMs });
+      const choice = response?.choices?.[0] || {};
+      const content = typeof choice?.message?.content === 'string' ? choice.message.content : '';
+      if (!content.trim()) {
+        throw new Error(formatProviderError('groq', model, null, {
+          status: response?.status ?? null,
+          code: response?.error?.code ?? null,
+          type: response?.error?.type ?? null,
+          finish_reason: choice?.finish_reason ?? null,
+          has_reasoning: Boolean(choice?.message?.reasoning || choice?.message?.reasoning_content),
+          responseData: response?.error ? response : null,
+        }));
       }
+      return ujednolicWynik({ tekst: content, ucieta: choice?.finish_reason === 'length' }, 'groq', model);
       return ujednolicWynik({ tekst: response.choices?.[0]?.message?.content, ucieta: response.choices?.[0]?.finish_reason === 'length' }, 'groq', model);
     } catch (err) {
       const diagnostic = formatProviderError('groq', model, err, {

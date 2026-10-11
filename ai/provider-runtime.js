@@ -1,12 +1,31 @@
 'use strict';
 
 /** Call the Groq SDK with transport options separate from the JSON request body. */
-function createGroqCompletion(groqClient, payload, { signal } = {}) {
+function createGroqCompletion(groqClient, payload, { timeoutMs = null } = {}) {
   if (!groqClient?.chat?.completions?.create) {
     throw new TypeError('Groq chat.completions.create is unavailable');
   }
-  const requestOptions = signal ? { signal } : {};
-  return groqClient.chat.completions.create(payload, requestOptions);
+
+  // Groq SDK versions may reject AbortSignal as an unsupported request option.
+  // Enforce the caller's wall-clock budget without adding transport fields to
+  // the provider request or allowing a hung request to block the fallback chain.
+  const request = Promise.resolve().then(() => groqClient.chat.completions.create(payload));
+  const timeout = Number(timeoutMs);
+  if (!Number.isFinite(timeout) || timeout <= 0) {
+    const error = new Error('Groq request skipped: no generation time budget remains');
+    error.code = 'ETIMEDOUT';
+    return Promise.reject(error);
+  }
+
+  let timer;
+  const deadline = new Promise((_, reject) => {
+    timer = setTimeout(() => {
+      const error = new Error(`Groq request timed out after ${Math.floor(timeout)}ms`);
+      error.code = 'ETIMEDOUT';
+      reject(error);
+    }, Math.floor(timeout));
+  });
+  return Promise.race([request, deadline]).finally(() => clearTimeout(timer));
 }
 
 /**

@@ -5,38 +5,39 @@ const test = require('node:test');
 const { createGroqCompletion, computeValidatorTimeout, computeGenerationTimeout } = require('../ai/provider-runtime');
 const { classifyFailure, shouldRetryFailure, nextFallbacks, selectRepairFallbacks, repairBudgetBlockReason } = require('../ai/fallback');
 
-test('Groq request body never contains signal; AbortSignal is passed in SDK transport options', async () => {
-  const controller = new AbortController();
+test('Groq request uses a clean payload and no unsupported transport options', async () => {
   let observedPayload;
-  let observedOptions;
-  let timedOut = false;
+  let argumentCount = 0;
   const groqClient = {
-    chat: { completions: { create(payload, options) {
-      observedPayload = payload;
-      observedOptions = options;
-      return new Promise((resolve, reject) => {
-        options.signal.addEventListener('abort', () => {
-          timedOut = true;
-          reject(Object.assign(new Error('request aborted'), { name: 'AbortError' }));
-        }, { once: true });
-      });
+    chat: { completions: { create(...args) {
+      argumentCount = args.length;
+      observedPayload = args[0];
+      return Promise.resolve({ choices: [{ message: { content: 'ok' } }] });
     } } },
   };
   const payload = {
     model: 'openai/gpt-oss-120b',
     messages: [{ role: 'user', content: 'test' }],
     max_completion_tokens: 300,
-    reasoning_effort: 'medium',
+    reasoning_effort: 'low',
     include_reasoning: false,
     temperature: 0.2,
   };
-  const pending = createGroqCompletion(groqClient, payload, { signal: controller.signal });
+  const response = await createGroqCompletion(groqClient, payload, { timeoutMs: 100 });
+  assert.equal(response.choices[0].message.content, 'ok');
   assert.equal(observedPayload, payload);
   assert.equal(Object.hasOwn(observedPayload, 'signal'), false);
-  assert.equal(observedOptions.signal, controller.signal);
-  controller.abort();
-  await assert.rejects(pending, { name: 'AbortError' });
-  assert.equal(timedOut, true, 'aborting the request must still cancel the in-flight SDK request');
+  assert.equal(argumentCount, 1, 'the SDK must receive only the JSON request payload');
+});
+
+test('Groq wrapper timeout rejects and lets the fallback chain continue', async () => {
+  const groqClient = {
+    chat: { completions: { create() { return new Promise(() => {}); } } },
+  };
+  await assert.rejects(
+    createGroqCompletion(groqClient, { model: 'openai/gpt-oss-120b' }, { timeoutMs: 5 }),
+    error => error.code === 'ETIMEDOUT' && /timed out/.test(error.message),
+  );
 });
 
 test('validator timeout is capped and reserves time for fallback', () => {
