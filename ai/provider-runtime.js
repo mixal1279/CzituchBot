@@ -5,7 +5,10 @@ function createGroqCompletion(groqClient, payload, { signal } = {}) {
   if (!groqClient?.chat?.completions?.create) {
     throw new TypeError('Groq chat.completions.create is unavailable');
   }
-  const requestOptions = signal ? { signal } : {};
+  // The SDK retries transient failures by default. With a strict request deadline,
+  // those hidden retries can consume the time reserved for fallback/validation.
+  // One explicit attempt per provider keeps the outer fallback policy in control.
+  const requestOptions = { maxRetries: 0, ...(signal ? { signal } : {}) };
   return groqClient.chat.completions.create(payload, requestOptions);
 }
 
