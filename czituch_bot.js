@@ -2095,7 +2095,9 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
   // Nie utrzymujemy osobnych budżetów w generatorze, retrievalu i validatorze.
   const aiState = createAIRequestContext({
     requestId,
-    maxCzasMs: 25000,
+    // Retrieval + validator + at least one bounded repair must fit in one request.
+    // 25 s was routinely exhausted after a provider timeout and supplemental search.
+    maxCzasMs: 35000,
     // Rezerwujemy miejsce na semantic repair zamiast pozwolić, by initial
     // fallback chain zużył cały budżet generacji przed walidacją.
     maxGeneracji: 8,
