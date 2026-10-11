@@ -119,10 +119,10 @@ test('v26 accepts relative story chronology for when questions', () => {
 });
 
 test('v26 judge never accepts a partial answer just because its average score meets the threshold', () => {
-  const plan = buildAnswerPlan('Kiedy i gdzie Geralt przybywa do Novigradu?', {
+  const plan = buildAnswerPlan('Kiedy i gdzie Geralt spotyka Ciri?', {
     intent: 'web_fact', is_lore: true, entity: 'Geralt', game: 'The Witcher 3',
   });
-  const result = judgeAnswer('Geralt przybywa do Novigradu w 1272 roku.', plan);
+  const result = judgeAnswer('Geralt spotyka Ciri w 1272 roku.', plan);
   assert.equal(result.status, 'repair');
   assert.ok(result.missing.includes('where'));
 });
