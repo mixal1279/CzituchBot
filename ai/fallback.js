@@ -53,8 +53,10 @@ const GENERATION_FALLBACK_CHAIN = [
   'groq:openai/gpt-oss-20b',
   'gemini:gemini-3.8-flash',
   'gemini:gemini-3.5-flash-lite',
-  'xkiro:default',
+  // W ostatnim benchmarku Xkiro zwracał model unavailable; OpenRouter
+  // dostaje szansę wcześniej, zanim budżet/czas wyczerpie się na niedostępnym endpointcie.
   'openrouter:default',
+  'xkiro:default',
 ];
 
 function nextFallbacks({ failure = 'unknown', attempted = [], failedProviders = [], maxFallbacks = null } = {}) {
