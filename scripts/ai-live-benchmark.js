@@ -67,7 +67,8 @@ async function run() {
           temperature: 0.2,
           max_tokens: 300,
           __testDeps: {
-            onSummary: value => { summary = value; },
+            maxCzasMs: 40000,
+          onSummary: value => { summary = value; },
           },
         },
       );
