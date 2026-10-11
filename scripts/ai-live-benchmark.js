@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { buildAnswerPlan } = require('../ai/answer-plan');
 const { judgeAnswer } = require('../ai/answer-judge');
-const { scoreGoldenFacts } = require('./benchmark-scoring');
+const { scoreGoldenFacts, withGameContext } = require('./benchmark-scoring');
 const { zapytajAI } = require('../czituch_bot');
 
 if (process.env.AI_LIVE_BENCHMARK !== '1') {
@@ -45,7 +45,7 @@ function stratifiedCases(all, requested) {
 const cases = stratifiedCases(benchmark.cases, limit);
 
 function isFailureText(text) {
-  return /nie mam wystarczających danych|nie mogę wiarygodnie potwierdzić|nie mogę potwierdzić tej informacji|nie będę zgadywać/i.test(String(text || ''));
+  return /nie mam wystarczających danych|nie mogę wiarygodnie potwierdzić|nie mogę potwierdzić tej informacji|nie będę zgadywać|nie znalazłem pewnych danych/i.test(String(text || ''));
 }
 
 async function sleep(ms) {
@@ -60,9 +60,7 @@ async function run() {
     let answer = '';
     let summary = null;
     try {
-      const askedQuestion = useGameContext && item.game
-        ? `${item.question} (gra: ${item.game})`
-        : item.question;
+      const askedQuestion = useGameContext ? withGameContext(item.question, item.game) : item.question;
       await zapytajAI(
         'benchmark',
         askedQuestion,
@@ -86,6 +84,7 @@ async function run() {
       results.push({
         id: item.id,
         category: item.category,
+        askedQuestion,
         answered: Boolean(answer.trim()) && !isFailureText(answer),
         completeness: judge.score,
         judgeStatus: judge.status,
