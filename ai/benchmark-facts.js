@@ -29,7 +29,7 @@ function scoreGoldenFacts(answer, factual) {
     const requiredTokens = (Array.isArray(group) ? group : [group])
       .flatMap(phrase => normalizeFactText(phrase).split(' '))
       .filter(Boolean);
-    if (requiredTokens.some(token => !answerTokens.has(token))) missing.push(group);
+    if (!requiredTokens.every(token => answerTokens.has(token))) missing.push(group);
   }
 
   const forbidden = (factual.mustNot || [])
