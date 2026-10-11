@@ -54,10 +54,16 @@ async function run() {
     const item = cases[i];
     let answer = '';
     let summary = null;
+    // The case metadata names the game, but the raw question often does not.
+    // Pass that context to retrieval/generation so the live test measures answer quality,
+    // not whether the model can guess which game's dragon/sword/boss was intended.
+    const questionWithContext = item.game
+      ? `${item.question}\\nKontekst gry: ${item.game}.`
+      : item.question;
     try {
       await zapytajAI(
         'benchmark',
-        item.question,
+        questionWithContext,
         [],
         'Odpowiadaj rzeczowo po polsku. Korzystaj wyłącznie z potwierdzonych danych referencyjnych i nie zgaduj.',
         async text => { answer = String(text || ''); },
