@@ -16,7 +16,8 @@ function judgeAnswer(answer, plan, options = {}) {
     };
   }
 
-  if (completeness.score < minScore) {
+  // Completeness is conjunctive: a high average score must not hide a missing required slot.
+  if (!completeness.ok || completeness.score < minScore) {
     return {
       status: 'repair', ok: false, score: completeness.score,
       missing: completeness.missing,
