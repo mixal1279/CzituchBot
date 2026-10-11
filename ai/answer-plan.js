@@ -10,7 +10,7 @@ const SLOT_PATTERNS = Object.freeze({
   comparison: /\b(czym\s+(?:się\s+)?różni|czym\s+różni\s+się|różnica|porównaj|lepszy|gorszy|vs\.?|versus|difference|compare)\b/i,
   steps: /\b(jak zrobić|jak wykonać|jak zdobyć|jak przejść|jak naprawić|jak użyć|instrukcja|krok po kroku|how to|walkthrough)\b/i,
   outcome: /\b(co\s+(?:się\s+)?stało(?:\s+się)?|co dalej|jaki był skutek|konsekw\p{L}*|what happened|what happened next)\b/iu,
-  relationship: /\b(relacj\p{L}*|związek|przyjaźń|wróg|sojusz|relationship|friend|enemy|alliance)\b/iu,
+  relationship: /(?:relacj|związk|przyjaź|wróg|sojusz|relationship|friend|enemy|alliance)/iu,
 });
 const INTENT_REQUIREMENTS = Object.freeze({
   lore: ['entity_context'],
