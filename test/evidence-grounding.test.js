@@ -40,7 +40,7 @@ test('validator accepts an exact quoted span without requiring the whole source 
 });
 
 test('validator normalizes singular/camelCase evidence fields but still verifies the exact source and quote', () => {
-  const data = '[SOURCE 1]\\nTYTUŁ: Portal 2\\nTREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>\\nWheatley przejmuje kontrolę nad systemem Aperture.\\n<<<END_UNTRUSTED_SOURCE_CONTENT>>>';
+  const data = '[SOURCE 1]\nTYTUŁ: Portal 2\nTREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>\nWheatley przejmuje kontrolę nad systemem Aperture.\n<<<END_UNTRUSTED_SOURCE_CONTENT>>>';
   const result = normalizujWynikWalidatora({
     valid: true, reason: 'ok', unsupported_claims: [], supported: true, relevant: true, complete: true, hallucination: false, confidence: 0.95,
     claims: [{ claim: 'Wheatley przejmuje kontrolę nad systemem Aperture.', supported: true, sourceId: 'SOURCE 1', evidenceQuote: 'Wheatley przejmuje kontrolę nad systemem Aperture.', reason: 'dokładny cytat' }],
