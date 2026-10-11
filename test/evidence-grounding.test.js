@@ -39,6 +39,17 @@ test('validator accepts an exact quoted span without requiring the whole source 
   assert.equal(result.diagnostics.evidenceBindings[0].mode, 'exact_quote');
 });
 
+test('validator normalizes singular/camelCase evidence fields but still verifies the exact source and quote', () => {
+  const data = '[SOURCE 1]\nTYTUŁ: Portal 2\nTREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>\nWheatley przejmuje kontrolę nad systemem Aperture.\n<<<END_UNTRUSTED_SOURCE_CONTENT>>>';
+  const result = normalizujWynikWalidatora({
+    valid: true, reason: 'ok', unsupported_claims: [], supported: true, relevant: true, complete: true, hallucination: false, confidence: 0.95,
+    claims: [{ claim: 'Wheatley przejmuje kontrolę nad systemem Aperture.', supported: true, sourceId: 'SOURCE 1', evidenceQuote: 'Wheatley przejmuje kontrolę nad systemem Aperture.', reason: 'dokładny cytat' }],
+  }, 'test-model', 'test', new Set(['SOURCE 1']), data);
+  assert.equal(result.status, 'accepted');
+  assert.equal(result.diagnostics.evidenceBindings[0].sourceIds[0], 'SOURCE 1');
+  assert.equal(result.diagnostics.evidenceBindings[0].quoteVerified, true);
+});
+
 test('validator can use the same source block as bounded context when the quote uses a pronoun', () => {
   const data = '[SOURCE 1]\nTYTUŁ: RDR2\nTREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>\nArthur Morgan wrócił do obozu. On uratował Johna podczas wydarzeń w górach.\n<<<END_UNTRUSTED_SOURCE_CONTENT>>>';
   const result = normalizujWynikWalidatora({

@@ -541,9 +541,9 @@ console.log('AI regression tests: OK');
     'groq:openai/gpt-oss-20b',
     'gemini:gemini-3.8-flash',
     'gemini:gemini-3.5-flash-lite',
-    'xkiro:default',
+    'openrouter:default',
   ]);
-  assert.equal(GENERATION_FALLBACK_CHAIN.at(-1), 'openrouter:default');
+  assert.equal(GENERATION_FALLBACK_CHAIN.at(-1), 'xkiro:default');
   assert.equal(shouldRetryFailure('unknown'), true);
   assert.equal(shouldRetryFailure('provider_cooldown'), true);
   assert.equal(shouldRetryFailure('validator_inconclusive'), true);
@@ -560,10 +560,10 @@ console.log('AI regression tests: OK');
   }), [
     'gemini:gemini-3.8-flash',
     'gemini:gemini-3.5-flash-lite',
-    'xkiro:default',
     'openrouter:default',
+    'xkiro:default',
   ]);
-  assert.deepEqual(nextFallbacks({attempted:['groq:openai/gpt-oss-120b','groq:openai/gpt-oss-20b','gemini:gemini-3.8-flash','gemini:gemini-3.5-flash-lite'], maxFallbacks:1}), ['xkiro:default']);
+  assert.deepEqual(nextFallbacks({attempted:['groq:openai/gpt-oss-120b','groq:openai/gpt-oss-20b','gemini:gemini-3.8-flash','gemini:gemini-3.5-flash-lite'], maxFallbacks:1}), ['openrouter:default']);
   assert.deepEqual(nextFallbacks({
     failure: 'grounded_reject',
     failedProviders: [
@@ -573,7 +573,7 @@ console.log('AI regression tests: OK');
       'gemini:gemini-3.5-flash-lite',
     ],
     maxFallbacks: 1,
-  }), ['xkiro:default']);
+  }), ['openrouter:default']);
 }
 
 {

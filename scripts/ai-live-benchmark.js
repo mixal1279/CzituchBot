@@ -160,6 +160,8 @@ async function run() {
     validatorRejected: results.filter(x => x.finalStatus === 'rejected').length,
     validatorInconclusive: results.filter(x => x.finalStatus === 'inconclusive').length,
     validatorUnavailable: results.filter(x => x.finalStatus === 'unavailable').length,
+    acceptedButIncomplete: results.filter(x => x.finalStatus === 'accepted' && x.judgeStatus !== 'accepted').length,
+    acceptedButFactuallyFailed: results.filter(x => x.finalStatus === 'accepted' && x.factualPassed === false).length,
     repairUsed: results.filter(x => Number(x.generationBudget?.repairUsed || 0) > 0).length,
     repairSkipped: results.filter(x => Number(x.generationBudget?.repairUsed || 0) === 0 && x.finalStatus === 'rejected').length,
     avgModelCalls: results.filter(x => Number.isFinite(x.modelCalls)).length
