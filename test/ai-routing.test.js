@@ -36,6 +36,7 @@ const cases = [
   ['Ile trwa Cyberpunk 2077?', 'hltb', 'Cyberpunk 2077', 'game'],
   ['Ile trwa Elden Ring?', 'hltb', 'Elden Ring', 'game'],
   ['Ile trwa Red Dead Redemption 2?', 'hltb', 'Red Dead Redemption 2', 'game'],
+  ['Ile trwa walka z Malenią?', 'web_fact', null, null],
   ['Jaka jest dzisiaj pogoda?', 'weather', null, null],
   ['Jaka jest najnowsza wersja Minecrafta?', 'web_fact', 'Minecraft', 'game'],
   ['Co nowego dzisiaj w Fortnite?', 'web_fact', 'Fortnite', 'game'],
