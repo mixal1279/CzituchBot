@@ -91,7 +91,7 @@ function hasMeaningfulTail(text, marker) {
 
 function extractAnswerSignals(answer) {
   const text = normalize(answer);
-  const where = /\b(w|we|na|do|z|ze)\s+[a-ząćęłńóśźż0-9-]+/.test(text)
+  const where = /\b(w|we|na|do|z|ze)\s+(?!\d)[a-ząćęłńóśźż0-9-]+/.test(text)
     && !/\b(?:w|we|na|do)\s+(?:odpowiednim|okreslonym|okreslonej|miejscu|miejsca)\b/.test(text);
   const causalMarker = /\b(dlaczego|czemu|powod|poniewaz|bo|because|because of|due to)\b/.exec(text)?.[0] || '';
   const procedural = /\b(nalezy|trzeba|mozna|sposob|krok|najpierw|potem|nastepnie|uzyj|atakuj|wykorzystaj|unikaj|poczekaj|wyposaz|rzuc|cast|use|attack|avoid|equip|first|then|step)\b/.exec(text)?.[0] || '';
