@@ -74,6 +74,7 @@ function wyodrebnijNazwyWlasne(value) {
   // Wcześniejsze wykluczenie Artur/Arthur odrzucało poprawne nazwy własne.
   const genericFirstWords = new Set([
     'decyzja', 'motywuje', 'nowo', 'następnie', 'nastepnie', 'ponadto',
+    'dodatkowo', 'aby',
     'jednak', 'ogólnie', 'ogolnie', 'wtedy', 'potem', 'dlatego',
     'obecnie', 'później', 'pozniej', 'wcześniej', 'wczesniej',
     'ponieważ', 'poniewaz', 'chociaż', 'chociaz', 'choć', 'choc',
