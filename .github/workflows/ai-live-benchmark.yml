@@ -40,12 +40,3 @@ jobs:
         run: |
           set -o pipefail
           npm run ai:benchmark:live 2>&1 | tee ai-live-benchmark-report.txt
-
-      - name: Upload benchmark report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ai-live-benchmark-${{ github.sha }}
-          path: ai-live-benchmark-report.txt
-          if-no-files-found: warn
-          retention-days: 14
