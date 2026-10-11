@@ -17,6 +17,21 @@ const TAVILY_REWRITE_MAX_ENTRIES = 500;
 const TAVILY_CACHE_VERSION = 2;
 const TAVILY_MIN_SCORE = Number(process.env.TAVILY_MIN_SCORE) || 0.2;
 const TAVILY_MIN_STRONG_RESULTS = 1;
+const TAVILY_QUOTA_COOLDOWN_MS = Math.max(60_000, Number(process.env.TAVILY_QUOTA_COOLDOWN_MS) || 15 * 60 * 1000);
+
+// Tavily może zwracać HTTP 432 dla wyczerpanego limitu planu.
+// Nie klasyfikujemy każdego 432 jako limitu — wymagamy też sygnału quota/usage limit.
+function classifyTavilyError(error) {
+  const message = String(error?.message || error || '');
+  if (/\b429\b|rate.?limit|too many requests/i.test(message)) return 'rate_limited';
+  if (/\b432\b/i.test(message) && /quota|usage.?limit|exceeds?.{0,30}limit|plan.?limit|limit.{0,30}plan/i.test(message)) {
+    return 'rate_limited';
+  }
+  if (/\b(?:quota|usage.?limit)\b/i.test(message)) return 'rate_limited';
+  if (/timeout|abort|timed out/i.test(message)) return 'timeout';
+  return 'error';
+}
+
 
 // TTL zależny od tego, jak szybko odpowiedź się starzeje: świeże wiadomości krótko,
 // fakty historyczne (bez time_range) długo.
@@ -338,6 +353,7 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
   const cache = new Map();
   const inFlight = new Map();
   let persistQueue = Promise.resolve();
+  let tavilyCooldownUntil = 0;
   try {
     const stat = fs.statSync(cacheFile);
     if (stat.size <= TAVILY_CACHE_MAX_BYTES) {
@@ -404,6 +420,23 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
   return async function szukajTavily(pytanie, options = {}) {
     const original = String(pytanie || '').trim();
     const { domains, time_range, _skipRewrite = false, returnMeta = false, sourceStartIndex = 0, sourceQuestion = original, remainingMs = 15000, requestState = null } = options;
+    // Po potwierdzonym wyczerpaniu limitu nie marnujemy czasu na rewrite ani kolejny request Tavily.
+    if (Date.now() < tavilyCooldownUntil) {
+      const retryInMs = tavilyCooldownUntil - Date.now();
+      logger.warn?.(`[Tavily] circuit breaker aktywny — pomijam provider na ${Math.ceil(retryInMs / 1000)} s`);
+      const secondary = await searchSecondaryProviders({
+        query: sourceQuestion || original, geminiKey, exaKey, fetchFn: fetchZTimeout,
+        startIndex: sourceStartIndex, domains, prefer: 'gemini',
+        timeoutMs: Math.max(1, Math.min(15000, Number(remainingMs) || 15000)),
+      });
+      if (secondary.status === 'ok' && secondary.text) {
+        const providers = [...new Set((secondary.sources || []).map(s => s.provider).filter(Boolean))];
+        onStatus({ status: 'secondary', query: original, providers, sourceCount: secondary.sources?.length || 0, fallbackFrom: 'circuit_open' });
+        return returnMeta ? { status: 'ok', text: secondary.text, secondary: true, sources: secondary.sources, fallbackFrom: 'circuit_open' } : secondary.text;
+      }
+      onStatus({ status: 'rate_limited', query: original, error: 'Tavily quota cooldown active', retryInMs });
+      return returnMeta ? { status: 'rate_limited', text: '', error: 'Tavily quota cooldown active', retryInMs } : null;
+    }
     try {
       let searchQuery = original;
       const rewriteKey = kluczRewrite(original);
@@ -580,8 +613,11 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
       finally { if (inFlight.get(key) === promise) inFlight.delete(key); }
     } catch (err) {
       logger.error('[Tavily] Błąd:', err.message);
-      const rateLimited = /(?:\b429\b|rate.?limit|too many requests|quota)/i.test(err.message || '');
-      const status = rateLimited ? 'rate_limited' : (/timeout|abort|timed out/i.test(err.message || '') ? 'timeout' : 'error');
+      const status = classifyTavilyError(err);
+      if (status === 'rate_limited') {
+        tavilyCooldownUntil = Date.now() + TAVILY_QUOTA_COOLDOWN_MS;
+        logger.warn?.(`[Tavily] circuit breaker otwarty na ${Math.ceil(TAVILY_QUOTA_COOLDOWN_MS / 1000)} s po błędzie limitu`);
+      }
       const secondary = await searchSecondaryProviders({
         query: sourceQuestion || original,
         geminiKey,
@@ -618,4 +654,5 @@ module.exports = {
   zbudujRaportKonfliktowTavily,
   sanityzujTrescZrodlaTavily,
   czyWymagaSecondaryRetrieval,
+  classifyTavilyError,
 };
