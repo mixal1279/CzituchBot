@@ -67,6 +67,7 @@ test('provider and validator failures receive distinct categories', () => {
     ['xKiro validator TRANSPORT_ERROR', 'transport_error'],
     ['This operation was aborted', 'timeout_abort'],
     ['OpenRouter empty content', 'empty_response'],
+    ['Gemini zwrócił pustą odpowiedź', 'empty_response'],
     ['finish_reason":"length","has_reasoning":false', 'empty_response'],
     ['OpenRouter returned invalid JSON', 'invalid_json'],
     ['validator JSON schema contract rejected', 'schema_rejection'],
