@@ -2096,9 +2096,11 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
   const aiState = createAIRequestContext({
     requestId,
     maxCzasMs: 25000,
-    maxGeneracji: 6,
-    maxInitialGeneracji: 5,
-    maxRepairGeneracji: 4,
+    // Rezerwujemy miejsce na semantic repair zamiast pozwolić, by initial
+    // fallback chain zużył cały budżet generacji przed walidacją.
+    maxGeneracji: 7,
+    maxInitialGeneracji: 4,
+    maxRepairGeneracji: 3,
     maxModelCalls: 12,
     maxValidatorow: 3,
     maxWyszukanTavily: testMaxTavilySearches,
@@ -3015,6 +3017,7 @@ function oczyscOdpowiedzPrzedWalidacja(tekst) {
       hasExternalData: Boolean(daneZewnetrzne),
       searched: Boolean(wynikSzukania),
     });
+  let answerJudge = null;
   if (maWalidowac) {
     let walidacja = await validateAI(aiProfile === 'billy' ? 'billy' : aiProfile === 'edzzi' ? 'edzzi' : aiProfile === 'angie' ? 'angie' : 'generic', pytanie, odp, daneDoWalidacji, historiaRozmowy, requestId, aiState, metadaneRequestu);
     if (walidacja.status === 'soft_accepted' && walidacja.partialAnswer) {
@@ -3131,7 +3134,6 @@ function oczyscOdpowiedzPrzedWalidacja(tekst) {
     // v26: niezależny kontrakt kompletności odpowiedzi. Validator potwierdza
     // evidence, a answer judge sprawdza, czy odpowiedź rzeczywiście odpowiada
     // na kształt pytania. Naprawiamy tylko odpowiedzi już ugruntowane w źródłach.
-    let answerJudge = null;
     if (walidacja.status === 'accepted') {
       answerJudge = judgeAnswer(odp, answerPlan);
       console.log(`[AI][${requestId}] answer-judge=${JSON.stringify(answerJudge)}`);
@@ -3222,6 +3224,22 @@ function oczyscOdpowiedzPrzedWalidacja(tekst) {
   } else {
     aiState.finalStatus = 'accepted';
     console.log(`[AI][${requestId}] final status=accepted validator=skipped (smalltalk/opinia/brak potrzeby)`);
+
+    // Brak fact-checkera nie może oznaczać automatycznej akceptacji niekompletnej
+    // odpowiedzi na pytanie faktograficzne/lore/gameplay. To osobny kontrakt:
+    // sprawdzamy kompletność, nie uznajemy jej za dowód prawdziwości.
+    const requiresCompletenessGuard = routingAI.needs_web
+      || routingAI.is_lore
+      || routingAI.is_gameplay
+      || ['web_fact', 'lore', 'gameplay', 'hltb'].includes(routingAI.intent);
+    if (requiresCompletenessGuard && answerPlan.requirements.length) {
+      answerJudge = judgeAnswer(odp, answerPlan);
+      console.log(`[AI][${requestId}] answer-judge-without-validator=${JSON.stringify(answerJudge)}`);
+      if (answerJudge.status !== 'accepted') {
+        aiState.finalStatus = 'rejected';
+        odp = 'Nie mam wystarczających danych, żeby odpowiedzieć na to pewnie.';
+      }
+    }
   }
 
   // Jedyny etap składający finalny payload. Nic nie jest dopisywane po tej funkcji,
