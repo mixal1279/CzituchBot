@@ -12,6 +12,8 @@ test('sentence-initial generic words are not treated as proper names', () => {
     'Decyzja ta wynikała z wcześniejszych wydarzeń.',
     'Motywuje go to do dalszego działania.',
     'Nowo uzyskana potęga zmienia sytuację.',
+    'Aby rozpocząć romans, zwiększ poziom aprobaty.',
+    'Dodatkowo Alex ma zielone oczy.',
   ]) {
     assert.deepEqual(wyodrebnijNazwyWlasne(claim), []);
   }
