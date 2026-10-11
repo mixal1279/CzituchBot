@@ -2102,7 +2102,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
     maxGeneracji: 6,
     maxInitialGeneracji: 5,
     maxRepairGeneracji: 4,
-    maxModelCalls: 12,
+    maxModelCalls: Number.isInteger(opcje.__testDeps?.maxModelCalls) ? Math.max(12, Math.min(24, opcje.__testDeps.maxModelCalls)) : 12,
     maxValidatorow: 3,
     maxWyszukanTavily: testMaxTavilySearches,
   });
