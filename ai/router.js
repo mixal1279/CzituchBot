@@ -14,7 +14,7 @@ function classifyAIRequest(pytanie, policyCategory, recipeDetector = () => false
   const isOpinion = /\b(?:czy warto|co (?:myślisz|myslisz|sądzisz)|co sądzisz|co sadzisz|jaka jest twoja opinia|jak oceniasz|polecasz|jest nadal dobre|jest nadal dobry|opłaca się|oplaca sie)\b/i.test(p);
   const asksAboutEncounterDuration = /\b(?:walka|walki|walkę|walke|boss|boss[a]?|starcie|pojedynek|misj\w*|quest\w*|zadani\w*|raid|mecz|cutscen\w*)\b/i.test(p);
   const isHLTB = !asksAboutEncounterDuration && /\b(?:ile\s+(?:jest\s+)?(?:godzin|czasu)|ile\s+godzin\s+(?:ma|zajmuje)|ile\s+trwa|jak\s+d[łl]ugo(?:\s+trwa)?|czas(?:u)?\s+(?:gry|przejścia|przejscia|ukończenia|ukonczenia)|przejście\s+gry|przejscie\s+gry)\b/i.test(p);
-  const category = isOpinion ? 'conversation' : isHLTB ? 'hltb' : policyResult;
+  const category = isOpinion ? 'conversation' : isHLTB ? 'hltb' : (asksAboutEncounterDuration && policyResult === 'hltb' ? 'web_fact' : policyResult);
   const resolved = resolveGameEntity(text);
   const entity = resolved?.game || resolved?.name || detectEntity(p) || null;
   const freshness = detectFreshness(p);
