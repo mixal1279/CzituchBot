@@ -58,7 +58,7 @@ async function run() {
     // Pass that context to retrieval/generation so the live test measures answer quality,
     // not whether the model can guess which game's dragon/sword/boss was intended.
     const questionWithContext = item.game
-      ? `${item.question}\\nKontekst gry: ${item.game}.`
+      ? `${item.question}\nKontekst gry: ${item.game}.`
       : item.question;
     try {
       await zapytajAI(
