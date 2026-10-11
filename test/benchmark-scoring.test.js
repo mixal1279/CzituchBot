@@ -2,7 +2,7 @@
 
 const assert = require('node:assert/strict');
 const { test } = require('node:test');
-const { normalizeFactText, scoreGoldenFacts } = require('../scripts/benchmark-scoring');
+const { normalizeFactText, scoreGoldenFacts, withGameContext } = require('../scripts/benchmark-scoring');
 
 const gold = (mustInclude, mustNot = []) => ({ independentGold: true, mustInclude, mustNot });
 
@@ -36,4 +36,13 @@ test('mustNot wykrywa zakazaną frazę', () => {
 
 test('przypadek bez gold nie jest oceniany', () => {
   assert.equal(scoreGoldenFacts('cokolwiek', {}).applicable, false);
+});
+
+test('withGameContext dopisuje grę naturalnym językiem, bez nawiasów', () => {
+  assert.equal(withGameContext('Jak pokonać smoka?', 'Skyrim'), 'Jak pokonać smoka w grze Skyrim?');
+  assert.equal(withGameContext('Gdzie znaleźć Wielki Miecz?', 'Elden Ring'), 'Gdzie znaleźć Wielki Miecz w grze Elden Ring?');
+  assert.equal(withGameContext('Dlaczego Geralt pomógł Baronowi w tej grze?', 'The Witcher 3'), 'Dlaczego Geralt pomógł Baronowi w grze The Witcher 3?');
+  assert.equal(withGameContext('Dlaczego Wheatley przejął kontrolę nad GLaDOS w Portal 2?', 'Portal 2'), 'Dlaczego Wheatley przejął kontrolę nad GLaDOS w Portal 2?');
+  assert.equal(withGameContext('Kim jest Astarion?', null), 'Kim jest Astarion?');
+  assert.ok(!/[()]/.test(withGameContext('Jak pokonać smoka?', 'Skyrim')));
 });

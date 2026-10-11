@@ -44,4 +44,14 @@ function scoreGoldenFacts(answer, factual) {
   return { applicable: true, score, passed: missing.length === 0 && forbidden.length === 0, missing, forbidden };
 }
 
-module.exports = { normalizeFactText, tokenMatchesWord, phraseMatches, scoreGoldenFacts };
+// Kontekst gry dopisywany naturalnym językiem ("w grze X"), bez nawiasów: nawiasy w pytaniu
+// trafiały do zapytań Tavily jako osobne, bezsensowne query (np. "(gra: Skyrim)").
+function withGameContext(question, game) {
+  const q = String(question || '').trim();
+  if (!game) return q;
+  if (q.toLowerCase().includes(String(game).toLowerCase())) return q;
+  if (/\bw tej grze\b/i.test(q)) return q.replace(/\bw tej grze\b/i, `w grze ${game}`);
+  return `${q.replace(/\s*\?\s*$/, '')} w grze ${game}?`;
+}
+
+module.exports = { normalizeFactText, tokenMatchesWord, phraseMatches, scoreGoldenFacts, withGameContext };
