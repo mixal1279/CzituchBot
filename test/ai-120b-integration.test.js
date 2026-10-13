@@ -139,12 +139,14 @@ test('kolejny request pomija 120B gdy breaker jest otwarty', async () => {
 });
 
 test('TPM 429 nie otwiera breakera na godziny', async () => {
+  const startedAt = Date.now();
   const harness = makeDeps(TPM_MESSAGE);
   await runOnce(harness.deps);
 
   const snap = defaultBreaker.snapshot();
   assert.equal(snap.breakerOpen, true);
-  const remaining = snap.breakerOpenUntil - Date.now();
+  // Measure from before the request; measuring after it loses elapsed milliseconds.
+  const remaining = snap.breakerOpenUntil - startedAt;
   assert.ok(remaining >= 60_000, `TPM floor powinien być >= 60s, jest ${remaining}ms`);
   assert.ok(remaining < 5 * 60_000, `TPM nie może trwać minutami, jest ${remaining}ms`);
 });
