@@ -169,6 +169,21 @@ test('kolejny request pomija 120B gdy breaker jest otwarty', async () => {
   assert.ok(second.calls['20b'] >= 1, 'drugi request musi użyć 20B jako fallbacku');
 });
 
+test('high demand przy otwartym breakerze nadal pomija 120B', async () => {
+  const first = makeDeps(TPD_MESSAGE);
+  await runOnce(first.deps);
+  assert.equal(defaultBreaker.snapshot().breakerOpen, true, 'TPD musi otworzyć breaker');
+
+  // Nawet jeśli kolejna próba 120B zwróciłaby high demand, otwarty breaker
+  // powinien zatrzymać ją przed wywołaniem providera.
+  const second = makeDeps(HIGH_DEMAND_MESSAGE);
+  await runOnce(second.deps);
+
+  assert.equal(second.calls['120b'], 0, 'otwarty breaker musi pominąć 120B');
+  assert.ok(second.calls['20b'] >= 1, 'pipeline powinien przejść do zdrowego fallbacku');
+  assert.equal(defaultBreaker.snapshot().breakerOpen, true, 'high demand nie może resetować istniejącego breakera');
+});
+
 test('TPM 429 nie otwiera breakera na godziny', async () => {
   const startedAt = Date.now();
   const harness = makeDeps(TPM_MESSAGE);
