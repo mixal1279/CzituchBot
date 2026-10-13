@@ -409,7 +409,7 @@ console.log('AI regression tests: OK');
   }, 'test', 'test', new Set(['SOURCE 1']), '[SOURCE 1]\nWheatley przejął kontrolę nad systemem.', 'Wheatley przejął kontrolę nad systemem. Portal 2 opowiada historię Wheatleya.');
   assert.equal(partialFromEvidenceFailure.diagnostics.unsupportedClaimCount, 0);
   assert.deepEqual(partialFromEvidenceFailure.diagnostics.unsupportedEvidenceClaimIndexes, [1]);
-  assert.equal(partialFromEvidenceFailure.status, 'soft_accepted');
+  assert.equal(partialFromEvidenceFailure.status, 'rejected');
   assert.equal(partialFromEvidenceFailure.partialAnswer, null);
 
   // Brak istotnej nazwy własnej w dowodzie jest twardym mismatch, a nie
