@@ -72,7 +72,7 @@ const { extractExplicitUserMemories, mergeMemoryRecords, buildVerifiedMemoryCont
 const { parseMemoryCommand, forgetMemories, describeMemories } = require('./ai/memory_manager');
 const { decomposeQuestion, buildAdvancedRetrievalPlan } = require('./ai/retrieval');
 const { classifyFailure, nextFallbacks, selectRepairFallbacks, repairBudgetBlockReason, GENERATION_FALLBACK_CHAIN, markProviderQuota, isProviderQuotaBlocked, quotaCooldownMsFromError } = require('./ai/fallback');
-const { createGroqCompletion, awaitWithAbortTimeout, computeValidatorTimeout, computeGenerationTimeout } = require('./ai/provider-runtime');
+const { createGroqCompletion, awaitWithAbortTimeout, computeValidatorTimeout, computeValidatorReserveMs, computeGenerationTimeout } = require('./ai/provider-runtime');
 const { createAIMetrics, recordAIMetric, snapshotAIMetrics } = require('./ai/metrics');
 const { sanitizeRequestText } = require('./ai/limits');
 const { createAIRequestContext } = require('./ai/requestContext');
@@ -1521,12 +1521,10 @@ Zwróć WYŁĄCZNIE JSON: {"valid":true/false,"reason":"krótki powód","confide
     // (4 s minimum plus its own 6.5 s reserve). The final permitted validator
     // can spend more of the remaining deadline because no further validator slot
     // exists in this request.
-    const isLastValidatorSlot = Boolean(requestState
-      && Number(requestState.validatory) >= Number(requestState.maxValidatorow));
     const validatorTimeoutMs = requestState
       ? computeValidatorTimeout(validatorRemainingMs, {
           maxTimeoutMs: 9000,
-          reserveMs: isLastValidatorSlot ? 2500 : 10500,
+          reserveMs: computeValidatorReserveMs(validatorRemainingMs),
           minTimeoutMs: 4000,
         })
       : 9000;
@@ -1624,12 +1622,10 @@ async function walidujOdpowiedzOpenRouter(persona, pytanie, odpowiedz, dane, req
   const remainingMs = requestState
     ? (typeof requestState.remainingMs === 'function' ? requestState.remainingMs() : requestState.maxCzasMs - (Date.now() - requestState.startedAt))
     : 12000;
-  const isLastValidatorSlot = Boolean(requestState
-    && Number(requestState.validatory) >= Number(requestState.maxValidatorow));
   const validatorTimeoutMs = requestState
     ? computeValidatorTimeout(remainingMs, {
         maxTimeoutMs: 9000,
-        reserveMs: isLastValidatorSlot ? 2500 : 10500,
+        reserveMs: computeValidatorReserveMs(remainingMs),
         minTimeoutMs: 4000,
       })
     : 9000;
@@ -1741,11 +1737,9 @@ ${dane}
   const remainingMs = requestState
     ? (typeof requestState.remainingMs === 'function' ? requestState.remainingMs() : requestState.maxCzasMs - (Date.now() - requestState.startedAt))
     : 6000;
-  const isLastValidatorSlot = Boolean(requestState
-    && Number(requestState.validatory) >= Number(requestState.maxValidatorow));
   const timeoutMs = computeValidatorTimeout(remainingMs, {
     maxTimeoutMs: 9000,
-    reserveMs: isLastValidatorSlot ? 2500 : 10500,
+    reserveMs: computeValidatorReserveMs(remainingMs),
     minTimeoutMs: 4000,
   });
   if (timeoutMs === null) {
@@ -1843,6 +1837,19 @@ async function walidujOdpowiedzAI(persona, pytanie, odpowiedz, dane, historiaRoz
   if (!models.length) console.warn(`[AI][${requestId}] Gemini validator w cooldownie — używam fallbacku OpenRouter`);
   let last = null;
   for (let i = 0; i < models.length; i++) {
+    const remainingMs = requestState
+      ? (typeof requestState.remainingMs === 'function' ? requestState.remainingMs() : requestState.maxCzasMs - (Date.now() - requestState.startedAt))
+      : 9000;
+    const timeoutMs = computeValidatorTimeout(remainingMs, {
+      maxTimeoutMs: 9000,
+      reserveMs: computeValidatorReserveMs(remainingMs),
+      minTimeoutMs: 4000,
+    });
+    if (requestState && timeoutMs === null) {
+      last = { status: 'unavailable', ok: false, technicalError: true, transient: true, skipped: true, provider: 'gemini', model: models[i], unsupported_claims: [], reason: 'Gemini validator pominięty: zbyt mały pozostały budżet czasu' };
+      console.warn(`[AI][${requestId}] Gemini validator pominięty przed rezerwacją slotu; remaining=${remainingMs}ms`);
+      continue;
+    }
     if (requestState?.reserveValidator && !requestState.reserveValidator(`validator:${models[i]}`)) {
       return { status: 'unavailable', ok: false, technicalError: true, provider: 'gemini', model: models[i], unsupported_claims: [], reason: 'budżet validatora wyczerpany' };
     }
@@ -1867,7 +1874,11 @@ async function walidujOdpowiedzAI(persona, pytanie, odpowiedz, dane, historiaRoz
     const xkiroRemainingMs = requestState
       ? (typeof requestState.remainingMs === 'function' ? requestState.remainingMs() : requestState.maxCzasMs - (Date.now() - requestState.startedAt))
       : 6000;
-    const xkiroTimeoutMs = computeValidatorTimeout(xkiroRemainingMs);
+    const xkiroTimeoutMs = computeValidatorTimeout(xkiroRemainingMs, {
+      maxTimeoutMs: 9000,
+      reserveMs: computeValidatorReserveMs(xkiroRemainingMs),
+      minTimeoutMs: 4000,
+    });
     if (xkiroTimeoutMs === null) {
       console.warn(`[AI][${requestId}] xKiro validator pominięty: zbyt mały remaining budget=${xkiroRemainingMs}ms; przechodzę do następnego validatora`);
     } else {
@@ -1892,6 +1903,17 @@ async function walidujOdpowiedzAI(persona, pytanie, odpowiedz, dane, historiaRoz
       if (xkiroResult.status === 'accepted' || xkiroResult.status === 'soft_accepted' || xkiroResult.status === 'rejected') return xkiroResult;
       last = xkiroResult;
     }
+  }
+  const openRouterRemainingMs = requestState
+    ? (typeof requestState.remainingMs === 'function' ? requestState.remainingMs() : requestState.maxCzasMs - (Date.now() - requestState.startedAt))
+    : 12000;
+  const openRouterTimeoutMs = computeValidatorTimeout(openRouterRemainingMs, {
+    maxTimeoutMs: 9000,
+    reserveMs: computeValidatorReserveMs(openRouterRemainingMs),
+    minTimeoutMs: 4000,
+  });
+  if (requestState && openRouterTimeoutMs === null) {
+    return { ...(last || {}), status: 'unavailable', ok: false, technicalError: true, transient: true, skipped: true, provider: 'openrouter', model: KONFIGURACJA.openrouterValidatorModel, unsupported_claims: [], reason: 'OpenRouter validator pominięty przed rezerwacją slotu: zbyt mały pozostały budżet czasu' };
   }
   if (requestState) {
     if (requestState.reserveValidator && !requestState.reserveValidator('validator:openrouter')) {
