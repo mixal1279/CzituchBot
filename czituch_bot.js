@@ -2157,7 +2157,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
   const budzetPrzekroczony = () => aiState.isExpired();
   const pozostalyCzasMs = () => aiState.remainingMs();
   // Dzielimy pozostały deadline między aktualną i potencjalne kolejne próby.
-  // Dzięki temu jeden zawieszony provider nie może zjeść całych 25 s i zablokować fallbacku.
+  // Dzięki temu jeden zawieszony provider nie może zjeść całych 40 s i zablokować fallbacku.
   const timeoutDlaGeneracji = () => computeGenerationTimeout(pozostalyCzasMs());
   const zarezerwujModel = (purpose = 'model') => {
     const reserved = aiState.reserveModel(purpose);
