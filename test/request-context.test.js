@@ -37,6 +37,30 @@ test('request context enforces shared model, generation, validator and Tavily bu
   assert.equal(ctx.reserveTavily('retrieval-again'), false);
 });
 
+test('validator and model budgets are reserved atomically', () => {
+  const modelLimited = createAIRequestContext({
+    maxCzasMs: 60000,
+    maxModelCalls: 1,
+    maxValidatorow: 2,
+  });
+  assert.equal(modelLimited.reserveModel('generation'), true);
+  assert.equal(modelLimited.reserveValidatorModel('validator:xkiro'), false);
+  assert.equal(modelLimited.validatory, 0, 'failed model budget must not consume validator slot');
+  assert.equal(modelLimited.modelCalls, 1);
+
+  const validatorLimited = createAIRequestContext({
+    maxCzasMs: 60000,
+    maxModelCalls: 2,
+    maxValidatorow: 1,
+  });
+  assert.equal(validatorLimited.reserveValidatorModel('validator:gemini'), true);
+  assert.equal(validatorLimited.validatory, 1);
+  assert.equal(validatorLimited.modelCalls, 1);
+  assert.equal(validatorLimited.reserveValidatorModel('validator:openrouter'), false);
+  assert.equal(validatorLimited.validatory, 1);
+  assert.equal(validatorLimited.modelCalls, 1, 'failed validator budget must not consume model call');
+});
+
 test('request context clamps remaining time to zero instead of extending the deadline', () => {
   const ctx = createAIRequestContext({ startedAt: Date.now() - 1000, maxCzasMs: 100 });
   assert.equal(ctx.isExpired(), true);

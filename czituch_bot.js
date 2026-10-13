@@ -72,7 +72,7 @@ const { extractExplicitUserMemories, mergeMemoryRecords, buildVerifiedMemoryCont
 const { parseMemoryCommand, forgetMemories, describeMemories } = require('./ai/memory_manager');
 const { decomposeQuestion, buildAdvancedRetrievalPlan } = require('./ai/retrieval');
 const { classifyFailure, nextFallbacks, selectRepairFallbacks, repairBudgetBlockReason, GENERATION_FALLBACK_CHAIN, markProviderQuota, isProviderQuotaBlocked, quotaCooldownMsFromError } = require('./ai/fallback');
-const { createGroqCompletion, awaitWithAbortTimeout, computeValidatorTimeout, computeGenerationTimeout } = require('./ai/provider-runtime');
+const { createGroqCompletion, awaitWithAbortTimeout, computeValidatorTimeout, computeValidatorReserveMs, computeGenerationTimeout } = require('./ai/provider-runtime');
 const { createAIMetrics, recordAIMetric, snapshotAIMetrics } = require('./ai/metrics');
 const { sanitizeRequestText } = require('./ai/limits');
 const { createAIRequestContext } = require('./ai/requestContext');
@@ -1111,7 +1111,7 @@ async function znajdzYoutuberaWPytaniu(pytanie, requestState = null) {
 // =============================================
 //  HOWLONGTOBEAT — bezpośrednio z howlongtobeat.com
 //  Mechanizm zgodny z implementacją z PolishSteamDB: nieoficjalny
-//  endpoint /api/bleed, token z /api/bleed/init odświeżany co 4 minuty,
+//  endpoint /api/search/site, token z /api/search/site/init odświeżany co 4 minuty,
 //  wyszukiwanie z oceną podobieństwa oraz cache. Wynik zawiera wszystkie
 //  dostępne warianty czasu: główny wątek, dodatki, 100% i wszystkie style.
 // =============================================
@@ -1123,10 +1123,10 @@ async function pobierzTokenHLTBBleed() {
     return hltbBleedTokenCache;
   }
   const agent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
-  const res = await fetchZTimeout(`https://howlongtobeat.com/api/bleed/init?t=${Date.now()}`, {
+  const res = await fetchZTimeout(`https://howlongtobeat.com/api/search/site/init?t=${Date.now()}`, {
     headers: { 'User-Agent': agent, 'Referer': 'https://howlongtobeat.com/', 'Accept': '*/*' },
   }, 10000);
-  if (!res.ok) throw new Error(`[HLTB] bleed/init HTTP ${res.status}`);
+  if (!res.ok) throw new Error(`[HLTB] search/site/init HTTP ${res.status}`);
   const data = await res.json();
   const cookie = res.headers.get('set-cookie');
   hltbBleedTokenCache = { ...data, cookie: cookie ? cookie.split(';')[0] : '', expiresAt: Date.now() + 4 * 60 * 1000 };
@@ -1214,9 +1214,7 @@ async function szukajHLTBBleed(gameName, retried = false) {
     },
     useCache: true,
   };
-  if (hpKey) payload[hpKey] = hpVal;
-
-  const res = await fetchZTimeout('https://howlongtobeat.com/api/bleed', {
+  const res = await fetchZTimeout('https://howlongtobeat.com/api/search/site', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -1288,7 +1286,7 @@ function zbudujWynikHLTBZCodepotatoes(gra, nazwaOryginalna) {
 }
 
 // Zwraca surowe dane (godziny + link) dla podanej nazwy gry.
-// Najpierw próbuje ścieżki Steam AppID → codepotatoes, a potem /api/bleed.
+// Najpierw próbuje ścieżki Steam AppID → codepotatoes, a potem /api/search/site.
 async function pobierzCzasHLTB(nazwaGry) {
   const cacheKey = nazwaGry.toLowerCase().trim();
   if (hltbCache.has(cacheKey)) {
@@ -1322,7 +1320,7 @@ async function pobierzCzasHLTB(nazwaGry) {
       }
     }
 
-    console.log('[HLTB] Brak wyniku po Steam AppID — fallback /api/bleed po nazwie.');
+    console.log('[HLTB] Brak wyniku po Steam AppID — fallback /api/search/site po nazwie.');
     for (const wariant of warianty) {
       const data = await szukajHLTBBleed(wariant);
       if (!data || !data.data || data.data.length === 0) continue;
@@ -1499,6 +1497,25 @@ function czyPytanieBillyFaktograficzne(pytanie, kategoriaAI) {
 
 const { VALIDATOR_JSON_SCHEMA, GEMINI_VALIDATOR_JSON_SCHEMA, wytnijJsonWalidatora, normalizujWynikWalidatora, wyodrebnijIdentyfikatoryZrodel } = AI_VALIDATOR;
 
+function zarezerwujSlotWalidatora(requestState, purpose) {
+  if (!requestState) return true;
+  if (typeof requestState.reserveValidatorModel === 'function') {
+    return requestState.reserveValidatorModel(purpose);
+  }
+  // Compatibility for older request-context test doubles. Roll back the first
+  // reservation if the model budget rejects the second one.
+  if (!requestState.reserveValidator || !requestState.zarezerwujModel) return false;
+  const previousValidatorCount = Number(requestState.validatory);
+  if (!requestState.reserveValidator(purpose)) return false;
+  if (requestState.zarezerwujModel(purpose)) return true;
+  if (Number.isFinite(previousValidatorCount)) {
+    requestState.validatory = previousValidatorCount;
+  } else if (Number.isFinite(Number(requestState.validatory))) {
+    requestState.validatory = Math.max(0, Number(requestState.validatory) - 1);
+  }
+  return false;
+}
+
 async function walidujOdpowiedzGeminiModel(model, persona, pytanie, odpowiedz, dane, historiaRozmowy = [], requestId = '-', requestState = null, requestMeta = null) {
   if (!dane) return { status: 'unavailable', ok: false, technicalError: true, provider: 'gemini', model, unsupported_claims: [], reason: 'brak danych referencyjnych' };
   try {
@@ -1517,16 +1534,13 @@ Zwróć WYŁĄCZNIE JSON: {"valid":true/false,"reason":"krótki powód","confide
     const validatorRemainingMs = requestState
       ? (typeof requestState.remainingMs === 'function' ? requestState.remainingMs() : requestState.maxCzasMs - (Date.now() - requestState.startedAt))
       : 9000;
-    // The first validator reserves enough time for one fallback validator
-    // (4 s minimum plus its own 6.5 s reserve). The final permitted validator
-    // can spend more of the remaining deadline because no further validator slot
-    // exists in this request.
-    const isLastValidatorSlot = Boolean(requestState
-      && Number(requestState.validatory) >= Number(requestState.maxValidatorow));
+    // Use the same adaptive reserve policy as the preflight check. The helper
+    // always preserves at least 2.5s; computeValidatorTimeout skips the attempt
+    // when less than 4s + that reserve remains.
     const validatorTimeoutMs = requestState
       ? computeValidatorTimeout(validatorRemainingMs, {
           maxTimeoutMs: 9000,
-          reserveMs: isLastValidatorSlot ? 2500 : 10500,
+          reserveMs: computeValidatorReserveMs(validatorRemainingMs, requestState?.validatory + 1, requestState?.maxValidatorow),
           minTimeoutMs: 4000,
         })
       : 9000;
@@ -1562,8 +1576,9 @@ Zwróć WYŁĄCZNIE JSON: {"valid":true/false,"reason":"krótki powód","confide
   } catch (err) {
     const message = String(err?.message || '');
     const abortLike = err?.name === 'AbortError' || /aborted|abort|cancelled|canceled/i.test(message);
-    const quota = /quota|rate.?limit|resource.?exhausted|429|limit:/i.test(message);
-    const transient = quota
+    const transientOverload = /(?:high demand|overloaded|temporarily unavailable|capacity exceeded)/i.test(message);
+    const quota = !transientOverload && /quotaExceeded|quota exceeded|rate.?limit|resource.?exhausted|429|limit:/i.test(message);
+    const transient = transientOverload || quota
       || abortLike
       || /(?:HTTP\s*(?:408|409|429|500|502|503|504)|timeout|timed out|network|fetch failed|ECONNRESET|ETIMEDOUT)/i.test(message);
     const elapsedMs = requestState?.startedAt ? Math.max(0, Date.now() - requestState.startedAt) : null;
@@ -1624,12 +1639,10 @@ async function walidujOdpowiedzOpenRouter(persona, pytanie, odpowiedz, dane, req
   const remainingMs = requestState
     ? (typeof requestState.remainingMs === 'function' ? requestState.remainingMs() : requestState.maxCzasMs - (Date.now() - requestState.startedAt))
     : 12000;
-  const isLastValidatorSlot = Boolean(requestState
-    && Number(requestState.validatory) >= Number(requestState.maxValidatorow));
   const validatorTimeoutMs = requestState
     ? computeValidatorTimeout(remainingMs, {
         maxTimeoutMs: 9000,
-        reserveMs: isLastValidatorSlot ? 2500 : 10500,
+        reserveMs: computeValidatorReserveMs(remainingMs, requestState?.validatory + 1, requestState?.maxValidatorow),
         minTimeoutMs: 4000,
       })
     : 9000;
@@ -1741,11 +1754,9 @@ ${dane}
   const remainingMs = requestState
     ? (typeof requestState.remainingMs === 'function' ? requestState.remainingMs() : requestState.maxCzasMs - (Date.now() - requestState.startedAt))
     : 6000;
-  const isLastValidatorSlot = Boolean(requestState
-    && Number(requestState.validatory) >= Number(requestState.maxValidatorow));
   const timeoutMs = computeValidatorTimeout(remainingMs, {
     maxTimeoutMs: 9000,
-    reserveMs: isLastValidatorSlot ? 2500 : 10500,
+    reserveMs: computeValidatorReserveMs(remainingMs, requestState?.validatory + 1, requestState?.maxValidatorow),
     minTimeoutMs: 4000,
   });
   if (timeoutMs === null) {
@@ -1843,11 +1854,21 @@ async function walidujOdpowiedzAI(persona, pytanie, odpowiedz, dane, historiaRoz
   if (!models.length) console.warn(`[AI][${requestId}] Gemini validator w cooldownie — używam fallbacku OpenRouter`);
   let last = null;
   for (let i = 0; i < models.length; i++) {
-    if (requestState?.reserveValidator && !requestState.reserveValidator(`validator:${models[i]}`)) {
-      return { status: 'unavailable', ok: false, technicalError: true, provider: 'gemini', model: models[i], unsupported_claims: [], reason: 'budżet validatora wyczerpany' };
+    const remainingMs = requestState
+      ? (typeof requestState.remainingMs === 'function' ? requestState.remainingMs() : requestState.maxCzasMs - (Date.now() - requestState.startedAt))
+      : 9000;
+    const timeoutMs = computeValidatorTimeout(remainingMs, {
+      maxTimeoutMs: 9000,
+      reserveMs: computeValidatorReserveMs(remainingMs, requestState?.validatory + 1, requestState?.maxValidatorow),
+      minTimeoutMs: 4000,
+    });
+    if (requestState && timeoutMs === null) {
+      last = { status: 'unavailable', ok: false, technicalError: true, transient: true, skipped: true, provider: 'gemini', model: models[i], unsupported_claims: [], reason: 'Gemini validator pominięty: zbyt mały pozostały budżet czasu' };
+      console.warn(`[AI][${requestId}] Gemini validator pominięty przed rezerwacją slotu; remaining=${remainingMs}ms`);
+      continue;
     }
-    if (requestState?.zarezerwujModel && !requestState.zarezerwujModel(`validator:${models[i]}`)) {
-      return { status: 'unavailable', ok: false, technicalError: true, provider: 'gemini', model: models[i], unsupported_claims: [], reason: 'globalny budżet modeli wyczerpany' };
+    if (!zarezerwujSlotWalidatora(requestState, `validator:${models[i]}`)) {
+      return { status: 'unavailable', ok: false, technicalError: true, provider: 'gemini', model: models[i], unsupported_claims: [], reason: 'budżet validatora/modeli wyczerpany' };
     }
     const result = await walidujOdpowiedzGeminiModel(models[i], persona, pytanie, odpowiedz, dane, historiaRozmowy, requestId, requestState, requestMeta);
     if (requestState) requestState.validatorResults.push({ model: models[i], status: result.status, complete: result.complete === true, confidence: Number.isFinite(result.confidence) ? result.confidence : null, claimCoverage: Array.isArray(result.claims) && result.claims.length ? result.claims.filter(c => c.supported === true).length / result.claims.length : null, validationDiagnostics: result.diagnostics || null });
@@ -1867,15 +1888,16 @@ async function walidujOdpowiedzAI(persona, pytanie, odpowiedz, dane, historiaRoz
     const xkiroRemainingMs = requestState
       ? (typeof requestState.remainingMs === 'function' ? requestState.remainingMs() : requestState.maxCzasMs - (Date.now() - requestState.startedAt))
       : 6000;
-    const xkiroTimeoutMs = computeValidatorTimeout(xkiroRemainingMs);
+    const xkiroTimeoutMs = computeValidatorTimeout(xkiroRemainingMs, {
+      maxTimeoutMs: 9000,
+      reserveMs: computeValidatorReserveMs(xkiroRemainingMs, requestState?.validatory + 1, requestState?.maxValidatorow),
+      minTimeoutMs: 4000,
+    });
     if (xkiroTimeoutMs === null) {
       console.warn(`[AI][${requestId}] xKiro validator pominięty: zbyt mały remaining budget=${xkiroRemainingMs}ms; przechodzę do następnego validatora`);
     } else {
-      if (requestState?.reserveValidator && !requestState.reserveValidator('validator:xkiro')) {
-        return { ...(last || {}), status: 'unavailable', ok: false, technicalError: true, unsupported_claims: [], reason: 'budżet validatora wyczerpany przed xKiro' };
-      }
-      if (requestState?.zarezerwujModel && !requestState.zarezerwujModel('validator:xkiro')) {
-        return { ...(last || {}), status: 'unavailable', ok: false, technicalError: true, unsupported_claims: [], reason: 'globalny budżet modeli wyczerpany przed xKiro' };
+      if (!zarezerwujSlotWalidatora(requestState, 'validator:xkiro')) {
+        return { ...(last || {}), status: 'unavailable', ok: false, technicalError: true, unsupported_claims: [], reason: 'budżet validatora/modeli wyczerpany przed xKiro' };
       }
       const xkiroResult = await walidujOdpowiedzXKiro(persona, pytanie, odpowiedz, dane, requestId, requestState, requestMeta);
       if (requestState) requestState.validatorResults.push({
@@ -1893,12 +1915,20 @@ async function walidujOdpowiedzAI(persona, pytanie, odpowiedz, dane, historiaRoz
       last = xkiroResult;
     }
   }
+  const openRouterRemainingMs = requestState
+    ? (typeof requestState.remainingMs === 'function' ? requestState.remainingMs() : requestState.maxCzasMs - (Date.now() - requestState.startedAt))
+    : 12000;
+  const openRouterTimeoutMs = computeValidatorTimeout(openRouterRemainingMs, {
+    maxTimeoutMs: 9000,
+    reserveMs: computeValidatorReserveMs(openRouterRemainingMs, requestState?.validatory + 1, requestState?.maxValidatorow),
+    minTimeoutMs: 4000,
+  });
+  if (requestState && openRouterTimeoutMs === null) {
+    return { ...(last || {}), status: 'unavailable', ok: false, technicalError: true, transient: true, skipped: true, provider: 'openrouter', model: KONFIGURACJA.openrouterValidatorModel, unsupported_claims: [], reason: 'OpenRouter validator pominięty przed rezerwacją slotu: zbyt mały pozostały budżet czasu' };
+  }
   if (requestState) {
-    if (requestState.reserveValidator && !requestState.reserveValidator('validator:openrouter')) {
-      return { status: 'unavailable', ok: false, technicalError: true, provider: 'openrouter', model: KONFIGURACJA.openrouterValidatorModel, unsupported_claims: [], reason: 'budżet validatora wyczerpany' };
-    }
-    if (requestState.zarezerwujModel && !requestState.zarezerwujModel('validator:openrouter')) {
-      return { status: 'unavailable', ok: false, technicalError: true, provider: 'openrouter', model: KONFIGURACJA.openrouterValidatorModel, unsupported_claims: [], reason: 'globalny budżet modeli wyczerpany' };
+    if (!zarezerwujSlotWalidatora(requestState, 'validator:openrouter')) {
+      return { status: 'unavailable', ok: false, technicalError: true, provider: 'openrouter', model: KONFIGURACJA.openrouterValidatorModel, unsupported_claims: [], reason: 'budżet validatora/modeli wyczerpany' };
     }
     requestState.validatorResults.push({ model: KONFIGURACJA.openrouterValidatorModel, status: 'fallback', complete: false, confidence: null, claimCoverage: null });
   }
@@ -2802,7 +2832,7 @@ Pytanie użytkownika: ${pytanie}`;
           messages: [{ role: 'system', content: overrideSystemPrompt }, ...przygotujHistorieDoModelu(historiaRozmowy, 4), { role: 'user', content: kontekstDoGroq }],
           temperature,
           max_completion_tokens: maxTok,
-          reasoning_effort: model === 'openai/gpt-oss-120b' ? 'medium' : 'low',
+          reasoning_effort: 'low',
           include_reasoning: false,
         }, { signal: controller.signal }), groqTimeoutMs, controller, `Groq ${model}`);
       const choice = response?.choices?.[0] || {};
@@ -2826,7 +2856,7 @@ Pytanie użytkownika: ${pytanie}`;
           endpoint: 'chat.completions.create',
           model,
           max_completion_tokens: Math.max(maxTok, 300),
-          reasoning_effort: model === 'openai/gpt-oss-120b' ? 'medium' : 'low',
+          reasoning_effort: 'low',
           include_reasoning: false,
           temperature,
         },
@@ -3147,8 +3177,37 @@ function oczyscOdpowiedzPrzedWalidacja(tekst) {
         }
       }
     } else if (walidacja.status === 'unavailable') {
-      console.warn(`[AI][${requestId}] validator unavailable — bez retry generowania`);
-      odp = 'Chwilowo nie mogę potwierdzić tej informacji, więc nie będę zgadywać.';
+      // Provider outage is not a semantic rejection. Keep the generated answer
+      // only when reference material exists and deterministic fact, format, and
+      // completeness gates all pass; label it explicitly as unverified.
+      const localFacts = daneDoWalidacji
+        ? sprawdzTwardeFaktyOdpowiedzi(odp, daneDoWalidacji, pytanie)
+        : { ok: false, unsupported: ['brak danych referencyjnych'] };
+      const localFormat = sprawdzFormatOdpowiedzi(odp, { maxZdania: responseCfg.maxSentences, maxZnakow: 1800 });
+      const localCompleteness = judgeAnswer(odp, answerPlan);
+      const canReturnUnverified = Boolean(
+        daneDoWalidacji
+        && localFacts.ok
+        && localFormat.ok
+        && localCompleteness.status === 'accepted'
+        && !AI_POLICY.czyOdpowiedzToJednoznacznaOdmowa(odp)
+      );
+      if (canReturnUnverified) {
+        walidacja = {
+          ...walidacja,
+          status: 'unverified',
+          ok: false,
+          valid: false,
+          verified: false,
+          complete: true,
+          reason: 'validator unavailable; deterministic fact/format/completeness gates passed',
+          diagnostics: { ...(walidacja.diagnostics || {}), localFacts, localFormat, localCompleteness },
+        };
+        console.warn(`[AI][${requestId}] validator unavailable; answer returned UNVERIFIED after deterministic gates`);
+      } else {
+        console.warn(`[AI][${requestId}] validator unavailable and local gates insufficient — refusing answer; facts=${JSON.stringify(localFacts.unsupported || [])} format=${localFormat.reason || localFormat.ok} completeness=${localCompleteness.status}`);
+        odp = 'Chwilowo nie mogę potwierdzić tej informacji, więc nie będę zgadywać.';
+      }
     }
     // v26: niezależny kontrakt kompletności odpowiedzi. Validator potwierdza
     // evidence, a answer judge sprawdza, czy odpowiedź rzeczywiście odpowiada

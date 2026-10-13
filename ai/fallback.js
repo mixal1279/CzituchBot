@@ -37,6 +37,9 @@ function classifyFailure(error = '') {
   const text = error && typeof error === 'object'
     ? [error.message, error.reason, error.error, error.diagnostic].filter(Boolean).join(' ')
     : String(error?.message || error || '');
+  // HTTP 429 can also be used for temporary capacity pressure ("high demand").
+  // Classify that explicit overload before the generic quota matcher.
+  if (/(?:high demand|overloaded|temporarily unavailable|capacity exceeded)/i.test(text)) return 'transient';
   for (const [type, pattern] of DETAIL_CLASSIFIERS) {
     if (pattern.test(text)) return type;
   }
@@ -64,13 +67,15 @@ function resetProviderQuotaCooldowns() {
 }
 
 function quotaCooldownMsFromError(error) {
+  const message = String(error?.message || error || '');
+  // Capacity pressure is transient, not a persistent account quota exhaustion.
+  if (/(?:high demand|overloaded|temporarily unavailable|capacity exceeded)/i.test(message)) return 60_000;
   const configured = Number(process.env.AI_PROVIDER_QUOTA_COOLDOWN_MS) || 60_000;
-  const match = String(error?.message || error || '').match(/retry[- ]after\s*[=:]\s*(\d+(?:\.\d+)?)\s*(?:s|sec(?:ond)?s?)?/i);
+  const match = message.match(/retry[- ]after\s*[=:]\s*(\d+(?:\.\d+)?)\s*(?:s|sec(?:ond)?s?)?/i);
   if (!match) return configured;
   const retryAfterMs = Math.max(0, Number(match[1])) * 1000;
   return Math.max(configured, Math.ceil(retryAfterMs), 1_000);
 }
-
 function markProviderQuota(provider, cooldownMs = Number(process.env.AI_PROVIDER_QUOTA_COOLDOWN_MS) || 60_000) {
   const endpoint = String(provider || '');
   if (!GENERATION_FALLBACK_CHAIN.includes(endpoint)) return [];
