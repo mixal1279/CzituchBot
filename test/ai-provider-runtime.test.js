@@ -156,6 +156,8 @@ test('quota cooldown respects Retry-After and never goes below the configured ba
   try {
     assert.equal(quotaCooldownMsFromError('HTTP 429 (Retry-After=12s)'), 12_000);
     assert.equal(quotaCooldownMsFromError('HTTP 429 rate limit'), 5_000);
+    assert.equal(quotaCooldownMsFromError('HTTP 429: high demand'), 60_000);
+    assert.equal(classifyFailure('HTTP 429: high demand'), 'transient');
   } finally {
     if (previous === undefined) delete process.env.AI_PROVIDER_QUOTA_COOLDOWN_MS;
     else process.env.AI_PROVIDER_QUOTA_COOLDOWN_MS = previous;
