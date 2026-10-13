@@ -75,7 +75,7 @@ function makeDeps(errorMessage) {
   };
 }
 
-async function runOnce(deps, question = 'Cześć, co słychać?') {
+async function runOnce(deps, question = 'Cześć, co słychać?', options = {}) {
   await zapytajAI(
     'benchmark',
     question,
@@ -87,6 +87,7 @@ async function runOnce(deps, question = 'Cześć, co słychać?') {
       memoryUserId: 'ai-benchmark',
       temperature: 0.2,
       max_tokens: 100,
+      ...options,
       __testDeps: deps,
     },
   );
@@ -207,4 +208,14 @@ test('high demand nie otwiera breakera (transient, nie quota)', async () => {
     'high demand powinno być transient — breaker musi zostać zamknięty',
   );
   assert.equal(isProviderQuotaBlocked('groq:openai/gpt-oss-120b'), false);
+});
+
+test('zapytajAI używa 25s domyślnie i respektuje override benchmarku 40s', async () => {
+  const chat = makeDeps(null);
+  await runOnce(chat.deps);
+  assert.equal(chat.summary.requestBudget.maxCzasMs, 25000);
+
+  const benchmark = makeDeps(null);
+  await runOnce(benchmark.deps, 'Cześć, co słychać?', { maxCzasMs: 40000 });
+  assert.equal(benchmark.summary.requestBudget.maxCzasMs, 40000);
 });
