@@ -75,7 +75,7 @@ const { classifyFailure, nextFallbacks, selectRepairFallbacks, repairBudgetBlock
 const { createGroqCompletion, awaitWithAbortTimeout, computeValidatorTimeout, computeValidatorReserveMs, computeGenerationTimeout } = require('./ai/provider-runtime');
 const { defaultBreaker: model120bBreaker } = require('./ai/breaker-120b');
 const { createAIMetrics, recordAIMetric, snapshotAIMetrics } = require('./ai/metrics');
-const { sanitizeRequestText } = require('./ai/limits');
+const { DEFAULTS: AI_LIMITS, sanitizeRequestText } = require('./ai/limits');
 const { createAIRequestContext } = require('./ai/requestContext');
 const { sprawdzTwardeFaktyOdpowiedzi, sprawdzFormatOdpowiedzi } = require('./ai/response');
 const { Firestore } = require('@google-cloud/firestore');
@@ -2146,11 +2146,11 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
   // Nie utrzymujemy osobnych budżetów w generatorze, retrievalu i validatorze.
   const aiState = createAIRequestContext({
     requestId,
-    maxCzasMs: 40000,
+    maxCzasMs: AI_LIMITS.requestTimeoutMs,
     maxGeneracji: 6,
     maxInitialGeneracji: 5,
     maxRepairGeneracji: 4,
-    maxModelCalls: 15,
+    maxModelCalls: AI_LIMITS.maxModelCalls,
     maxValidatorow: 3,
     maxWyszukanTavily: testMaxTavilySearches,
   });
