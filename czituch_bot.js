@@ -73,7 +73,7 @@ const { parseMemoryCommand, forgetMemories, describeMemories } = require('./ai/m
 const { decomposeQuestion, buildAdvancedRetrievalPlan } = require('./ai/retrieval');
 const { classifyFailure, nextFallbacks, selectRepairFallbacks, repairBudgetBlockReason, GENERATION_FALLBACK_CHAIN, markProviderQuota, isProviderQuotaBlocked, quotaCooldownMsFromError } = require('./ai/fallback');
 const { createGroqCompletion, awaitWithAbortTimeout, computeValidatorTimeout, computeValidatorReserveMs, computeGenerationTimeout } = require('./ai/provider-runtime');
-const { create120bBreaker } = require('./ai/breaker-120b');
+const { defaultBreaker: model120bBreaker } = require('./ai/breaker-120b');
 const { createAIMetrics, recordAIMetric, snapshotAIMetrics } = require('./ai/metrics');
 const { sanitizeRequestText } = require('./ai/limits');
 const { createAIRequestContext } = require('./ai/requestContext');
@@ -3480,13 +3480,7 @@ const historiaRozmowy = {};
 const ostatnieUzycie  = {};
 let botNaPrzerwie = false;
 
-// Globalna ochrona 120B: limit requestów w oknie i breaker mają osobne deadline'y.
-const model120bBreaker = create120bBreaker({
-  maxRequests: Math.max(1, Number(process.env.AI_120B_GLOBAL_MAX_REQUESTS) || 6),
-  windowMs: 60 * 60 * 1000,
-  defaultCooldownMs: 90 * 1000,
-});
-
+// Współdzielony singleton: bot i testy obserwują ten sam stan breakera.
 function zarezerwujRequest120B(requestId = '-') {
   const result = model120bBreaker.reserve(requestId);
   if (!result.ok) {
