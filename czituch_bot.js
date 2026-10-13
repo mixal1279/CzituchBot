@@ -7716,4 +7716,8 @@ if (require.main === module) {
   });
 }
 
-module.exports = { zapytajAI, startBot };
+module.exports = {
+  zapytajAI,
+  startBot,
+  __test: { agregujMetrykiWalidatorow, zbudujKontekstMetrykiWalidatora },
+};
