@@ -1835,6 +1835,54 @@ ${dane}
   }
 }
 
+function registrarMetrikeWalidatora(requestState, metric) {
+  if (!requestState) return;
+  if (!Array.isArray(requestState.validatorMetrics)) requestState.validatorMetrics = [];
+  const record = {
+    requestId: String(metric.requestId || requestState.requestId || '-'),
+    validator: metric.validator,
+    model: metric.model || null,
+    outcome: metric.outcome,
+    remainingMsAtStart: Number.isFinite(metric.remainingMsAtStart) ? metric.remainingMsAtStart : null,
+    timeoutMs: Number.isFinite(metric.timeoutMs) ? metric.timeoutMs : null,
+    actualMs: Number.isFinite(metric.actualMs) ? metric.actualMs : null,
+    status: metric.status || 'unavailable',
+    failureReason: metric.failureReason || null,
+    sourceCount: Number.isFinite(metric.sourceCount) ? metric.sourceCount : null,
+    answerLength: Number.isFinite(metric.answerLength) ? metric.answerLength : 0,
+    claimCount: Number.isFinite(metric.claimCount) ? metric.claimCount : null,
+    // Bez metadanych per źródło nie przypisujemy długości całego evidence do Tavily.
+    tavilyChars: Number.isFinite(metric.tavilyChars) ? metric.tavilyChars : null,
+  };
+  requestState.validatorMetrics.push(record);
+  console.log(`[AI][${record.requestId}] VALIDATOR_METRIC ${JSON.stringify(record)}`);
+}
+
+function zbudujKontekstMetrykiWalidatora(requestId, validator, model, odpowiedz, dane, requestState, remainingMsAtStart, timeoutMs, startedAt, result, outcome = 'attempted') {
+  let sourceCount = null;
+  try {
+    const ids = wyodrebnijIdentyfikatoryZrodel(dane);
+    sourceCount = Array.isArray(ids) ? ids.length : null;
+  } catch {}
+  const answer = String(odpowiedz || '');
+  const reason = String(result?.reason || '').toLowerCase();
+  const failureReason = outcome !== 'attempted' ? null
+    : /abort|timeout|timed out|przekroczono czas|przekroczył czas/.test(reason) ? 'timeout'
+    : /http|status code|\b4\d\d\b|\b5\d\d\b/.test(reason) ? 'http_error'
+    : /empty|pusta odpowiedź|brak treści|brak odpowiedzi/.test(reason) ? 'empty_response'
+    : /json|pars|schema|format odpowiedzi/.test(reason) ? 'invalid_json'
+    : null;
+  const claimCount = answer.trim()
+    ? answer.split(/[.!?;]+|\n+/).map(part => part.trim()).filter(part => part.length >= 12).length
+    : 0;
+  return {
+    requestId, validator, model, outcome, remainingMsAtStart, timeoutMs,
+    actualMs: Number.isFinite(startedAt) ? Math.max(0, Date.now() - startedAt) : null,
+    status: result?.status || 'unavailable', failureReason, sourceCount,
+    answerLength: answer.length, claimCount, tavilyChars: null,
+  };
+}
+
 async function walidujOdpowiedzAI(persona, pytanie, odpowiedz, dane, historiaRozmowy = [], requestId = '-', requestState = null, requestMeta = null) {
   if (!dane) {
     return { status: 'unavailable', ok: false, technicalError: true, provider: 'gemini', model: null, unsupported_claims: [], reason: 'brak danych referencyjnych' };
@@ -1864,13 +1912,17 @@ async function walidujOdpowiedzAI(persona, pytanie, odpowiedz, dane, historiaRoz
     });
     if (requestState && timeoutMs === null) {
       last = { status: 'unavailable', ok: false, technicalError: true, transient: true, skipped: true, provider: 'gemini', model: models[i], unsupported_claims: [], reason: 'Gemini validator pominięty: zbyt mały pozostały budżet czasu' };
+      registrarMetrikeWalidatora(requestState, zbudujKontekstMetrykiWalidatora(requestId, 'gemini', models[i], odpowiedz, dane, requestState, remainingMs, null, null, last, 'skipped_budget'));
       console.warn(`[AI][${requestId}] Gemini validator pominięty przed rezerwacją slotu; remaining=${remainingMs}ms`);
       continue;
     }
     if (!zarezerwujSlotWalidatora(requestState, `validator:${models[i]}`)) {
+      registrarMetrikeWalidatora(requestState, zbudujKontekstMetrykiWalidatora(requestId, 'gemini', models[i], odpowiedz, dane, requestState, remainingMs, timeoutMs, null, { status: 'unavailable' }, 'skipped_slot'));
       return { status: 'unavailable', ok: false, technicalError: true, provider: 'gemini', model: models[i], unsupported_claims: [], reason: 'budżet validatora/modeli wyczerpany' };
     }
+    const validatorStartedAt = Date.now();
     const result = await walidujOdpowiedzGeminiModel(models[i], persona, pytanie, odpowiedz, dane, historiaRozmowy, requestId, requestState, requestMeta);
+    registrarMetrikeWalidatora(requestState, zbudujKontekstMetrykiWalidatora(requestId, 'gemini', models[i], odpowiedz, dane, requestState, remainingMs, timeoutMs, validatorStartedAt, result));
     if (requestState) requestState.validatorResults.push({ model: models[i], status: result.status, complete: result.complete === true, confidence: Number.isFinite(result.confidence) ? result.confidence : null, claimCoverage: Array.isArray(result.claims) && result.claims.length ? result.claims.filter(c => c.supported === true).length / result.claims.length : null, validationDiagnostics: result.diagnostics || null });
     console.log(`[AI][${requestId}] validator #${i + 1} ${models[i]} → ${result.status}${result.diagnostics ? ` localReject=${JSON.stringify(result.diagnostics.localRejectReasons)} claimCoverage=${result.diagnostics.claimCoverage}` : ''}`);
     if (result.status === 'accepted' || result.status === 'soft_accepted' || result.status === 'rejected') return result;
@@ -1894,12 +1946,16 @@ async function walidujOdpowiedzAI(persona, pytanie, odpowiedz, dane, historiaRoz
       minTimeoutMs: 4000,
     });
     if (xkiroTimeoutMs === null) {
+      registrarMetrikeWalidatora(requestState, zbudujKontekstMetrykiWalidatora(requestId, 'xkiro', KONFIGURACJA.xkiroModel, odpowiedz, dane, requestState, xkiroRemainingMs, null, null, { status: 'unavailable' }, 'skipped_budget'));
       console.warn(`[AI][${requestId}] xKiro validator pominięty: zbyt mały remaining budget=${xkiroRemainingMs}ms; przechodzę do następnego validatora`);
     } else {
       if (!zarezerwujSlotWalidatora(requestState, 'validator:xkiro')) {
+        registrarMetrikeWalidatora(requestState, zbudujKontekstMetrykiWalidatora(requestId, 'xkiro', KONFIGURACJA.xkiroModel, odpowiedz, dane, requestState, xkiroRemainingMs, xkiroTimeoutMs, null, { status: 'unavailable' }, 'skipped_slot'));
         return { ...(last || {}), status: 'unavailable', ok: false, technicalError: true, unsupported_claims: [], reason: 'budżet validatora/modeli wyczerpany przed xKiro' };
       }
+      const xkiroStartedAt = Date.now();
       const xkiroResult = await walidujOdpowiedzXKiro(persona, pytanie, odpowiedz, dane, requestId, requestState, requestMeta);
+      registrarMetrikeWalidatora(requestState, zbudujKontekstMetrykiWalidatora(requestId, 'xkiro', xkiroResult.model || KONFIGURACJA.xkiroModel, odpowiedz, dane, requestState, xkiroRemainingMs, xkiroTimeoutMs, xkiroStartedAt, xkiroResult));
       if (requestState) requestState.validatorResults.push({
         model: xkiroResult.model || KONFIGURACJA.xkiroModel,
         provider: 'xkiro',
@@ -1924,17 +1980,21 @@ async function walidujOdpowiedzAI(persona, pytanie, odpowiedz, dane, historiaRoz
     minTimeoutMs: 4000,
   });
   if (requestState && openRouterTimeoutMs === null) {
+    registrarMetrikeWalidatora(requestState, zbudujKontekstMetrykiWalidatora(requestId, 'openrouter', KONFIGURACJA.openrouterValidatorModel, odpowiedz, dane, requestState, openRouterRemainingMs, null, null, { status: 'unavailable' }, 'skipped_budget'));
     return { ...(last || {}), status: 'unavailable', ok: false, technicalError: true, transient: true, skipped: true, provider: 'openrouter', model: KONFIGURACJA.openrouterValidatorModel, unsupported_claims: [], reason: 'OpenRouter validator pominięty przed rezerwacją slotu: zbyt mały pozostały budżet czasu' };
   }
   if (requestState) {
     if (!zarezerwujSlotWalidatora(requestState, 'validator:openrouter')) {
+      registrarMetrikeWalidatora(requestState, zbudujKontekstMetrykiWalidatora(requestId, 'openrouter', KONFIGURACJA.openrouterValidatorModel, odpowiedz, dane, requestState, openRouterRemainingMs, openRouterTimeoutMs, null, { status: 'unavailable' }, 'skipped_slot'));
       return { status: 'unavailable', ok: false, technicalError: true, provider: 'openrouter', model: KONFIGURACJA.openrouterValidatorModel, unsupported_claims: [], reason: 'budżet validatora/modeli wyczerpany' };
     }
     requestState.validatorResults.push({ model: KONFIGURACJA.openrouterValidatorModel, status: 'fallback', complete: false, confidence: null, claimCoverage: null });
   }
   // Brak Gemini nie jest błędem logicznym: OpenRouter jest pełnoprawnym
   // fallbackiem validatora, a nie tylko ratunkiem po błędzie sieciowym Gemini.
+  const openRouterStartedAt = Date.now();
   const fallback = await walidujOdpowiedzOpenRouter(persona, pytanie, odpowiedz, dane, requestId, requestState, requestMeta);
+  registrarMetrikeWalidatora(requestState, zbudujKontekstMetrykiWalidatora(requestId, 'openrouter', fallback.model || KONFIGURACJA.openrouterValidatorModel, odpowiedz, dane, requestState, openRouterRemainingMs, openRouterTimeoutMs, openRouterStartedAt, fallback));
   if (fallback.status === 'accepted' || fallback.status === 'soft_accepted' || fallback.status === 'rejected') return fallback;
   return { ...fallback, status: 'unavailable', ok: false, technicalError: true, unsupported_claims: [], reason: fallback.reason || 'Gemini i fallback validatora są technicznie niedostępne' };
 }
