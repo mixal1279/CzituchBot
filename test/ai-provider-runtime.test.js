@@ -163,6 +163,19 @@ test('quota cooldown respects Retry-After and never goes below the configured ba
     assert.equal(quotaCooldownMsFromError('HTTP 429 rate limit'), 5_000);
     assert.equal(quotaCooldownMsFromError('HTTP 429: high demand'), 60_000);
     assert.equal(classifyFailure('HTTP 429: high demand'), 'transient');
+
+    // Groq TPM waits get a conservative 60s cooldown, not a 1h breaker.
+    assert.equal(
+      quotaCooldownMsFromError('Rate limit reached (TPM). Please try again in 5.43s.'),
+      60_000,
+    );
+    // Groq TPD waits retain the provider-specified multi-minute cooldown.
+    assert.ok(
+      quotaCooldownMsFromError('Rate limit reached (TPD). Please try again in 24m34.416s.') >= 24 * 60_000,
+    );
+    assert.ok(
+      quotaCooldownMsFromError('Please try again in 3m22.176s') >= 3 * 60_000,
+    );
   } finally {
     if (previous === undefined) delete process.env.AI_PROVIDER_QUOTA_COOLDOWN_MS;
     else process.env.AI_PROVIDER_QUOTA_COOLDOWN_MS = previous;
