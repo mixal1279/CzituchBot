@@ -1,5 +1,7 @@
 'use strict';
 
+const { DEFAULTS } = require('./limits');
+
 /**
  * Wspólny budżet pojedynczego żądania AI.
  *
@@ -16,7 +18,7 @@ function createAIRequestContext(options = {}) {
   const ctx = {
     requestId: String(options.requestId || '-'),
     startedAt: Number.isFinite(options.startedAt) ? options.startedAt : Date.now(),
-    maxCzasMs: clampLimit(options.maxCzasMs, 60000),
+    maxCzasMs: clampLimit(options.maxCzasMs, DEFAULTS.requestTimeoutMs),
     maxGeneracji: clampLimit(options.maxGeneracji, 6),
     maxInitialGeneracji: clampLimit(options.maxInitialGeneracji, clampLimit(options.maxGeneracji, 6)),
     maxRepairGeneracji: clampLimit(options.maxRepairGeneracji, 0),
