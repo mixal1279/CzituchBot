@@ -7,9 +7,11 @@
  *   - attempted: the provider wrapper actually attempted a request
  *   - skipped_budget: no request was sent because the time budget was too small
  *   - skipped_slot: no request was sent because a validator/model slot was unavailable
+ *   - skipped_provider: no request was sent because credentials, source data, or provider cooldown prevented it
  *
  * failureReason is null for decisive validation results (accepted, soft_accepted,
- * rejected); otherwise it is one of budget_exhausted, slot_unavailable, quota,
+ * rejected); otherwise it is one of budget_exhausted, slot_unavailable,
+ * missing_credentials, provider_cooldown, missing_sources, quota,
  * provider_overload, timeout, empty_response, invalid_json, http_error, or
  * provider_unavailable. More specific causes take precedence over generic HTTP
  * status detection, so "high demand" is not misreported as an ordinary HTTP error.
@@ -23,7 +25,7 @@ function agregujMetrykiWalidatorow(metrics = []) {
   for (const metric of metrics) {
     const key = metric.validator || 'unknown';
     const row = byValidator[key] ||= {
-      attempted: 0, skippedBudget: 0, skippedSlot: 0, avgMs: null,
+      attempted: 0, skippedBudget: 0, skippedSlot: 0, skippedProvider: 0, avgMs: null,
       timeouts: 0, quotas: 0, providerOverloads: 0, httpErrors: 0,
       emptyResponses: 0, invalidJson: 0,
       unavailable: 0, accepted: 0, softAccepted: 0, rejected: 0,
@@ -31,6 +33,7 @@ function agregujMetrykiWalidatorow(metrics = []) {
     if (metric.outcome === 'attempted') row.attempted++;
     if (metric.outcome === 'skipped_budget') row.skippedBudget++;
     if (metric.outcome === 'skipped_slot') row.skippedSlot++;
+    if (metric.outcome === 'skipped_provider') row.skippedProvider++;
     if (metric.failureReason === 'timeout') row.timeouts++;
     if (metric.failureReason === 'quota') row.quotas++;
     if (metric.failureReason === 'provider_overload') row.providerOverloads++;
@@ -80,6 +83,9 @@ function zbudujKontekstMetrykiWalidatora(requestId, validator, model, odpowiedz,
     || /abortlike["']?\s*[:=]\s*["']?true|aborterror|aborted|abort|cancelled|canceled|anulowan|timeout|timed out|etimedout/i.test(diagnosticText);
   const failureReason = resolvedOutcome === 'skipped_budget' ? 'budget_exhausted'
     : resolvedOutcome === 'skipped_slot' ? 'slot_unavailable'
+    : resolvedOutcome === 'skipped_provider' && /cooldown|cool down/i.test(diagnosticText) ? 'provider_cooldown'
+    : resolvedOutcome === 'skipped_provider' && /brak .*key|missing credentials|api key/i.test(diagnosticText) ? 'missing_credentials'
+    : resolvedOutcome === 'skipped_provider' && /brak danych referencyjnych|missing sources/i.test(diagnosticText) ? 'missing_sources'
     : isTerminal ? null
     : isQuota ? 'quota'
     : isOverload ? 'provider_overload'
@@ -98,6 +104,7 @@ function zbudujKontekstMetrykiWalidatora(requestId, validator, model, odpowiedz,
       ? Math.max(0, Date.now() - startedAt)
       : null,
     status: result?.status || 'unavailable', failureReason, sourceCount,
+    skipReason: resolvedOutcome.startsWith('skipped_') ? String(result?.reason || result?.error || 'unspecified') : null,
     answerLength: answer.length, claimCountHeuristic, tavilyChars: null,
   };
 }
