@@ -35,7 +35,7 @@ test('repeated benchmark median handles odd and even samples', () => {
 
 test('repeated benchmark quantiles report interquartile spread', () => {
   const { quantile } = require('../scripts/ai-live-benchmark');
-  assert.equal(quantile([0.4, 0.5, 0.6, 0.7], 0.25), 0.475);
-  assert.equal(quantile([0.4, 0.5, 0.6, 0.7], 0.75), 0.625);
+  assert.ok(Math.abs(quantile([0.4, 0.5, 0.6, 0.7], 0.25) - 0.475) < 1e-12);
+  assert.ok(Math.abs(quantile([0.4, 0.5, 0.6, 0.7], 0.75) - 0.625) < 1e-12);
   assert.equal(quantile([], 0.5), null);
 });
