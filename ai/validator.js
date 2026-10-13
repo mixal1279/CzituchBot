@@ -417,28 +417,6 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
     && !unknownSourceClaim
     && !unsupportedEvidenceClaim;
 
-  // A quote-binding defect can be repaired safely only when the claim itself
-  // is independently supported by the explicitly declared source block. This
-  // must never cover action/causal contradictions or unsupported synthesis.
-  const softEvidenceOnly = claims.length > 0
-    && unverifiedEvidenceQuoteIndexes.length > 0
-    && claims.every((claim, index) => {
-      if (!claim.supported || !claim.source_ids.length) return false;
-      const sourceBlocks = claim.source_ids
-        .map(id => parsedEvidenceBlocks.find(block => block.sourceId === id))
-        .filter(Boolean);
-      if (!sourceBlocks.length) return false;
-      return sourceBlocks.some(block => zgodnoscStrukturalna(block.content, claim.claim, {
-        allowCrossLanguageExactEvidence: true,
-        allowDistributedEvidence: true,
-      }).ok);
-    });
-
-  const softQuoteBindingOnly = unsupportedEvidenceClaimIndexes.length > 0
-    && unsupportedEvidenceReasons
-      .filter(item => unsupportedEvidenceClaimIndexes.includes(item.claimIndex))
-      .every(item => item.reasons.every(reason => /evidence_quote nie występuje w wskazanym źródle/i.test(reason)));
-
   const localRejectReasons = [];
   if (!rawClaims.length) localRejectReasons.push('claims_missing');
   if (tooManyClaims) localRejectReasons.push('claims_over_limit');
