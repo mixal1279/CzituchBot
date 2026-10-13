@@ -2870,7 +2870,7 @@ Pytanie użytkownika: ${pytanie}`;
           temperature,
         },
       });
-      const isLimit = /429|rate.?limit|tokens per day|tokens per minute|TPD|TPM/i.test(diagnostic);
+      const isLimit = classifyFailure(diagnostic) === 'quota';
       console.error(`[Groq][${requestId}] ${model} request failed: ${diagnostic}`);
       if (model === 'openai/gpt-oss-120b' && isLimit) {
         requestBlokada120b = true;
