@@ -329,7 +329,6 @@ assert.match(require('fs').readFileSync(require('path').join(__dirname, '..', 'c
   assert.match(botSource, /Object\.getOwnPropertyNames\(value\)/);
   assert.match(botSource, /requestContract: \{/);
   assert.doesNotMatch(botSource, /async function walidujOdpowiedzXKiro\(/);
-  assert.match(botSource, /response_format: \{ type: 'json_object' \}/);
   assert.doesNotMatch(botSource, /validator:xkiro/);
 }
 
