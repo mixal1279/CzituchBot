@@ -328,9 +328,9 @@ assert.match(require('fs').readFileSync(require('path').join(__dirname, '..', 'c
   assert.match(botSource, /abortLike/);
   assert.match(botSource, /Object\.getOwnPropertyNames\(value\)/);
   assert.match(botSource, /requestContract: \{/);
-  assert.match(botSource, /async function walidujOdpowiedzXKiro\(/);
+  assert.doesNotMatch(botSource, /async function walidujOdpowiedzXKiro\(/);
   assert.match(botSource, /response_format: \{ type: 'json_object' \}/);
-  assert.match(botSource, /validator:xkiro/);
+  assert.doesNotMatch(botSource, /validator:xkiro/);
 }
 
 console.log('AI regression tests: OK');
@@ -493,7 +493,7 @@ console.log('AI regression tests: OK');
   assert.match(require('fs').readFileSync(require('path').join(__dirname, '..', 'czituch_bot.js'), 'utf8'), /AI_TAVILY_CACHE_FILE \|\| path\.join\(process\.env\.AI_CACHE_DIR \|\| __dirname, 'tavily_cache\.json'\)/);
   const source = require('fs').readFileSync(require('path').join(__dirname, '..', 'czituch_bot.js'), 'utf8');
   assert.match(source, /computeValidatorTimeout\(remainingMs, \{[\s\S]*?reserveMs: computeValidatorReserveMs\(remainingMs, requestState\?\.validatory \+ 1, requestState\?\.maxValidatorow\),[\s\S]*?minTimeoutMs: 4000/);
-  assert.match(source, /xKiro validator pominięty: zbyt mały remaining budget|computeValidatorReserveMs\(xkiroRemainingMs, requestState\?\.validatory \+ 1/);
+  assert.doesNotMatch(source, /xKiro validator pominięty: zbyt mały remaining budget|computeValidatorReserveMs\(xkiroRemainingMs/);
   assert.match(source, /function zarezerwujSlotWalidatora\(requestState, purpose\)/);
   assert.match(source, /status: 'unverified'/);
 }
@@ -586,7 +586,7 @@ console.log('AI regression tests: OK');
   assert.equal(budget.maxInitialGenerations, 5);
   assert.equal(budget.maxRepairGenerations, 4);
   assert.equal(budget.requestTimeoutMs, 25000);
-  assert.equal(budget.maxValidators, 3);
+  assert.equal(budget.maxValidators, 2);
   assert.equal(budget.maxModelCalls, 12);
   {
     const { createAIRequestContext } = require('../ai/requestContext');
