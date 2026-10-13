@@ -37,6 +37,9 @@ function classifyFailure(error = '') {
   const text = error && typeof error === 'object'
     ? [error.message, error.reason, error.error, error.diagnostic].filter(Boolean).join(' ')
     : String(error?.message || error || '');
+  // HTTP 429 can also be used for temporary capacity pressure ("high demand").
+  // Classify that explicit overload before the generic quota matcher.
+  if (/(?:high demand|overloaded|temporarily unavailable|capacity exceeded)/i.test(text)) return 'transient';
   for (const [type, pattern] of DETAIL_CLASSIFIERS) {
     if (pattern.test(text)) return type;
   }
