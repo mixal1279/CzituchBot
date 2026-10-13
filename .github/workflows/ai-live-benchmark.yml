@@ -18,7 +18,7 @@ jobs:
       AI_BENCHMARK_DELAY_MS: "750"
       AI_BENCHMARK_REQUIRE_PERFECT: "1"
       AI_PROVIDER_QUOTA_COOLDOWN_MS: "1800000"
-      AI_120B_GLOBAL_MAX_REQUESTS: "5"
+      AI_120B_GLOBAL_MAX_REQUESTS: "20"
       CZITUCHBOT_SKIP_STARTUP_IO: "1"
       GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
       TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
@@ -41,6 +41,8 @@ jobs:
 
       - name: Install dependencies
         run: npm install
+      - name: Preflight Tavily
+        run: node scripts/tavily-preflight.js
 
       - name: Run 10-case live benchmark
         shell: bash
@@ -56,4 +58,4 @@ jobs:
           name: ai-live-benchmark-${{ github.sha }}
           path: ai-live-benchmark-report.txt
           if-no-files-found: warn
-          retention-days: 3
+          retention-days: 1
