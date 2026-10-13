@@ -1,5 +1,5 @@
 'use strict';
-const DEFAULTS={maxQuestionChars:500,maxHistoryMessages:8,maxReferenceChars:10000,maxMemoryRecords:20,requestTimeoutMs:25000,maxModelCalls:12,maxGenerations:6,maxInitialGenerations:5,maxRepairGenerations:4,maxValidators:3,maxTavilySearches:3};
+const DEFAULTS={maxQuestionChars:500,maxHistoryMessages:8,maxReferenceChars:10000,maxMemoryRecords:20,requestTimeoutMs:40000,maxModelCalls:15,maxGenerations:6,maxInitialGenerations:5,maxRepairGenerations:4,maxValidators:3,maxTavilySearches:3};
 function createRequestBudget(overrides={}){const c={...DEFAULTS,...overrides},startedAt=Date.now();return{startedAt,...c,modelCalls:0,generations:0,validators:0,tavilySearches:0,expired(){return Date.now()-startedAt>=c.requestTimeoutMs;},reserve(type){const map={modelCalls:'modelCalls',generation:'generations',validator:'validators',tavily:'tavilySearches'},key=map[type];if(!key||this.expired()||this[key]>=c['max'+key.charAt(0).toUpperCase()+key.slice(1)])return false;this[key]++;return true;}};}
 function sanitizeRequestText(text,maxChars=DEFAULTS.maxQuestionChars){return String(text||'').replace(/[\u0000-\u001F\u007F]/g,' ').trim().slice(0,maxChars);}
 module.exports={DEFAULTS,createRequestBudget,sanitizeRequestText};
