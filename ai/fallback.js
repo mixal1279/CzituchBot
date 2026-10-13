@@ -24,6 +24,22 @@ const DETAIL_CLASSIFIERS = Object.freeze([
 ]);
 
 function classifyFailure(error = '') {
+  // Provider diagnostics are JSON strings containing metadata such as timeoutMs.
+  // Classify the actual provider message first; otherwise the word "timeout"
+  // in diagnostic metadata can mask a real 429 quota error.
+  if (typeof error === 'string') {
+    try {
+      const parsed = JSON.parse(error);
+      if (parsed && typeof parsed === 'object' && typeof parsed.message === 'string') {
+        return classifyFailure({
+          message: parsed.message,
+          status: parsed.status,
+          code: parsed.code,
+          type: parsed.type,
+        });
+      }
+    } catch (_) {}
+  }
   const status = error && typeof error === 'object' ? String(error.status || '').toLowerCase() : '';
   if (status === 'accepted' || status === 'soft_accepted') return null;
   if (status === 'rejected') {
@@ -68,14 +84,31 @@ function resetProviderQuotaCooldowns() {
 
 function quotaCooldownMsFromError(error) {
   const message = String(error?.message || error || '');
-  // Capacity pressure is transient, not a persistent account quota exhaustion.
-  if (/(?:high demand|overloaded|temporarily unavailable|capacity exceeded)/i.test(message)) return 60_000;
   const configured = Number(process.env.AI_PROVIDER_QUOTA_COOLDOWN_MS) || 60_000;
-  const match = message.match(/retry[- ]after\s*[=:]\s*(\d+(?:\.\d+)?)\s*(?:s|sec(?:ond)?s?)?/i);
-  if (!match) return configured;
-  const retryAfterMs = Math.max(0, Number(match[1])) * 1000;
-  return Math.max(configured, Math.ceil(retryAfterMs), 1_000);
+  // Keep the conservative transient backoff, but still honor any longer provider hint.
+  let cooldownMs = /(?:high demand|overloaded|temporarily unavailable|capacity exceeded)/i.test(message)
+    ? Math.max(configured, 60_000)
+    : configured;
+
+  // Retry-After=Ns
+  const retryAfterMatch = message.match(/retry[- ]after\s*[=:]\s*(\d+(?:\.\d+)?)\s*(?:s|sec(?:ond)?s?)?/i);
+  if (retryAfterMatch) {
+    cooldownMs = Math.max(cooldownMs, Math.ceil(Number(retryAfterMatch[1]) * 1000));
+  }
+
+  // Groq: "Please try again in 1h2m3s", "3m22.176s" or "5.43s".
+  const tryAgainMatch = message.match(/try again in\s+(?:(\d+)h)?\s*(?:(\d+)m)?\s*(\d+(?:\.\d+)?)\s*s/i);
+  if (tryAgainMatch) {
+    const hours = Number(tryAgainMatch[1] || 0);
+    const minutes = Number(tryAgainMatch[2] || 0);
+    const seconds = Number(tryAgainMatch[3] || 0);
+    const retryAfterMs = Math.max(0, (hours * 3600 + minutes * 60 + seconds) * 1000);
+    cooldownMs = Math.max(cooldownMs, 60_000, Math.ceil(retryAfterMs));
+  }
+
+  return Math.max(cooldownMs, 1_000);
 }
+
 function markProviderQuota(provider, cooldownMs = Number(process.env.AI_PROVIDER_QUOTA_COOLDOWN_MS) || 60_000) {
   const endpoint = String(provider || '');
   if (!GENERATION_FALLBACK_CHAIN.includes(endpoint)) return [];
@@ -83,6 +116,10 @@ function markProviderQuota(provider, cooldownMs = Number(process.env.AI_PROVIDER
   const until = Date.now() + duration;
   quotaBlockedUntil.set(endpoint, until);
   return [endpoint];
+}
+
+function getProviderQuotaUntil(provider) {
+  return quotaBlockedUntil.get(String(provider || '')) || 0;
 }
 
 function isProviderQuotaBlocked(provider, now = Date.now()) {
@@ -164,6 +201,7 @@ module.exports = {
   quotaCooldownMsFromError,
   markProviderQuota,
   isProviderQuotaBlocked,
+  getProviderQuotaUntil,
   classifyFailure,
   nextFallbacks,
   selectRepairFallbacks,

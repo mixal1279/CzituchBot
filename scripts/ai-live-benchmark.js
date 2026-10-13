@@ -65,6 +65,7 @@ async function run() {
         async text => { answer = String(text || ''); },
         {
           aiProfile: 'generic',
+          maxCzasMs: 40000,
           memoryUserId: 'ai-benchmark',
           temperature: 0.2,
           max_tokens: 300,

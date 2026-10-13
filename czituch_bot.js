@@ -73,8 +73,9 @@ const { parseMemoryCommand, forgetMemories, describeMemories } = require('./ai/m
 const { decomposeQuestion, buildAdvancedRetrievalPlan } = require('./ai/retrieval');
 const { classifyFailure, nextFallbacks, selectRepairFallbacks, repairBudgetBlockReason, GENERATION_FALLBACK_CHAIN, markProviderQuota, isProviderQuotaBlocked, quotaCooldownMsFromError } = require('./ai/fallback');
 const { createGroqCompletion, awaitWithAbortTimeout, computeValidatorTimeout, computeValidatorReserveMs, computeGenerationTimeout } = require('./ai/provider-runtime');
+const { defaultBreaker: model120bBreaker } = require('./ai/breaker-120b');
 const { createAIMetrics, recordAIMetric, snapshotAIMetrics } = require('./ai/metrics');
-const { sanitizeRequestText } = require('./ai/limits');
+const { DEFAULTS: AI_LIMITS, sanitizeRequestText } = require('./ai/limits');
 const { createAIRequestContext } = require('./ai/requestContext');
 const { sprawdzTwardeFaktyOdpowiedzi, sprawdzFormatOdpowiedzi } = require('./ai/response');
 const { Firestore } = require('@google-cloud/firestore');
@@ -1595,7 +1596,7 @@ Zwróć WYŁĄCZNIE JSON: {"valid":true/false,"reason":"krótki powód","confide
       markProviderQuota(endpoint, cooldownMs);
       console.warn(`[AI][${requestId}] quota circuit opened for ${endpoint} for ${cooldownMs}ms`);
     }
-    if (transient) geminiValidatorCooldownUntil = Date.now() + (quota ? 90_000 : 60_000);
+    if (transient) ustawGeminiValidatorCooldown(model, quota ? 90_000 : 60_000);
     return {
       status: 'unavailable',
       ok: false,
@@ -1612,9 +1613,17 @@ Zwróć WYŁĄCZNIE JSON: {"valid":true/false,"reason":"krótki powód","confide
   }
 }
 
-let geminiValidatorCooldownUntil = 0;
+const geminiValidatorCooldowns = Object.create(null);
 let geminiGenerationCooldowns = Object.create(null);
 let groqHistoryCooldownUntil = 0;
+
+function geminiValidatorCooldownUntil(model) {
+  return Number(geminiValidatorCooldowns[String(model || '')] || 0);
+}
+
+function ustawGeminiValidatorCooldown(model, ms) {
+  geminiValidatorCooldowns[String(model || '')] = Date.now() + Math.max(0, Number(ms) || 0);
+}
 
 function geminiGenerationCooldownUntil(model) {
   return Number(geminiGenerationCooldowns[String(model || '')] || 0);
@@ -1847,9 +1856,10 @@ async function walidujOdpowiedzAI(persona, pytanie, odpowiedz, dane, historiaRoz
   // Jeden stabilny model wystarcza do prostego JSON fact-checkera i nie
   // zużywa potrójnie darmowego limitu Gemini przy każdym pytaniu.
   const models = KONFIGURACJA.geminiKey
-    && Date.now() >= geminiValidatorCooldownUntil
-    && !isProviderQuotaBlocked('gemini:gemini-3.5-flash-lite')
-    ? ['gemini-3.5-flash-lite']
+    ? ['gemini-3.5-flash-lite'].filter(model =>
+        Date.now() >= geminiValidatorCooldownUntil(model)
+        && !isProviderQuotaBlocked(`gemini:${model}`)
+      )
     : [];
   if (!models.length) console.warn(`[AI][${requestId}] Gemini validator w cooldownie — używam fallbacku OpenRouter`);
   let last = null;
@@ -2136,19 +2146,19 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
   // Nie utrzymujemy osobnych budżetów w generatorze, retrievalu i validatorze.
   const aiState = createAIRequestContext({
     requestId,
-    maxCzasMs: 25000,
-    maxGeneracji: 6,
-    maxInitialGeneracji: 5,
-    maxRepairGeneracji: 4,
-    maxModelCalls: 12,
-    maxValidatorow: 3,
-    maxWyszukanTavily: testMaxTavilySearches,
+    maxCzasMs: Number(opcje.maxCzasMs) || AI_LIMITS.requestTimeoutMs,
+    maxGeneracji: Number(opcje.maxGeneracji) || AI_LIMITS.maxGenerations,
+    maxInitialGeneracji: Number(opcje.maxInitialGeneracji) || AI_LIMITS.maxInitialGenerations,
+    maxRepairGeneracji: Number(opcje.maxRepairGeneracji) || AI_LIMITS.maxRepairGenerations,
+    maxModelCalls: Number(opcje.maxModelCalls) || AI_LIMITS.maxModelCalls,
+    maxValidatorow: Number(opcje.maxValidatorow) || AI_LIMITS.maxValidators,
+    maxWyszukanTavily: Number(opcje.maxWyszukanTavily) || testMaxTavilySearches,
   });
   let daneDoWalidacji = null;
   const budzetPrzekroczony = () => aiState.isExpired();
   const pozostalyCzasMs = () => aiState.remainingMs();
   // Dzielimy pozostały deadline między aktualną i potencjalne kolejne próby.
-  // Dzięki temu jeden zawieszony provider nie może zjeść całych 25 s i zablokować fallbacku.
+  // Dzięki temu jeden zawieszony provider nie może zjeść całych 40 s i zablokować fallbacku.
   const timeoutDlaGeneracji = () => computeGenerationTimeout(pozostalyCzasMs());
   const zarezerwujModel = (purpose = 'model') => {
     const reserved = aiState.reserveModel(purpose);
@@ -2179,7 +2189,8 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
       fallbackReasons: aiState.fallbackReasons,
       finalProvider: wynikGeneracji?.provider || null,
       finalModel: wynikGeneracji?.model || null, tavilySearches: aiState.tavilySearches,
-      global120bRequests: model120bGlobalRequesty,
+      global120bRequests: model120bBreaker.snapshot().requestsInWindow,
+      requestBudget: { maxCzasMs: aiState.maxCzasMs },
       generationBudget: {
         total: aiState.maxGeneracji,
         initial: aiState.maxInitialGeneracji,
@@ -2861,11 +2872,12 @@ Pytanie użytkownika: ${pytanie}`;
           temperature,
         },
       });
-      const isLimit = /429|rate.?limit|tokens per day|tokens per minute|TPD|TPM/i.test(diagnostic);
+      const isLimit = classifyFailure(diagnostic) === 'quota';
       console.error(`[Groq][${requestId}] ${model} request failed: ${diagnostic}`);
       if (model === 'openai/gpt-oss-120b' && isLimit) {
         requestBlokada120b = true;
-        zablokuj120BGlobalnie(diagnostic);
+        const cooldownMs = quotaCooldownMsFromError(diagnostic);
+        zablokuj120BGlobalnie(diagnostic, cooldownMs);
       }
       return wynikPusty('groq', model, diagnostic);
     }
@@ -3469,45 +3481,23 @@ const historiaRozmowy = {};
 const ostatnieUzycie  = {};
 let botNaPrzerwie = false;
 
-// Globalna ochrona 120B: równoległe requesty nie mogą każdy osobno zużyć
-// pełnego limitu retry. Quota jest liczona dla całego procesu w ruchomym oknie.
-const MODEL_120B_GLOBAL_MAX_REQUESTS = Math.max(1, Number(process.env.AI_120B_GLOBAL_MAX_REQUESTS) || 6);
-const MODEL_120B_GLOBAL_WINDOW_MS = 60 * 60 * 1000;
-let model120bGlobalRequesty = 0;
-let model120bGlobalOknoDo = Date.now() + MODEL_120B_GLOBAL_WINDOW_MS;
-let model120bGlobalZablokowanyDo = 0;
-let model120bCircuitBreakerOpen = false;
-
+// Współdzielony singleton: bot i testy obserwują ten sam stan breakera.
 function zarezerwujRequest120B(requestId = '-') {
-  const teraz = Date.now();
-  // Okno quota i cooldown circuit breakera są niezależnymi ograniczeniami.
-  // Wygaśnięcie godzinnego okna nie może przedwcześnie otworzyć 120B po 429.
-  if (teraz >= model120bGlobalOknoDo && teraz >= model120bGlobalZablokowanyDo) {
-    model120bGlobalRequesty = 0;
-    model120bGlobalOknoDo = teraz + MODEL_120B_GLOBAL_WINDOW_MS;
-    model120bGlobalZablokowanyDo = 0;
-    model120bCircuitBreakerOpen = false;
-  }
-  if (model120bCircuitBreakerOpen && teraz < model120bGlobalZablokowanyDo) {
-    console.warn(`[AI][${requestId}] 120B global circuit breaker aktywny do ${new Date(model120bGlobalZablokowanyDo).toISOString()}`);
+  const result = model120bBreaker.reserve(requestId);
+  if (!result.ok) {
+    if (result.reason === 'circuit_breaker_open') {
+      console.warn(`[AI][${requestId}] 120B global circuit breaker aktywny do ${new Date(result.until).toISOString()}`);
+    } else if (result.reason === 'quota_exhausted') {
+      console.warn(`[AI][${requestId}] 120B global quota wyczerpana (${result.used}/${result.max})`);
+    }
     return false;
   }
-  if (model120bCircuitBreakerOpen && teraz >= model120bGlobalZablokowanyDo) {
-    model120bCircuitBreakerOpen = false;
-    model120bGlobalZablokowanyDo = 0;
-  }
-  if (model120bGlobalRequesty >= MODEL_120B_GLOBAL_MAX_REQUESTS) {
-    console.warn(`[AI][${requestId}] 120B global quota wyczerpana (${MODEL_120B_GLOBAL_MAX_REQUESTS}/${MODEL_120B_GLOBAL_MAX_REQUESTS})`);
-    return false;
-  }
-  model120bGlobalRequesty++;
   return true;
 }
 
-function zablokuj120BGlobalnie(powod = 'limit') {
-  model120bGlobalZablokowanyDo = Date.now() + MODEL_120B_GLOBAL_WINDOW_MS;
-  model120bCircuitBreakerOpen = true;
-  console.error(`[AI] 120B global circuit breaker: ${powod}`);
+function zablokuj120BGlobalnie(powod = 'limit', cooldownMs) {
+  const result = model120bBreaker.trip(powod, cooldownMs);
+  console.error(`[AI] 120B global circuit breaker: ${powod} (cooldown ${Math.round(result.cooldownMs / 1000)}s)`);
 }
 
 // Kolejka chroni przed jednoczesnym uruchomieniem dużej liczby drogich sekwencji
