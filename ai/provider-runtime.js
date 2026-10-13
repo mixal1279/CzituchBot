@@ -65,18 +65,28 @@ function awaitWithAbortTimeout(promise, timeoutMs, controller, label = 'provider
  * Return null when starting the validator would leave too little time for the
  * next validator/fallback to run.
  */
-function computeValidatorReserveMs(remainingMs) {
+function computeValidatorReserveMs(remainingMs, currentSlot = 1, maxValidators = 3) {
   const remaining = Number(remainingMs);
   if (!Number.isFinite(remaining) || remaining <= 0) return 0;
   // Keep a fallback slot only when the current request has enough time for it.
-  // 14.5s: current validator can use up to 9s and leave 5.5s? The next slot
-  // needs at least 4s plus a 2.5s final reserve (6.5s total).
-  if (remaining >= 14500) return 10500;
-  if (remaining >= 10500) return 6500;
-  if (remaining >= 6500) return 2500;
-  // Below 6.5s there is no viable fallback slot; spend the remaining time on
-  // the current validator instead of skipping it merely to preserve unused time.
-  return 0;
+  // The reserve adapts to both remaining time and the number of validator slots
+  // after the current one, so a late fallback can use the time earlier stages
+  // could not preserve.
+  const slot = Math.max(1, Math.floor(Number(currentSlot) || 1));
+  const maxSlots = Math.max(slot, Math.floor(Number(maxValidators) || 3));
+  const futureSlots = maxSlots - slot;
+  if (futureSlots >= 2) {
+    if (remaining >= 14500) return 10500;
+    if (remaining >= 10500) return 6500;
+    if (remaining >= 6500) return 2500;
+    return 0;
+  }
+  if (futureSlots === 1) {
+    if (remaining >= 10500) return 6500;
+    if (remaining >= 6500) return 2500;
+    return 0;
+  }
+  return remaining >= 6500 ? 2500 : 0;
 }
 
 function computeValidatorTimeout(remainingMs, {
