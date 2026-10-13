@@ -77,6 +77,7 @@ function buildAdvancedRetrievalPlan(question, routing = {}, baseQueries = []) {
 function normalizujToken(value) {
   return String(value || '').toLocaleLowerCase('pl-PL')
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/ł/g, 'l')
     .replace(/\s+/g, ' ').trim();
 }
 
