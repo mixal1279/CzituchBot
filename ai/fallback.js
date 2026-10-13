@@ -25,7 +25,8 @@ const DETAIL_CLASSIFIERS = Object.freeze([
 
 function classifyFailure(error = '') {
   const status = error && typeof error === 'object' ? String(error.status || '').toLowerCase() : '';
-  if (status === 'accepted' || status === 'soft_accepted') return null;
+  if (status === 'accepted') return null;
+  if (status === 'soft_accepted') return 'validator_rejection';
   if (status === 'rejected') {
     const rejectionText = [error.message, error.reason, error.error, error.diagnostic].filter(Boolean).join(' ');
     return SCHEMA_REJECTION.test(rejectionText) ? 'schema_rejection' : 'validator_rejection';
