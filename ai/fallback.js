@@ -75,13 +75,13 @@ function quotaCooldownMsFromError(error) {
     : configured;
 
   // Retry-After=Ns
-  const retryAfterMatch = message.match(/retry[- ]after\\s*[=:]\\s*(\\d+(?:\\.\\d+)?)\\s*(?:s|sec(?:ond)?s?)?/i);
+  const retryAfterMatch = message.match(/retry[- ]after\s*[=:]\s*(\d+(?:\.\d+)?)\s*(?:s|sec(?:ond)?s?)?/i);
   if (retryAfterMatch) {
     cooldownMs = Math.max(cooldownMs, Math.ceil(Number(retryAfterMatch[1]) * 1000));
   }
 
   // Groq: "Please try again in 3m22.176s" or "Please try again in 5.43s".
-  const tryAgainMatch = message.match(/try again in\\s+(?:(\\d+)m)?\\s*(\\d+(?:\\.\\d+)?)\\s*s/i);
+  const tryAgainMatch = message.match(/try again in\s+(?:(\d+)m)?\s*(\d+(?:\.\d+)?)\s*s/i);
   if (tryAgainMatch) {
     const minutes = Number(tryAgainMatch[1] || 0);
     const seconds = Number(tryAgainMatch[2] || 0);
