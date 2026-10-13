@@ -110,6 +110,56 @@ function rankEvidenceForClaim(claim, blocks, allowedSourceIds = null, limit = 3)
   }).slice(0, limit);
 }
 
+/**
+ * Return only a source ID that matches the repository's canonical evidence format.
+ * Do not invent IDs from URLs or arbitrary provider IDs: IDs must bind to parsed
+ * [SOURCE n] or [REFERENCE ...] blocks already present in the evidence payload.
+ */
+function ensureEvidenceSourceId(candidate) {
+  const raw = String(candidate?.sourceId ?? candidate?.source_id ?? candidate?.id ?? '').trim();
+  const sourceMatch = raw.match(/^SOURCE\s+(\d+)$/i);
+  if (sourceMatch) return `SOURCE ${sourceMatch[1]}`;
+  const referenceMatch = raw.match(/^REFERENCE\s+([^\]\r\n]+)$/i);
+  if (referenceMatch) return `REFERENCE ${referenceMatch[1].trim()}`;
+  return null;
+}
+
+/**
+ * Rank verbatim evidence candidates from already parsed source blocks.
+ * The returned source_id is canonical and evidence_quote is copied from the
+ * source content, never generated or paraphrased.
+ */
+function buildEvidenceCandidatesFromSources(sources, question = '', options = {}) {
+  if (!Array.isArray(sources) || !String(question || '').trim()) return [];
+  const blocks = sources.map(source => {
+    const sourceId = ensureEvidenceSourceId(source);
+    if (!sourceId) return null;
+    return {
+      sourceId,
+      title: String(source?.title || ''),
+      url: String(source?.url || ''),
+      content: String(source?.content || ''),
+    };
+  }).filter(block => block && block.content.trim());
+
+  const allowedSourceIds = options.allowedSourceIds instanceof Set ? options.allowedSourceIds : null;
+  const limit = Number.isFinite(Number(options.limit)) ? Math.max(0, Math.floor(Number(options.limit))) : 3;
+  return rankEvidenceForClaim(question, blocks, allowedSourceIds, limit)
+    .filter(candidate => {
+      const source = blocks.find(block => block.sourceId === candidate.sourceId);
+      return source && quoteExists(source.content, candidate.quote);
+    })
+    .map(candidate => ({
+      source_id: candidate.sourceId,
+      evidence_quote: candidate.quote,
+      title: candidate.title,
+      url: candidate.url,
+      score: candidate.score,
+      claimType: candidate.claimType,
+      relationMatch: candidate.relationMatch,
+    }));
+}
+
 function buildEvidenceRepairContext(claims, blocks, allowedSourceIds = null, maxClaims = 4) {
   const rows = [];
   for (const claim of (Array.isArray(claims) ? claims : []).slice(0, maxClaims)) {
@@ -121,13 +171,16 @@ function buildEvidenceRepairContext(claims, blocks, allowedSourceIds = null, max
     const claimType = classifyClaimType(claimText);
     const claimIsCausal = claimType === 'causal';
     const claimIsSourceMeta = /\b(?:źródł\w*|zrodł\w*|danych|materiał\w*|material\w*|evidence|cytat\w*)\b/i.test(claimText);
-    const candidates = rankEvidenceForClaim(claimText, blocks, allowedSourceIds, 6)
+    const candidates = buildEvidenceCandidatesFromSources(blocks, claimText, {
+      allowedSourceIds,
+      limit: 6,
+    })
       .filter(candidate => Number(candidate.score) >= 0.20)
-      .filter(candidate => !claimIsCausal || (candidate.relationMatch && evidenceRelationSignals(candidate.quote).causal))
+      .filter(candidate => !claimIsCausal || (candidate.relationMatch && evidenceRelationSignals(candidate.evidence_quote).causal))
       .filter(candidate => !claimIsSourceMeta)
       .slice(0, 2);
     if (!candidates.length) continue;
-    rows.push({ claim: String(claim.claim).slice(0, 500), candidates: candidates.map(candidate => ({ source_id: candidate.sourceId, evidence_quote: candidate.quote.slice(0, 500), score: candidate.score })) });
+    rows.push({ claim: String(claim.claim).slice(0, 500), candidates: candidates.map(candidate => ({ source_id: candidate.source_id, evidence_quote: candidate.evidence_quote.slice(0, 500), score: candidate.score })) });
   }
   if (!rows.length) return '';
   return rows.map((row, index) => [
@@ -175,4 +228,4 @@ function buildQuestionEvidenceContext(question, blocks, allowedSourceIds = null,
   }).join('\n\n');
 }
 
-module.exports = { normalizeEvidenceText, parseEvidenceBlocks, quoteExists, splitEvidenceSentences, classifyClaimType, evidenceRelationSignals, rankEvidenceForClaim, buildEvidenceRepairContext, buildQuestionEvidenceContext };
+module.exports = { normalizeEvidenceText, parseEvidenceBlocks, quoteExists, splitEvidenceSentences, classifyClaimType, evidenceRelationSignals, rankEvidenceForClaim, ensureEvidenceSourceId, buildEvidenceCandidatesFromSources, buildEvidenceRepairContext, buildQuestionEvidenceContext };

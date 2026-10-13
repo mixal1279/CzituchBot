@@ -66,3 +66,19 @@ test('request context snapshot is stable and exposes one shared budget', () => {
   assert.ok(snapshot.remainingMs >= 0);
   assert.ok(snapshot.remainingMs <= snapshot.maxCzasMs);
 });
+
+test('repair generation is not reserved when less than the minimum time window remains', () => {
+  const ctx = createAIRequestContext({
+    startedAt: Date.now() - 6000,
+    maxCzasMs: 10000,
+    maxGeneracji: 4,
+    maxInitialGeneracji: 3,
+    maxRepairGeneracji: 1,
+    maxModelCalls: 6,
+  });
+
+  assert.ok(ctx.remainingMs() < 5000);
+  assert.equal(ctx.reserveGeneration('gemini', 'repair-model', 'repair'), false);
+  assert.equal(ctx.repairGeneracje, 0);
+  assert.equal(ctx.modelCalls, 0);
+});

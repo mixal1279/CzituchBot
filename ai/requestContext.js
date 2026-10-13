@@ -53,6 +53,10 @@ function createAIRequestContext(options = {}) {
   ctx.reserveGeneration = (provider, model, phase = 'initial') => {
     if (ctx.isExpired() || ctx.generacje >= ctx.maxGeneracji) return false;
     const isRepair = phase === 'repair';
+    // A repair attempt needs enough time for the generation timeout policy
+    // (4s minimum generation window + 4.5s reserved for validation/fallback).
+    // Keep this guard here as a final safety net for callers that bypass preflight.
+    if (isRepair && ctx.remainingMs() < 8500) return false;
     if (isRepair && ctx.repairGeneracje >= ctx.maxRepairGeneracji) return false;
     if (!isRepair && ctx.initialGeneracje >= ctx.maxInitialGeneracji) return false;
     if (!ctx.reserveModel(`generation:${phase}:${provider}/${model}`)) return false;

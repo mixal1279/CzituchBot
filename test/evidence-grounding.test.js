@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { normalizujWynikWalidatora } = require('../ai/validator');
-const { parseEvidenceBlocks, quoteExists, buildEvidenceRepairContext } = require('../ai/evidence');
+const { parseEvidenceBlocks, quoteExists, ensureEvidenceSourceId, buildEvidenceCandidatesFromSources, buildEvidenceRepairContext } = require('../ai/evidence');
 
 function base(claim, sourceId, quote, answer = claim) {
   return normalizujWynikWalidatora({
@@ -87,4 +87,21 @@ test('evidence repair context returns verbatim candidates from authorized source
   const repair = buildEvidenceRepairContext([{ claim: 'Wheatley uzyskał kontrolę nad Aperture.' }], blocks, new Set(['SOURCE 1']));
   assert.match(repair, /CANDIDATE SOURCE: SOURCE 1/);
   assert.match(repair, /Wheatley przejął kontrolę/);
+});
+
+test('evidence candidate builder preserves canonical source IDs and verbatim quotes', () => {
+  const blocks = parseEvidenceBlocks('[SOURCE 1]\nTYTUŁ: Test\nURL: https://example.com\nTREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>\nWheatley przejął kontrolę nad systemem Aperture.\n<<<END_UNTRUSTED_SOURCE_CONTENT>>>');
+  assert.equal(ensureEvidenceSourceId(blocks[0]), 'SOURCE 1');
+  assert.equal(ensureEvidenceSourceId({ id: 'S1', url: 'https://example.com' }), null);
+
+  const candidates = buildEvidenceCandidatesFromSources(blocks, 'Wheatley przejął kontrolę nad systemem Aperture.', {
+    allowedSourceIds: new Set(['SOURCE 1']),
+    limit: 3,
+  });
+  assert.ok(candidates.length > 0);
+  assert.equal(candidates[0].source_id, 'SOURCE 1');
+  assert.equal(quoteExists(blocks[0].content, candidates[0].evidence_quote), true);
+  assert.deepEqual(buildEvidenceCandidatesFromSources(blocks, 'Wheatley przejął kontrolę.', {
+    allowedSourceIds: new Set(['SOURCE 99']),
+  }), []);
 });
