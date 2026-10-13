@@ -1851,6 +1851,7 @@ function registrarMetrikeWalidatora(requestState, metric) {
     actualMs: Number.isFinite(metric.actualMs) ? metric.actualMs : null,
     status: metric.status || 'unavailable',
     failureReason: metric.failureReason || null,
+    skipReason: metric.skipReason || null,
     sourceCount: Number.isFinite(metric.sourceCount) ? metric.sourceCount : null,
     answerLength: Number.isFinite(metric.answerLength) ? metric.answerLength : 0,
     claimCountHeuristic: Number.isFinite(metric.claimCountHeuristic) ? metric.claimCountHeuristic : null,
@@ -1877,7 +1878,17 @@ async function walidujOdpowiedzAI(persona, pytanie, odpowiedz, dane, historiaRoz
     && !isProviderQuotaBlocked('gemini:gemini-3.5-flash-lite')
     ? ['gemini-3.5-flash-lite']
     : [];
-  if (!models.length) console.warn(`[AI][${requestId}] Gemini validator w cooldownie — używam fallbacku OpenRouter`);
+  if (!models.length) {
+    const skipReason = !KONFIGURACJA.geminiKey
+      ? 'brak GEMINI_API_KEY'
+      : (Date.now() < geminiValidatorCooldownUntil ? 'Gemini validator cooldown' : 'Gemini quota cooldown');
+    registrarMetrikeWalidatora(requestState, zbudujKontekstMetrykiWalidatora(
+      requestId, 'gemini', 'gemini-3.5-flash-lite', odpowiedz, dane, requestState,
+      requestState?.remainingMs?.() ?? null, null, null,
+      { status: 'unavailable', reason: skipReason }, 'skipped_provider'
+    ));
+    console.warn(`[AI][${requestId}] Gemini validator pominięty (${skipReason}) — używam fallbacku`);
+  }
   let last = null;
   for (let i = 0; i < models.length; i++) {
     const remainingMs = requestState
@@ -1914,7 +1925,13 @@ async function walidujOdpowiedzAI(persona, pytanie, odpowiedz, dane, historiaRoz
   // OpenRouterem, gdy Gemini jest niedostępne, ponieważ live benchmark wykazał,
   // że xKiro stabilnie generuje odpowiedź, a lokalny validator nadal wykonuje
   // pełne, deterministyczne sprawdzenie claimów/evidence.
-  if (KONFIGURACJA.xkiroKey) {
+  if (!KONFIGURACJA.xkiroKey) {
+    registrarMetrikeWalidatora(requestState, zbudujKontekstMetrykiWalidatora(
+      requestId, 'xkiro', KONFIGURACJA.xkiroModel, odpowiedz, dane, requestState,
+      requestState?.remainingMs?.() ?? null, null, null,
+      { status: 'unavailable', reason: 'brak XKIRO_API_KEY' }, 'skipped_provider'
+    ));
+  } else {
     const xkiroRemainingMs = requestState
       ? (typeof requestState.remainingMs === 'function' ? requestState.remainingMs() : requestState.maxCzasMs - (Date.now() - requestState.startedAt))
       : 6000;
@@ -1960,6 +1977,15 @@ async function walidujOdpowiedzAI(persona, pytanie, odpowiedz, dane, historiaRoz
   if (requestState && openRouterTimeoutMs === null) {
     registrarMetrikeWalidatora(requestState, zbudujKontekstMetrykiWalidatora(requestId, 'openrouter', KONFIGURACJA.openrouterValidatorModel, odpowiedz, dane, requestState, openRouterRemainingMs, null, null, { status: 'unavailable' }, 'skipped_budget'));
     return { ...(last || {}), status: 'unavailable', ok: false, technicalError: true, transient: true, skipped: true, provider: 'openrouter', model: KONFIGURACJA.openrouterValidatorModel, unsupported_claims: [], reason: 'OpenRouter validator pominięty przed rezerwacją slotu: zbyt mały pozostały budżet czasu' };
+  }
+  if (!KONFIGURACJA.openrouterKey || !dane) {
+    const skipReason = !KONFIGURACJA.openrouterKey ? 'brak OPENROUTER_API_KEY' : 'brak danych referencyjnych';
+    registrarMetrikeWalidatora(requestState, zbudujKontekstMetrykiWalidatora(
+      requestId, 'openrouter', KONFIGURACJA.openrouterValidatorModel, odpowiedz, dane, requestState,
+      openRouterRemainingMs, null, null,
+      { status: 'unavailable', reason: skipReason }, 'skipped_provider'
+    ));
+    return { ...(last || {}), status: 'unavailable', ok: false, technicalError: true, provider: 'openrouter', model: KONFIGURACJA.openrouterValidatorModel, unsupported_claims: [], reason: skipReason };
   }
   if (requestState) {
     if (!zarezerwujSlotWalidatora(requestState, 'validator:openrouter')) {
