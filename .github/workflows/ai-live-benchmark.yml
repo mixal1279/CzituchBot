@@ -39,8 +39,71 @@ jobs:
         with:
           node-version: 24
 
+      - name: Sanity check xKiro
+        shell: bash
+        run: |
+          set -uo pipefail
+
+          if [[ -z "${XKIRO_API_KEY:-}" ]]; then
+            echo "XKIRO_SECRET_MISSING: GitHub Actions secret XKIRO_API_KEY is empty or unavailable."
+            exit 1
+          fi
+
+          http_code="$(curl --silent --show-error \
+            --connect-timeout 5 --max-time 15 \
+            --output /tmp/xkiro-response.json \
+            --write-out "%{http_code}" \
+            --request POST "https://api.xkiro.com/v1/chat/completions" \
+            --header "Authorization: Bearer ${XKIRO_API_KEY}" \
+            --header "Content-Type: application/json" \
+            --data '{"model":"qwen/qwen3.5-397b-a17b:free","messages":[{"role":"user","content":"Reply with exactly: OK"}],"max_tokens":8,"temperature":0}' \
+          )" || http_code="000"
+
+          echo "XKIRO_HTTP_STATUS=${http_code}"
+          if [[ -f /tmp/xkiro-response.json ]]; then
+            cat /tmp/xkiro-response.json
+            echo
+          fi
+
+          if [[ "${http_code}" != "200" ]]; then
+            if [[ "${http_code}" == "000" ]]; then
+              echo "DIAGNOSIS=XKIRO_CONNECTION_TIMEOUT_OR_NETWORK_ERROR"
+            elif [[ "${http_code}" == "401" || "${http_code}" == "403" ]]; then
+              echo "DIAGNOSIS=XKIRO_AUTH_OR_ACCESS_REJECTED"
+            elif [[ "${http_code}" == "429" ]]; then
+              echo "DIAGNOSIS=XKIRO_RATE_LIMIT_OR_QUOTA"
+            else
+              echo "DIAGNOSIS=XKIRO_API_ERROR"
+            fi
+            exit 1
+          fi
+
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          try:
+              data = json.loads(Path("/tmp/xkiro-response.json").read_text())
+              content = data["choices"][0]["message"]["content"]
+              if isinstance(content, list):
+                  content = "".join(
+                      part if isinstance(part, str) else part.get("text", "")
+                      for part in content
+                  )
+              if not isinstance(content, str) or not content.strip():
+                  raise ValueError("empty message content")
+              print("XKIRO_SANITY_CHECK=PASS")
+              print("XKIRO_RESPONSE_CONTENT=" + content[:200])
+          except Exception as exc:
+              print("XKIRO_SANITY_CHECK=FAIL")
+              print("DIAGNOSIS=XKIRO_HTTP_200_WITH_INVALID_OR_EMPTY_RESPONSE")
+              print("DETAIL=" + type(exc).__name__ + ": " + str(exc))
+              raise SystemExit(1)
+          PY
+
       - name: Install dependencies
         run: npm install
+
       - name: Preflight Tavily
         run: node scripts/tavily-preflight.js
 
