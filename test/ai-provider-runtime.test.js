@@ -91,6 +91,7 @@ test('provider and validator failures receive distinct categories', () => {
   assert.equal(classifyFailure({ status: 'rejected', reason: 'unsupported claims' }), 'validator_rejection');
   assert.equal(classifyFailure({ status: 'rejected', reason: 'invalid JSON schema from validator' }), 'schema_rejection');
   assert.equal(classifyFailure({ status: 'accepted', reason: 'grounded' }), null);
+  assert.equal(classifyFailure({ status: 'soft_accepted', reason: 'partial answer' }), 'validator_rejection');
   assert.equal(classifyFailure({ status: 'inconclusive', reason: 'insufficient evidence' }), 'validator_inconclusive');
   assert.equal(classifyFailure({ status: 'unavailable', reason: 'fallback validator niedostępny' }), 'provider_unavailable');
   assert.equal(classifyFailure({ status: 'unavailable', reason: 'xKiro validator niedostępny', error: 'This operation was aborted' }), 'timeout_abort');

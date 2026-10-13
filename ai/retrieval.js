@@ -62,7 +62,7 @@ function buildAdvancedRetrievalPlan(question, routing = {}, baseQueries = []) {
   // Clause queries are reserved first so compound questions cannot lose a
   // sub-question when the global five-query cap is applied.
   for (const item of [...clausePlan, ...corePlan, ...legacy.map(query => ({ query, priority: 'fallback', reason: 'legacy' }))]) {
-    const q = String(item?.query || '').replace(/\\s+/g, ' ').trim();
+    const q = String(item?.query || '').replace(/\s+/g, ' ').trim();
     const key = normalizujToken(q);
     if (q.length < 8 || seen.has(key)) continue;
     seen.add(key);
@@ -76,16 +76,29 @@ function buildAdvancedRetrievalPlan(question, routing = {}, baseQueries = []) {
 }
 function normalizujToken(value) {
   return String(value || '').toLocaleLowerCase('pl-PL')
-    .normalize('NFD').replace(/[\\u0300-\\u036f]/g, '')
-    .replace(/\\s+/g, ' ').trim();
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/ł/g, 'l')
+    .replace(/\s+/g, ' ').trim();
 }
 
 function sourceHost(url){try{return new URL(url).hostname.toLowerCase().replace(/^www\./,'');}catch(_){return '';}}
-function sourceQualityScore(source={}){const score=Number(source.score);const authority=String(source.authority||'').toLowerCase();const authorityBonus=authority==='oficjalne'?0.25:authority==='wyspecjalizowane'?0.2:authority.includes('guide')?0.08:0;return (Number.isFinite(score)?score:0)+authorityBonus;}
+function sourceQualityScore(source = {}) {
+  const score = Number(source.score);
+  const authority = String(source.authority || '').toLocaleLowerCase('pl-PL');
+  // core.js emits canonical English enum values; accept legacy Polish labels too.
+  const authorityBonus = authority === 'official' || authority === 'oficjalne'
+    ? 0.25
+    : authority === 'specialized' || authority === 'wyspecjalizowane'
+      ? 0.2
+      : authority === 'guide' || authority.includes('guide') || authority.includes('poradnik')
+        ? 0.08
+        : 0;
+  return (Number.isFinite(score) ? score : 0) + authorityBonus;
+}
 function sourceTokens(source={}){return [...new Set(String([source.title,source.content,source.snippet].filter(Boolean).join(' ')).toLocaleLowerCase('pl-PL').normalize('NFD').replace(/[\u0300-\u036f]/g,'').match(/[\p{L}\p{N}]{3,}/gu)||[])];}
 function sourceDiversity(results=[]){const list=Array.isArray(results)?results:[];const hosts=new Set(list.map(r=>sourceHost(r?.url)).filter(Boolean));const providers=new Set(list.map(r=>String(r?.provider||'')).filter(Boolean));const independent=[];let duplicatePairs=0;
 for(const result of list){const tokens=sourceTokens(result);const tokenSet=new Set(tokens);let duplicate=false;for(const prior of independent){const priorTokens=prior.tokens;if(tokens.length<8||priorTokens.length<8)continue;const smaller=Math.min(tokens.length,priorTokens.length);const common=tokens.filter(t=>prior.set.has(t)).length;const containment=common/smaller;const union=new Set([...tokens,...priorTokens]).size;const jaccard=union?common/union:0;if(containment>=0.88&&jaccard>=0.72){duplicate=true;duplicatePairs++;break;}}if(!duplicate)independent.push({host:sourceHost(result?.url),tokens,set:tokenSet});}
 const independentHosts=new Set(independent.map(x=>x.host).filter(Boolean));return {hosts:hosts.size,providers:providers.size,independentSources:independent.length,independentHosts:independentHosts.size,duplicatePairs};}
 function shouldRunAdditionalRetrieval({status='ok',text='',sourceCount=0,queryCount=1,results=[],requireDiversity=false}={}){const list=Array.isArray(results)?results:[];if(status!=='ok'||!String(text).trim()||String(text).length<900||sourceCount<2)return true;if(requireDiversity){const d=sourceDiversity(list);if(d.independentHosts<2)return true;}const strong=list.filter(r=>sourceQualityScore(r)>=0.55).length;if(strong<1)return true;return false;}
 function rankRetrievalNeed({routing={},sourceCount=0,textLength=0,validatorStatus=null,results=[]}={}){let score=0;if(routing.needs_fresh_data)score+=3;if(routing.is_lore||routing.is_gameplay)score+=2;if(sourceCount<2)score+=2;if(textLength<900)score++;if(validatorStatus==='rejected'||validatorStatus==='inconclusive')score+=3;const d=sourceDiversity(results);if(sourceCount>=2&&d.independentHosts<2)score+=2;return score>=5?'high':score>=3?'medium':'low';}
-module.exports={decomposeQuestion,extractCarryoverEntities,buildAdvancedRetrievalPlan,shouldRunAdditionalRetrieval,rankRetrievalNeed,sourceDiversity,sourceQualityScore};
+module.exports={decomposeQuestion,extractCarryoverEntities,buildAdvancedRetrievalPlan,shouldRunAdditionalRetrieval,rankRetrievalNeed,sourceDiversity,sourceQualityScore,normalizujToken};

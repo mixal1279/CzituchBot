@@ -391,10 +391,9 @@ console.log('AI regression tests: OK');
       { claim: 'Zrobił to, ponieważ chciał zemsty.', supported: false, source_ids: [], evidence_quote: '', reason: 'brak dowodu' },
     ],
   }, 'test', 'test', new Set(['SOURCE 1']), '[SOURCE 1]\nWheatley przejął kontrolę nad systemem.', 'Wheatley przejął kontrolę nad systemem. Zrobił to, ponieważ chciał zemsty.');
-  assert.equal(partial.status, 'soft_accepted');
-  assert.equal(partial.ok, true);
-  assert.match(partial.partialAnswer, /Wheatley przejął kontrolę nad systemem/);
-  assert.match(partial.partialAnswer, /Nie wszystkie szczegóły/);
+  assert.equal(partial.status, 'rejected');
+  assert.equal(partial.ok, false);
+  assert.equal(partial.partialAnswer, null);
   assert.equal(partial.diagnostics.partialAccepted, true);
   assert.equal(partial.complete, false);
 
@@ -410,9 +409,8 @@ console.log('AI regression tests: OK');
   }, 'test', 'test', new Set(['SOURCE 1']), '[SOURCE 1]\nWheatley przejął kontrolę nad systemem.', 'Wheatley przejął kontrolę nad systemem. Portal 2 opowiada historię Wheatleya.');
   assert.equal(partialFromEvidenceFailure.diagnostics.unsupportedClaimCount, 0);
   assert.deepEqual(partialFromEvidenceFailure.diagnostics.unsupportedEvidenceClaimIndexes, [1]);
-  assert.equal(partialFromEvidenceFailure.status, 'soft_accepted');
-  assert.match(partialFromEvidenceFailure.partialAnswer, /Wheatley przejął kontrolę nad systemem/);
-  assert.doesNotMatch(partialFromEvidenceFailure.partialAnswer, /Portal 2 opowiada historię/);
+  assert.equal(partialFromEvidenceFailure.status, 'rejected');
+  assert.equal(partialFromEvidenceFailure.partialAnswer, null);
 
   // Brak istotnej nazwy własnej w dowodzie jest twardym mismatch, a nie
   // samym błędem wiązania cytatu; nie wolno użyć go jako triggera partial-accept.
@@ -668,12 +666,10 @@ console.log('AI regression tests: OK');
     ],
   }, 'test-model', 'gemini', new Set(['SOURCE 1']), source,
   'Wheatley przejął kontrolę nad systemem. GLaDOS została całkowicie wyłączona.');
-  assert.equal(partial.status, 'soft_accepted');
-  assert.equal(partial.ok, true);
+  assert.equal(partial.status, 'rejected');
+  assert.equal(partial.ok, false);
   assert.equal(partial.complete, false);
-  assert.match(partial.partialAnswer, /Wheatley przejął kontrolę nad systemem/);
-  assert.doesNotMatch(partial.partialAnswer, /GLaDOS/);
-  assert.match(partial.partialAnswer, /Nie wszystkie szczegóły/);
+  assert.equal(partial.partialAnswer, null);
 }
 
 {
