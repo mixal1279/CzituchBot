@@ -1835,6 +1835,39 @@ ${dane}
   }
 }
 
+function agregujMetrykiWalidatorow(metrics = []) {
+  const byValidator = {};
+  for (const metric of metrics) {
+    const key = metric.validator || 'unknown';
+    const row = byValidator[key] ||= {
+      attempted: 0, skippedBudget: 0, skippedSlot: 0, avgMs: null,
+      timeouts: 0, httpErrors: 0, emptyResponses: 0, invalidJson: 0,
+      unavailable: 0, accepted: 0, softAccepted: 0, rejected: 0,
+    };
+    if (metric.outcome === 'attempted') row.attempted++;
+    if (metric.outcome === 'skipped_budget') row.skippedBudget++;
+    if (metric.outcome === 'skipped_slot') row.skippedSlot++;
+    if (metric.failureReason === 'timeout') row.timeouts++;
+    if (metric.failureReason === 'http_error') row.httpErrors++;
+    if (metric.failureReason === 'empty_response') row.emptyResponses++;
+    if (metric.failureReason === 'invalid_json') row.invalidJson++;
+    if (metric.status === 'unavailable') row.unavailable++;
+    if (metric.status === 'accepted') row.accepted++;
+    if (metric.status === 'soft_accepted') row.softAccepted++;
+    if (metric.status === 'rejected') row.rejected++;
+    if (Number.isFinite(metric.actualMs) && metric.outcome === 'attempted') {
+      row._totalMs = (row._totalMs || 0) + metric.actualMs;
+      row._timedCalls = (row._timedCalls || 0) + 1;
+    }
+  }
+  for (const row of Object.values(byValidator)) {
+    row.avgMs = row._timedCalls ? Math.round(row._totalMs / row._timedCalls) : null;
+    delete row._totalMs;
+    delete row._timedCalls;
+  }
+  return byValidator;
+}
+
 function registrarMetrikeWalidatora(requestState, metric) {
   if (!requestState) return;
   if (!Array.isArray(requestState.validatorMetrics)) requestState.validatorMetrics = [];
@@ -1850,12 +1883,12 @@ function registrarMetrikeWalidatora(requestState, metric) {
     failureReason: metric.failureReason || null,
     sourceCount: Number.isFinite(metric.sourceCount) ? metric.sourceCount : null,
     answerLength: Number.isFinite(metric.answerLength) ? metric.answerLength : 0,
-    claimCount: Number.isFinite(metric.claimCount) ? metric.claimCount : null,
+    claimCountHeuristic: Number.isFinite(metric.claimCountHeuristic) ? metric.claimCountHeuristic : null,
     // Bez metadanych per źródło nie przypisujemy długości całego evidence do Tavily.
     tavilyChars: Number.isFinite(metric.tavilyChars) ? metric.tavilyChars : null,
   };
   requestState.validatorMetrics.push(record);
-  console.log(`[AI][${record.requestId}] VALIDATOR_METRIC ${JSON.stringify(record)}`);
+  console.log(\`[AI][\${record.requestId}] VALIDATOR_METRIC \${JSON.stringify(record)}\`);
 }
 
 function zbudujKontekstMetrykiWalidatora(requestId, validator, model, odpowiedz, dane, requestState, remainingMsAtStart, timeoutMs, startedAt, result, outcome = 'attempted') {
@@ -1865,21 +1898,25 @@ function zbudujKontekstMetrykiWalidatora(requestId, validator, model, odpowiedz,
     sourceCount = Array.isArray(ids) ? ids.length : null;
   } catch {}
   const answer = String(odpowiedz || '');
-  const reason = String(result?.reason || '').toLowerCase();
+  const diagnosticText = [result?.reason, result?.diagnostic, result?.error]
+    .map(value => typeof value === 'string' ? value : value ? JSON.stringify(value) : '')
+    .join(' ')
+    .toLowerCase();
   const failureReason = outcome !== 'attempted' ? null
-    : /abort|timeout|timed out|przekroczono czas|przekroczył czas/.test(reason) ? 'timeout'
-    : /http|status code|\b4\d\d\b|\b5\d\d\b/.test(reason) ? 'http_error'
-    : /empty|pusta odpowiedź|brak treści|brak odpowiedzi/.test(reason) ? 'empty_response'
-    : /json|pars|schema|format odpowiedzi/.test(reason) ? 'invalid_json'
+    : /abort|timeout|timed out|abortlike\s*[:=]\s*true|przekroczono czas|przekroczył czas/.test(diagnosticText) ? 'timeout'
+    : /http|status code|\b4\d\d\b|\b5\d\d\b/.test(diagnosticText) ? 'http_error'
+    : /empty|pusta odpowiedź|brak treści|brak odpowiedzi/.test(diagnosticText) ? 'empty_response'
+    : /json|pars|schema|format odpowiedzi/.test(diagnosticText) ? 'invalid_json'
+    : result?.status === 'unavailable' ? 'provider_unavailable'
     : null;
-  const claimCount = answer.trim()
+  const claimCountHeuristic = answer.trim()
     ? answer.split(/[.!?;]+|\n+/).map(part => part.trim()).filter(part => part.length >= 12).length
     : 0;
   return {
     requestId, validator, model, outcome, remainingMsAtStart, timeoutMs,
     actualMs: Number.isFinite(startedAt) ? Math.max(0, Date.now() - startedAt) : null,
     status: result?.status || 'unavailable', failureReason, sourceCount,
-    answerLength: answer.length, claimCount, tavilyChars: null,
+    answerLength: answer.length, claimCountHeuristic, tavilyChars: null,
   };
 }
 
@@ -2236,6 +2273,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
       requestId, persona: aiProfile, category: kategoriaAI || 'pending',
       generatorAttempts: aiState.generacje, modelCalls: aiState.modelCalls, validatorCalls: aiState.validatory,
       validatorResults: aiState.validatorResults,
+      validatorMetrics: agregujMetrykiWalidatorow(aiState.validatorMetrics || []),
       fallbackReasons: aiState.fallbackReasons,
       finalProvider: wynikGeneracji?.provider || null,
       finalModel: wynikGeneracji?.model || null, tavilySearches: aiState.tavilySearches,
@@ -2255,7 +2293,9 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
     };
     console.log(`[AI][${requestId}] SUMMARY ${JSON.stringify(summary)}`);
     if (onAISummary) {
-      try { onAISummary(summary); } catch (err) { console.warn(`[AI][${requestId}] summary hook error: ${err.message}`); }
+      try {
+        onAISummary({ ...summary, validatorMetricsRaw: [...(aiState.validatorMetrics || [])] });
+      } catch (err) { console.warn(`[AI][${requestId}] summary hook error: ${err.message}`); }
     }
   };
   console.log(`[AI][${requestId}] start kategoria=pending persona=${aiProfile}`);
