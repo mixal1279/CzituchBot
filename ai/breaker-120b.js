@@ -91,8 +91,15 @@ function create120bBreaker(options = {}) {
   return { reserve, trip, isOpen, snapshot, reset };
 }
 
+const defaultBreaker = create120bBreaker({
+  maxRequests: Math.max(1, Number(process.env.AI_120B_GLOBAL_MAX_REQUESTS) || 6),
+  windowMs: DEFAULT_WINDOW_MS,
+  defaultCooldownMs: DEFAULT_BREAKER_COOLDOWN_MS,
+});
+
 module.exports = {
   create120bBreaker,
+  defaultBreaker,
   DEFAULT_WINDOW_MS,
   DEFAULT_MAX_REQUESTS,
   DEFAULT_BREAKER_COOLDOWN_MS,
