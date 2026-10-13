@@ -2146,13 +2146,13 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
   // Nie utrzymujemy osobnych budżetów w generatorze, retrievalu i validatorze.
   const aiState = createAIRequestContext({
     requestId,
-    maxCzasMs: AI_LIMITS.requestTimeoutMs,
-    maxGeneracji: 6,
-    maxInitialGeneracji: 5,
-    maxRepairGeneracji: 4,
-    maxModelCalls: AI_LIMITS.maxModelCalls,
-    maxValidatorow: 3,
-    maxWyszukanTavily: testMaxTavilySearches,
+    maxCzasMs: Number(opcje.maxCzasMs) || AI_LIMITS.requestTimeoutMs,
+    maxGeneracji: Number(opcje.maxGeneracji) || AI_LIMITS.maxGenerations,
+    maxInitialGeneracji: Number(opcje.maxInitialGeneracji) || AI_LIMITS.maxInitialGenerations,
+    maxRepairGeneracji: Number(opcje.maxRepairGeneracji) || AI_LIMITS.maxRepairGenerations,
+    maxModelCalls: Number(opcje.maxModelCalls) || AI_LIMITS.maxModelCalls,
+    maxValidatorow: Number(opcje.maxValidatorow) || AI_LIMITS.maxValidators,
+    maxWyszukanTavily: Number(opcje.maxWyszukanTavily) || testMaxTavilySearches,
   });
   let daneDoWalidacji = null;
   const budzetPrzekroczony = () => aiState.isExpired();
