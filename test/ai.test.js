@@ -495,6 +495,7 @@ console.log('AI regression tests: OK');
   assert.match(source, /computeValidatorTimeout\(remainingMs, \{[\s\S]*?reserveMs: computeValidatorReserveMs\(remainingMs, requestState\?\.validatory \+ 1, requestState\?\.maxValidatorow\),[\s\S]*?minTimeoutMs: 4000/);
   assert.match(source, /xKiro validator pominięty przed rezerwacją slotu|computeValidatorReserveMs\(xkiroRemainingMs, requestState\?\.validatory \+ 1/);
   assert.match(source, /function zarezerwujSlotWalidatora\(requestState, purpose\)/);
+  assert.match(source, /status: 'unverified'/);
 }
 
 {
