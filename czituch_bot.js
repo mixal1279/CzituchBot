@@ -2189,7 +2189,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
       fallbackReasons: aiState.fallbackReasons,
       finalProvider: wynikGeneracji?.provider || null,
       finalModel: wynikGeneracji?.model || null, tavilySearches: aiState.tavilySearches,
-      global120bRequests: model120bGlobalRequesty,
+      global120bRequests: model120bBreaker.snapshot().requestsInWindow,
       generationBudget: {
         total: aiState.maxGeneracji,
         initial: aiState.maxInitialGeneracji,
