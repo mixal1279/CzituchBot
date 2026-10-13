@@ -47,11 +47,45 @@ async function sleep(ms) {
   if (ms > 0) await new Promise(resolve => setTimeout(resolve, ms));
 }
 
+function aggregateValidatorMetrics(metrics = []) {
+  const byValidator = {};
+  for (const metric of metrics) {
+    const key = metric.validator || 'unknown';
+    const row = byValidator[key] ||= {
+      attempted: 0, skippedBudget: 0, skippedSlot: 0, avgMs: null,
+      timeouts: 0, httpErrors: 0, emptyResponses: 0, invalidJson: 0,
+      unavailable: 0, accepted: 0, softAccepted: 0, rejected: 0,
+    };
+    if (metric.outcome === 'attempted') row.attempted++;
+    if (metric.outcome === 'skipped_budget') row.skippedBudget++;
+    if (metric.outcome === 'skipped_slot') row.skippedSlot++;
+    if (metric.failureReason === 'timeout') row.timeouts++;
+    if (metric.failureReason === 'http_error') row.httpErrors++;
+    if (metric.failureReason === 'empty_response') row.emptyResponses++;
+    if (metric.failureReason === 'invalid_json') row.invalidJson++;
+    if (metric.status === 'unavailable') row.unavailable++;
+    if (metric.status === 'accepted') row.accepted++;
+    if (metric.status === 'soft_accepted') row.softAccepted++;
+    if (metric.status === 'rejected') row.rejected++;
+    if (Number.isFinite(metric.actualMs) && metric.outcome === 'attempted') {
+      row._totalMs = (row._totalMs || 0) + metric.actualMs;
+      row._timedCalls = (row._timedCalls || 0) + 1;
+    }
+  }
+  for (const row of Object.values(byValidator)) {
+    row.avgMs = row._timedCalls ? Math.round(row._totalMs / row._timedCalls) : null;
+    delete row._totalMs;
+    delete row._timedCalls;
+  }
+  return byValidator;
+}
+
 async function run() {
   const { zapytajAI } = require('../czituch_bot');
   resetProviderQuotaCooldowns();
   const started = Date.now();
   const results = [];
+  const validatorMetricsRaw = [];
   for (let i = 0; i < cases.length; i++) {
     const item = cases[i];
     let answer = '';
@@ -101,6 +135,7 @@ async function run() {
         generationAttempts: summary?.generationAttempts || [],
         generationBudget: summary?.generationBudget || null,
         validatorResults: summary?.validatorResults || [],
+        validatorMetrics: summary?.validatorMetrics || {},
         fallbackReasons: summary?.fallbackReasons || [],
         tavilySearches: summary?.tavilySearches ?? null,
         sourceCount: summary?.sourceCount ?? null,
@@ -124,12 +159,15 @@ async function run() {
         generationAttempts: summary?.generationAttempts || [],
         generationBudget: summary?.generationBudget || null,
         validatorResults: summary?.validatorResults || [],
+        validatorMetrics: summary?.validatorMetrics || {},
         fallbackReasons: summary?.fallbackReasons || [],
         tavilySearches: summary?.tavilySearches ?? null,
         sourceCount: summary?.sourceCount ?? null,
         error: String(error?.message || error),
       });
     }
+
+    validatorMetricsRaw.push(...(summary?.validatorMetricsRaw || []));
 
     if ((i + 1) % 10 === 0 || i + 1 === cases.length) {
       const answered = results.filter(x => x.answered).length / results.length;
@@ -167,10 +205,13 @@ async function run() {
     durationMs: Date.now() - started,
     note: 'Ten testuje produkcyjny pipeline i kompletność odpowiedzi. Nie jest niezależnym pomiarem factual accuracy; do tego potrzebny jest ręcznie zweryfikowany gold answer/fact set.',
     categories: [...new Set(results.map(x => x.category))].sort(),
+    validatorMetrics: aggregateValidatorMetrics(validatorMetricsRaw),
     diagnostics: diagnostic,
     failures: results.filter(x => !x.answered || x.judgeStatus !== 'accepted' || x.factualPassed === false).slice(0, 100),
   };
   console.log(JSON.stringify(report, null, 2));
+  console.log('\\n=== VALIDATOR_METRICS_RAW ===');
+  console.log(JSON.stringify(validatorMetricsRaw, null, 2));
   if (process.env.AI_BENCHMARK_REQUIRE_PERFECT === '1') {
     const factualOk = factualCases.length > 0 && factualPassed === factualCases.length;
     if (answered !== results.length || complete !== results.length || !factualOk) {
