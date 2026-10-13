@@ -1123,10 +1123,10 @@ async function pobierzTokenHLTBBleed() {
     return hltbBleedTokenCache;
   }
   const agent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
-  const res = await fetchZTimeout(`https://howlongtobeat.com/api/bleed/init?t=${Date.now()}`, {
+  const res = await fetchZTimeout(`https://howlongtobeat.com/api/search/site/init?t=${Date.now()}`, {
     headers: { 'User-Agent': agent, 'Referer': 'https://howlongtobeat.com/', 'Accept': '*/*' },
   }, 10000);
-  if (!res.ok) throw new Error(`[HLTB] bleed/init HTTP ${res.status}`);
+  if (!res.ok) throw new Error(`[HLTB] search/site/init HTTP ${res.status}`);
   const data = await res.json();
   const cookie = res.headers.get('set-cookie');
   hltbBleedTokenCache = { ...data, cookie: cookie ? cookie.split(';')[0] : '', expiresAt: Date.now() + 4 * 60 * 1000 };
@@ -1214,9 +1214,7 @@ async function szukajHLTBBleed(gameName, retried = false) {
     },
     useCache: true,
   };
-  if (hpKey) payload[hpKey] = hpVal;
-
-  const res = await fetchZTimeout('https://howlongtobeat.com/api/bleed', {
+  const res = await fetchZTimeout('https://howlongtobeat.com/api/search/site', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -1288,7 +1286,7 @@ function zbudujWynikHLTBZCodepotatoes(gra, nazwaOryginalna) {
 }
 
 // Zwraca surowe dane (godziny + link) dla podanej nazwy gry.
-// Najpierw próbuje ścieżki Steam AppID → codepotatoes, a potem /api/bleed.
+// Najpierw próbuje ścieżki Steam AppID → codepotatoes, a potem /api/search/site.
 async function pobierzCzasHLTB(nazwaGry) {
   const cacheKey = nazwaGry.toLowerCase().trim();
   if (hltbCache.has(cacheKey)) {
@@ -1322,7 +1320,7 @@ async function pobierzCzasHLTB(nazwaGry) {
       }
     }
 
-    console.log('[HLTB] Brak wyniku po Steam AppID — fallback /api/bleed po nazwie.');
+    console.log('[HLTB] Brak wyniku po Steam AppID — fallback /api/search/site po nazwie.');
     for (const wariant of warianty) {
       const data = await szukajHLTBBleed(wariant);
       if (!data || !data.data || data.data.length === 0) continue;
@@ -1536,7 +1534,7 @@ Zwróć WYŁĄCZNIE JSON: {"valid":true/false,"reason":"krótki powód","confide
     const validatorTimeoutMs = requestState
       ? computeValidatorTimeout(validatorRemainingMs, {
           maxTimeoutMs: 9000,
-          reserveMs: computeValidatorReserveMs(validatorRemainingMs, requestState?.validatory, requestState?.maxValidatorow),
+          reserveMs: computeValidatorReserveMs(validatorRemainingMs, requestState?.validatory + 1, requestState?.maxValidatorow),
           minTimeoutMs: 4000,
         })
       : 9000;
@@ -1637,7 +1635,7 @@ async function walidujOdpowiedzOpenRouter(persona, pytanie, odpowiedz, dane, req
   const validatorTimeoutMs = requestState
     ? computeValidatorTimeout(remainingMs, {
         maxTimeoutMs: 9000,
-        reserveMs: computeValidatorReserveMs(remainingMs, requestState?.validatory, requestState?.maxValidatorow),
+        reserveMs: computeValidatorReserveMs(remainingMs, requestState?.validatory + 1, requestState?.maxValidatorow),
         minTimeoutMs: 4000,
       })
     : 9000;
@@ -1751,7 +1749,7 @@ ${dane}
     : 6000;
   const timeoutMs = computeValidatorTimeout(remainingMs, {
     maxTimeoutMs: 9000,
-    reserveMs: computeValidatorReserveMs(remainingMs, requestState?.validatory, requestState?.maxValidatorow),
+    reserveMs: computeValidatorReserveMs(remainingMs, requestState?.validatory + 1, requestState?.maxValidatorow),
     minTimeoutMs: 4000,
   });
   if (timeoutMs === null) {
@@ -2827,7 +2825,7 @@ Pytanie użytkownika: ${pytanie}`;
           messages: [{ role: 'system', content: overrideSystemPrompt }, ...przygotujHistorieDoModelu(historiaRozmowy, 4), { role: 'user', content: kontekstDoGroq }],
           temperature,
           max_completion_tokens: maxTok,
-          reasoning_effort: model === 'openai/gpt-oss-120b' ? 'medium' : 'low',
+          reasoning_effort: 'low',
           include_reasoning: false,
         }, { signal: controller.signal }), groqTimeoutMs, controller, `Groq ${model}`);
       const choice = response?.choices?.[0] || {};
@@ -2851,7 +2849,7 @@ Pytanie użytkownika: ${pytanie}`;
           endpoint: 'chat.completions.create',
           model,
           max_completion_tokens: Math.max(maxTok, 300),
-          reasoning_effort: model === 'openai/gpt-oss-120b' ? 'medium' : 'low',
+          reasoning_effort: 'low',
           include_reasoning: false,
           temperature,
         },
@@ -3172,8 +3170,37 @@ function oczyscOdpowiedzPrzedWalidacja(tekst) {
         }
       }
     } else if (walidacja.status === 'unavailable') {
-      console.warn(`[AI][${requestId}] validator unavailable — bez retry generowania`);
-      odp = 'Chwilowo nie mogę potwierdzić tej informacji, więc nie będę zgadywać.';
+      // Provider outage is not a semantic rejection. Keep the generated answer
+      // only when reference material exists and deterministic fact, format, and
+      // completeness gates all pass; label it explicitly as unverified.
+      const localFacts = daneDoWalidacji
+        ? sprawdzTwardeFaktyOdpowiedzi(odp, daneDoWalidacji, pytanie)
+        : { ok: false, unsupported: ['brak danych referencyjnych'] };
+      const localFormat = sprawdzFormatOdpowiedzi(odp, { maxZdania: responseCfg.maxSentences, maxZnakow: 1800 });
+      const localCompleteness = judgeAnswer(odp, answerPlan);
+      const canReturnUnverified = Boolean(
+        daneDoWalidacji
+        && localFacts.ok
+        && localFormat.ok
+        && localCompleteness.status === 'accepted'
+        && !AI_POLICY.czyOdpowiedzToJednoznacznaOdmowa(odp)
+      );
+      if (canReturnUnverified) {
+        walidacja = {
+          ...walidacja,
+          status: 'unverified',
+          ok: false,
+          valid: false,
+          verified: false,
+          complete: true,
+          reason: 'validator unavailable; deterministic fact/format/completeness gates passed',
+          diagnostics: { ...(walidacja.diagnostics || {}), localFacts, localFormat, localCompleteness },
+        };
+        console.warn(`[AI][${requestId}] validator unavailable; answer returned UNVERIFIED after deterministic gates`);
+      } else {
+        console.warn(`[AI][${requestId}] validator unavailable and local gates insufficient — refusing answer; facts=${JSON.stringify(localFacts.unsupported || [])} format=${localFormat.reason || localFormat.ok} completeness=${localCompleteness.status}`);
+        odp = 'Chwilowo nie mogę potwierdzić tej informacji, więc nie będę zgadywać.';
+      }
     }
     // v26: niezależny kontrakt kompletności odpowiedzi. Validator potwierdza
     // evidence, a answer judge sprawdza, czy odpowiedź rzeczywiście odpowiada
