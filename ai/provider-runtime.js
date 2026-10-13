@@ -90,6 +90,10 @@ function computeValidatorReserveMs(remainingMs, currentSlot = 1, maxValidators =
   return 2500;
 }
 
+/**
+ * Compute a bounded validator timeout, or null when the minimum attempt plus
+ * the fallback reserve cannot fit inside the remaining request deadline.
+ */
 function computeValidatorTimeout(remainingMs, {
   maxTimeoutMs = 9000,
   reserveMs = 6500,
