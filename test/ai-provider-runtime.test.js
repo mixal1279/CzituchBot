@@ -2,7 +2,7 @@
 
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { createGroqCompletion, awaitWithAbortTimeout, computeValidatorTimeout, computeGenerationTimeout } = require('../ai/provider-runtime');
+const { createGroqCompletion, awaitWithAbortTimeout, computeValidatorTimeout, computeValidatorReserveMs, computeGenerationTimeout } = require('../ai/provider-runtime');
 const { classifyFailure, shouldRetryFailure, nextFallbacks, selectRepairFallbacks, repairBudgetBlockReason, resetProviderQuotaCooldowns, markProviderQuota, isProviderQuotaBlocked, quotaCooldownMsFromError } = require('../ai/fallback');
 
 test('Groq request body never contains signal; AbortSignal is passed in SDK transport options', async () => {
@@ -60,6 +60,20 @@ test('validator timeout is capped and reserves time for fallback', () => {
   assert.equal(computeValidatorTimeout(10500), 4000);
   assert.equal(computeValidatorTimeout(10499), null);
   assert.equal(computeValidatorTimeout(0), null);
+});
+
+test('validator reserve adapts to remaining time and slots without wasting the final slot', () => {
+  assert.equal(computeValidatorReserveMs(25000, 1, 3), 10500);
+  assert.equal(computeValidatorReserveMs(13000, 1, 3), 6500);
+  assert.equal(computeValidatorReserveMs(8000, 1, 3), 2500);
+  assert.equal(computeValidatorReserveMs(5000, 1, 3), 0);
+
+  assert.equal(computeValidatorReserveMs(12000, 2, 3), 6500);
+  assert.equal(computeValidatorReserveMs(8000, 2, 3), 2500);
+  assert.equal(computeValidatorReserveMs(5000, 2, 3), 0);
+
+  assert.equal(computeValidatorReserveMs(15000, 3, 3), 2500);
+  assert.equal(computeValidatorReserveMs(5000, 3, 3), 0);
 });
 
 test('generation timeout skips calls that cannot run for long enough while preserving fallback reserve', () => {
