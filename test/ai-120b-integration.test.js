@@ -8,7 +8,9 @@ const test = require('node:test');
 const { zapytajAI } = require('../czituch_bot');
 const { defaultBreaker } = require('../ai/breaker-120b');
 const {
+  getProviderQuotaUntil,
   isProviderQuotaBlocked,
+  quotaCooldownMsFromError,
   resetProviderQuotaCooldowns,
 } = require('../ai/fallback');
 
@@ -109,6 +111,35 @@ test('TPD 429 przez zapytajAI otwiera breaker z cooldownem z parsera', async () 
 
   assert.equal(harness.calls['120b'], 1, '120B powinno być wywołane dokładnie raz');
   assert.ok(harness.calls['20b'] >= 1, 'fallback 20B powinien zostać użyty');
+});
+
+test('breaker i endpoint mają spójny deadline (±100ms)', async () => {
+  const harness = makeDeps(TPD_MESSAGE);
+  await runOnce(harness.deps);
+
+  const expectedCooldown = quotaCooldownMsFromError(TPD_MESSAGE);
+  const breakerUntil = defaultBreaker.snapshot().breakerOpenUntil;
+  const endpointUntil = getProviderQuotaUntil('groq:openai/gpt-oss-120b');
+
+  assert.ok(breakerUntil > 0, 'breaker musi mieć ustawiony deadline');
+  assert.ok(endpointUntil > 0, 'endpoint musi mieć ustawiony deadline');
+
+  const drift = Math.abs(breakerUntil - endpointUntil);
+  const TOLERANCE_MS = 100;
+  assert.ok(
+    drift <= TOLERANCE_MS,
+    `deadline drift ${drift}ms > ${TOLERANCE_MS}ms (breaker=${breakerUntil}, endpoint=${endpointUntil})`,
+  );
+
+  const now = Date.now();
+  assert.ok(
+    breakerUntil - now >= expectedCooldown - TOLERANCE_MS,
+    'breaker deadline musi zachować wyliczony cooldown',
+  );
+  assert.ok(
+    endpointUntil - now >= expectedCooldown - TOLERANCE_MS,
+    'endpoint deadline musi zachować wyliczony cooldown',
+  );
 });
 
 test('endpoint 120B jest zablokowany, inne endpointy pozostają dostępne', async () => {
