@@ -1902,7 +1902,8 @@ function zbudujKontekstMetrykiWalidatora(requestId, validator, model, odpowiedz,
     .map(value => typeof value === 'string' ? value : value ? JSON.stringify(value) : '')
     .join(' ')
     .toLowerCase();
-  const failureReason = outcome !== 'attempted' ? null
+  const failureReason = outcome === 'skipped_budget' ? 'budget_exhausted'
+    : outcome === 'skipped_slot' ? 'slot_unavailable'
     : /abort|timeout|timed out|abortlike\s*[:=]\s*true|przekroczono czas|przekroczył czas/.test(diagnosticText) ? 'timeout'
     : /http|status code|\b4\d\d\b|\b5\d\d\b/.test(diagnosticText) ? 'http_error'
     : /empty|pusta odpowiedź|brak treści|brak odpowiedzi/.test(diagnosticText) ? 'empty_response'
