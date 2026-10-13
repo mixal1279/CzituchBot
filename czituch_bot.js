@@ -1888,7 +1888,7 @@ function registrarMetrikeWalidatora(requestState, metric) {
     tavilyChars: Number.isFinite(metric.tavilyChars) ? metric.tavilyChars : null,
   };
   requestState.validatorMetrics.push(record);
-  console.log(`[AI][\${record.requestId}] VALIDATOR_METRIC \${JSON.stringify(record)}`);
+  console.log(`[AI][${record.requestId}] VALIDATOR_METRIC ${JSON.stringify(record)}`);
 }
 
 function zbudujKontekstMetrykiWalidatora(requestId, validator, model, odpowiedz, dane, requestState, remainingMsAtStart, timeoutMs, startedAt, result, outcome = 'attempted') {
