@@ -1524,7 +1524,7 @@ Zwróć WYŁĄCZNIE JSON: {"valid":true/false,"reason":"krótki powód","confide
     const validatorTimeoutMs = requestState
       ? computeValidatorTimeout(validatorRemainingMs, {
           maxTimeoutMs: 9000,
-          reserveMs: computeValidatorReserveMs(validatorRemainingMs),
+          reserveMs: computeValidatorReserveMs(validatorRemainingMs, requestState?.validatory, requestState?.maxValidatorow),
           minTimeoutMs: 4000,
         })
       : 9000;
@@ -1625,7 +1625,7 @@ async function walidujOdpowiedzOpenRouter(persona, pytanie, odpowiedz, dane, req
   const validatorTimeoutMs = requestState
     ? computeValidatorTimeout(remainingMs, {
         maxTimeoutMs: 9000,
-        reserveMs: computeValidatorReserveMs(remainingMs),
+        reserveMs: computeValidatorReserveMs(remainingMs, requestState?.validatory, requestState?.maxValidatorow),
         minTimeoutMs: 4000,
       })
     : 9000;
@@ -1739,7 +1739,7 @@ ${dane}
     : 6000;
   const timeoutMs = computeValidatorTimeout(remainingMs, {
     maxTimeoutMs: 9000,
-    reserveMs: computeValidatorReserveMs(remainingMs),
+    reserveMs: computeValidatorReserveMs(remainingMs, requestState?.validatory, requestState?.maxValidatorow),
     minTimeoutMs: 4000,
   });
   if (timeoutMs === null) {
@@ -1842,7 +1842,7 @@ async function walidujOdpowiedzAI(persona, pytanie, odpowiedz, dane, historiaRoz
       : 9000;
     const timeoutMs = computeValidatorTimeout(remainingMs, {
       maxTimeoutMs: 9000,
-      reserveMs: computeValidatorReserveMs(remainingMs),
+      reserveMs: computeValidatorReserveMs(remainingMs, requestState?.validatory + 1, requestState?.maxValidatorow),
       minTimeoutMs: 4000,
     });
     if (requestState && timeoutMs === null) {
@@ -1876,7 +1876,7 @@ async function walidujOdpowiedzAI(persona, pytanie, odpowiedz, dane, historiaRoz
       : 6000;
     const xkiroTimeoutMs = computeValidatorTimeout(xkiroRemainingMs, {
       maxTimeoutMs: 9000,
-      reserveMs: computeValidatorReserveMs(xkiroRemainingMs),
+      reserveMs: computeValidatorReserveMs(xkiroRemainingMs, requestState?.validatory + 1, requestState?.maxValidatorow),
       minTimeoutMs: 4000,
     });
     if (xkiroTimeoutMs === null) {
@@ -1909,7 +1909,7 @@ async function walidujOdpowiedzAI(persona, pytanie, odpowiedz, dane, historiaRoz
     : 12000;
   const openRouterTimeoutMs = computeValidatorTimeout(openRouterRemainingMs, {
     maxTimeoutMs: 9000,
-    reserveMs: computeValidatorReserveMs(openRouterRemainingMs),
+    reserveMs: computeValidatorReserveMs(openRouterRemainingMs, requestState?.validatory + 1, requestState?.maxValidatorow),
     minTimeoutMs: 4000,
   });
   if (requestState && openRouterTimeoutMs === null) {
