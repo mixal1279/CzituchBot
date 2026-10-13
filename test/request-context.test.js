@@ -3,6 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { createAIRequestContext } = require('../ai/requestContext');
+const { DEFAULTS } = require('../ai/limits');
 
 test('request context enforces shared model, generation, validator and Tavily budgets', () => {
   const ctx = createAIRequestContext({
@@ -65,4 +66,10 @@ test('request context snapshot is stable and exposes one shared budget', () => {
   assert.equal(snapshot.tavilySearches, 1);
   assert.ok(snapshot.remainingMs >= 0);
   assert.ok(snapshot.remainingMs <= snapshot.maxCzasMs);
+});
+
+
+test('request context default timeout matches the shared AI limit configuration', () => {
+  const ctx = createAIRequestContext();
+  assert.equal(ctx.maxCzasMs, DEFAULTS.requestTimeoutMs);
 });
