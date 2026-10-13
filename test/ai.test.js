@@ -585,9 +585,9 @@ console.log('AI regression tests: OK');
   assert.equal(budget.maxGenerations, 6);
   assert.equal(budget.maxInitialGenerations, 5);
   assert.equal(budget.maxRepairGenerations, 4);
-  assert.equal(budget.requestTimeoutMs, 25000);
+  assert.equal(budget.requestTimeoutMs, 40000);
   assert.equal(budget.maxValidators, 3);
-  assert.equal(budget.maxModelCalls, 12);
+  assert.equal(budget.maxModelCalls, 15);
   {
     const { createAIRequestContext } = require('../ai/requestContext');
     const ctx = createAIRequestContext({ maxModelCalls: 12 });
