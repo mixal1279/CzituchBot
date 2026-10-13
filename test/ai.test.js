@@ -587,7 +587,9 @@ console.log('AI regression tests: OK');
   assert.equal(budget.maxRepairGenerations, 4);
   assert.equal(budget.requestTimeoutMs, 40000);
   assert.equal(budget.maxValidators, 3);
-  assert.equal(budget.maxModelCalls, 15);
+  assert.equal(budget.maxModelCalls, 12);
+  for (let i = 0; i < 12; i++) assert.equal(budget.reserve('modelCalls'), true);
+  assert.equal(budget.reserve('modelCalls'), false, 'default model-call ceiling must remain 12');
   {
     const { createAIRequestContext } = require('../ai/requestContext');
     const ctx = createAIRequestContext({ maxModelCalls: 12 });
