@@ -73,6 +73,7 @@ const { parseMemoryCommand, forgetMemories, describeMemories } = require('./ai/m
 const { decomposeQuestion, buildAdvancedRetrievalPlan } = require('./ai/retrieval');
 const { classifyFailure, nextFallbacks, selectRepairFallbacks, repairBudgetBlockReason, GENERATION_FALLBACK_CHAIN, markProviderQuota, isProviderQuotaBlocked, quotaCooldownMsFromError } = require('./ai/fallback');
 const { createGroqCompletion, awaitWithAbortTimeout, computeValidatorTimeout, computeValidatorReserveMs, computeGenerationTimeout } = require('./ai/provider-runtime');
+const { create120bBreaker } = require('./ai/breaker-120b');
 const { createAIMetrics, recordAIMetric, snapshotAIMetrics } = require('./ai/metrics');
 const { sanitizeRequestText } = require('./ai/limits');
 const { createAIRequestContext } = require('./ai/requestContext');
@@ -3479,48 +3480,29 @@ const historiaRozmowy = {};
 const ostatnieUzycie  = {};
 let botNaPrzerwie = false;
 
-// Globalna ochrona 120B: równoległe requesty nie mogą każdy osobno zużyć
-// pełnego limitu retry. Quota jest liczona dla całego procesu w ruchomym oknie.
-const MODEL_120B_GLOBAL_MAX_REQUESTS = Math.max(1, Number(process.env.AI_120B_GLOBAL_MAX_REQUESTS) || 6);
-const MODEL_120B_GLOBAL_WINDOW_MS = 60 * 60 * 1000;
-let model120bGlobalRequesty = 0;
-let model120bGlobalOknoDo = Date.now() + MODEL_120B_GLOBAL_WINDOW_MS;
-let model120bGlobalZablokowanyDo = 0;
-let model120bCircuitBreakerOpen = false;
+// Globalna ochrona 120B: limit requestów w oknie i breaker mają osobne deadline'y.
+const model120bBreaker = create120bBreaker({
+  maxRequests: Math.max(1, Number(process.env.AI_120B_GLOBAL_MAX_REQUESTS) || 6),
+  windowMs: 60 * 60 * 1000,
+  defaultCooldownMs: 90 * 1000,
+});
 
 function zarezerwujRequest120B(requestId = '-') {
-  const teraz = Date.now();
-  // Okno quota i cooldown circuit breakera są niezależnymi ograniczeniami.
-  // Wygaśnięcie godzinnego okna nie może przedwcześnie otworzyć 120B po 429.
-  if (teraz >= model120bGlobalOknoDo && teraz >= model120bGlobalZablokowanyDo) {
-    model120bGlobalRequesty = 0;
-    model120bGlobalOknoDo = teraz + MODEL_120B_GLOBAL_WINDOW_MS;
-    model120bGlobalZablokowanyDo = 0;
-    model120bCircuitBreakerOpen = false;
-  }
-  if (model120bCircuitBreakerOpen && teraz < model120bGlobalZablokowanyDo) {
-    console.warn(`[AI][${requestId}] 120B global circuit breaker aktywny do ${new Date(model120bGlobalZablokowanyDo).toISOString()}`);
+  const result = model120bBreaker.reserve(requestId);
+  if (!result.ok) {
+    if (result.reason === 'circuit_breaker_open') {
+      console.warn(`[AI][${requestId}] 120B global circuit breaker aktywny do ${new Date(result.until).toISOString()}`);
+    } else if (result.reason === 'quota_exhausted') {
+      console.warn(`[AI][${requestId}] 120B global quota wyczerpana (${result.used}/${result.max})`);
+    }
     return false;
   }
-  if (model120bCircuitBreakerOpen && teraz >= model120bGlobalZablokowanyDo) {
-    model120bCircuitBreakerOpen = false;
-    model120bGlobalZablokowanyDo = 0;
-  }
-  if (model120bGlobalRequesty >= MODEL_120B_GLOBAL_MAX_REQUESTS) {
-    console.warn(`[AI][${requestId}] 120B global quota wyczerpana (${MODEL_120B_GLOBAL_MAX_REQUESTS}/${MODEL_120B_GLOBAL_MAX_REQUESTS})`);
-    return false;
-  }
-  model120bGlobalRequesty++;
   return true;
 }
 
-const MODEL_120B_GLOBAL_BREAKER_MS = 90 * 1000;
-
-function zablokuj120BGlobalnie(powod = 'limit', cooldownMs = MODEL_120B_GLOBAL_BREAKER_MS) {
-  const ms = Math.max(30_000, Number(cooldownMs) || MODEL_120B_GLOBAL_BREAKER_MS);
-  model120bGlobalZablokowanyDo = Date.now() + ms;
-  model120bCircuitBreakerOpen = true;
-  console.error(`[AI] 120B global circuit breaker: ${powod} (${Math.round(ms / 1000)}s)`);
+function zablokuj120BGlobalnie(powod = 'limit', cooldownMs) {
+  const result = model120bBreaker.trip(powod, cooldownMs);
+  console.error(`[AI] 120B global circuit breaker: ${powod} (cooldown ${Math.round(result.cooldownMs / 1000)}s)`);
 }
 
 // Kolejka chroni przed jednoczesnym uruchomieniem dużej liczby drogich sekwencji
