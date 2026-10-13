@@ -307,11 +307,9 @@ function tokenyPokrywajaSie(a, b) {
   if (Math.min(a.length, b.length) < 6) return false;
   let prefixLength = 0;
   while (prefixLength < Math.min(a.length, b.length) && a[prefixLength] === b[prefixLength]) prefixLength++;
-  if (prefixLength >= 5 && prefixLength / Math.min(a.length, b.length) >= 0.72) return true;
-  // A single source typo (e.g. "debffów" vs "debuffów") should not erase
-  // otherwise strong sentence-level evidence. Limit fuzzy matching to one
-  // edit in tokens of at least six characters; names, numbers, negation and
-  // causal relations are checked independently before token coverage.
+  // Do not accept long common prefixes as a substitute for edit distance:
+  // unrelated words can share most of a prefix but differ in their suffix.
+  // A single typo is allowed only when the complete tokens differ by one edit.
   if (Math.abs(a.length - b.length) > 1) return false;
   let i = 0;
   let j = 0;
@@ -373,4 +371,4 @@ function sprawdzPokrycieClaimamiOdpowiedzi(answer, claims) {
 function czyDowodSemantyczniePokrywaClaim(evidence, claim, options = {}) {
   return zgodnoscStrukturalna(evidence, claim, options).ok;
 }
-module.exports = { normalizujClaim, tokenyClaim, czyRelacjaPrzyczynowaPokrywaClaim, wyodrebnijLiczbyIDaty, wyodrebnijJednostkoweWartosci, wyodrebnijNazwyWlasne, zgodnoscStrukturalna, sprawdzTwardeKonflikty, sprawdzSprzecznosciSemantyczne, dopasowanieSemantyczne, sprawdzPokrycieClaimamiOdpowiedzi, czyDowodSemantyczniePokrywaClaim };
+module.exports = { normalizujClaim, tokenyClaim, czyRelacjaPrzyczynowaPokrywaClaim, wyodrebnijLiczbyIDaty, wyodrebnijJednostkoweWartosci, wyodrebnijNazwyWlasne, zgodnoscStrukturalna, sprawdzTwardeKonflikty, sprawdzSprzecznosciSemantyczne, dopasowanieSemantyczne, sprawdzPokrycieClaimamiOdpowiedzi, czyDowodSemantyczniePokrywaClaim, tokenyPokrywajaSie };
