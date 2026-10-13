@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { agregujMetrykiWalidatorow, zbudujKontekstMetrykiWalidatora } = require('../ai/validator-telemetry');
+const { agregujMetrykiWalidatorow, zbudujKontekstMetrykiWalidatora, wybierzTimeoutWalidatora } = require('../ai/validator-telemetry');
 
 function metric(result, options = {}) {
   return zbudujKontekstMetrykiWalidatora(
@@ -91,4 +91,11 @@ test('missing credentials are visible as skipped provider, not attempted', () =>
   assert.equal(result.outcome, 'skipped_provider');
   assert.equal(result.failureReason, 'missing_credentials');
   assert.equal(result.actualMs, null);
+});
+
+
+test('preflight timeout remains authoritative when the wrapper recomputes a different value', () => {
+  assert.equal(wybierzTimeoutWalidatora(4794, 8794), 4794);
+  assert.equal(wybierzTimeoutWalidatora(9000, 9000), 9000);
+  assert.equal(wybierzTimeoutWalidatora(null, 5206), 5206);
 });
