@@ -114,6 +114,7 @@ test('provider and validator failures receive distinct categories', () => {
   assert.equal(classifyFailure({ status: 'unavailable', reason: 'fallback validator niedostępny' }), 'provider_unavailable');
   assert.equal(classifyFailure({ status: 'unavailable', reason: 'xKiro validator niedostępny', error: 'This operation was aborted' }), 'timeout_abort');
   assert.equal(classifyFailure('Groq chat.completions.create is unavailable; extra.requestContract={"endpoint":"chat.completions.create"}'), 'provider_unavailable');
+  assert.equal(classifyFailure(JSON.stringify({ message: 'Rate limit reached on tokens per day (TPD). Please try again in 24m34.416s.', status: 429, extra: { timeoutMs: 12000 } })), 'quota', 'diagnostic timeout metadata must not mask provider TPD');
   assert.equal(shouldRetryFailure('timeout_abort'), true);
   assert.equal(shouldRetryFailure('validator_rejection'), false, 'semantic rejection must not be treated as transport failure');
 });
@@ -167,6 +168,7 @@ test('quota cooldown respects Retry-After and never goes below the configured ba
       quotaCooldownMsFromError('Retry-After=30s; Please try again in 3m22.176s'),
       202_176,
     );
+    assert.equal(quotaCooldownMsFromError('Please try again in 1h2m3s.'), 3_723_000);
     assert.equal(
       quotaCooldownMsFromError('HTTP 429: high demand; Please try again in 3m22.176s'),
       202_176,
