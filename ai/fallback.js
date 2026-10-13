@@ -139,6 +139,11 @@ function repairBudgetBlockReason({
   if (Number.isFinite(Number(repairGenerations)) && Number.isFinite(Number(maxRepairGenerations)) && Number(repairGenerations) >= Number(maxRepairGenerations)) {
     return 'repair_generation_budget_exhausted';
   }
+  // computeGenerationTimeout() needs 8.5s remaining to offer a 4s attempt
+  // while reserving 4.5s for validation or another fallback.
+  if (Number.isFinite(Number(remainingMs)) && Number(remainingMs) < 8500) {
+    return 'insufficient_time_for_fallback';
+  }
   return null;
 }
 
