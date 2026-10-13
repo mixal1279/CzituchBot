@@ -77,7 +77,18 @@ test('aggregates preserve every raw record and distinguish skip categories', () 
   assert.equal(aggregate.providerOverloads, 1);
   assert.equal(aggregate.quotas, 1);
   assert.equal(
-    aggregate.attempted + aggregate.skippedBudget + aggregate.skippedSlot,
+    aggregate.attempted + aggregate.skippedBudget + aggregate.skippedSlot + aggregate.skippedProvider,
     raw.length,
   );
+});
+
+
+test('missing credentials are visible as skipped provider, not attempted', () => {
+  const result = metric(
+    { status: 'unavailable', reason: 'brak XKIRO_API_KEY' },
+    { outcome: 'skipped_provider' },
+  );
+  assert.equal(result.outcome, 'skipped_provider');
+  assert.equal(result.failureReason, 'missing_credentials');
+  assert.equal(result.actualMs, null);
 });
