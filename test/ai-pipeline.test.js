@@ -93,3 +93,13 @@ test('pipeline finalText replaces terminal failure output and sanitizes accepted
     sanitizeResponse: value => value.replace(/\s+/g, ' '),
   }), 'poprawna odpowiedź');
 });
+
+
+test('pipeline never promotes a soft-accepted answer to a final user response', () => {
+  assert.deepEqual(decideValidation(STATUS.SOFT_ACCEPTED), {
+    finalStatus: STATUS.REJECTED,
+    retry: false,
+    reason: 'soft_acceptance_disabled',
+  });
+  assert.equal(finalText('partial unsupported answer', STATUS.SOFT_ACCEPTED), 'Nie mam wystarczających danych, żeby odpowiedzieć na to pewnie.');
+});
