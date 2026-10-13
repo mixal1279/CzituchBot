@@ -65,6 +65,20 @@ function awaitWithAbortTimeout(promise, timeoutMs, controller, label = 'provider
  * Return null when starting the validator would leave too little time for the
  * next validator/fallback to run.
  */
+function computeValidatorReserveMs(remainingMs) {
+  const remaining = Number(remainingMs);
+  if (!Number.isFinite(remaining) || remaining <= 0) return 0;
+  // Keep a fallback slot only when the current request has enough time for it.
+  // 14.5s: current validator can use up to 9s and leave 5.5s? The next slot
+  // needs at least 4s plus a 2.5s final reserve (6.5s total).
+  if (remaining >= 14500) return 10500;
+  if (remaining >= 10500) return 6500;
+  if (remaining >= 6500) return 2500;
+  // Below 6.5s there is no viable fallback slot; spend the remaining time on
+  // the current validator instead of skipping it merely to preserve unused time.
+  return 0;
+}
+
 function computeValidatorTimeout(remainingMs, {
   maxTimeoutMs = 9000,
   reserveMs = 6500,
@@ -93,4 +107,4 @@ function computeGenerationTimeout(remainingMs, {
   return timeoutMs >= minTimeoutMs ? Math.floor(timeoutMs) : null;
 }
 
-module.exports = { createGroqCompletion, awaitWithAbortTimeout, withReasoningHeadroom, computeValidatorTimeout, computeGenerationTimeout };
+module.exports = { createGroqCompletion, awaitWithAbortTimeout, withReasoningHeadroom, computeValidatorTimeout, computeValidatorReserveMs, computeGenerationTimeout };
