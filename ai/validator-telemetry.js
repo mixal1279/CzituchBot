@@ -1,5 +1,23 @@
 'use strict';
 
+/**
+ * Validator telemetry contract.
+ *
+ * Per-attempt outcome is one of:
+ *   - attempted: the provider wrapper actually attempted a request
+ *   - skipped_budget: no request was sent because the time budget was too small
+ *   - skipped_slot: no request was sent because a validator/model slot was unavailable
+ *
+ * failureReason is null for decisive validation results (accepted, soft_accepted,
+ * rejected); otherwise it is one of budget_exhausted, slot_unavailable, quota,
+ * provider_overload, timeout, empty_response, invalid_json, http_error, or
+ * provider_unavailable. More specific causes take precedence over generic HTTP
+ * status detection, so "high demand" is not misreported as an ordinary HTTP error.
+ *
+ * actualMs is null for skipped attempts. sourceCount counts SOURCE/REFERENCE
+ * blocks using the same rule as SUMMARY.sourceCount. claimCountHeuristic counts
+ * sentence-like fragments and is deliberately not an atomic-claim count.
+ */
 function agregujMetrykiWalidatorow(metrics = []) {
   const byValidator = {};
   for (const metric of metrics) {
