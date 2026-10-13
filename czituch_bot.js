@@ -1111,7 +1111,7 @@ async function znajdzYoutuberaWPytaniu(pytanie, requestState = null) {
 // =============================================
 //  HOWLONGTOBEAT — bezpośrednio z howlongtobeat.com
 //  Mechanizm zgodny z implementacją z PolishSteamDB: nieoficjalny
-//  endpoint /api/bleed, token z /api/bleed/init odświeżany co 4 minuty,
+//  endpoint /api/search/site, token z /api/search/site/init odświeżany co 4 minuty,
 //  wyszukiwanie z oceną podobieństwa oraz cache. Wynik zawiera wszystkie
 //  dostępne warianty czasu: główny wątek, dodatki, 100% i wszystkie style.
 // =============================================
@@ -1570,8 +1570,9 @@ Zwróć WYŁĄCZNIE JSON: {"valid":true/false,"reason":"krótki powód","confide
   } catch (err) {
     const message = String(err?.message || '');
     const abortLike = err?.name === 'AbortError' || /aborted|abort|cancelled|canceled/i.test(message);
-    const quota = /quota|rate.?limit|resource.?exhausted|429|limit:/i.test(message);
-    const transient = quota
+    const transientOverload = /(?:high demand|overloaded|temporarily unavailable|capacity exceeded)/i.test(message);
+    const quota = !transientOverload && /quotaExceeded|quota exceeded|rate.?limit|resource.?exhausted|429|limit:/i.test(message);
+    const transient = transientOverload || quota
       || abortLike
       || /(?:HTTP\s*(?:408|409|429|500|502|503|504)|timeout|timed out|network|fetch failed|ECONNRESET|ETIMEDOUT)/i.test(message);
     const elapsedMs = requestState?.startedAt ? Math.max(0, Date.now() - requestState.startedAt) : null;
