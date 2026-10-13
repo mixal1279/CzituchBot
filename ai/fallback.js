@@ -71,10 +71,24 @@ function quotaCooldownMsFromError(error) {
   // Capacity pressure is transient, not a persistent account quota exhaustion.
   if (/(?:high demand|overloaded|temporarily unavailable|capacity exceeded)/i.test(message)) return 60_000;
   const configured = Number(process.env.AI_PROVIDER_QUOTA_COOLDOWN_MS) || 60_000;
-  const match = message.match(/retry[- ]after\s*[=:]\s*(\d+(?:\.\d+)?)\s*(?:s|sec(?:ond)?s?)?/i);
-  if (!match) return configured;
-  const retryAfterMs = Math.max(0, Number(match[1])) * 1000;
-  return Math.max(configured, Math.ceil(retryAfterMs), 1_000);
+  // Retry-After is explicit provider guidance and must not be shortened.
+  const retryAfterMatch = message.match(/retry[- ]after\s*[=:]\s*(\d+(?:\.\d+)?)\s*(?:s|sec(?:ond)?s?)?/i);
+  if (retryAfterMatch) {
+    const retryAfterMs = Math.max(0, Number(retryAfterMatch[1])) * 1000;
+    return Math.max(configured, Math.ceil(retryAfterMs), 1_000);
+  }
+
+  // Groq: "Please try again in 3m22.176s" or "Please try again in 5.43s".
+  const tryAgainMatch = message.match(/try again in\s+(?:(\d+)m)?\s*(\d+(?:\.\d+)?)\s*s/i);
+  if (tryAgainMatch) {
+    const minutes = Number(tryAgainMatch[1] || 0);
+    const seconds = Number(tryAgainMatch[2] || 0);
+    const retryAfterMs = Math.max(0, (minutes * 60 + seconds) * 1000);
+    // A short TPM wait should not cause rapid retries; longer TPD waits are preserved.
+    return Math.max(configured, 60_000, Math.ceil(retryAfterMs), 1_000);
+  }
+
+  return configured;
 }
 function markProviderQuota(provider, cooldownMs = Number(process.env.AI_PROVIDER_QUOTA_COOLDOWN_MS) || 60_000) {
   const endpoint = String(provider || '');
