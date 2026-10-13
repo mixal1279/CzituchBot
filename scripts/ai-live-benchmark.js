@@ -2,6 +2,7 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
+const { spawnSync } = require('node:child_process');
 const { buildAnswerPlan } = require('../ai/answer-plan');
 const { judgeAnswer } = require('../ai/answer-judge');
 const { normalizeFactText, scoreGoldenFacts } = require('../ai/benchmark-scorer');
@@ -254,7 +255,20 @@ async function run() {
   const reports = [];
   for (let runNumber = 1; runNumber <= repeat; runNumber++) {
     console.log(`\\n[LIVE BENCHMARK] repeat ${runNumber}/${repeat}`);
-    reports.push(await runOnce(runNumber));
+    // Each repeat gets a fresh Node process so module-level cooldowns/circuit breakers cannot leak between runs.
+    const child = spawnSync(process.execPath, [__filename], {
+      stdio: 'inherit',
+      env: {
+        ...process.env,
+        AI_BENCHMARK_REPEAT: '1',
+        AI_BENCHMARK_CHILD: '1',
+        AI_BENCHMARK_RUN_NUMBER: String(runNumber),
+        AI_BENCHMARK_OUTPUT_DIR: outputDir,
+      },
+    });
+    if (child.error) throw child.error;
+    if (child.status !== 0) throw new Error(`Benchmark run ${runNumber} zakończył się kodem ${child.status}`);
+    reports.push(JSON.parse(fs.readFileSync(path.join(outputDir, `run-${runNumber}.json`), 'utf8')));
   }
   const perRun = reports.map(report => ({
     run: report.run,
@@ -319,7 +333,10 @@ async function run() {
 module.exports = { normalizeFactText, scoreGoldenFacts, stratifiedCases, run, runOnce, median, quantile };
 
 if (require.main === module) {
-  run().catch(error => {
+  const execute = process.env.AI_BENCHMARK_CHILD === '1'
+    ? runOnce(Math.max(1, Number(process.env.AI_BENCHMARK_RUN_NUMBER) || 1))
+    : run();
+  execute.catch(error => {
     console.error(error?.stack || error);
     process.exitCode = 1;
   });
