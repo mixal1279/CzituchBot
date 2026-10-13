@@ -117,6 +117,10 @@ function markProviderQuota(provider, cooldownMs = Number(process.env.AI_PROVIDER
   return [endpoint];
 }
 
+function getProviderQuotaUntil(provider) {
+  return quotaBlockedUntil.get(String(provider || '')) || 0;
+}
+
 function isProviderQuotaBlocked(provider, now = Date.now()) {
   const until = quotaBlockedUntil.get(provider);
   if (!until) return false;
@@ -196,6 +200,7 @@ module.exports = {
   quotaCooldownMsFromError,
   markProviderQuota,
   isProviderQuotaBlocked,
+  getProviderQuotaUntil,
   classifyFailure,
   nextFallbacks,
   selectRepairFallbacks,
