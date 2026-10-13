@@ -69,6 +69,17 @@ function createAIRequestContext(options = {}) {
   ctx.reserveValidator = (purpose = 'validator') =>
     ctx.reserve('validatory', ctx.maxValidatorow, purpose);
 
+  // Reserve validator and model budgets atomically: a failed model-budget check
+  // must not consume a validator slot (and vice versa).
+  ctx.reserveValidatorModel = (purpose = 'validator') => {
+    if (ctx.isExpired()
+      || ctx.validatory >= ctx.maxValidatorow
+      || ctx.modelCalls >= ctx.maxModelCalls) return false;
+    ctx.validatory++;
+    ctx.modelCalls++;
+    return true;
+  };
+
   ctx.reserveTavily = (purpose = 'tavily') =>
     ctx.reserve('tavilySearches', ctx.maxWyszukanTavily, purpose);
 
