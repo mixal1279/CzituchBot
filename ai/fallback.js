@@ -24,6 +24,22 @@ const DETAIL_CLASSIFIERS = Object.freeze([
 ]);
 
 function classifyFailure(error = '') {
+  // Provider diagnostics are JSON strings containing metadata such as timeoutMs.
+  // Classify the actual provider message first; otherwise the word "timeout"
+  // in diagnostic metadata can mask a real 429 quota error.
+  if (typeof error === 'string') {
+    try {
+      const parsed = JSON.parse(error);
+      if (parsed && typeof parsed === 'object' && typeof parsed.message === 'string') {
+        return classifyFailure({
+          message: parsed.message,
+          status: parsed.status,
+          code: parsed.code,
+          type: parsed.type,
+        });
+      }
+    } catch (_) {}
+  }
   const status = error && typeof error === 'object' ? String(error.status || '').toLowerCase() : '';
   if (status === 'accepted' || status === 'soft_accepted') return null;
   if (status === 'rejected') {
