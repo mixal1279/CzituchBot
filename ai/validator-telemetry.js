@@ -20,6 +20,11 @@
  * blocks using the same rule as SUMMARY.sourceCount. claimCountHeuristic counts
  * sentence-like fragments and is deliberately not an atomic-claim count.
  */
+function wybierzTimeoutWalidatora(timeoutOverrideMs, computedTimeoutMs) {
+  // The preflight timeout is the single source of truth for both telemetry and AbortController.
+  return Number.isFinite(timeoutOverrideMs) ? timeoutOverrideMs : computedTimeoutMs;
+}
+
 function agregujMetrykiWalidatorow(metrics = []) {
   const byValidator = {};
   for (const metric of metrics) {
@@ -109,4 +114,4 @@ function zbudujKontekstMetrykiWalidatora(requestId, validator, model, odpowiedz,
   };
 }
 
-module.exports = { agregujMetrykiWalidatorow, zbudujKontekstMetrykiWalidatora };
+module.exports = { agregujMetrykiWalidatorow, zbudujKontekstMetrykiWalidatora, wybierzTimeoutWalidatora };
