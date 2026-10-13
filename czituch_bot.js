@@ -2082,6 +2082,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
   let { temperature = 0.5, max_tokens = 200, tavilyOptions = {}, aiProfile = 'generic', memoryUserId = null } = opcje;
   const groqClient = opcje.__testDeps?.groq || groq;
   const searchTavilyFn = opcje.__testDeps?.searchTavily || szukajTavily;
+  const pobierzCzasHLTBFn = opcje.__testDeps?.pobierzCzasHLTB || pobierzCzasHLTB;
   const validateAI = opcje.__testDeps?.validateAI || walidujOdpowiedzAI;
   const loadMemory = opcje.__testDeps?.loadMemory || wczytajZweryfikowanaPamiecAI;
   const testMaxTavilySearches = Number.isInteger(opcje.__testDeps?.maxWyszukanTavily) ? Math.max(2, opcje.__testDeps.maxWyszukanTavily) : 3;
@@ -2323,25 +2324,24 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
   let hltbKontekst = null;
   if (czyPytanieOHLTB) {
     if (!Array.isArray(gryHLTB) || !gryHLTB.length) {
-      await wyslijFn(`@${nick} nie rozpoznałem tytułu gry — podaj nazwę, a sprawdzę ją bez zgadywania.`);
-      return;
+      console.log(`[HLTB] Nie rozpoznano tytułu gry dla pytania "${pytanie}" — przechodzę do zwykłego wyszukiwania Tavily.`);
+    } else {
+      const wynikiHLTB = [];
+      for (const tytulHLTB of gryHLTB) {
+        const wynikHLTB = await pobierzCzasHLTBFn(tytulHLTB).catch(err => {
+          console.error(`[HLTB] Błąd pobierania danych dla ${tytulHLTB}:`, err.message);
+          return null;
+        });
+        console.log(`[HLTB] ⏱️ ${tytulHLTB} -> ${wynikHLTB ? 'OK' : 'brak danych'}`);
+        if (wynikHLTB) wynikiHLTB.push(wynikHLTB);
+      }
+      if (wynikiHLTB.length) {
+        const odpowiedziHLTB = wynikiHLTB.map(w => przygotujOdpowiedzHLTB(nick, w, pytanie).replace(new RegExp(`^@${nick}\\s*`), ''));
+        await wyslijFn(`@${nick} ${odpowiedziHLTB.join(' | ')}`);
+        return;
+      }
+      console.log(`[HLTB] Brak danych dla rozpoznanych gier — przechodzę do zwykłego wyszukiwania Tavily.`);
     }
-    const wynikiHLTB = [];
-    for (const tytulHLTB of gryHLTB) {
-      const wynikHLTB = await pobierzCzasHLTB(tytulHLTB).catch(err => {
-        console.error(`[HLTB] Błąd pobierania danych dla ${tytulHLTB}:`, err.message);
-        return null;
-      });
-      console.log(`[HLTB] ⏱️ ${tytulHLTB} -> ${wynikHLTB ? 'OK' : 'brak danych'}`);
-      if (wynikHLTB) wynikiHLTB.push(wynikHLTB);
-    }
-    if (!wynikiHLTB.length) {
-      await wyslijFn(`@${nick} nie znalazłem pewnych danych HLTB dla żadnej rozpoznanej gry — nie będę zgadywać.`);
-      return;
-    }
-    const odpowiedziHLTB = wynikiHLTB.map(w => przygotujOdpowiedzHLTB(nick, w, pytanie).replace(new RegExp(`^@${nick}\\s*`), ''));
-    await wyslijFn(`@${nick} ${odpowiedziHLTB.join(' | ')}`);
-    return;
   }
 
   let infoKanalu = null;
