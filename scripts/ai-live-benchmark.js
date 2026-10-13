@@ -210,7 +210,7 @@ async function run() {
     failures: results.filter(x => !x.answered || x.judgeStatus !== 'accepted' || x.factualPassed === false).slice(0, 100),
   };
   console.log(JSON.stringify(report, null, 2));
-  console.log('\\n=== VALIDATOR_METRICS_RAW ===');
+  console.log('\n=== VALIDATOR_METRICS_RAW ===');
   console.log(JSON.stringify(validatorMetricsRaw, null, 2));
   if (process.env.AI_BENCHMARK_REQUIRE_PERFECT === '1') {
     const factualOk = factualCases.length > 0 && factualPassed === factualCases.length;
