@@ -48,6 +48,7 @@ jobs:
           node --check ai/validator.js
           node --check ai/tavily.js
           node --check ai/webRetrieval.js
+          node --check scripts/ai-live-benchmark.js
           node --check czituch_bot.js
           node --check trello.js
 
