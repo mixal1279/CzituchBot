@@ -61,9 +61,10 @@ function awaitWithAbortTimeout(promise, timeoutMs, controller, label = 'provider
 }
 
 /**
- * Allocate a validator timeout from the request's remaining wall-clock budget.
- * Return null when starting the validator would leave too little time for the
- * next validator/fallback to run.
+ * Choose the reserve for a later validator/fallback based on the remaining
+ * deadline and slots. Keep a 2.5s reserve floor; computeValidatorTimeout will
+ * skip a call if the remaining time cannot fit both the 4s minimum attempt and
+ * this reserve.
  */
 function computeValidatorReserveMs(remainingMs, currentSlot = 1, maxValidators = 3) {
   const remaining = Number(remainingMs);
@@ -79,14 +80,14 @@ function computeValidatorReserveMs(remainingMs, currentSlot = 1, maxValidators =
     if (remaining >= 14500) return 10500;
     if (remaining >= 10500) return 6500;
     if (remaining >= 6500) return 2500;
-    return 0;
+    return 2500;
   }
   if (futureSlots === 1) {
     if (remaining >= 10500) return 6500;
     if (remaining >= 6500) return 2500;
-    return 0;
+    return 2500;
   }
-  return remaining >= 6500 ? 2500 : 0;
+  return 2500;
 }
 
 function computeValidatorTimeout(remainingMs, {
