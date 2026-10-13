@@ -87,6 +87,7 @@ function classifyPipelineFailure(status, options = {}) {
   if (s === 'rejected') return 'validator_reject';
   if (s === 'inconclusive') return 'validator_inconclusive';
   if (s === 'unavailable') return options.reason || 'provider_unavailable';
+  if (s === 'unverified') return 'validator_unverified';
   return 'unknown';
 }
 
@@ -127,7 +128,10 @@ function finalText(text, status, helpers = {}) {
     let value = String(text || '');
     if (typeof helpers.sanitizeResponse === 'function') value = helpers.sanitizeResponse(value);
     value = value.trim();
-    return value ? '⚠️ Odpowiedź niezweryfikowana — walidator jest niedostępny. ' + value : (helpers.unavailableMessage || 'Chwilowo nie mogę potwierdzić tej informacji, więc nie będę zgadywać.');
+    const warning = '⚠️ Odpowiedź niezweryfikowana — walidator jest niedostępny. ';
+    return value
+      ? (value.startsWith(warning) ? value : warning + value)
+      : (helpers.unavailableMessage || 'Chwilowo nie mogę potwierdzić tej informacji, więc nie będę zgadywać.');
   }
 
   let value = String(text || '');
