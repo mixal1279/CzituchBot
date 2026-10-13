@@ -90,7 +90,7 @@ test('evidence repair context returns verbatim candidates from authorized source
 });
 
 test('evidence candidate builder preserves canonical source IDs and verbatim quotes', () => {
-  const blocks = parseEvidenceBlocks('[SOURCE 1]\\nTYTUŁ: Test\\nURL: https://example.com\\nTREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>\\nWheatley przejął kontrolę nad systemem Aperture.\\n<<<END_UNTRUSTED_SOURCE_CONTENT>>>');
+  const blocks = parseEvidenceBlocks('[SOURCE 1]\nTYTUŁ: Test\nURL: https://example.com\nTREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>\nWheatley przejął kontrolę nad systemem Aperture.\n<<<END_UNTRUSTED_SOURCE_CONTENT>>>');
   assert.equal(ensureEvidenceSourceId(blocks[0]), 'SOURCE 1');
   assert.equal(ensureEvidenceSourceId({ id: 'S1', url: 'https://example.com' }), null);
 
