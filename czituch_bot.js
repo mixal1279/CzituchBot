@@ -1595,7 +1595,7 @@ Zwróć WYŁĄCZNIE JSON: {"valid":true/false,"reason":"krótki powód","confide
       markProviderQuota(endpoint, cooldownMs);
       console.warn(`[AI][${requestId}] quota circuit opened for ${endpoint} for ${cooldownMs}ms`);
     }
-    if (transient) geminiValidatorCooldownUntil = Date.now() + (quota ? 90_000 : 60_000);
+    if (transient) ustawGeminiValidatorCooldown(model, quota ? 90_000 : 60_000);
     return {
       status: 'unavailable',
       ok: false,
@@ -1612,9 +1612,17 @@ Zwróć WYŁĄCZNIE JSON: {"valid":true/false,"reason":"krótki powód","confide
   }
 }
 
-let geminiValidatorCooldownUntil = 0;
+const geminiValidatorCooldowns = Object.create(null);
 let geminiGenerationCooldowns = Object.create(null);
 let groqHistoryCooldownUntil = 0;
+
+function geminiValidatorCooldownUntil(model) {
+  return Number(geminiValidatorCooldowns[String(model || '')] || 0);
+}
+
+function ustawGeminiValidatorCooldown(model, ms) {
+  geminiValidatorCooldowns[String(model || '')] = Date.now() + Math.max(0, Number(ms) || 0);
+}
 
 function geminiGenerationCooldownUntil(model) {
   return Number(geminiGenerationCooldowns[String(model || '')] || 0);
@@ -1847,9 +1855,10 @@ async function walidujOdpowiedzAI(persona, pytanie, odpowiedz, dane, historiaRoz
   // Jeden stabilny model wystarcza do prostego JSON fact-checkera i nie
   // zużywa potrójnie darmowego limitu Gemini przy każdym pytaniu.
   const models = KONFIGURACJA.geminiKey
-    && Date.now() >= geminiValidatorCooldownUntil
-    && !isProviderQuotaBlocked('gemini:gemini-3.5-flash-lite')
-    ? ['gemini-3.5-flash-lite']
+    ? ['gemini-3.5-flash-lite'].filter(model =>
+        Date.now() >= geminiValidatorCooldownUntil(model)
+        && !isProviderQuotaBlocked(`gemini:${model}`)
+      )
     : [];
   if (!models.length) console.warn(`[AI][${requestId}] Gemini validator w cooldownie — używam fallbacku OpenRouter`);
   let last = null;
@@ -2136,11 +2145,11 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
   // Nie utrzymujemy osobnych budżetów w generatorze, retrievalu i validatorze.
   const aiState = createAIRequestContext({
     requestId,
-    maxCzasMs: 25000,
+    maxCzasMs: 40000,
     maxGeneracji: 6,
     maxInitialGeneracji: 5,
     maxRepairGeneracji: 4,
-    maxModelCalls: 12,
+    maxModelCalls: 15,
     maxValidatorow: 3,
     maxWyszukanTavily: testMaxTavilySearches,
   });
@@ -2865,7 +2874,8 @@ Pytanie użytkownika: ${pytanie}`;
       console.error(`[Groq][${requestId}] ${model} request failed: ${diagnostic}`);
       if (model === 'openai/gpt-oss-120b' && isLimit) {
         requestBlokada120b = true;
-        zablokuj120BGlobalnie(diagnostic);
+        const cooldownMs = quotaCooldownMsFromError(diagnostic);
+        zablokuj120BGlobalnie(diagnostic, cooldownMs);
       }
       return wynikPusty('groq', model, diagnostic);
     }
@@ -3504,10 +3514,13 @@ function zarezerwujRequest120B(requestId = '-') {
   return true;
 }
 
-function zablokuj120BGlobalnie(powod = 'limit') {
-  model120bGlobalZablokowanyDo = Date.now() + MODEL_120B_GLOBAL_WINDOW_MS;
+const MODEL_120B_GLOBAL_BREAKER_MS = 90 * 1000;
+
+function zablokuj120BGlobalnie(powod = 'limit', cooldownMs = MODEL_120B_GLOBAL_BREAKER_MS) {
+  const ms = Math.max(30_000, Number(cooldownMs) || MODEL_120B_GLOBAL_BREAKER_MS);
+  model120bGlobalZablokowanyDo = Date.now() + ms;
   model120bCircuitBreakerOpen = true;
-  console.error(`[AI] 120B global circuit breaker: ${powod}`);
+  console.error(`[AI] 120B global circuit breaker: ${powod} (${Math.round(ms / 1000)}s)`);
 }
 
 // Kolejka chroni przed jednoczesnym uruchomieniem dużej liczby drogich sekwencji
