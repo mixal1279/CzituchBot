@@ -67,6 +67,7 @@ test('validator reserve adapts to remaining time and slots without wasting the f
   assert.equal(computeValidatorReserveMs(13000, 1, 3), 6500);
   assert.equal(computeValidatorReserveMs(8000, 1, 3), 2500);
   assert.equal(computeValidatorReserveMs(5000, 1, 3), 2500);
+  assert.equal(computeValidatorReserveMs(1, 1, 3), 2500, 'positive remaining time must never drop the fallback reserve to zero');
   assert.equal(computeValidatorTimeout(5000, {
     reserveMs: computeValidatorReserveMs(5000, 1, 3),
     minTimeoutMs: 4000,
