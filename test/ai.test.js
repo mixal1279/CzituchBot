@@ -491,7 +491,10 @@ console.log('AI regression tests: OK');
   });
   assert.deepEqual(GEMINI_VALIDATOR_JSON_SCHEMA.required, VALIDATOR_JSON_SCHEMA.required);
   assert.match(require('fs').readFileSync(require('path').join(__dirname, '..', 'czituch_bot.js'), 'utf8'), /AI_TAVILY_CACHE_FILE \|\| path\.join\(process\.env\.AI_CACHE_DIR \|\| __dirname, 'tavily_cache\.json'\)/);
-  assert.match(require('fs').readFileSync(require('path').join(__dirname, '..', 'czituch_bot.js'), 'utf8'), /computeValidatorTimeout\(remainingMs, \{[\s\S]*?reserveMs: isLastValidatorSlot \? 2500 : 10500,[\s\S]*?minTimeoutMs: 4000/);
+  const source = require('fs').readFileSync(require('path').join(__dirname, '..', 'czituch_bot.js'), 'utf8');
+  assert.match(source, /computeValidatorTimeout\(remainingMs, \{[\s\S]*?reserveMs: computeValidatorReserveMs\(remainingMs, requestState\?\.validatory, requestState\?\.maxValidatorow\),[\s\S]*?minTimeoutMs: 4000/);
+  assert.match(source, /xKiro validator pominięty przed rezerwacją slotu|computeValidatorReserveMs\(xkiroRemainingMs, requestState\?\.validatory \+ 1/);
+  assert.match(source, /function zarezerwujSlotWalidatora\(requestState, purpose\)/);
 }
 
 {
