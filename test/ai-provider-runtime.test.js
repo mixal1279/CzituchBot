@@ -182,3 +182,18 @@ test('repair checks shared model-call and generation limits before selecting a p
   assert.equal(repairBudgetBlockReason({ ...budget, modelCalls: 7 }), null);
   assert.equal(repairBudgetBlockReason({ ...budget, modelCalls: 7, remainingMs: 0 }), 'request_deadline_exhausted');
 });
+
+test('repair fallback stops when remaining time cannot fit a minimum generation attempt', () => {
+  const base = {
+    remainingMs: 8499,
+    generations: 1,
+    maxGenerations: 6,
+    repairGenerations: 0,
+    maxRepairGenerations: 1,
+    modelCalls: 1,
+    maxModelCalls: 12,
+  };
+  assert.equal(repairBudgetBlockReason(base), 'insufficient_time_for_fallback');
+  assert.equal(repairBudgetBlockReason({ ...base, remainingMs: 8500 }), null);
+  assert.equal(repairBudgetBlockReason({ ...base, modelCalls: 12 }), 'model_calls_exhausted');
+});
