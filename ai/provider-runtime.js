@@ -59,7 +59,7 @@ function computeValidatorTimeout(remainingMs, {
  * fraction of a second; those attempts create timeout noise without real fallback.
  */
 function computeGenerationTimeout(remainingMs, {
-  maxTimeoutMs = 9000,
+  maxTimeoutMs = 12000,
   reserveMs = 4500,
   minTimeoutMs = 4000,
 } = {}) {

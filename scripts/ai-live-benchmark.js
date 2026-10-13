@@ -80,9 +80,17 @@ async function run() {
       results.push({
         id: item.id,
         category: item.category,
+        answer,
         answered: Boolean(answer.trim()) && !isFailureText(answer),
         completeness: judge.score,
         judgeStatus: judge.status,
+        rejectionReason: [
+          judge.status !== 'accepted' ? judge.reason : null,
+          ...(summary?.validatorResults || [])
+            .filter(result => result.status === 'rejected')
+            .map(result => [result.reason, ...(result.validationDiagnostics?.localRejectReasons || [])].filter(Boolean).join(': ')),
+          ...(summary?.fallbackReasons || []),
+        ].filter(Boolean).join(' | ') || null,
         missing: judge.missing,
         factualScore: factual.score,
         factualPassed: factual.passed,
@@ -101,9 +109,11 @@ async function run() {
       results.push({
         id: item.id,
         category: item.category,
+        answer,
         answered: false,
         completeness: 0,
         judgeStatus: 'error',
+        rejectionReason: String(error?.message || error),
         missing: [],
         factualScore: item.expected?.factual?.independentGold ? 0 : null,
         factualPassed: item.expected?.factual?.independentGold ? false : null,

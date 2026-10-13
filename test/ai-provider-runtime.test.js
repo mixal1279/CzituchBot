@@ -51,8 +51,8 @@ test('validator timeout is capped and reserves time for fallback', () => {
 });
 
 test('generation timeout skips calls that cannot run for long enough while preserving fallback reserve', () => {
-  assert.equal(computeGenerationTimeout(25000), 9000);
-  assert.equal(computeGenerationTimeout(16000), 9000);
+  assert.equal(computeGenerationTimeout(25000), 12000);
+  assert.equal(computeGenerationTimeout(16000), 11500);
   assert.equal(computeGenerationTimeout(10000), 5500);
   assert.equal(computeGenerationTimeout(8500), 4000);
   assert.equal(computeGenerationTimeout(8499), null);
