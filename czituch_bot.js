@@ -1888,7 +1888,7 @@ function registrarMetrikeWalidatora(requestState, metric) {
     tavilyChars: Number.isFinite(metric.tavilyChars) ? metric.tavilyChars : null,
   };
   requestState.validatorMetrics.push(record);
-  console.log(\`[AI][\${record.requestId}] VALIDATOR_METRIC \${JSON.stringify(record)}\`);
+  console.log(`[AI][\${record.requestId}] VALIDATOR_METRIC \${JSON.stringify(record)}`);
 }
 
 function zbudujKontekstMetrykiWalidatora(requestId, validator, model, odpowiedz, dane, requestState, remainingMsAtStart, timeoutMs, startedAt, result, outcome = 'attempted') {
@@ -3512,7 +3512,7 @@ async function skompresujHistorie(historiaRozmowy) {
     });
     const rawSummary = (podsumowanie.choices[0].message.content || '').trim();
     const tresc = parsujStrukturalnePodsumowanie(rawSummary)
-      || rawSummary.replace(/^\`\`\`(?:json)?/i, '').replace(/\`\`\`$/i, '').trim().slice(0, 1400);
+      || rawSummary.replace(/^```(?:json)?/i, '').replace(/```$/i, '').trim().slice(0, 1400);
 
     // W czasie await mogła dojść nowa wiadomość. W takim przypadku nie wolno
     // nadpisywać aktualnej historii starym snapshotem; kolejna kompresja zrobi to
@@ -7485,7 +7485,7 @@ async function odswiezTokenTwitchChat(botKey) {
       stan.dead = true;
       wyslijAlertPolishSteamDB(
         `🔴 **CzituchBot – token czatu Twitch (${botKey}) martwy.** Brak refresh tokena, nie mogę odświeżyć automatycznie. `
-        + `Wygeneruj nowy access + refresh token i wklej do \`${stan.plik}\` (albo do env), potem zrestartuj bota.`
+        + `Wygeneruj nowy access + refresh token i wklej do `${stan.plik}` (albo do env), potem zrestartuj bota.`
       ).catch(() => {});
     }
     return;
@@ -7524,7 +7524,7 @@ async function odswiezTokenTwitchChat(botKey) {
         console.error(`[Twitch Chat/${botKey}] ❌ Refresh token odrzucony. Zatrzymuję auto-refresh.`);
         wyslijAlertPolishSteamDB(
           `🔴 **CzituchBot – token czatu Twitch (${botKey}) martwy.** Refresh token odrzucony przez Twitch. `
-          + `Wygeneruj nowy access + refresh token i wklej do \`${stan.plik}\` (albo do env), potem zrestartuj bota.`
+          + `Wygeneruj nowy access + refresh token i wklej do `${stan.plik}` (albo do env), potem zrestartuj bota.`
         ).catch(() => {});
       } else {
         console.error(`[Twitch Chat/${botKey}] ❌ Błąd odświeżania (chwilowy?):`, err.message);
