@@ -1617,6 +1617,11 @@ Zwróć WYŁĄCZNIE JSON: {"valid":true/false,"reason":"krótki powód","confide
 }
 
 let geminiValidatorCooldownUntil = 0;
+
+// Benchmark-only reset: repeated runs in one process must not inherit a prior run's local cooldown.
+function resetGeminiValidatorCooldownForBenchmark() {
+  geminiValidatorCooldownUntil = 0;
+}
 let geminiGenerationCooldowns = Object.create(null);
 let groqHistoryCooldownUntil = 0;
 
@@ -7664,4 +7669,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { zapytajAI, startBot };
+module.exports = { zapytajAI, startBot, resetGeminiValidatorCooldownForBenchmark };
