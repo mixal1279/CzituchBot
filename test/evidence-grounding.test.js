@@ -49,6 +49,20 @@ test('validator can use the same source block as bounded context when the quote 
   assert.ok(['exact_quote', 'source_context'].includes(result.diagnostics.evidenceBindings[0].mode));
 });
 
+test('validator tolerates one source typo in an otherwise strongly supported paraphrase', () => {
+  const source = 'Trzeba na bieżąco oczyszczać się z debffów i blokować poison oraz weaken wrzucane przez smoka.';
+  const claim = 'W trakcie starcia należy na bieżąco oczyszczać się z debuffów i blokować poison oraz weaken, które smocze zdolności rzucają.';
+  const data = `[SOURCE 1]\nTYTUŁ: Poradnik testowy\nTREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>\n${source}\n<<<END_UNTRUSTED_SOURCE_CONTENT>>>`;
+  const result = normalizujWynikWalidatora({
+    valid: true, reason: 'ok', unsupported_claims: [], supported: true, relevant: true,
+    complete: true, hallucination: false, confidence: 0.95,
+    claims: [{ claim, supported: true, source_ids: ['SOURCE 1'], evidence_quote: source }],
+  }, 'test-model', 'test', new Set(['SOURCE 1']), data, claim);
+  assert.equal(result.status, 'accepted', result.reason);
+  assert.equal(result.diagnostics.evidenceBindings[0].quoteVerified, true);
+  assert.ok(['exact_quote', 'source_context'].includes(result.diagnostics.evidenceBindings[0].mode));
+});
+
 test('validator rejects a real quote when the claim adds an unsupported causal relationship', () => {
   const data = '[SOURCE 1]\nTYTUŁ: RDR2\nTREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>\nArthur zdradził Dutcha podczas wydarzeń w obozie.\n<<<END_UNTRUSTED_SOURCE_CONTENT>>>';
   const result = normalizujWynikWalidatora({

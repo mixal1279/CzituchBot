@@ -207,7 +207,7 @@ function dopasowanieSemantyczne(evidence, claim) {
   const sharedConcepts = [...cConcepts].filter(x => eConcepts.has(x));
   const ct = tokenyClaim(claim);
   const et = new Set(tokenyClaim(evidence));
-  const overlap = ct.length ? ct.filter(t => et.has(t)).length / ct.length : 0;
+  const overlap = ct.length ? ct.filter(t => [...et].some(other => tokenyPokrywajaSie(t, other))).length / ct.length : 0;
   const entities = wyodrebnijNazwyWlasne(claim);
   const normalizedEvidence = normalizujClaim(evidence);
   const missingEntities = entities.filter(entity => !czyNazwaWlasnaWystepuje(entity, normalizedEvidence));
@@ -307,7 +307,28 @@ function tokenyPokrywajaSie(a, b) {
   if (Math.min(a.length, b.length) < 6) return false;
   let prefixLength = 0;
   while (prefixLength < Math.min(a.length, b.length) && a[prefixLength] === b[prefixLength]) prefixLength++;
-  return prefixLength >= 5 && prefixLength / Math.min(a.length, b.length) >= 0.72;
+  if (prefixLength >= 5 && prefixLength / Math.min(a.length, b.length) >= 0.72) return true;
+  // A single source typo (e.g. "debffów" vs "debuffów") should not erase
+  // otherwise strong sentence-level evidence. Limit fuzzy matching to one
+  // edit in tokens of at least six characters; names, numbers, negation and
+  // causal relations are checked independently before token coverage.
+  if (Math.abs(a.length - b.length) > 1) return false;
+  let i = 0;
+  let j = 0;
+  let edits = 0;
+  while (i < a.length && j < b.length) {
+    if (a[i] === b[j]) {
+      i++;
+      j++;
+      continue;
+    }
+    if (++edits > 1) return false;
+    if (a.length > b.length) i++;
+    else if (b.length > a.length) j++;
+    else { i++; j++; }
+  }
+  if (i < a.length || j < b.length) edits++;
+  return edits === 1;
 }
 function sprawdzPokrycieClaimamiOdpowiedzi(answer, claims) {
   const sentences = String(answer || '').split(/(?<=[.!?])\s+|\n+/).map(x => x.trim()).filter(Boolean);
