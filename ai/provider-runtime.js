@@ -37,6 +37,30 @@ function createGroqCompletion(groqClient, payload, { signal } = {}) {
 }
 
 /**
+ * Enforce a caller-owned wall-clock deadline even if an SDK/provider does not
+ * promptly settle its promise after AbortSignal.abort(). The signal still asks
+ * the transport to stop; the race ensures the pipeline can move on regardless.
+ */
+function awaitWithAbortTimeout(promise, timeoutMs, controller, label = 'provider request') {
+  const timeout = Number(timeoutMs);
+  if (!Number.isFinite(timeout) || timeout <= 0) {
+    const error = new Error(`${label} has no remaining timeout budget`);
+    error.name = 'TimeoutError';
+    return Promise.reject(error);
+  }
+  let timer;
+  const deadline = new Promise((_, reject) => {
+    timer = setTimeout(() => {
+      try { controller?.abort(); } catch (_) {}
+      const error = new Error(`${label} timed out after ${Math.floor(timeout)}ms`);
+      error.name = 'TimeoutError';
+      reject(error);
+    }, Math.max(1, Math.floor(timeout)));
+  });
+  return Promise.race([Promise.resolve(promise), deadline]).finally(() => clearTimeout(timer));
+}
+
+/**
  * Allocate a validator timeout from the request's remaining wall-clock budget.
  * Return null when starting the validator would leave too little time for the
  * next validator/fallback to run.
@@ -69,4 +93,4 @@ function computeGenerationTimeout(remainingMs, {
   return timeoutMs >= minTimeoutMs ? Math.floor(timeoutMs) : null;
 }
 
-module.exports = { createGroqCompletion, withReasoningHeadroom, computeValidatorTimeout, computeGenerationTimeout };
+module.exports = { createGroqCompletion, awaitWithAbortTimeout, withReasoningHeadroom, computeValidatorTimeout, computeGenerationTimeout };

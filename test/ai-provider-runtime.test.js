@@ -2,7 +2,7 @@
 
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { createGroqCompletion, computeValidatorTimeout, computeGenerationTimeout } = require('../ai/provider-runtime');
+const { createGroqCompletion, awaitWithAbortTimeout, computeValidatorTimeout, computeGenerationTimeout } = require('../ai/provider-runtime');
 const { classifyFailure, shouldRetryFailure, nextFallbacks, selectRepairFallbacks, repairBudgetBlockReason, resetProviderQuotaCooldowns, markProviderQuota, isProviderQuotaBlocked, quotaCooldownMsFromError } = require('../ai/fallback');
 
 test('Groq request body never contains signal; AbortSignal is passed in SDK transport options', async () => {
@@ -37,6 +37,18 @@ test('Groq request body never contains signal; AbortSignal is passed in SDK tran
   controller.abort();
   await assert.rejects(pending, { name: 'AbortError' });
   assert.equal(timedOut, true, 'aborting the request must still cancel the in-flight SDK request');
+});
+
+test('hard timeout releases the pipeline when a provider ignores AbortSignal', async () => {
+  const controller = new AbortController();
+  const startedAt = Date.now();
+  const neverSettles = new Promise(() => {});
+  await assert.rejects(
+    awaitWithAbortTimeout(neverSettles, 15, controller, 'test provider'),
+    error => error.name === 'TimeoutError' && /timed out after 15ms/.test(error.message),
+  );
+  assert.equal(controller.signal.aborted, true);
+  assert.ok(Date.now() - startedAt < 250, 'pipeline should not wait for the provider’s own timeout');
 });
 
 test('validator timeout is capped and reserves time for fallback', () => {
