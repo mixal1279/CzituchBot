@@ -2,8 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { __test } = require('../czituch_bot');
-const { agregujMetrykiWalidatorow, zbudujKontekstMetrykiWalidatora } = __test;
+const { agregujMetrykiWalidatorow, zbudujKontekstMetrykiWalidatora } = require('../ai/validator-telemetry');
 
 function metric(result, options = {}) {
   return zbudujKontekstMetrykiWalidatora(
