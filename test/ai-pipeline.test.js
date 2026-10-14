@@ -26,6 +26,24 @@ test('pipeline parser reads SOURCE blocks with metadata', () => {
   assert.equal(parsed[1].title, 'GameFAQs Guide');
 });
 
+test('pipeline parser extracts only marked source content and trims legacy blocks', () => {
+  const marked = parseEvidenceText([
+    '[SOURCE 1]',
+    'TYP: article',
+    'TYTUŁ: Testowy tytuł',
+    'HOST: example.com',
+    'URL: https://example.com/test',
+    'HEURYSTYCZNA_OCENA: 0.91',
+    'TREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>',
+    'właściwy tekst',
+    '<<<END_UNTRUSTED_SOURCE_CONTENT>>>',
+  ].join('\\n'));
+  assert.equal(marked[0].content, 'właściwy tekst');
+
+  const legacy = parseEvidenceText('[SOURCE 1]\\n  Zwykła treść bez znaczników.  ');
+  assert.equal(legacy[0].content, 'Zwykła treść bez znaczników.');
+});
+
 test('pipeline parser accepts REFERENCE headers case-insensitively', () => {
   const parsed = parseEvidenceText('[reference Portal 2]\nTYTUŁ: Reference\nURL: https://example.com/reference\nTreść.');
   assert.equal(parsed.length, 1);

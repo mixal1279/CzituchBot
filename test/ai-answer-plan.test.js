@@ -52,6 +52,14 @@ test('v26 judge rejects generic why answer', () => {
   assert.ok(result.missing.includes('causal_explanation'));
 });
 
+test('answer signals handle Polish ł normalization and inflected answer roots', () => {
+  assert.equal(extractAnswerSignals('Arthur Morgan był członkiem gangu.').who, true);
+  assert.equal(extractAnswerSignals('W wyniku walki bohater zginął na miejscu.').outcome, true);
+  assert.equal(extractAnswerSignals('Po tym wydarzeniu bohater został sam.').outcome, true);
+  assert.equal(extractAnswerSignals('Ich relacja opierała się na wieloletniej współpracy.').relationship, true);
+  assert.equal(extractAnswerSignals('Ten pistolet jest lepszy natomiast tamten ma większą celność.').comparison, true);
+});
+
 test('v26 answer signals reject generic where and procedural answers', () => {
   const signals = extractAnswerSignals('Znajdziesz to w odpowiednim miejscu. Najpierw wykonaj czynność.');
   assert.equal(signals.where, false);

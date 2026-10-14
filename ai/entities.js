@@ -53,6 +53,7 @@ const CONTEXT_REQUIRED_CHARACTER_ALIASES = new Set([
 
 function normalizujEncje(text) {
   return String(text || '').toLocaleLowerCase('pl-PL')
+    .replace(/ł/g, 'l')
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     .replace(/[’']/g, '').replace(/[^a-z0-9 ]/gi, ' ')
     .replace(/\s+/g, ' ').trim();

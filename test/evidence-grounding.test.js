@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { normalizujWynikWalidatora } = require('../ai/validator');
-const { parseEvidenceBlocks, quoteExists, buildEvidenceRepairContext } = require('../ai/evidence');
+const { parseEvidenceBlocks, quoteExists, buildEvidenceRepairContext, normalizeEvidenceText, classifyClaimType, evidenceRelationSignals } = require('../ai/evidence');
 
 function base(claim, sourceId, quote, answer = claim) {
   return normalizujWynikWalidatora({
@@ -27,6 +27,13 @@ test('evidence parser preserves source identity and exact content', () => {
   assert.equal(blocks[0].title, 'Test');
   assert.equal(quoteExists(blocks[0].content, 'Arthur returned to camp.'), true);
   assert.equal(quoteExists(blocks[0].content, 'Arthur invented a new camp.'), false);
+});
+
+test('evidence normalization handles ł, day inflections, and Polish month inflections', () => {
+  assert.equal(normalizeEvidenceText('Łódź'), 'lodz');
+  assert.equal(classifyClaimType('W którym dniu odbyła się premiera?'), 'temporal');
+  assert.equal(evidenceRelationSignals('Premiera odbyła się w grudniu.').temporal, true);
+  assert.equal(evidenceRelationSignals('Aktualizacja wyszła w styczniu i lutym.').temporal, true);
 });
 
 test('validator accepts an exact quoted span without requiring the whole source block to match', () => {

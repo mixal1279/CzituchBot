@@ -62,7 +62,7 @@ function parseEvidenceText(text) {
       sourceId: m[1].trim(),
       title: block.match(/TYTUŁ:\s*([^\r\n]+)/i)?.[1] || m[1],
       url: block.match(/URL:\s*(https?:\/\/[^\s\r\n]+)/i)?.[1] || '',
-      content: block,
+      content: (block.match(/TREŚĆ:\s*<<<UNTRUSTED_SOURCE_CONTENT>>>\s*([\s\S]*?)<<<END_UNTRUSTED_SOURCE_CONTENT>>>/i)?.[1] || block).trim(),
     };
   });
 }

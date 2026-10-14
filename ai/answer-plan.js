@@ -23,6 +23,7 @@ const INTENT_REQUIREMENTS = Object.freeze({
 function normalize(value) {
   return String(value || '')
     .toLocaleLowerCase('pl-PL')
+    .replace(/ł/g, 'l')
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .replace(/[^\p{L}\p{N}%]+/gu, ' ')
@@ -102,10 +103,10 @@ function extractAnswerSignals(answer) {
     who: /\b(?:jest|sa|byl|byla|byli|jako|osoba|postac|gracz|autor|tworca|bohater)\b/.test(text)
       && !/^\s*(?:to|jest)\s+(?:posta[cć]|osoba)\b/.test(text),
     quantity: /\b\d+(?:[.,]\d+)?\s*(?:godzin|godz|h|min|sekund|dni|lat|%|gb|mb|tb|zł|pln|usd|eur)?\b/.test(text),
-    comparison: /\b(roznic|rozni|wiecej|mniej|leps|gors|natomiast|podobn|vs|versus|z kolei)\b/.test(text)
-      && /\b(?:roznic|rozni|natomiast|z kolei|wiecej|mniej|leps|gors)\b/.test(text),
+    comparison: /\b(roznic\w*|rozni\w*|wiecej|mniej|leps\w*|gors\w*|natomiast|podobn\w*|vs|versus|z kolei)\b/.test(text)
+      && /\b(?:roznic\w*|rozni\w*|natomiast|z kolei|wiecej|mniej|leps\w*|gors\w*|podobn\w*)\b/.test(text),
     steps: Boolean(procedural) && hasMeaningfulTail(text, procedural),
-    outcome: /\b(wynik|skutek|konsekwenc|ostatecznie|pozniej|potem|nastepnie|umar|zgina|zostal|zostala)\b/.test(text)
+    outcome: /\b(wynik\w*|skutek|skutk\w*|konsekwenc\w*|ostatecznie|pozniej|potem|nastepnie|umar\w*|zgin\w*|zostal\w*)\b/.test(text)
       && text.split(/\s+/).length >= 4,
     relationship: Boolean(relationshipMarker)
       && /\b(?:wspolprac|wspolpracy|konflikt|przyjazn|zauf|zdrad|sojusz|wrog|partner|lacz|dziel)\p{L}*/u.test(text),

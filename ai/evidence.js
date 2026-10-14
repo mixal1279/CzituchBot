@@ -3,6 +3,7 @@
 function normalizeEvidenceText(value) {
   return String(value || '')
     .toLocaleLowerCase('pl-PL')
+    .replace(/ł/g, 'l')
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .replace(/[^\p{L}\p{N}%]+/gu, ' ')
@@ -54,7 +55,7 @@ function classifyClaimType(claim) {
   const text = normalizeEvidenceText(claim);
   if (/(?:dlaczego|why|powod\w*|przyczyn\w*|motyw\w*|doprowadz\w*|spowod\w*|umożliw\w*|umozliw\w*|poniewa[zż]|dlatego|bo |z powodu|w celu|because|due to|therefore)/i.test(text)) return 'causal';
   if (/(?:jak |w jaki sposób|how |sposob\w*|instrukcj\w*|krok\w*|walkthrough|guide)/i.test(text)) return 'procedural';
-  if (/(?:kiedy|when |rok\b|data|dzień|today|yesterday|tomorrow)/i.test(text)) return 'temporal';
+  if (/(?:kiedy|when |rok\b|data|dzien\w*|today|yesterday|tomorrow)/i.test(text)) return 'temporal';
   if (/(?:gdzie|where |lokacj\w*|miejsce)/i.test(text)) return 'location';
   if (/(?:kto |kim |who |postaci|osob\w*)/i.test(text)) return 'entity';
   if (/(?:ile |how many|how much|cena|liczb\w*|procent)/i.test(text)) return 'quantitative';
@@ -67,7 +68,7 @@ function evidenceRelationSignals(value) {
   return {
     causal: /(?:bo|poniewaz|gdyz|dlatego|z powodu|w celu|dzieki|przez|spowod\w*|doprowadz\w*|umozliw\w*|because|therefore|due to|caused|led to|so that)/i.test(text),
     procedural: /(?:najpierw|następnie|nastepnie|potem|krok|steps?|first|then|after|before|use|użyj|uzyj|kliknij|click|instrukcj|walkthrough)/i.test(text),
-    temporal: /(?:19|20)\d{2}|\b(?:stycz|luty|marzec|kwiec|maj|czerwiec|lipiec|sierp|wrzes|paźdz|pazdz|listop|grudziec|wczoraj|dzisiaj|jutro|today|yesterday|tomorrow)\b/i.test(text),
+    temporal: /\b(?:19|20)\d{2}\b|\b(?:(?:stycz|lut|marz|marc|kwiet|kwiec|maj|czerw|lip|sierp|wrzes|pazdz|listopad|grudzi|grudn|grudz)\w*|wczoraj|dzis\w*|jutro|today|yesterday|tomorrow)\b/i.test(text),
     location: /(?:w |na |near |located|znajduj|lokacj|miejsce|location|area|region|city|miasto)/i.test(text),
     relationship: /(?:relationship|związk|zwiazk|partner|przyjaź|przyjaz|enemy|wróg|wrog|conflict|konflikt|alliance|sojusz)/i.test(text),
   };
