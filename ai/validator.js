@@ -133,7 +133,7 @@ function normalizujIdZrodla(value) {
   const raw = String(value || '').trim();
   // Models sometimes copy the visible header including square brackets.
   // Canonicalize [SOURCE 8], SOURCE 8, and 8 to the same internal ID.
-  const match = raw.match(/^\\[?\\s*(?:SOURCE\\s*)?(\\d+)\\s*\\]?$/i);
+  const match = raw.match(/^\[?\s*(?:SOURCE\s*)?(\d+)\s*\]?$/i);
   return match ? `SOURCE ${match[1]}` : raw;
 }
 function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '') {
