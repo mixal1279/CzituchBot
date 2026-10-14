@@ -297,6 +297,7 @@ function zastosujDeterministyczneGuards(walidacja, odpowiedz, dane, pytanie, for
       confidence: Math.min(Number(walidacja.confidence) || 0, 0.5),
       unsupported_claims: [...(walidacja.unsupported_claims || [])],
       reason: `odpowiedź nie spełnia kontraktu formatu: ${format.reason}`,
+      deterministicGuardDiagnostics: { format, quality: null, hardFacts: null },
     };
   }
   // Odpowiedź częściowa celowo nie spełnia pełnego coverage score; nadal
@@ -312,6 +313,7 @@ function zastosujDeterministyczneGuards(walidacja, odpowiedz, dane, pytanie, for
       confidence: Math.min(Number(walidacja.confidence) || 0, 0.6),
       unsupported_claims: [...(walidacja.unsupported_claims || [])],
       reason: `odpowiedź nie spełnia minimalnego kontraktu jakości: ${quality.issues.join('; ')}`,
+      deterministicGuardDiagnostics: { format, quality, hardFacts: null },
     };
   }
   const textForHardFactCheck = partial
@@ -326,9 +328,13 @@ function zastosujDeterministyczneGuards(walidacja, odpowiedz, dane, pytanie, for
       confidence: Math.min(Number(walidacja.confidence) || 0, 0.5),
       unsupported_claims: [...new Set([...(walidacja.unsupported_claims || []), ...twardeFakty.unsupported])],
       reason: 'odpowiedź zawiera twarde dane, których nie ma w materiale referencyjnym',
+      deterministicGuardDiagnostics: { format, quality, hardFacts: twardeFakty },
     };
   }
-  return walidacja;
+  return {
+    ...walidacja,
+    deterministicGuardDiagnostics: { format, quality, hardFacts: twardeFakty },
+  };
 }
 
 function czyPytanieWymagaPewnychDanych(kategoria) {
