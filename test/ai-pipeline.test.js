@@ -37,10 +37,10 @@ test('pipeline parser extracts only marked source content and trims legacy block
     'TREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>',
     'właściwy tekst',
     '<<<END_UNTRUSTED_SOURCE_CONTENT>>>',
-  ].join('\\n'));
+  ].join('\n'));
   assert.equal(marked[0].content, 'właściwy tekst');
 
-  const legacy = parseEvidenceText('[SOURCE 1]\\n  Zwykła treść bez znaczników.  ');
+  const legacy = parseEvidenceText('[SOURCE 1]\n  Zwykła treść bez znaczników.  ');
   assert.equal(legacy[0].content, 'Zwykła treść bez znaczników.');
 });
 
