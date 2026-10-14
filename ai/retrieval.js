@@ -88,9 +88,9 @@ function sourceQualityScore(source = {}) {
   // core.js emits canonical English enum values; accept legacy Polish labels too.
   const authorityBonus = authority === 'official' || authority === 'oficjalne'
     ? 0.25
-    : authority === 'specialized' || authority === 'wyspecjalizowane'
+    : ['specialized', 'wyspecjalizowane', 'reference'].includes(authority)
       ? 0.2
-      : authority === 'guide' || authority.includes('guide') || authority.includes('poradnik')
+      : authority.includes('guide') || authority === 'guide/referencyjne' || authority.includes('poradnik')
         ? 0.08
         : 0;
   return (Number.isFinite(score) ? score : 0) + authorityBonus;
