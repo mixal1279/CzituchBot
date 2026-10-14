@@ -20,6 +20,20 @@ const TAVILY_MIN_STRONG_RESULTS = 1;
 
 // TTL zależny od tego, jak szybko odpowiedź się starzeje: świeże wiadomości krótko,
 // fakty historyczne (bez time_range) długo.
+function zarezerwujBudzetRewrite(requestState) {
+  if (!requestState || typeof requestState !== 'object') return true;
+  if (typeof requestState.reserveModel === 'function') {
+    return Boolean(requestState.reserveModel('tavily-query-rewrite'));
+  }
+  if (typeof requestState.zarezerwujModel === 'function') {
+    return Boolean(requestState.zarezerwujModel('tavily-query-rewrite'));
+  }
+  if (typeof requestState.reserve === 'function') {
+    return Boolean(requestState.reserve('modelCalls'));
+  }
+  return true;
+}
+
 function przesunSourceIdsTavily(text, offset = 0) {
   const n = Number.isFinite(Number(offset)) ? Math.max(0, Math.floor(Number(offset))) : 0;
   if (!n) return String(text || '');
@@ -412,7 +426,7 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
         searchQuery = rewriteZCache.query;
         logger.log(`[Tavily] ♻️ Rewrite z cache — bez wywołania modelu`);
       } else if (!_skipRewrite && original) {
-        const canRewrite = !requestState?.zarezerwujModel || requestState.zarezerwujModel('tavily-query-rewrite');
+        const canRewrite = zarezerwujBudzetRewrite(requestState);
         if (!canRewrite) {
           logger.warn?.('[Tavily] rewrite pominięty — budżet modelu/ czasu requestu wyczerpany');
         } else {
@@ -512,16 +526,19 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
             // słaby Tavily był całkowicie wyrzucany, przez co traciliśmy użyteczne
             // fragmenty i validator miał mniej dowodów.
             const secondaryText = secondary.text;
-            const secondaryRebased = secondary.sources?.length
+            const primaryResults = results.slice(0, 4);
+            const secondaryStartIndex = sourceStartIndex + primaryResults.length;
+            const secondaryResults = (secondary.sources || []).filter(source => source?.url && source?.content);
+            const secondaryRebased = secondaryResults.length
               ? formatSources(
-                  secondary.sources.map((source, index) => ({
+                  secondaryResults.map((source, index) => ({
                     ...source,
-                    sourceId: `SOURCE ${sourceStartIndex + results.length + index + 1}`,
+                    sourceId: `SOURCE ${secondaryStartIndex + index + 1}`,
                   })),
-                  sourceStartIndex + results.length,
+                  secondaryStartIndex,
                 )
               : secondaryText;
-            const primaryPreview = results.slice(0, 4).map((r, index) => {
+            const primaryPreview = primaryResults.map((r, index) => {
               const content = String(r.content || r.raw_content || '').trim();
               const materialRaw = content.substring(0, 1800)
                 .split('\n').map(line => line.trim()).filter(Boolean).join('\n');
@@ -537,7 +554,11 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
               ].join('\n');
             }).join('\n---\n');
             const mergedText = [primaryPreview, secondaryRebased].filter(Boolean).join('\n---\n');
-            return returnMeta ? { status: 'ok', text: mergedText, secondary: true, sources: [...results, ...(secondary.sources || [])] } : mergedText;
+            const mergedSources = [...primaryResults, ...secondaryResults].map((source, index) => ({
+              ...source,
+              sourceId: `SOURCE ${sourceStartIndex + index + 1}`,
+            }));
+            return returnMeta ? { status: 'ok', text: mergedText, secondary: true, sources: mergedSources } : mergedText;
           }
         }
         if (!results.length) { onStatus({ status: 'empty', query: searchQuery }); return returnMeta ? { status: 'empty', text: '' } : ''; }
