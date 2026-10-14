@@ -383,13 +383,20 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
     const stat = fs.statSync(cacheFile);
     if (stat.size <= TAVILY_CACHE_MAX_BYTES) {
       const saved = JSON.parse(fs.readFileSync(cacheFile, 'utf8'));
-      const entries = saved?.version === TAVILY_CACHE_VERSION ? saved.entries : saved;
-      if (entries && typeof entries === 'object' && !Array.isArray(entries)) {
-        for (const [key, value] of Object.entries(entries)) {
+      // Only load the canonical cache schema. Older versions stored formatted strings
+      // and cannot safely be migrated because their SOURCE IDs may already be offset.
+      if (saved?.version === TAVILY_CACHE_VERSION && saved.entries && typeof saved.entries === 'object' && !Array.isArray(saved.entries)) {
+        for (const [key, value] of Object.entries(saved.entries)) {
           if (typeof key !== 'string' || key.length > 2048) continue;
-          if (!value || !value.wynik || typeof value.wynik !== 'object' || !['ok', 'empty'].includes(value.wynik.status) || typeof value.wynik.text !== 'string' || value.wynik.text.length > 12000) continue;
-          if (value.czas && Date.now() - value.czas < (value.ttl || TAVILY_CACHE_TTL_MS)) cache.set(key, value);
+          const canonical = value?.wynik;
+          if (!value || !canonical || typeof canonical !== 'object') continue;
+          if (!['ok', 'empty'].includes(canonical.status) || typeof canonical.text !== 'string' || canonical.text.length > 12000) continue;
+          if (canonical.sources !== undefined && (!Array.isArray(canonical.sources) || canonical.sources.some(source => !source || typeof source !== 'object' || typeof source.url !== 'string'))) continue;
+          if (!Number.isFinite(Number(value.czas)) || Date.now() - Number(value.czas) >= (Number(value.ttl) || TAVILY_CACHE_TTL_MS)) continue;
+          cache.set(key, value);
         }
+      } else {
+        logger.warn?.('[Tavily] pominięto cache dyskowy — nieobsługiwana wersja lub nieprawidłowy format');
       }
     } else {
       logger.warn?.(`[Tavily] cache pominięty — plik przekracza limit ${TAVILY_CACHE_MAX_BYTES} B`);

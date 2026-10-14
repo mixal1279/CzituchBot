@@ -153,7 +153,8 @@ test('P0-B query rewrite uses createGroqCompletion transport options and reasoni
   await search('Dlaczego Wheatley przejął kontrolę nad GLaDOS w Portal 2?', { returnMeta: true });
   assert.ok(capturedPayload);
   assert.equal(capturedPayload.model, 'openai/gpt-oss-20b');
-  assert.equal(capturedPayload.max_completion_tokens, 1020);
+  // The runtime enforces at least 300 answer tokens, then adds the 800-token reasoning headroom.
+  assert.equal(capturedPayload.max_completion_tokens, 1100);
   assert.equal(Object.hasOwn(capturedPayload, 'signal'), false);
   assert.ok(capturedOptions.signal instanceof AbortSignal);
 });
