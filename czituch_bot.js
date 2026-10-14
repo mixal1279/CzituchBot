@@ -74,7 +74,7 @@ const { decomposeQuestion, buildAdvancedRetrievalPlan } = require('./ai/retrieva
 const { classifyFailure, nextFallbacks, selectRepairFallbacks, repairBudgetBlockReason, GENERATION_FALLBACK_CHAIN, markProviderQuota, isProviderQuotaBlocked, quotaCooldownMsFromError } = require('./ai/fallback');
 const { createGroqCompletion, awaitWithAbortTimeout, computeValidatorTimeout, computeGenerationTimeout } = require('./ai/provider-runtime');
 const { createAIMetrics, recordAIMetric, snapshotAIMetrics } = require('./ai/metrics');
-const { sanitizeRequestText } = require('./ai/limits');
+const { DEFAULTS, sanitizeRequestText } = require('./ai/limits');
 const { createAIRequestContext } = require('./ai/requestContext');
 const { sprawdzTwardeFaktyOdpowiedzi, sprawdzFormatOdpowiedzi } = require('./ai/response');
 const { Firestore } = require('@google-cloud/firestore');
@@ -2139,7 +2139,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
   // Nie utrzymujemy osobnych budżetów w generatorze, retrievalu i validatorze.
   const aiState = createAIRequestContext({
     requestId,
-    maxCzasMs: 25000,
+    maxCzasMs: DEFAULTS.requestTimeoutMs,
     maxGeneracji: 6,
     maxInitialGeneracji: 5,
     maxRepairGeneracji: 4,
