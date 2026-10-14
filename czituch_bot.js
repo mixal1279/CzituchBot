@@ -2114,6 +2114,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
     maxValidatorow: 3,
     maxWyszukanTavily: testMaxTavilySearches,
   });
+  aiState.recordTiming('request_start', { requestTimeoutMs: aiState.maxCzasMs });
   let daneDoWalidacji = null;
   const budzetPrzekroczony = () => aiState.isExpired();
   const pozostalyCzasMs = () => aiState.remainingMs();
@@ -2159,6 +2160,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
         repairUsed: aiState.repairGeneracje,
       },
       generationAttempts: aiState.generationAttempts || [],
+      timingTrace: aiState.timingTrace || [],
       sourceCount: daneDoWalidacji ? (daneDoWalidacji.match(/\[(?:SOURCE|REFERENCE) [^\]]+\]/g) || []).length : 0,
       metrics: { ...AI_METRYKI, observability: snapshotAIMetrics(AI_OBSERVABILITY) },
       durationMs: Date.now() - aiState.startedAt, finalStatus: status,
@@ -2875,14 +2877,18 @@ Pytanie użytkownika: ${pytanie}`;
 
   const recordGenerationAttempt = (attempt) => {
     if (!Array.isArray(aiState.generationAttempts)) aiState.generationAttempts = [];
-    aiState.generationAttempts.push({
+    const entry = {
       provider: attempt.provider || 'unknown',
       model: attempt.model || 'unknown',
       phase: attempt.phase || aiState.generationPhase || 'initial',
       status: attempt.status || 'unknown',
       failure: attempt.failure || null,
       latencyMs: Math.max(0, Number(attempt.latencyMs) || 0),
-    });
+      elapsedMs: aiState.elapsedMs(),
+      remainingMs: aiState.remainingMs(),
+    };
+    aiState.generationAttempts.push(entry);
+    aiState.recordTiming('generation_attempt_end', entry);
     if (aiState.generationAttempts.length > 32) aiState.generationAttempts.shift();
   };
 
@@ -2890,6 +2896,7 @@ Pytanie użytkownika: ${pytanie}`;
     const phase = /repair/i.test(String(powod || '')) ? 'repair' : 'initial';
     aiState.generationPhase = phase;
     const startedGenerationAt = Date.now();
+    aiState.recordTiming('generation_cycle_start', { phase, provider: 'groq', model: allow120b ? 'openai/gpt-oss-120b' : null });
     let result = allow120b
       ? await zapytajGlowny(Math.max(maxTok, 300), prompt, 'openai/gpt-oss-120b')
       : wynikPusty('groq', 'openai/gpt-oss-120b', '120B skipped for this generation cycle');
@@ -2956,6 +2963,13 @@ Pytanie użytkownika: ${pytanie}`;
         });
     }
 
+    if (phase === 'repair') {
+      aiState.recordTiming('repair_budget_evaluation', {
+        repairBudgetFailure,
+        candidateCount: candidateSteps.length,
+        lastFailureType: failureType,
+      });
+    }
     const policy = phase === 'repair' ? 'validator_rejection' : (failureType || 'unknown');
     const repairEmptyReason = repairBudgetFailure || 'no_healthy_provider';
     console.log(`[AI][${requestId}] fallback policy=${policy} next=${JSON.stringify(candidateSteps)}${phase === 'repair' && !candidateSteps.length ? ` reason=${repairEmptyReason}` : ''}`);
@@ -2977,6 +2991,7 @@ Pytanie użytkownika: ${pytanie}`;
 
       attempted.push(step);
       const attemptStartedAt = Date.now();
+      aiState.recordTiming('generation_fallback_start', { phase, provider: step.split(':')[0], model: step.split(':').slice(1).join(':') || 'default', step });
       const candidate = await fn();
       lastResult = candidate;
       if (candidate.tekst && !candidate.ucieta) {
@@ -3038,7 +3053,9 @@ function oczyscOdpowiedzPrzedWalidacja(tekst) {
       searched: Boolean(wynikSzukania),
     });
   if (maWalidowac) {
+    aiState.recordTiming('validator_start', { pass: 1, answerChars: odp.length });
     let walidacja = await validateAI(aiProfile === 'billy' ? 'billy' : aiProfile === 'edzzi' ? 'edzzi' : aiProfile === 'angie' ? 'angie' : 'generic', pytanie, odp, daneDoWalidacji, historiaRozmowy, requestId, aiState, metadaneRequestu);
+    aiState.recordTiming('validator_end', { pass: 1, status: walidacja.status, provider: walidacja.provider || null, model: walidacja.model || null, reason: String(walidacja.reason || '').slice(0, 220) });
     if (walidacja.status === 'soft_accepted' && walidacja.partialAnswer) {
       odp = walidacja.partialAnswer;
       console.log(`[AI][${requestId}] partial answer accepted with ${walidacja.diagnostics?.partialClaimCount || 0} verified claims`);
@@ -3072,6 +3089,7 @@ function oczyscOdpowiedzPrzedWalidacja(tekst) {
     if (walidacja.status === 'accepted' || walidacja.status === 'soft_accepted') {
       const beforeGuard = walidacja;
       walidacja = zastosujDeterministyczneGuards(walidacja, odp, daneDoWalidacji, pytanie, { maxZdania: responseCfg.maxSentences, maxZnakow: 1800 }, routingAI, aiPlan.responseProfile);
+      aiState.recordTiming('deterministic_guard_result', { statusBefore: beforeGuard.status, statusAfter: walidacja.status, diagnostics: walidacja.deterministicGuardDiagnostics || null });
       if (walidacja.status !== beforeGuard.status) {
         console.warn(`[AI][${requestId}] deterministic response guard rejected: ${JSON.stringify(walidacja.unsupported_claims || [])}`);
       }
@@ -3085,6 +3103,7 @@ function oczyscOdpowiedzPrzedWalidacja(tekst) {
       // Wymuszamy więc jedno celowane wyszukanie causal evidence.
       const wymagaCausalRetrieval = Boolean(answerPlan.causalQuestion);
       const remainingBeforeRepair = pozostalyCzasMs();
+      aiState.recordTiming('validator_rejected_before_repair', { remainingBeforeRepair, validatorStatus: walidacja.status, reason: String(walidacja.reason || '').slice(0, 220), causalQuestion: Boolean(answerPlan.causalQuestion) });
       const canSpendOnSupplementalRepair = Number.isFinite(remainingBeforeRepair) && remainingBeforeRepair >= 9000;
       const uzupelniono = !canSpendOnSupplementalRepair
         ? false
@@ -3113,6 +3132,7 @@ function oczyscOdpowiedzPrzedWalidacja(tekst) {
       // Dokładnie jeden cykl retry po odrzuceniu walidacji. Fallbacki providerów
       // pozostają wewnątrz jednego cyklu generacji i nie uruchamiamy kolejnego retry.
       const repairRemainingMs = pozostalyCzasMs();
+      aiState.recordTiming('repair_generation_decision', { remainingMsBeforeRepair: repairRemainingMs, willAttempt: Number.isFinite(repairRemainingMs) && repairRemainingMs >= 5000, minRequiredMs: 5000 });
       const retry = Number.isFinite(repairRemainingMs) && repairRemainingMs >= 5000
         ? await generujOdpowiedz(max_tokens, promptRetry, 'soft validation repair', false)
         : wynikPusty('pipeline', 'none', 'repair_request_deadline_too_short');
@@ -3121,7 +3141,9 @@ function oczyscOdpowiedzPrzedWalidacja(tekst) {
         const nowaOdp = usunMarkeryWewnetrzneAI(filtrBezpieczenstwa(retry.tekst));
         if (nowaOdp) {
           odp = oczyscOdpowiedzPrzedWalidacja(nowaOdp);
+          aiState.recordTiming('validator_start', { pass: 2, answerChars: odp.length, trigger: 'generation_retry' });
           walidacja = await validateAI(aiProfile === 'billy' ? 'billy' : aiProfile === 'edzzi' ? 'edzzi' : aiProfile === 'angie' ? 'angie' : 'generic', pytanie, odp, daneDoWalidacji, historiaRozmowy, requestId, aiState, metadaneRequestu);
+          aiState.recordTiming('validator_end', { pass: 2, status: walidacja.status, provider: walidacja.provider || null, model: walidacja.model || null, reason: String(walidacja.reason || '').slice(0, 220) });
           if (walidacja.status === 'soft_accepted' && walidacja.partialAnswer) odp = walidacja.partialAnswer;
           if (walidacja.status === 'accepted' || walidacja.status === 'soft_accepted') {
             walidacja = zastosujDeterministyczneGuards(walidacja, odp, daneDoWalidacji, pytanie, { maxZdania: responseCfg.maxSentences, maxZnakow: 1800 }, routingAI, aiPlan.responseProfile);
