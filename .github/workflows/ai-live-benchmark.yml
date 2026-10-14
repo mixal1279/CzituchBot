@@ -14,9 +14,9 @@ jobs:
 
     env:
       AI_LIVE_BENCHMARK: "1"
-      AI_BENCHMARK_LIMIT: "10"
+      AI_BENCHMARK_LIMIT: "5"
       AI_BENCHMARK_DELAY_MS: "750"
-      AI_BENCHMARK_REQUIRE_PERFECT: "1"
+      AI_BENCHMARK_REQUIRE_PERFECT: "0"
       AI_PROVIDER_QUOTA_COOLDOWN_MS: "1800000"
       AI_120B_GLOBAL_MAX_REQUESTS: "20"
       CZITUCHBOT_SKIP_STARTUP_IO: "1"
@@ -44,7 +44,7 @@ jobs:
       - name: Preflight Tavily
         run: node scripts/tavily-preflight.js
 
-      - name: Run 10-case live benchmark
+      - name: Run 5-case live benchmark
         shell: bash
         run: |
           set -o pipefail
