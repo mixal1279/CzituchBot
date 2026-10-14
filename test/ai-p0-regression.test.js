@@ -15,7 +15,7 @@ test('P0 retrieval normalization preserves letters, digits, and collapses whites
   const input = 'Fabuła  GTA 6 i   losy  Artura 2030';
   const normalized = normalizujToken(input);
   assert.match(normalized, /fabula gta 6 i losy artura 2030/);
-  assert.doesNotMatch(normalized, /\s/);
+  assert.doesNotMatch(normalized, /\s{2,}/);
   const plan = buildAdvancedRetrievalPlan(input, {}, [input.replace(/\s+/g, ' ')]);
   assert.ok(plan.length >= 1);
   assert.equal(plan[0].query, input.replace(/\s+/g, ' '));
