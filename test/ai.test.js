@@ -506,6 +506,20 @@ console.log('AI regression tests: OK');
 }
 
 {
+  const { normalizujWynikWalidatora } = require('../ai/validator');
+  const data = '[SOURCE 1]\nTYTUŁ: Test\nTREŚĆ: Wheatley przejął kontrolę nad ośrodkiem.\n';
+  const input = {
+    valid: true, reason: 'supported', unsupported_claims: [],
+    supported: true, relevant: true, complete: true, hallucination: false, confidence: 0.95,
+    claims: [{ claim: 'Wheatley przejął kontrolę nad ośrodkiem.', supported: true, source_ids: ['[SOURCE 1]'], evidence_quote: 'Wheatley przejął kontrolę nad ośrodkiem.', reason: 'exact quote' }],
+  };
+  const result = normalizujWynikWalidatora(input, 'test-model', 'gemini', new Set(['SOURCE 1']), data, input.claims[0].claim);
+  assert.deepEqual(result.claims[0].source_ids, ['SOURCE 1']);
+  assert.deepEqual(result.diagnostics.unknownSourceClaimIndexes, []);
+  assert.equal(result.diagnostics.evidenceBindings[0].quoteVerified, true);
+}
+
+{
   // Skrócone cytaty z [...] / ... muszą być możliwe do związania z pełnym źródłem.
   assert.equal(
     quoteExists('Wheatley przejął kontrolę. Następnie pokonał GLaDOS i został administratorem.', 'Wheatley przejął kontrolę [...] został administratorem.'),
