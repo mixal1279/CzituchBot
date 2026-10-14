@@ -34,6 +34,7 @@ function createAIRequestContext(options = {}) {
     tavilySearches: 0,
     validatorResults: [],
     generationAttempts: [],
+    timingTrace: [],
     generationPhase: 'initial',
     fallbackReasons: [],
     finalStatus: 'unavailable',
@@ -42,6 +43,27 @@ function createAIRequestContext(options = {}) {
   ctx.elapsedMs = () => Math.max(0, Date.now() - ctx.startedAt);
   ctx.remainingMs = () => Math.max(0, ctx.maxCzasMs - ctx.elapsedMs());
   ctx.isExpired = () => ctx.remainingMs() <= 0;
+
+  // Diagnostic-only timeline: records the shared deadline and counters at phase boundaries.
+  // Keep the trace bounded and store only explicitly supplied, JSON-safe metadata.
+  ctx.recordTiming = (stage, details = {}) => {
+    const event = {
+      stage: String(stage || 'unknown').slice(0, 80),
+      elapsedMs: ctx.elapsedMs(),
+      remainingMs: ctx.remainingMs(),
+      generationPhase: ctx.generationPhase,
+      generations: ctx.generacje,
+      initialGenerations: ctx.initialGeneracje,
+      repairGenerations: ctx.repairGeneracje,
+      modelCalls: ctx.modelCalls,
+      validators: ctx.validatory,
+      tavilySearches: ctx.tavilySearches,
+      ...details,
+    };
+    ctx.timingTrace.push(event);
+    if (ctx.timingTrace.length > 100) ctx.timingTrace.shift();
+    return event;
+  };
 
   ctx.reserve = (counter, limit, purpose = counter) => {
     if (ctx.isExpired() || ctx[counter] >= limit) return false;
@@ -87,6 +109,7 @@ function createAIRequestContext(options = {}) {
     generacje: ctx.generacje,
     generationPhase: ctx.generationPhase,
     generationAttempts: [...ctx.generationAttempts],
+    timingTrace: ctx.timingTrace.map(event => ({ ...event })),
     modelCalls: ctx.modelCalls,
     validatory: ctx.validatory,
     tavilySearches: ctx.tavilySearches,
