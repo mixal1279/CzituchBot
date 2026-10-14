@@ -1630,8 +1630,9 @@ async function walidujOdpowiedzOpenRouter(persona, pytanie, odpowiedz, dane, req
   const remainingMs = requestState
     ? (typeof requestState.remainingMs === 'function' ? requestState.remainingMs() : requestState.maxCzasMs - (Date.now() - requestState.startedAt))
     : 12000;
-  const isLastValidatorSlot = Boolean(requestState
-    && Number(requestState.validatory) >= Number(requestState.maxValidatorow));
+  // OpenRouter is the final validator provider; it must use the final time reserve
+  // even when earlier skipped/failed validators did not consume the whole slot budget.
+  const isLastValidatorSlot = true;
   const validatorTimeoutMs = requestState
     ? computeValidatorTimeout(remainingMs, {
         maxTimeoutMs: 9000,
