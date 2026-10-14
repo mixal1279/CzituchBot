@@ -20,6 +20,20 @@ const STOPWORDS = new Set([
   'a','an','is','are','was','were','what','who','how','why','where','when'
 ]);
 
+const AUTHORITY_ALIASES = {
+  official: 'official',
+  oficjalne: 'official',
+  specialized: 'specialized',
+  wyspecjalizowane: 'specialized',
+  reference: 'reference',
+  guide: 'guide',
+  'guide/referencyjne': 'guide',
+  general: 'general',
+  'zewnętrzne-niezweryfikowane': 'general',
+  unknown: 'unknown',
+  nieznane: 'unknown',
+};
+
 const AUTHORITY = {
   official: 1,
   specialized: 0.92,
@@ -110,7 +124,13 @@ function normalizeSource(source = {}, index = 0) {
     title,
     content,
     host: hostOf(source.url),
-    authority: AUTHORITY[source.authority] ? source.authority : classifyAuthority(source),
+    authority: (() => {
+      const rawAuthority = String(source.authority || '').trim().toLocaleLowerCase('pl-PL');
+      const canonicalAuthority = AUTHORITY_ALIASES[rawAuthority] || rawAuthority;
+      return Object.prototype.hasOwnProperty.call(AUTHORITY, canonicalAuthority)
+        ? canonicalAuthority
+        : classifyAuthority(source);
+    })(),
     key: sourceKey(source),
   };
 }
@@ -307,6 +327,7 @@ module.exports = {
   hostOf,
   canonicalUrl,
   classifyAuthority,
+  AUTHORITY_ALIASES,
   normalizeSource,
   scoreSource,
   similarity,
