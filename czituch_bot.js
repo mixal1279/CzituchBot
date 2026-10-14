@@ -1855,8 +1855,14 @@ async function walidujOdpowiedzAI(persona, pytanie, odpowiedz, dane, historiaRoz
     if (requestState?.zarezerwujModel && !requestState.zarezerwujModel(`validator:${models[i]}`)) {
       return { status: 'unavailable', ok: false, technicalError: true, provider: 'gemini', model: models[i], unsupported_claims: [], reason: 'globalny budżet modeli wyczerpany' };
     }
+    const validatorStartedAt = Date.now();
+    const remainingBefore = requestState?.remainingMs?.() ?? null;
+    requestState?.recordTiming?.('validator_provider_start', { provider: 'gemini', model: models[i], remainingBefore });
     const result = await walidujOdpowiedzGeminiModel(models[i], persona, pytanie, odpowiedz, dane, historiaRozmowy, requestId, requestState, requestMeta);
-    if (requestState) requestState.validatorResults.push({ model: models[i], status: result.status, complete: result.complete === true, confidence: Number.isFinite(result.confidence) ? result.confidence : null, claimCoverage: Array.isArray(result.claims) && result.claims.length ? result.claims.filter(c => c.supported === true).length / result.claims.length : null, validationDiagnostics: result.diagnostics || null });
+    const validatorElapsedMs = Date.now() - validatorStartedAt;
+    const remainingAfter = requestState?.remainingMs?.() ?? null;
+    requestState?.recordTiming?.('validator_provider_end', { provider: 'gemini', model: models[i], status: result.status, validatorElapsedMs, remainingBefore, remainingAfter, reason: String(result.reason || '').slice(0, 180) });
+    if (requestState) requestState.validatorResults.push({ model: models[i], provider: 'gemini', status: result.status, elapsedMs: validatorElapsedMs, remainingMsBefore: remainingBefore, remainingMsAfter: remainingAfter, complete: result.complete === true, confidence: Number.isFinite(result.confidence) ? result.confidence : null, claimCoverage: Array.isArray(result.claims) && result.claims.length ? result.claims.filter(c => c.supported === true).length / result.claims.length : null, validationDiagnostics: result.diagnostics || null });
     console.log(`[AI][${requestId}] validator #${i + 1} ${models[i]} → ${result.status}${result.diagnostics ? ` localReject=${JSON.stringify(result.diagnostics.localRejectReasons)} claimCoverage=${result.diagnostics.claimCoverage}` : ''}`);
     if (result.status === 'accepted' || result.status === 'soft_accepted' || result.status === 'rejected') return result;
     last = result;
@@ -1883,11 +1889,20 @@ async function walidujOdpowiedzAI(persona, pytanie, odpowiedz, dane, historiaRoz
       if (requestState?.zarezerwujModel && !requestState.zarezerwujModel('validator:xkiro')) {
         return { ...(last || {}), status: 'unavailable', ok: false, technicalError: true, unsupported_claims: [], reason: 'globalny budżet modeli wyczerpany przed xKiro' };
       }
+      const validatorStartedAt = Date.now();
+      const remainingBefore = requestState?.remainingMs?.() ?? null;
+      requestState?.recordTiming?.('validator_provider_start', { provider: 'xkiro', model: KONFIGURACJA.xkiroModel, remainingBefore });
       const xkiroResult = await walidujOdpowiedzXKiro(persona, pytanie, odpowiedz, dane, requestId, requestState, requestMeta);
+      const validatorElapsedMs = Date.now() - validatorStartedAt;
+      const remainingAfter = requestState?.remainingMs?.() ?? null;
+      requestState?.recordTiming?.('validator_provider_end', { provider: 'xkiro', model: xkiroResult.model || KONFIGURACJA.xkiroModel, status: xkiroResult.status, validatorElapsedMs, remainingBefore, remainingAfter, reason: String(xkiroResult.reason || '').slice(0, 180) });
       if (requestState) requestState.validatorResults.push({
         model: xkiroResult.model || KONFIGURACJA.xkiroModel,
         provider: 'xkiro',
         status: xkiroResult.status,
+        elapsedMs: validatorElapsedMs,
+        remainingMsBefore: remainingBefore,
+        remainingMsAfter: remainingAfter,
         complete: xkiroResult.complete === true,
         confidence: Number.isFinite(xkiroResult.confidence) ? xkiroResult.confidence : null,
         claimCoverage: Array.isArray(xkiroResult.claims) && xkiroResult.claims.length
@@ -1910,7 +1925,19 @@ async function walidujOdpowiedzAI(persona, pytanie, odpowiedz, dane, historiaRoz
   }
   // Brak Gemini nie jest błędem logicznym: OpenRouter jest pełnoprawnym
   // fallbackiem validatora, a nie tylko ratunkiem po błędzie sieciowym Gemini.
+  const validatorStartedAt = Date.now();
+  const remainingBefore = requestState?.remainingMs?.() ?? null;
+  requestState?.recordTiming?.('validator_provider_start', { provider: 'openrouter', model: KONFIGURACJA.openrouterValidatorModel, remainingBefore });
   const fallback = await walidujOdpowiedzOpenRouter(persona, pytanie, odpowiedz, dane, requestId, requestState, requestMeta);
+  const validatorElapsedMs = Date.now() - validatorStartedAt;
+  const remainingAfter = requestState?.remainingMs?.() ?? null;
+  requestState?.recordTiming?.('validator_provider_end', { provider: 'openrouter', model: fallback.model || KONFIGURACJA.openrouterValidatorModel, status: fallback.status, validatorElapsedMs, remainingBefore, remainingAfter, reason: String(fallback.reason || '').slice(0, 180) });
+  if (requestState?.validatorResults?.length) {
+    const lastResult = requestState.validatorResults[requestState.validatorResults.length - 1];
+    if (lastResult?.provider === 'openrouter' || lastResult?.status === 'fallback') {
+      Object.assign(lastResult, { elapsedMs: validatorElapsedMs, remainingMsBefore: remainingBefore, remainingMsAfter: remainingAfter, status: fallback.status });
+    }
+  }
   if (fallback.status === 'accepted' || fallback.status === 'soft_accepted' || fallback.status === 'rejected') return fallback;
   return { ...fallback, status: 'unavailable', ok: false, technicalError: true, unsupported_claims: [], reason: fallback.reason || 'Gemini i fallback validatora są technicznie niedostępne' };
 }
