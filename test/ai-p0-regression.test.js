@@ -10,6 +10,13 @@ const { scoreSource } = require('../ai/core');
 const { createAIRequestContext } = require('../ai/requestContext');
 const { createRequestBudget } = require('../ai/limits');
 const { createTavilySearch, przesunSourceIdsTavily } = require('../ai/tavily');
+const { buildQuestionForBot } = require('../scripts/ai-live-benchmark');
+
+test('live benchmark passes the gold case game context to the production pipeline', () => {
+  assert.equal(buildQuestionForBot({ question: 'Jak pokonać smoka?', game: 'Skyrim' }), 'Jak pokonać smoka? (kontekst gry: Skyrim)');
+  assert.equal(buildQuestionForBot({ question: 'Dlaczego Wheatley przejął kontrolę w Portal 2?', game: 'Portal 2' }), 'Dlaczego Wheatley przejął kontrolę w Portal 2?');
+  assert.equal(buildQuestionForBot({ question: 'Pytanie ogólne bez gry' }), 'Pytanie ogólne bez gry');
+});
 
 test('P0 retrieval normalization preserves letters, digits, and collapses whitespace', () => {
   const input = 'Fabuła  GTA 6 i   losy  Artura 2030';
