@@ -15,11 +15,11 @@ test('P0 retrieval normalization preserves letters, digits, and collapses whites
   const input = 'Fabuła  GTA 6 i   losy  Artura 2030';
   const normalized = normalizujToken(input);
   assert.match(normalized, /fabula gta 6 i losy artura 2030/);
-  assert.doesNotMatch(normalized, /\\s/);
-  const plan = buildAdvancedRetrievalPlan(input, {}, [input.replace(/\\s+/g, ' ')]);
+  assert.doesNotMatch(normalized, /\s/);
+  const plan = buildAdvancedRetrievalPlan(input, {}, [input.replace(/\s+/g, ' ')]);
   assert.ok(plan.length >= 1);
-  assert.equal(plan[0].query, input);
-  assert.ok(plan.every(item => !/\\s{2,}/.test(item.query)));
+  assert.equal(plan[0].query, input.replace(/\s+/g, ' '));
+  assert.ok(plan.every(item => !/\s{2,}/.test(item.query)));
 });
 
 test('P0 core source scoring maps Polish authority aliases to canonical values', () => {
