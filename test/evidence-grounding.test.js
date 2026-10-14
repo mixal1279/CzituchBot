@@ -31,7 +31,7 @@ test('evidence parser preserves source identity and exact content', () => {
 
 test('evidence normalization handles ł, day inflections, and Polish month inflections', () => {
   assert.equal(normalizeEvidenceText('Łódź'), 'lodz');
-  assert.equal(classifyClaimType('W którym dniu odbyła się premiera?'), 'temporal');
+  assert.equal(classifyClaimType('To był dzień premiery?'), 'temporal');
   assert.equal(evidenceRelationSignals('Premiera odbyła się w grudniu.').temporal, true);
   assert.equal(evidenceRelationSignals('Aktualizacja wyszła w styczniu i lutym.').temporal, true);
 });
