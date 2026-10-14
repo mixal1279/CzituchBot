@@ -85,8 +85,6 @@ function createAIRequestContext(options = {}) {
     maxValidatorow: ctx.maxValidatorow,
     maxWyszukanTavily: ctx.maxWyszukanTavily,
     generacje: ctx.generacje,
-    initialGeneracje: ctx.initialGeneracje,
-    repairGeneracje: ctx.repairGeneracje,
     generationPhase: ctx.generationPhase,
     generationAttempts: [...ctx.generationAttempts],
     modelCalls: ctx.modelCalls,

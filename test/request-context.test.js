@@ -73,3 +73,13 @@ test('request context default timeout matches the shared AI limit configuration'
   const ctx = createAIRequestContext();
   assert.equal(ctx.maxCzasMs, DEFAULTS.requestTimeoutMs);
 });
+
+test('request context snapshot declares initial and repair generation counters once', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const source = fs.readFileSync(path.join(__dirname, '..', 'ai', 'requestContext.js'), 'utf8');
+  const snapshotBody = source.match(/ctx\.snapshot\s*=\s*\(\)\s*=>\s*\(\{([\s\S]*?)\n  \}\);/)?.[1];
+  assert.ok(snapshotBody, 'snapshot body should be present');
+  assert.equal((snapshotBody.match(/\binitialGeneracje\s*:/g) || []).length, 1);
+  assert.equal((snapshotBody.match(/\brepairGeneracje\s*:/g) || []).length, 1);
+});

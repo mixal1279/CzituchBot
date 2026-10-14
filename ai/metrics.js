@@ -15,7 +15,7 @@ function boundedIncrement(map, key) {
 function createAIMetrics() {
   return {
     requests: 0, accepted: 0, rejected: 0, inconclusive: 0, unavailable: 0, errors: 0,
-    retries: 0, retryAccepted: 0, retryRejected: 0, supplementalRetrievals: 0, supplementalSuccesses: 0, sourceDiversityFailures: 0, falseAccepts: 0, falseRejects: 0, claimCoverageSum: 0, answerQualitySum: 0, qualitySamples: 0,
+    retries: 0, retryAccepted: 0, retryRejected: 0, supplementalRetrievals: 0, supplementalSuccesses: 0, sourceDiversityFailures: 0, falseAccepts: 0, falseRejects: 0, claimCoverageSum: 0, claimCoverageSamples: 0, answerQualitySum: 0, qualitySamples: 0,
     totalLatencyMs: 0, totalModelCalls: 0, totalTavilySearches: 0,
     providerCalls: {}, fallbackReasons: {}, validatorStatuses: {}, retrievalStatuses: {},
     generationAttempts: [], recent: [],
@@ -39,7 +39,10 @@ function recordAIMetric(metrics, event = {}) {
   if (event.sourceDiversityFailure) m.sourceDiversityFailures++;
   if (event.falseAccept) m.falseAccepts++;
   if (event.falseReject) m.falseRejects++;
-  if (Number.isFinite(Number(event.claimCoverage))) m.claimCoverageSum += Math.max(0, Math.min(1, Number(event.claimCoverage)));
+  if (Number.isFinite(Number(event.claimCoverage))) {
+    m.claimCoverageSum += Math.max(0, Math.min(1, Number(event.claimCoverage)));
+    m.claimCoverageSamples++;
+  }
   if (Number.isFinite(Number(event.answerQuality))) { m.answerQualitySum += Math.max(0, Math.min(1, Number(event.answerQuality))); m.qualitySamples++; }
 
   for (const provider of Array.isArray(event.providers) ? event.providers : []) boundedIncrement(m.providerCalls, provider);
@@ -82,7 +85,7 @@ function snapshotAIMetrics(metrics) {
     avgLatencyMs: m.requests ? Math.round(m.totalLatencyMs / m.requests) : 0,
     avgModelCalls: m.requests ? Number((m.totalModelCalls / m.requests).toFixed(2)) : 0,
     avgTavilySearches: m.requests ? Number((m.totalTavilySearches / m.requests).toFixed(2)) : 0,
-    avgClaimCoverage: m.qualitySamples ? Number((m.claimCoverageSum / m.qualitySamples).toFixed(3)) : null,
+    avgClaimCoverage: m.claimCoverageSamples ? Number((m.claimCoverageSum / m.claimCoverageSamples).toFixed(3)) : null,
     avgAnswerQuality: m.qualitySamples ? Number((m.answerQualitySum / m.qualitySamples).toFixed(3)) : null,
   };
 }

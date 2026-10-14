@@ -35,3 +35,16 @@ test('AI observability buckets remain bounded', () => {
   assert.ok(Object.keys(metrics.fallbackReasons).length <= 41);
   assert.ok(metrics.recent.length <= 200);
 });
+
+test('claim coverage uses its own sample count, independent of answer quality', () => {
+  const metrics = createAIMetrics();
+  recordAIMetric(metrics, { claimCoverage: 0.8 });
+  recordAIMetric(metrics, { claimCoverage: 0.4 });
+  recordAIMetric(metrics, { answerQuality: 0.2 });
+
+  const snapshot = snapshotAIMetrics(metrics);
+  assert.equal(metrics.claimCoverageSamples, 2);
+  assert.equal(snapshot.qualitySamples, 1);
+  assert.equal(snapshot.avgClaimCoverage, 0.6);
+  assert.equal(snapshot.avgAnswerQuality, 0.2);
+});
