@@ -39,6 +39,16 @@ function stratifiedCases(all, requested) {
 }
 const cases = stratifiedCases(benchmark.cases, limit);
 
+// The gold case's game field is context for the bot, not just the judge.
+// Without passing it to the production pipeline, short prompts like "Jak pokonać smoka?"
+// are ambiguous and the benchmark can accidentally test retrieval for the wrong game.
+function buildQuestionForBot(item) {
+  const question = String(item?.question || '').trim();
+  const game = String(item?.game || '').trim();
+  if (!game || question.toLocaleLowerCase('pl-PL').includes(game.toLocaleLowerCase('pl-PL'))) return question;
+  return `${question} (kontekst gry: ${game})`;
+}
+
 function isFailureText(text) {
   return /nie mam wystarczających danych|nie mogę wiarygodnie potwierdzić|nie mogę potwierdzić tej informacji|nie będę zgadywać/i.test(String(text || ''));
 }
@@ -59,7 +69,7 @@ async function run() {
     try {
       await zapytajAI(
         'benchmark',
-        item.question,
+        buildQuestionForBot(item),
         [],
         'Odpowiadaj rzeczowo po polsku. Korzystaj wyłącznie z potwierdzonych danych referencyjnych i nie zgaduj.',
         async text => { answer = String(text || ''); },
@@ -182,7 +192,7 @@ async function run() {
   }
 }
 
-module.exports = { normalizeFactText, scoreGoldenFacts, stratifiedCases, run };
+module.exports = { normalizeFactText, scoreGoldenFacts, stratifiedCases, buildQuestionForBot, run };
 
 if (require.main === module) {
   run().catch(error => {
