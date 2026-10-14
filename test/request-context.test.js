@@ -74,6 +74,10 @@ test('request context default timeout matches the shared AI limit configuration'
   assert.equal(ctx.maxCzasMs, DEFAULTS.requestTimeoutMs);
 });
 
+test('shared AI request timeout is 40 seconds to leave room for repair and fallback', () => {
+  assert.equal(DEFAULTS.requestTimeoutMs, 40000);
+});
+
 test('request context snapshot declares initial and repair generation counters once', () => {
   const fs = require('node:fs');
   const path = require('node:path');
