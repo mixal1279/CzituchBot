@@ -78,6 +78,14 @@ test('shared AI request timeout is 40 seconds to leave room for repair and fallb
   assert.equal(DEFAULTS.requestTimeoutMs, 40000);
 });
 
+test('production pipeline reads its timeout from shared AI limits', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const source = fs.readFileSync(path.join(__dirname, '..', 'czituch_bot.js'), 'utf8');
+  assert.match(source, /maxCzasMs:\s*DEFAULTS\.requestTimeoutMs/);
+  assert.doesNotMatch(source, /maxCzasMs:\s*25000/);
+});
+
 test('request context snapshot declares initial and repair generation counters once', () => {
   const fs = require('node:fs');
   const path = require('node:path');
