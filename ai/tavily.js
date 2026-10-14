@@ -513,7 +513,7 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
             geminiKey,
             exaKey,
             fetchFn: fetchZTimeout,
-            startIndex: sourceStartIndex,
+            startIndex: sourceStartIndex + Math.min(results.length, 4),
             domains,
             prefer: time_range ? 'gemini' : 'exa',
             timeoutMs: secondaryTimeoutMs,
