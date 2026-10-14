@@ -186,7 +186,7 @@ async function run() {
   if (process.env.AI_BENCHMARK_REQUIRE_PERFECT === '1') {
     const factualOk = factualCases.length > 0 && factualPassed === factualCases.length;
     if (answered !== results.length || complete !== results.length || !factualOk) {
-      console.error(`[LIVE BENCHMARK] wymagane 10/10; odpowiedzi=${answered}/${results.length}, kompletność=${complete}/${results.length}, factual=${factualPassed}/${factualCases.length}`);
+      console.error(`[LIVE BENCHMARK] wymagane ${results.length}/${results.length}; odpowiedzi=${answered}/${results.length}, kompletność=${complete}/${results.length}, factual=${factualPassed}/${factualCases.length}`);
       process.exitCode = 1;
     }
   }
