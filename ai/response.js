@@ -111,6 +111,11 @@ function sprawdzTwardeFaktyOdpowiedzi(odpowiedz, dane, pytanie = '') {
     unsupported: [...unsupported, ...contextUnsupported, ...loreCheck.unsupported].slice(0, 8),
     checked: answerTokens,
     conflictingGames: contextCheck.conflicting,
+    diagnostics: {
+      hardTokenCheck: { ok: unsupported.length === 0, unsupported, checked: answerTokens },
+      gameContextCheck: { ok: contextCheck.ok, conflicting: contextCheck.conflicting },
+      portal2LoreCheck: { ok: loreCheck.ok, unsupported: loreCheck.unsupported },
+    },
   };
 }
 
