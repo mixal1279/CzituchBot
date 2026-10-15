@@ -3180,8 +3180,16 @@ function oczyscOdpowiedzPrzedWalidacja(tekst) {
       // Dokładnie jeden cykl retry po odrzuceniu walidacji. Fallbacki providerów
       // pozostają wewnątrz jednego cyklu generacji i nie uruchamiamy kolejnego retry.
       const repairRemainingMs = pozostalyCzasMs();
-      aiState.recordTiming('repair_generation_decision', { remainingMsBeforeRepair: repairRemainingMs, willAttempt: Number.isFinite(repairRemainingMs) && repairRemainingMs >= 5000, minRequiredMs: 5000 });
-      const retry = Number.isFinite(repairRemainingMs) && repairRemainingMs >= 5000
+      // A repair generation needs at least 4 s for the provider call plus
+      // the 4.5 s reserve used by computeGenerationTimeout for final validation.
+      // The old 5 s gate admitted attempts that could never receive a valid timeout.
+      const minRepairGenerationBudgetMs = 8500;
+      aiState.recordTiming('repair_generation_decision', {
+        remainingMsBeforeRepair: repairRemainingMs,
+        willAttempt: Number.isFinite(repairRemainingMs) && repairRemainingMs >= minRepairGenerationBudgetMs,
+        minRequiredMs: minRepairGenerationBudgetMs,
+      });
+      const retry = Number.isFinite(repairRemainingMs) && repairRemainingMs >= minRepairGenerationBudgetMs
         ? await generujOdpowiedz(max_tokens, promptRetry, 'soft validation repair', false)
         : wynikPusty('pipeline', 'none', 'repair_request_deadline_too_short');
       wynikGeneracji = retry;
