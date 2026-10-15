@@ -521,10 +521,10 @@ console.log('AI regression tests: OK');
 }
 
 {
-  // Skrócone cytaty z [...] / ... muszą być możliwe do związania z pełnym źródłem.
+  // Cytat z pominiętym środkiem nie jest ciągłym fragmentem źródła i nie może być evidence.
   assert.equal(
     quoteExists('Wheatley przejął kontrolę. Następnie pokonał GLaDOS i został administratorem.', 'Wheatley przejął kontrolę [...] został administratorem.'),
-    true
+    false
   );
 }
 
