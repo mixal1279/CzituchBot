@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 const { searchSecondaryProviders } = require('../ai/webRetrieval');
 const { czyWymagaSecondaryRetrieval, filtrujMaterialPoSlowachTavily } = require('../ai/tavily');
 const { normalizujWynikWalidatora } = require('../ai/validator');
-const { wyodrebnijJednostkoweWartosci } = require('../ai/claimValidation');
+const { wyodrebnijJednostkoweWartosci, zgodnoscStrukturalna } = require('../ai/claimValidation');
 const { decomposeQuestion, sourceDiversity, shouldRunAdditionalRetrieval } = require('../ai/retrieval');
 const { createAIRequestContext } = require('../ai/requestContext');
 const { createAIMetrics, recordAIMetric, snapshotAIMetrics } = require('../ai/metrics');
@@ -215,4 +215,23 @@ test('quality gate accepts a concise complete lore answer but rejects a content-
   );
   assert.equal(fragment.ok, false);
   assert.ok(fragment.issues.includes('odpowiedź jest zbyt krótka'));
+});
+
+
+test('cross-language game evidence recognizes Dragonrend and its Polish name', () => {
+  const result = zgodnoscStrukturalna(
+    'Dragonrend shout you get from the main storyline. It forcibly causes the target dragon to stay on the ground.',
+    'Warto użyć krzyku Smocza Zguba, który zmusza smoka do wylądowania na ziemi.',
+    { allowCrossLanguageExactEvidence: true },
+  );
+  assert.equal(result.ok, true, JSON.stringify(result));
+});
+
+test('cross-language game evidence recognizes recruiting a companion', () => {
+  const result = zgodnoscStrukturalna(
+    'You can play as Astarion to live out his story, or you can choose to create a custom character and recruit him as a companion instead.',
+    'Gracz może zrekrutować go jako towarzysza podróży.',
+    { allowCrossLanguageExactEvidence: true },
+  );
+  assert.equal(result.ok, true, JSON.stringify(result));
 });
