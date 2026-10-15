@@ -35,7 +35,7 @@ function selectRetrievalQueries({
 function isMultiPartQuestion(question) {
   const q = String(question || '').replace(/\s+/g, ' ').trim();
   if (!q) return false;
-  const interrogatives = q.match(/\b(?:kto|kim|co|czym|jaki|jaka|jakie|dlaczego|czemu|kiedy|gdzie|ile|czy|jak)\b/giu) || [];
+  const interrogatives = q.match(/(?<![\p{L}])(?:kto|kim|co|czym|jaki|jaka|jakie|dlaczego|czemu|kiedy|gdzie|ile|czy|jak)(?![\p{L}])/giu) || [];
   return interrogatives.length >= 2 || decomposeQuestion(q).length >= 2;
 }
 function unique(items){const out=[],seen=new Set();for(const item of Array.isArray(items)?items:[]){const q=String(item||'').replace(/\s+/g,' ').trim(),k=q.toLocaleLowerCase('pl-PL');if(q.length>=8&&!seen.has(k)){seen.add(k);out.push(q);}}return out;}
@@ -78,7 +78,7 @@ function decomposeQuestion(question,routing={}) {
 }
 function extractCarryoverEntities(text) {
   const stop = new Set(['jaki','jaka','jakie','który','która','które','kim','kto','co','czym','dlaczego','czemu','kiedy','gdzie','ile','czy','jak']);
-  const matches = String(text || '').match(/\b[A-ZĄĆĘŁŃÓŚŹŻ][\p{L}\d'’.-]*(?:\s+[A-ZĄĆĘŁŃÓŚŹŻ][\p{L}\d'’.-]*){0,3}/gu) || [];
+  const matches = String(text || '').match(/(?<![\p{L}\p{N}_])[A-ZĄĆĘŁŃÓŚŹŻ][\p{L}\d'’.-]*(?:\s+[A-ZĄĆĘŁŃÓŚŹŻ][\p{L}\d'’.-]*){0,3}/gu) || [];
   return [...new Set(matches
     .map(x => x.replace(/\s+/g, ' ').trim())
     .filter(x => {
