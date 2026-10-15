@@ -3,7 +3,7 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
 const { createGroqCompletion, awaitWithAbortTimeout, computeValidatorTimeout, computeGenerationTimeout } = require('../ai/provider-runtime');
-const { classifyFailure, shouldRetryFailure, nextFallbacks, selectRepairFallbacks, repairBudgetBlockReason, resetProviderQuotaCooldowns, markProviderQuota, isProviderQuotaBlocked, quotaCooldownMsFromError } = require('../ai/fallback');
+const { classifyFailure, shouldRetryFailure, nextFallbacks, selectRepairFallbacks, filterAvailableFallbacks, repairBudgetBlockReason, resetProviderQuotaCooldowns, markProviderQuota, isProviderQuotaBlocked, quotaCooldownMsFromError } = require('../ai/fallback');
 
 test('Groq request body never contains signal; AbortSignal is passed in SDK transport options', async () => {
   const controller = new AbortController();
@@ -189,4 +189,16 @@ test('repair checks shared model-call and generation limits before selecting a p
   assert.equal(repairBudgetBlockReason(budget), 'model_calls_exhausted');
   assert.equal(repairBudgetBlockReason({ ...budget, modelCalls: 7 }), null);
   assert.equal(repairBudgetBlockReason({ ...budget, modelCalls: 7, remainingMs: 0 }), 'request_deadline_exhausted');
+});
+
+test('fallback filtering does not let unconfigured providers consume fallback slots', () => {
+  const candidates = [
+    'gemini:gemini-3.8-flash',
+    'gemini:gemini-3.5-flash-lite',
+    'xkiro:default',
+    'openrouter:default',
+  ];
+  const configured = ['xkiro:default', 'openrouter:default'];
+  assert.deepEqual(filterAvailableFallbacks(candidates, configured), ['xkiro:default', 'openrouter:default']);
+  assert.deepEqual(filterAvailableFallbacks(candidates, ['openrouter:default']).slice(0, 1), ['openrouter:default']);
 });
