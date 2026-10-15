@@ -2,7 +2,8 @@
 
 const SLOT_PATTERNS = Object.freeze({
   why: /\b(dlaczego|czemu|z jakiego powodu|why|how come)\b/i,
-  // „Jak” samo w sobie nie oznacza instrukcji: rozróżniamy mechanizm działania od pytań o czas i procedurę.\n  how: /\b(jak działa|jak funkcjonuje|w jaki sposób działa|na czym polega|how does .{1,80} work|how do .{1,80} work)\b/i,
+  // „Jak” samo w sobie nie oznacza instrukcji: rozróżniamy mechanizm działania od pytań o czas i procedurę.
+  how: /\b(jak działa|jak funkcjonuje|w jaki sposób działa|na czym polega|how does .{1,80} work|how do .{1,80} work)\b/i,
   when: /\b(kiedy|w którym roku|w jakim roku|when)\b/i,
   where: /\b(gdzie|dokąd|skąd|where)\b/i,
   who: /\b(kto|kim|czyj|who|whose)\b/i,
