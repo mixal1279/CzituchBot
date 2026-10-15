@@ -120,6 +120,11 @@ function selectRepairFallbacks({ failedProviders = [], exclude = [], availablePr
     .slice(0, Math.max(0, Number(maxFallbacks) || 0));
 }
 
+function filterAvailableFallbacks(candidates, availableProviders) {
+  const available = new Set(Array.isArray(availableProviders) ? availableProviders : []);
+  return (Array.isArray(candidates) ? candidates : []).filter(provider => available.has(provider));
+}
+
 function repairBudgetBlockReason({
   remainingMs,
   generations,
@@ -157,6 +162,7 @@ module.exports = {
   classifyFailure,
   nextFallbacks,
   selectRepairFallbacks,
+  filterAvailableFallbacks,
   repairBudgetBlockReason,
   shouldRetryFailure,
 };
