@@ -62,6 +62,13 @@ test('validator timeout is capped and reserves time for fallback', () => {
   assert.equal(computeValidatorTimeout(0), null);
 });
 
+test('xKiro timeout policy preserves enough time for the OpenRouter validator fallback', () => {
+  const options = { maxTimeoutMs: 9000, reserveMs: 10500, minTimeoutMs: 4000 };
+  assert.equal(computeValidatorTimeout(12306, options), null, 'skip xKiro rather than consume the OpenRouter reserve');
+  assert.equal(computeValidatorTimeout(16000, options), 5500, 'cap xKiro so at least 10.5 seconds remain');
+  assert.equal(computeValidatorTimeout(20000, options), 9000);
+});
+
 test('generation timeout skips calls that cannot run for long enough while preserving fallback reserve', () => {
   assert.equal(computeGenerationTimeout(25000), 12000);
   assert.equal(computeGenerationTimeout(16000), 11500);
