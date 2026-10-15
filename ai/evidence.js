@@ -74,13 +74,22 @@ function evidenceRelationSignals(value) {
   };
 }
 
+function removeLeadingImageFilenameNoise(value) {
+  // Search engines sometimes prepend image alt/file names to the extracted body.
+  // Strip only leading filename tokens for candidate ranking; the original source
+  // remains unchanged and quote verification still checks against its real content.
+  return String(value || '')
+    .replace(/^(?:\\s*[\\p{L}\\p{N}_()'’ -]+\\.(?:png|jpe?g|webp|gif|svg)\\s*)+/iu, '')
+    .trim();
+}
+
 function rankEvidenceForClaim(claim, blocks, allowedSourceIds = null, limit = 3) {
   const rows = [];
   const claimType = classifyClaimType(claim);
   const claimSignals = evidenceRelationSignals(claim);
   for (const block of Array.isArray(blocks) ? blocks : []) {
     if (allowedSourceIds instanceof Set && !allowedSourceIds.has(block.sourceId)) continue;
-    const sentences = splitEvidenceSentences(block.content);
+    const sentences = splitEvidenceSentences(removeLeadingImageFilenameNoise(block.content));
     for (let i = 0; i < sentences.length; i++) {
       const windows = [sentences[i]];
       if (sentences[i + 1]) windows.push(sentences[i] + ' ' + sentences[i + 1]);
@@ -176,4 +185,4 @@ function buildQuestionEvidenceContext(question, blocks, allowedSourceIds = null,
   }).join('\n\n');
 }
 
-module.exports = { normalizeEvidenceText, parseEvidenceBlocks, quoteExists, splitEvidenceSentences, classifyClaimType, evidenceRelationSignals, rankEvidenceForClaim, buildEvidenceRepairContext, buildQuestionEvidenceContext };
+module.exports = { normalizeEvidenceText, parseEvidenceBlocks, quoteExists, splitEvidenceSentences, classifyClaimType, evidenceRelationSignals, rankEvidenceForClaim, buildEvidenceRepairContext, buildQuestionEvidenceContext, removeLeadingImageFilenameNoise };
