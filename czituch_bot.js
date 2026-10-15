@@ -1070,16 +1070,22 @@ async function pobierzTokenIGDB() {
 async function znajdzGreIGDB(pytanie, requestState = null) {
   try {
     if (requestState?.zarezerwujModel && !requestState.zarezerwujModel('igdb-classifier')) return null;
-    const rewrite = await groq.chat.completions.create({
-      model: AI_MODELS.queryRewrite, // lekka klasyfikacja — 20b wystarczy, szybszy/tańszy niż 120b i nie jest wycofywany 16.08.2026 jak llama-3.1-8b-instant
-      max_tokens: 60,
-      reasoning_effort: 'low',
-      temperature: 0,
-      messages: [
-        { role: 'system', content: 'Jeśli w podanym tekście pojawia się tytuł gry wideo, odpowiedz TYLKO tym tytułem po angielsku (np. "Clair Obscur Expedition 33", "Minecraft", "Fortnite"). Jeśli nie ma tytułu gry, odpowiedz dokładnie: NONE.' },
-        { role: 'user', content: pytanie }
-      ]
-    });
+    const classifierController = new AbortController();
+    const rewrite = await awaitWithAbortTimeout(
+      createGroqCompletion(groq, {
+        model: AI_MODELS.queryRewrite,
+        max_tokens: 60,
+        reasoning_effort: 'low',
+        temperature: 0,
+        messages: [
+          { role: 'system', content: 'Jeśli w podanym tekście pojawia się tytuł gry wideo, odpowiedz TYLKO tym tytułem po angielsku (np. "Clair Obscur Expedition 33", "Minecraft", "Fortnite"). Jeśli nie ma tytułu gry, odpowiedz dokładnie: NONE.' },
+          { role: 'user', content: pytanie }
+        ]
+      }, { signal: classifierController.signal }),
+      Math.min(2200, typeof requestState?.remainingMs === 'function' ? requestState.remainingMs() : 2200),
+      classifierController,
+      'IGDB game classifier'
+    );
     const nazwaGry = (rewrite.choices[0].message.content || '').trim();
     if (!nazwaGry || nazwaGry.toUpperCase() === 'NONE') return null;
 
