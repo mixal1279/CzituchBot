@@ -2,9 +2,6 @@ name: AI live benchmark
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - fix/ai-core-retrieval-validator-hardening
 
 concurrency:
   group: ai-live-benchmark
