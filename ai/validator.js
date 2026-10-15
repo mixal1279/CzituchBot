@@ -129,6 +129,38 @@ function pobierzBlokZrodla(dane, sourceId) {
   return active ? body.join('\n') : null;
 }
 
+function buildBoundedSourceContext(sourceContent, quote, radius = 1) {
+  const source = String(sourceContent || '').replace(/\s+/g, ' ').trim();
+  const wantedQuote = String(quote || '').trim();
+  if (!source || !wantedQuote) return '';
+
+  const sentences = source
+    .split(/(?<=[.!?])\s+(?=[\p{Lu}\d"'“‘(\[])/u)
+    .map(sentence => sentence.trim())
+    .filter(Boolean);
+  if (!sentences.length) return quoteExists(source, wantedQuote) ? source : '';
+
+  // Find the narrowest consecutive sentence window that contains the exact
+  // authorized quote. Include only one adjacent sentence on either side so
+  // pronouns and local causal context can resolve without importing unrelated
+  // facts from the rest of a long page.
+  const maxWidth = Math.min(6, sentences.length);
+  for (let width = 1; width <= maxWidth; width++) {
+    for (let start = 0; start + width <= sentences.length; start++) {
+      const span = sentences.slice(start, start + width).join(' ');
+      if (!quoteExists(span, wantedQuote)) continue;
+      const contextStart = Math.max(0, start - Math.max(0, radius));
+      const contextEnd = Math.min(sentences.length, start + width + Math.max(0, radius));
+      return sentences.slice(contextStart, contextEnd).join(' ');
+    }
+  }
+
+  // quoteExists was already checked against this block by the caller. A quote
+  // that cannot be localized to a bounded sentence window should not authorize
+  // a fallback to the entire source.
+  return '';
+}
+
 function normalizujIdZrodla(value) {
   const raw = String(value || '').trim().replace(/^\[|\]$/g, '').trim();
   const normalized = raw.replace(/\s+/g, ' ').replace(/_/g, ' ').toLocaleUpperCase('en-US');
@@ -171,10 +203,9 @@ function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '') {
   if (claimCaptured && quoteKilled && !quoteCaptured) {
     return { ok: false, reason: 'claim zawiera schwytanie/porwanie, a evidence wskazuje zabójstwo' };
   }
-  // Causal claims are not rejected solely because the selected quote is a
-  // non-causal excerpt. The full source block is checked below with
-  // allowDistributedEvidence=true, so a supported synthesis across the source
-  // remains valid while unsupported causal claims still fail semantic checks.
+  // Causal and contextual synthesis must remain within a short sentence window
+  // around the exact quote; do not allow distant text on the same page to support
+  // an otherwise ungrounded claim.
 
   const blocks = parseEvidenceBlocks(dane);
   const byId = new Map(blocks.map(block => [block.sourceId, block]));
@@ -191,31 +222,32 @@ function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '') {
       continue;
     }
 
-    // Causal synthesis is allowed when the full authorized source block
-    // actually contains the causal relation, even if the selected quote is
-    // only the event sentence. It is rejected when neither does.
-    const blockNorm = String(block.content || '').toLocaleLowerCase('pl-PL')
-      .normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/ł/g, 'l');
-    if (claimCausal && !quoteCausal && !causalRe.test(blockNorm)) {
-      reasons.push('claim dodaje relację przyczynową nieobecną w całym źródle: ' + id);
+    const sourceContext = buildBoundedSourceContext(block.content, quote, 1);
+    const verificationContext = sourceContext || quote;
+
+    // The evidence quote is guaranteed to exist in this authorized source, but
+    // it may omit details (such as the date or a subject expressed in the prior
+    // sentence). Validate hard conflicts against the bounded context, not the
+    // isolated quote or the unbounded full page.
+    const contextHard = sprawdzTwardeKonflikty(verificationContext, claim, {
+      allowDistributedEvidence: true,
+    });
+    if (!contextHard.ok) {
+      reasons.push(contextHard.reason || 'kontekst cytatu zawiera konflikt liczbowy, czasowy lub negację');
       continue;
     }
-    if (claimCausal && !quoteCausal && !czyRelacjaPrzyczynowaPokrywaClaim(block.content, claim)) {
-      reasons.push('źródło zawiera sygnał przyczynowy, ale nie wiąże go bezpośrednio z claimem: ' + id);
+    const contextConflict = sprawdzSprzecznosciSemantyczne(verificationContext, claim);
+    if (!contextConflict.ok) {
+      reasons.push(contextConflict.reason || 'kontekst cytatu przeczy claimowi');
       continue;
     }
 
-    // The quote must not contradict the claim. A verified quote may be only
-    // one part of a supported claim, so use the same authorized source block
-    // for cross-sentence synthesis after checking hard conflicts against the quote.
-    const quoteHard = sprawdzTwardeKonflikty(quote, claim);
-    if (!quoteHard.ok) {
-      reasons.push(quoteHard.reason || 'wybrany cytat zawiera konflikt liczbowy, czasowy lub negację');
+    if (claimCausal && !quoteCausal && !causalRe.test(verificationContext)) {
+      reasons.push('claim dodaje relację przyczynową nieobecną w kontekście cytatu: ' + id);
       continue;
     }
-    const quoteConflict = sprawdzSprzecznosciSemantyczne(quote, claim);
-    if (!quoteConflict.ok) {
-      reasons.push(quoteConflict.reason || 'wybrany cytat przeczy claimowi');
+    if (claimCausal && !quoteCausal && !czyRelacjaPrzyczynowaPokrywaClaim(verificationContext, claim)) {
+      reasons.push('kontekst zawiera sygnał przyczynowy, ale nie wiąże go bezpośrednio z claimem: ' + id);
       continue;
     }
 
@@ -227,23 +259,26 @@ function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '') {
       return { ok: true, sourceId: id, mode: 'exact_quote', reason: 'cytat występuje w źródle i bezpośrednio wspiera claim' };
     }
 
-    // The selected quote can omit the antecedent, a character's name, or a
-    // second attribute that is stated elsewhere in the *same* authorized
-    // source. Accept synthesis only when the source block independently passes
-    // the full structural checks; never search another source to repair it.
-    const sourceStructural = zgodnoscStrukturalna(block.content, claim, {
-      allowCrossLanguageExactEvidence: true,
-      allowDistributedEvidence: true,
-    });
-    if (sourceStructural.ok) {
-      return {
-        ok: true,
-        sourceId: id,
-        mode: 'source_block_synthesis',
-        reason: 'claim jest wsparty w obrębie tego samego autoryzowanego bloku źródła',
-      };
+    // Bounded same-source synthesis supports local anaphora and facts stated in
+    // immediately adjacent sentences without granting the entire page authority
+    // to supply missing entities, dates, or causal relations from far away.
+    if (sourceContext) {
+      const contextStructural = zgodnoscStrukturalna(sourceContext, claim, {
+        allowCrossLanguageExactEvidence: true,
+        allowDistributedEvidence: true,
+      });
+      if (contextStructural.ok) {
+        return {
+          ok: true,
+          sourceId: id,
+          mode: 'source_context',
+          reason: 'claim jest wsparty przez cytat i jego lokalny kontekst w tym samym źródle',
+        };
+      }
+      reasons.push(contextStructural.reason || quoteStructural.reason || 'kontekst cytatu nie potwierdza claimu');
+    } else {
+      reasons.push(quoteStructural.reason || 'nie udało się ustalić kontekstu cytatu');
     }
-    reasons.push(sourceStructural.reason || quoteStructural.reason || 'wybrany cytat nie potwierdza claimu bezpośrednio');
   }
 
   return { ok: false, reason: reasons[0] || 'brak zweryfikowanego evidence' };
