@@ -9,7 +9,9 @@ function buildBoundedEvidencePrompt(context, question, maxChars = DEFAULT_MAX_PR
   const marker = 'Pytanie użytkownika:';
   const markerIndex = source.lastIndexOf(marker);
   const hasEmbeddedQuestion = markerIndex >= 0;
-  const questionText = (hasEmbeddedQuestion ? source.slice(markerIndex + marker.length).trim() : asked || source).trim();
+  // The explicit request argument is authoritative. Embedded context can be stale or
+  // contain a rewritten retrieval query; it must never replace the user's original question.
+  const questionText = (asked || (hasEmbeddedQuestion ? source.slice(markerIndex + marker.length).trim() : source)).trim();
   const prefix = hasEmbeddedQuestion ? source.slice(0, markerIndex).trimEnd() : (source === asked ? '' : source);
   const suffix = prefix ? '\n---\n' + marker + ' ' + questionText : questionText;
   if (suffix.length >= limit) return (prefix ? marker + ' ' + questionText : questionText).slice(-limit);
