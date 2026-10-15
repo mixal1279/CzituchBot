@@ -230,7 +230,7 @@ test('cross-language game evidence recognizes Dragonrend and its Polish name', (
 test('cross-language game evidence recognizes recruiting a companion', () => {
   const result = zgodnoscStrukturalna(
     'You can play as Astarion to live out his story, or you can choose to create a custom character and recruit him as a companion instead.',
-    'Gracz może zrekrutować go jako towarzysza podróży.',
+    'Gracz może sterować tą postacią bezpośrednio lub zrekrutować ją jako towarzysza podróży.',
     { allowCrossLanguageExactEvidence: true },
   );
   assert.equal(result.ok, true, JSON.stringify(result));
