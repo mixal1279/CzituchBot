@@ -55,6 +55,7 @@ function sprawdzSpojnoscLorePortal2(odpowiedz, pytanie) {
     /\bwheatley\b[^.!?]{0,180}(?:został|zostaje|została|znalazł|znalazl|znajduje się|znajduje sie)[^.!?]{0,120}(?:w\s+)?ciel(?:e|a|u)?\s+glados\b/i,
     /\bwheatley\b[^.!?]{0,160}(?:przejął|otrzymał)\s+(?:ciało|body)\s+glados/i,
     /zamian(?:a|ę|ie)\s+ciał[^.!?]{0,120}\bwheatley\b/i,
+    /\bwheatley\b[^.!?]{0,160}(?:przeniesion\w*|umieszczon\w*|wprowadzon\w*|trafił|trafil|wsadzon\w*)[^.!?]{0,120}(?:w\s+|do\s+)ciał(?:e|a|o|em)\s+glados\b/i,
   ].some(re => re.test(a));
 
   const przyciskJakoBezposredniaPrzyczyna =
