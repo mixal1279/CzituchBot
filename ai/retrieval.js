@@ -85,13 +85,13 @@ function normalizujToken(value) {
 // Unsupported claims are intentionally excluded: a rejected model claim may contain
 // a hallucinated location or even details from a different game.
 function buildSupplementalRetrievalQuery(question, routing = {}, causalQuestion = false) {
-  const q = String(question || '').replace(/\\s+/g, ' ').trim();
+  const q = String(question || '').replace(/\s+/g, ' ').trim();
   if (!q) return '';
-  const game = String(routing.resolved_entity?.game || routing.game || '').replace(/\\s+/g, ' ').trim();
+  const game = String(routing.resolved_entity?.game || routing.game || '').replace(/\s+/g, ' ').trim();
   const hasGame = game && normalizujToken(q).includes(normalizujToken(game));
   const anchor = game && !hasGame ? game : '';
   const intent = causalQuestion ? 'cause reason motivation' : 'guide walkthrough location';
-  return [anchor, q, intent].filter(Boolean).join(' ').replace(/\\s+/g, ' ').trim().slice(0, 300);
+  return [anchor, q, intent].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim().slice(0, 300);
 }
 
 function sourceHost(url){try{return new URL(url).hostname.toLowerCase().replace(/^www\./,'');}catch(_){return '';}}
