@@ -1,7 +1,7 @@
 'use strict';
 
 const NEGATION_RE = /\b(?:nie|nigdy|brak|bez|żaden|żadna|żadne|never|no|not)\b/iu;
-const CAUSAL_RE = /(?:\b(?:bo|poniewaz|gdyz|dlatego|because|therefore)\b|\bz\s+powodu\b|\bdzieki\b|\bprzez\b|\bbecause\s+of\b|\bdue\s+to\b|\bspowodowa(?:l|la|lo|ly)\b|\bdoprowadzi(?:l|la|lo|ly)\b|\bumozliwi(?:l|la|lo|ly)\b)/iu;
+const CAUSAL_RE = /(?:\b(?:bo|poniewaz|gdyz|dlatego|because|therefore|caused|causes|consequently|hence)\b|\b(?:as\s+a\s+result|led\s+to|resulted\s+in|because\s+of|due\s+to)\b|\bz\s+powodu\b|\bdzieki\b|\bprzez\b|\bspowodow\w*\b|\bdoprowadz\w*\b|\bumozliw\w*\b)/iu;
 const TEMPORAL_RE = /\b(?:19|20)\d{2}\b|\b(?:styczeń|luty|marzec|kwiecień|maj|czerwiec|lipiec|sierpień|wrzesień|październik|listopad|grudzień)\b|\b(?:wczoraj|dzisiaj|jutro|today|yesterday|tomorrow)\b/iu;
 const CROSS_LANGUAGE_CONCEPTS = [
   ['porwanie', /kidnap\w*|abduct\w*|captur\w*|porwan\w*|uprowadz\w*/i],
