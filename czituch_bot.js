@@ -94,16 +94,21 @@ function buildValidatorEvidenceHints(question, answer, data) {
   if (!blocks.length) return '';
   const answerSentences = String(answer || '').split(/(?<=[.!?])\s+/u).filter(Boolean);
   const queryParts = [String(question || ''), ...answerSentences].filter(value => value.trim()).slice(0, 3);
+  const allowedSourceIds = [...wyodrebnijIdentyfikatoryZrodel(data)];
   const hints = buildQuestionEvidenceContext(
     question,
     blocks,
-    wyodrebnijIdentyfikatoryZrodel(data),
-    8,
+    new Set(allowedSourceIds),
+    4,
     queryParts,
   );
-  return hints
-    ? '\n\nKANDYDACI NA DOSŁOWNE CYTATY (wyłącznie wskazówki; sprawdź je w źródłach):\n' + hints
-    : '';
+  if (!hints) return '';
+  return [
+    '\\n\\nDOZWOLONE ID ŹRÓDEŁ (używaj wyłącznie tych identyfikatorów, dokładnie w tej pisowni): ' + allowedSourceIds.join(', '),
+    'Nie twórz identyfikatorów z tytułów, nazw gier, nazw stron ani własnych skrótów. Jeśli nie możesz przypisać cytatu do jednego z powyższych ID, oznacz claim jako unsupported.',
+    'KANDYDACI NA DOSŁOWNE CYTATY (wskazówki; cytat i ID muszą być zweryfikowane w danych referencyjnych):',
+    hints,
+  ].join('\\n');
 }
 
 // =============================================
