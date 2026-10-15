@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { searchSecondaryProviders } = require('../ai/webRetrieval');
-const { czyWymagaSecondaryRetrieval } = require('../ai/tavily');
+const { czyWymagaSecondaryRetrieval, filtrujMaterialPoSlowachTavily } = require('../ai/tavily');
 const { normalizujWynikWalidatora } = require('../ai/validator');
 const { wyodrebnijJednostkoweWartosci } = require('../ai/claimValidation');
 const { decomposeQuestion, sourceDiversity, shouldRunAdditionalRetrieval } = require('../ai/retrieval');
@@ -182,4 +182,17 @@ test('www and apex variants count as one source host', () => {
   ]);
   assert.equal(diversity.hosts, 1);
   assert.equal(diversity.independentHosts, 1);
+});
+
+test('Tavily sentence filtering preserves adjacent causal context with different wording', () => {
+  const source = [
+    'Portal 2 follows Chell through the Aperture facility.',
+    'Wheatley was transferred into GLaDOS body and gained control of Aperture.',
+    'Because the transfer placed him in the central AI system, he could override its commands.',
+    'An unrelated paragraph describes a different game and unrelated characters.',
+    'The page footer contains navigation and copyright text.',
+  ].join(' ');
+  const filtered = filtrujMaterialPoSlowachTavily(source, 'Why did Wheatley gain control of GLaDOS in Portal 2?');
+  assert.match(filtered, /Wheatley was transferred into GLaDOS body/);
+  assert.match(filtered, /Because the transfer placed him in the central AI system/);
 });
