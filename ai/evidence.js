@@ -30,7 +30,7 @@ function removeLeadingSourceMetadataNoise(value) {
   }
   // Unmarked source blocks may retain the extraction label on the body line.
   // Remove the label itself, not the text that follows it.
-  return lines.join('\n').trim().replace(/^TREŚĆ:\\s*/i, '').trim();
+  return lines.join('\n').trim().replace(/^TREŚĆ:\s*/i, '').trim();
 }
 
 function parseEvidenceBlocks(data) {
