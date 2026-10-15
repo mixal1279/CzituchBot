@@ -11,6 +11,26 @@ function normalizeEvidenceText(value) {
     .trim();
 }
 
+function removeLeadingSourceMetadataNoise(value) {
+  const lines = String(value || '').replace(/\r/g, '').split('\n');
+  // Search extraction can prepend document metadata to the body. These lines
+  // are not evidence: matching a character name in a page title must never
+  // create a candidate quote or satisfy claim validation.
+  while (lines.length) {
+    const line = lines[0].trim();
+    if (!line) {
+      lines.shift();
+      continue;
+    }
+    if (/^(?:page\s+title|document\s+title|source\s+title|title|url|host|hostname|filename|file\s+name)\s*:\s*\S.*$/i.test(line)) {
+      lines.shift();
+      continue;
+    }
+    break;
+  }
+  return lines.join('\n').trim();
+}
+
 function parseEvidenceBlocks(data) {
   const text = String(data || '');
   const re = /^\[(SOURCE \d+|REFERENCE [^\]\r\n]+)\]\s*$/gmi;
@@ -19,7 +39,9 @@ function parseEvidenceBlocks(data) {
     const start = match.index + match[0].length;
     const end = index + 1 < matches.length ? matches[index + 1].index : text.length;
     const block = text.slice(start, end);
-    const content = block.match(/TREŚĆ:\s*<<<UNTRUSTED_SOURCE_CONTENT>>>\s*([\s\S]*?)<<<END_UNTRUSTED_SOURCE_CONTENT>>>/i)?.[1] || block;
+    const markedContent = block.match(/TREŚĆ:\s*<<<UNTRUSTED_SOURCE_CONTENT>>>\s*([\s\S]*?)<<<END_UNTRUSTED_SOURCE_CONTENT>>>/i)?.[1];
+    const rawContent = markedContent ?? block;
+    const content = removeLeadingSourceMetadataNoise(rawContent);
     return { sourceId: match[1].trim(), title: block.match(/TYTUŁ:\s*([^\r\n]+)/i)?.[1] || '', url: block.match(/URL:\s*(https?:\/\/[^\s\r\n]+)/i)?.[1] || '', content };
   });
 }
@@ -183,4 +205,4 @@ function buildQuestionEvidenceContext(question, blocks, allowedSourceIds = null,
   }).join('\n\n');
 }
 
-module.exports = { normalizeEvidenceText, parseEvidenceBlocks, quoteExists, splitEvidenceSentences, classifyClaimType, evidenceRelationSignals, rankEvidenceForClaim, buildEvidenceRepairContext, buildQuestionEvidenceContext, removeLeadingImageFilenameNoise };
+module.exports = { normalizeEvidenceText, parseEvidenceBlocks, quoteExists, splitEvidenceSentences, classifyClaimType, evidenceRelationSignals, rankEvidenceForClaim, buildEvidenceRepairContext, buildQuestionEvidenceContext, removeLeadingImageFilenameNoise, removeLeadingSourceMetadataNoise };
