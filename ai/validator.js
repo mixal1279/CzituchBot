@@ -229,9 +229,7 @@ function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '') {
     // it may omit details (such as the date or a subject expressed in the prior
     // sentence). Validate hard conflicts against the bounded context, not the
     // isolated quote or the unbounded full page.
-    const contextHard = sprawdzTwardeKonflikty(verificationContext, claim, {
-      allowDistributedEvidence: true,
-    });
+    const contextHard = sprawdzTwardeKonflikty(verificationContext, claim);
     if (!contextHard.ok) {
       reasons.push(contextHard.reason || 'kontekst cytatu zawiera konflikt liczbowy, czasowy lub negację');
       continue;
