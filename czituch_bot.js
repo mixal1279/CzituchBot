@@ -1132,14 +1132,20 @@ async function znajdzGreIGDB(pytanie, requestState = null) {
 async function znajdzYoutuberaWPytaniu(pytanie, requestState = null) {
   try {
     if (requestState?.zarezerwujModel && !requestState.zarezerwujModel('youtube-classifier')) return null;
-    const rewrite = await groq.chat.completions.create({
-      model: AI_MODELS.queryRewrite,
-      max_tokens: 40, reasoning_effort: 'low', temperature: 0,
-      messages: [
-        { role: 'system', content: 'Jeśli pytanie dotyczy konkretnego twórcy YouTube/kanału (np. pyta kim jest, ile ma subskrybentów, o czym jest kanał), odpowiedz TYLKO jego nickiem/nazwą kanału tak jak w pytaniu. Jeśli pytanie nie dotyczy żadnego konkretnego kanału YouTube, odpowiedz dokładnie: NONE.' },
-        { role: 'user', content: pytanie }
-      ]
-    });
+    const classifierController = new AbortController();
+    const rewrite = await awaitWithAbortTimeout(
+      createGroqCompletion(groq, {
+        model: AI_MODELS.queryRewrite,
+        max_tokens: 40, reasoning_effort: 'low', temperature: 0,
+        messages: [
+          { role: 'system', content: 'Jeśli pytanie dotyczy konkretnego twórcy YouTube/kanału (np. pyta kim jest, ile ma subskrybentów, o czym jest kanał), odpowiedz TYLKO jego nickiem/nazwą kanału tak jak w pytaniu. Jeśli pytanie nie dotyczy żadnego konkretnego kanału YouTube, odpowiedz dokładnie: NONE.' },
+          { role: 'user', content: pytanie }
+        ]
+      }, { signal: classifierController.signal }),
+      Math.min(2200, typeof requestState?.remainingMs === 'function' ? requestState.remainingMs() : 2200),
+      classifierController,
+      'YouTube classifier'
+    );
     const nazwa = (rewrite.choices[0].message.content || '').trim();
     return (!nazwa || nazwa.toUpperCase() === 'NONE') ? null : nazwa;
   } catch { return null; }
@@ -4560,16 +4566,22 @@ async function wyodrebnijMiastoPogoda(pytanie, requestState = null) {
   if (!wyglądaNaPogode) return null;
   try {
     if (requestState?.zarezerwujModel && !requestState.zarezerwujModel('weather-classifier')) return null;
-    const res = await groq.chat.completions.create({
-      model: AI_MODELS.queryRewrite, // lekka klasyfikacja — 20b wystarczy, nie wycofywany 16.08.2026
-      max_tokens: 60,
-      reasoning_effort: 'low',
-      temperature: 0,
-      messages: [
-        { role: 'system', content: 'Jeśli pytanie dotyczy pogody i wymienia nazwę miasta/miejscowości, odpowiedz TYLKO tą nazwą w mianowniku po polsku (np. "w Krakowie" -> "Kraków", "leszczawce" -> "Leszczawka"). Jeśli pytanie o pogodę nie wymienia żadnego miejsca, albo pytanie w ogóle nie dotyczy pogody, odpowiedz dokładnie: NONE.' },
-        { role: 'user', content: pytanie }
-      ]
-    });
+    const classifierController = new AbortController();
+    const res = await awaitWithAbortTimeout(
+      createGroqCompletion(groq, {
+        model: AI_MODELS.queryRewrite,
+        max_tokens: 60,
+        reasoning_effort: 'low',
+        temperature: 0,
+        messages: [
+          { role: 'system', content: 'Jeśli pytanie dotyczy pogody i wymienia nazwę miasta/miejscowości, odpowiedz TYLKO tą nazwą w mianowniku po polsku (np. "w Krakowie" -> "Kraków", "leszczawce" -> "Leszczawka"). Jeśli pytanie o pogodę nie wymienia żadnego miejsca, albo pytanie w ogóle nie dotyczy pogody, odpowiedz dokładnie: NONE.' },
+          { role: 'user', content: pytanie }
+        ]
+      }, { signal: classifierController.signal }),
+      Math.min(2200, typeof requestState?.remainingMs === 'function' ? requestState.remainingMs() : 2200),
+      classifierController,
+      'weather classifier'
+    );
     const miasto = (res.choices[0].message.content || '').trim();
     return (!miasto || miasto.toUpperCase() === 'NONE') ? null : miasto;
   } catch (_) {
