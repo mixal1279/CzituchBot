@@ -77,6 +77,7 @@ function createAIRequestContext(options = {}) {
   ctx.reserveGeneration = (provider, model, phase = 'initial') => {
     if (ctx.isExpired() || ctx.generacje >= ctx.maxGeneracji) return false;
     const isRepair = phase === 'repair';
+    if (isRepair && ctx.remainingMs() < 8500) return false;
     if (isRepair && ctx.repairGeneracje >= ctx.maxRepairGeneracji) return false;
     if (!isRepair && ctx.initialGeneracje >= ctx.maxInitialGeneracji) return false;
     if (!ctx.reserveModel(`generation:${phase}:${provider}/${model}`)) return false;
@@ -88,6 +89,15 @@ function createAIRequestContext(options = {}) {
 
   ctx.reserveValidator = (purpose = 'validator') =>
     ctx.reserve('validatory', ctx.maxValidatorow, purpose);
+
+  ctx.reserveValidatorModel = (purpose = 'validator') => {
+    if (ctx.isExpired()
+      || ctx.validatory >= ctx.maxValidatorow
+      || ctx.modelCalls >= ctx.maxModelCalls) return false;
+    ctx.validatory++;
+    ctx.modelCalls++;
+    return true;
+  };
 
   ctx.reserveTavily = (purpose = 'tavily') =>
     ctx.reserve('tavilySearches', ctx.maxWyszukanTavily, purpose);
