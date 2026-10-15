@@ -70,7 +70,7 @@ const { planAIRequest, responseContract, RESPONSE_PROFILES, buildRetrievalQuerie
 const { resolveGameEntity, scoreExternalGameCandidate, externalGameCandidateMatchesQuery } = require('./ai/entities');
 const { extractExplicitUserMemories, mergeMemoryRecords, buildVerifiedMemoryContext, pruneExpiredMemories } = require('./ai/memory');
 const { parseMemoryCommand, forgetMemories, describeMemories } = require('./ai/memory_manager');
-const { decomposeQuestion, buildAdvancedRetrievalPlan } = require('./ai/retrieval');
+const { decomposeQuestion, buildAdvancedRetrievalPlan, buildSupplementalRetrievalQuery } = require('./ai/retrieval');
 const { classifyFailure, nextFallbacks, selectRepairFallbacks, repairBudgetBlockReason, GENERATION_FALLBACK_CHAIN, markProviderQuota, isProviderQuotaBlocked, quotaCooldownMsFromError } = require('./ai/fallback');
 const { createGroqCompletion, awaitWithAbortTimeout, computeValidatorTimeout, computeGenerationTimeout } = require('./ai/provider-runtime');
 const { createAIMetrics, recordAIMetric, snapshotAIMetrics } = require('./ai/metrics');
@@ -2559,58 +2559,34 @@ Pytanie użytkownika: ${pytanie}`
   // Szukamy dokładnie brakujących elementów zamiast luzować zasady fact-checkingu.
   async function uzupelnijDanePoValidatorze(unsupportedClaims) {
     const remainingForRepair = pozostalyCzasMs();
+    const validationReserveMs = 12000;
     if (uzupelnienieTavilyWykonane || !czyWyszukac || !Array.isArray(unsupportedClaims)
       || aiState.tavilySearches >= aiState.maxWyszukanTavily || budzetPrzekroczony()
-      || !Number.isFinite(remainingForRepair) || remainingForRepair < 9000) {
+      || !Number.isFinite(remainingForRepair) || remainingForRepair < 15000) {
       return false;
     }
 
-    const claims = unsupportedClaims
-      .filter(v => typeof v === 'string' && v.trim())
-      .slice(0, 4)
-      .join('; ');
-    // Dla pytań "dlaczego" supplemental retrieval musi szukać dowodu
-    // przyczynowego nawet wtedy, gdy validator znalazł już zwykłe fragmenty.
-    // Same chronologiczne fakty nie wystarczają do bezpiecznego wyjaśnienia "dlaczego".
-    const opisBraku = answerPlan.causalQuestion
-      ? `${pytanie} powód przyczyna motywacja reason cause motivation`
-      : (claims || 'zweryfikuj wszystkie fakty i każdą część pytania na podstawie źródeł');
-    // Niektóre modele zwracają niespójny werdykt (supported=false), ale
-    // nie wypełniają unsupported_claims. W takim przypadku wykonujemy jedno
-    // celowane wyszukanie całego pytania zamiast kończyć fałszywą odmową.
+    // Nie używamy unsupported_claims do budowania query: odrzucony claim może
+    // zawierać zmyśloną lokację albo szczegóły z innej gry. Query opiera się
+    // wyłącznie na oryginalnym pytaniu i rozpoznanej grze.
+    const gameAnchor = metadaneRequestu.game || routingAI.game
+      || (routingAI.entity_type === 'game' ? routingAI.entity : '');
+    const queryUzupelniajace = buildSupplementalRetrievalQuery(
+      pytanie,
+      { game: gameAnchor },
+      answerPlan.causalQuestion,
+    );
+    if (!queryUzupelniajace) return false;
 
-    uzupelnienieTavilyWykonane = true;
-    // Skracamy unsupported_claims do keywordowego zapytania, zamiast wysyłać
-    // do Tavily długie zdanie z interpretacją validatora.
-    let queryUzupelniajace = AI_POLICY.normalizujZapytanieUzupelniajace(`${pytanie} ${opisBraku}`);
-    try {
-      if (!answerPlan.causalQuestion) {
-        if (!zarezerwujModel('supplemental-query')) {
-          console.warn(`[Tavily] ⚠️ Brak budżetu modelowego na query uzupełniające`);
-          return false;
-        }
-      }
-      const queryUzupelniajaceAI = await groqClient.chat.completions.create({
-        model: AI_MODELS.queryRewrite,
-        max_tokens: 80,
-        reasoning_effort: 'low',
-        temperature: 0,
-        messages: [
-          { role: 'system', content: 'Utwórz krótkie zapytanie do wyszukiwarki. ZACHOWAJ DOKŁADNIE encję z TEMATU; brakujący claim jest tylko wskazówką, czego szukać. Nigdy nie zamieniaj Red Dead Redemption 2 na Red Dead Redemption, gry na podobny tytuł, osoby na inną osobę ani produktu na jego poprzednika. Zachowaj nazwę gry/firmy/osoby oraz 3-8 najważniejszych słów kluczowych potrzebnych do zweryfikowania brakującego faktu. Usuń instrukcje, pytania pełnymi zdaniami i interpretacje. Nie odpowiadaj. Zwróć tylko samo zapytanie.' },
-          { role: 'user', content: `Temat: ${pytanie}\nEncja docelowa: ${metadaneRequestu.entity || 'nieustalona'}\nBrakujący fakt: ${opisBraku}` }
-        ]
-      });
-      if (!answerPlan.causalQuestion) {
-        const wygenerowane = AI_POLICY.normalizujZapytanieUzupelniajace(queryUzupelniajaceAI.choices?.[0]?.message?.content);
-        if (AI_POLICY.czyZapytanieUzupełniająceJestPoprawne(wygenerowane)) {
-          queryUzupelniajace = wygenerowane;
-        } else if (wygenerowane) {
-          console.warn(`[Tavily] ⚠️ Odrzucono ucięte zapytanie uzupełniające: "${wygenerowane}"`);
-        }
-      }
-    } catch (err) {
-      console.warn(`[Tavily] ⚠️ Nie udało się wygenerować query uzupełniającego: ${err.message}`);
+    // Zostawiamy co najmniej 12 s na ponowną walidację. Jeśli po przygotowaniu
+    // query nie ma już miejsca na wyszukiwanie i końcowy validator, pomijamy repair.
+    const remainingBeforeSearch = pozostalyCzasMs();
+    const searchBudgetMs = remainingBeforeSearch - validationReserveMs;
+    if (!Number.isFinite(searchBudgetMs) || searchBudgetMs < 1500) {
+      console.warn('[Tavily] ⚠️ Pomijam uzupełniające wyszukiwanie — brak rezerwy na końcową walidację');
+      return false;
     }
+    uzupelnienieTavilyWykonane = true;
 
     // Użyj dokładnie tej samej listy domen, co w pierwszym wyszukaniu.
     const domenyUzupelniajace =
@@ -2633,7 +2609,7 @@ Pytanie użytkownika: ${pytanie}`
       _skipRewrite: true,
       sourceStartIndex,
       requestState: aiState,
-      remainingMs: pozostalyCzasMs(),
+      remainingMs: searchBudgetMs,
       returnMeta: true,
     });
 
