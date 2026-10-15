@@ -151,9 +151,9 @@ function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '') {
   }
 
   const claimNorm = String(claim || '').toLocaleLowerCase('pl-PL')
-    .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/ł/g, 'l');
   const quoteNorm = claimNorm ? String(quote).toLocaleLowerCase('pl-PL')
-    .normalize('NFD').replace(/[\u0300-\u036f]/g, '') : '';
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/ł/g, 'l') : '';
 
   const causalRe = /(?:\b(?:bo|poniewaz|gdyz|dlatego|because|therefore|caused|causes|consequently|hence)\b|\b(?:as\s+a\s+result|led\s+to|resulted\s+in|because\s+of|due\s+to|so\s+that|in\s+order\s+to)\b|\bz\s+powodu\b|\bdzieki\b|\bspowodow\w*\b|\bdoprowadz\w*\b|\bumozliw\w*\b)/iu;
   const claimCausal = causalRe.test(claimNorm);
@@ -195,7 +195,7 @@ function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '') {
     // actually contains the causal relation, even if the selected quote is
     // only the event sentence. It is rejected when neither does.
     const blockNorm = String(block.content || '').toLocaleLowerCase('pl-PL')
-      .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/ł/g, 'l');
     if (claimCausal && !quoteCausal && !causalRe.test(blockNorm)) {
       reasons.push('claim dodaje relację przyczynową nieobecną w całym źródle: ' + id);
       continue;
