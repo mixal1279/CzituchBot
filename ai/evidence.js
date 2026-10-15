@@ -30,7 +30,8 @@ function quoteExists(sourceContent, quote) {
   // A quote must be one contiguous span after conservative text normalization.
   // Disconnected fragments joined by an ellipsis can hide omitted negations,
   // entities, or causal language and must not count as a verbatim quotation.
-  if (/\\[\\s*(?:\\.{3}|…)\\s*\\]|\\.\\.\\.|…/u.test(String(quote || ''))) return false;\n  return Boolean(source && q && q.length >= 3 && source.includes(q));
+  if (/\[\s*(?:\.{3}|…)\s*\]|\.\.\.|…/u.test(String(quote || ''))) return false;
+  return Boolean(source && q && q.length >= 3 && source.includes(q));
 }
 
 function splitEvidenceSentences(text) {
