@@ -97,7 +97,7 @@ function markProviderQuota(provider, cooldownMs = Number(process.env.AI_PROVIDER
   const endpoint = String(provider || '');
   if (!GENERATION_FALLBACK_CHAIN.includes(endpoint)) return [];
   const duration = Math.max(1_000, Number(cooldownMs) || 60_000);
-  const until = Date.now() + duration;
+  const until = Math.max(quotaBlockedUntil.get(endpoint) || 0, Date.now() + duration);
   quotaBlockedUntil.set(endpoint, until);
   return [endpoint];
 }
