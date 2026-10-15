@@ -10,6 +10,7 @@ on:
       - 'czituch_bot.js'
       - 'scripts/ai-live-benchmark.js'
       - 'test/**'
+      - '.github/workflows/ai-live-benchmark.yml'
 
 concurrency:
   group: ai-live-benchmark
