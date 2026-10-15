@@ -140,7 +140,7 @@ test('validator rejects a quote bound to an unauthorized source', () => {
 });
 
 test('validator evidence hints contain only verbatim quotes from authorized source blocks', () => {
-  const data = '[SOURCE 1]\nTYTUŁ: Portal 2\nTREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>\nWheatley was transferred into GLaDOS body. He later gained control of Aperture.\n<<<END_UNTRUSTED_SOURCE_CONTENT>>>';
+  const data = '[SOURCE 1]\nTYTUŁ: Portal 2\nTREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>\nWheatley was transferred into GLaDOS body. He later gained control of Aperture.\n<<<END_UNTRUSTED_SOURCE_CONTENT>>>\n[SOURCE 2]\nTYTUŁ: Unapproved source\nTREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>\nWheatley was transferred into GLaDOS body.\n<<<END_UNTRUSTED_SOURCE_CONTENT>>>';
   const blocks = parseEvidenceBlocks(data);
   const hints = buildQuestionEvidenceContext(
     'Why did Wheatley take control of GLaDOS?',
@@ -150,6 +150,7 @@ test('validator evidence hints contain only verbatim quotes from authorized sour
     ['Why did Wheatley take control of GLaDOS?', 'Wheatley was transferred into GLaDOS body.', 'He later gained control of Aperture.'],
   );
   assert.match(hints, /SOURCE 1/);
+  assert.doesNotMatch(hints, /SOURCE 2/, 'unapproved source IDs must not enter validator hints');
   const quotes = [...hints.matchAll(/QUOTE: ([^\n]+)/g)].map(match => match[1]);
   assert.ok(quotes.length > 0);
   for (const quote of quotes) assert.equal(quoteExists(blocks[0].content, quote), true, quote);
