@@ -61,6 +61,30 @@ function awaitWithAbortTimeout(promise, timeoutMs, controller, label = 'provider
 }
 
 /**
+ * Choose a reserve for later validator/fallback slots from the remaining deadline.
+ * Keep at least 2.5s for a final response; skip calls that cannot fit a 4s attempt.
+ */
+function computeValidatorReserveMs(remainingMs, currentSlot = 1, maxValidators = 3) {
+  const remaining = Number(remainingMs);
+  if (!Number.isFinite(remaining) || remaining <= 0) return 0;
+  const slot = Math.max(1, Math.floor(Number(currentSlot) || 1));
+  const maxSlots = Math.max(slot, Math.floor(Number(maxValidators) || 3));
+  const futureSlots = maxSlots - slot;
+  if (futureSlots >= 2) {
+    if (remaining >= 14500) return 10500;
+    if (remaining >= 10500) return 6500;
+    if (remaining >= 6500) return 2500;
+    return 2500;
+  }
+  if (futureSlots === 1) {
+    if (remaining >= 10500) return 6500;
+    if (remaining >= 6500) return 2500;
+    return 2500;
+  }
+  return 2500;
+}
+
+/**
  * Allocate a validator timeout from the request's remaining wall-clock budget.
  * Return null when starting the validator would leave too little time for the
  * next validator/fallback to run.
@@ -94,4 +118,4 @@ function computeGenerationTimeout(remainingMs, {
   return timeoutMs >= minTimeoutMs ? Math.floor(timeoutMs) : null;
 }
 
-module.exports = { createGroqCompletion, awaitWithAbortTimeout, withReasoningHeadroom, computeValidatorTimeout, computeGenerationTimeout };
+module.exports = { createGroqCompletion, awaitWithAbortTimeout, withReasoningHeadroom, computeValidatorTimeout, computeValidatorReserveMs, computeGenerationTimeout };
