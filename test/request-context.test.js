@@ -111,5 +111,5 @@ test('production pipeline uses shared validator limit', () => {
   const fs = require('node:fs');
   const path = require('node:path');
   const source = fs.readFileSync(path.join(__dirname, '..', 'czituch_bot.js'), 'utf8');
-  assert.match(source, /maxValidatorow:\\s*DEFAULTS\\.maxValidators/);
+  assert.match(source, /maxValidatorow:\s*DEFAULTS\.maxValidators/);
 });
