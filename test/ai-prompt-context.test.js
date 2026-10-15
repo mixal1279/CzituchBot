@@ -13,6 +13,14 @@ test('long evidence context keeps the actual question at the end of the generato
   assert.ok(prompt.includes('evidence block'));
 });
 
+test('original question overrides a stale embedded rewritten question', () => {
+  const original = 'Dlaczego Wheatley przejął kontrolę nad GLaDOS w Portal 2?';
+  const stale = 'Pytanie użytkownika: Gdzie znaleźć Wielki Miecz w Elden Ring?';
+  const prompt = buildBoundedEvidencePrompt('DANE REFERENCYJNE\\nźródła\\n---\\n' + stale, original);
+  assert.ok(prompt.endsWith('Pytanie użytkownika: ' + original));
+  assert.doesNotMatch(prompt, /Gdzie znaleźć Wielki Miecz/);
+});
+
 test('plain questions and short contexts remain usable without duplication', () => {
   assert.equal(buildBoundedEvidencePrompt('Jak pokonać smoka?', 'Jak pokonać smoka?'), 'Jak pokonać smoka?');
   const prompt = buildBoundedEvidencePrompt('Dane o Skyrim', 'Jak pokonać smoka?');
