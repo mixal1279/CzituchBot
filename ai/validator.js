@@ -150,7 +150,7 @@ function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '') {
   const quoteNorm = claimNorm ? String(quote).toLocaleLowerCase('pl-PL')
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '') : '';
 
-  const causalRe = /(?:\b(?:bo|poniewaz|gdyz|dlatego|celem|because|therefore)\b|\bz\s+powodu\b|\bw\s+celu\b|\bzeby\b|\baby\b|\bdzieki\b|\bbecause\s+of\b|\bdue\s+to\b|\bspowodow\w*\b|\bdoprowadz\w*\b|\bumozliw\w*\b)/iu;
+  const causalRe = /(?:\b(?:bo|poniewaz|gdyz|dlatego|because|therefore)\b|\bz\s+powodu\b|\bdzieki\b|\bbecause\s+of\b|\bdue\s+to\b|\bspowodow\w*\b|\bdoprowadz\w*\b|\bumozliw\w*\b)/iu;
   const claimCausal = causalRe.test(claimNorm);
   const quoteCausal = causalRe.test(quoteNorm);
 
