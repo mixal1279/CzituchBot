@@ -42,6 +42,8 @@ const KNOWN_ENTITY_ALIAS_PATTERNS = [
   { canonical: 'dragonrend', pattern: /\b(?:dragonrend|smocza\s+zguba)\b/iu },
   { canonical: 'spellbreaker', pattern: /\b(?:spellbreaker|zaklinacz\s+spellbreaker|łamacz(?:a|owi|em|u)?\s+zakl(?:ę|e)ć)\b/iu },
   { canonical: 'extended relaxation center', pattern: /\b(?:extended\s+relaxation\s+center|centrum\s+(?:przedluzonego|rozszerzonego)\s+relaksu)\b/iu },
+  { canonical: 'aperture laboratories', pattern: /\b(?:aperture\s+laboratories|laboratori(?:a|ach|ami|ow|ów)\s+aperture)\b/iu },
+  { canonical: 'aperture science', pattern: /\baperture\s+science\b/iu },
 ];
 function normalizujClaim(value) {
   return String(value || '')
