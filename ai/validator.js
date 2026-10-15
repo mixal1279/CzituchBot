@@ -264,7 +264,7 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
     claim: typeof claim?.claim === 'string' ? claim.claim.trim().slice(0, 500) : '',
     supported: claim?.supported === true,
     source_ids: Array.isArray(claim?.source_ids)
-      ? claim.source_ids.filter(v => typeof v === 'string' && v.trim()).map(normalizujIdZrodla).map(v => v.slice(0, 80)).slice(0, 5)
+      ? claim.source_ids.filter(v => typeof v === 'string' && v.trim()).flatMap(v => { const normalized = normalizujIdZrodla(v); return Array.isArray(normalized) ? normalized : [normalized]; }).map(v => v.slice(0, 80)).slice(0, 5)
       : [],
     evidence_quote: typeof claim?.evidence_quote === 'string' ? claim.evidence_quote.trim().slice(0, 500) : '',
     reason: typeof claim?.reason === 'string' ? claim.reason.trim().slice(0, 240) : '',
