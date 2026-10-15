@@ -2,6 +2,13 @@ name: AI live benchmark
 
 on:
   workflow_dispatch:
+  # Temporary one-shot verification: this path filter runs the live benchmark
+  # only when this workflow file changes on the repair branch, not on code pushes.
+  push:
+    branches:
+      - fix/ai-core-retrieval-validator-hardening
+    paths:
+      - .github/workflows/ai-live-benchmark.yml
 
 concurrency:
   group: ai-live-benchmark
