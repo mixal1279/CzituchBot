@@ -95,3 +95,14 @@ test('request context snapshot declares initial and repair generation counters o
   assert.equal((snapshotBody.match(/\binitialGeneracje\s*:/g) || []).length, 1);
   assert.equal((snapshotBody.match(/\brepairGeneracje\s*:/g) || []).length, 1);
 });
+
+test('request context reserves all shared validator slots, including the final OpenRouter fallback', () => {
+  const ctx = createAIRequestContext();
+  assert.equal(ctx.maxValidatorow, DEFAULTS.maxValidators);
+  assert.equal(DEFAULTS.maxValidators, 4);
+  assert.equal(ctx.reserveValidator('gemini:first'), true);
+  assert.equal(ctx.reserveValidator('gemini:repair'), true);
+  assert.equal(ctx.reserveValidator('xkiro'), true);
+  assert.equal(ctx.reserveValidator('openrouter'), true);
+  assert.equal(ctx.reserveValidator('over-budget'), false);
+});
