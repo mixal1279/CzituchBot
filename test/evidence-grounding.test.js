@@ -227,3 +227,35 @@ test('evidence quote verification rejects disconnected fragments joined by ellip
   assert.equal(quoteExists(source, 'Wheatley was transferred into GLaDOS body. ... He later gained control of Aperture.'), false);
   assert.equal(quoteExists(source, 'Wheatley was transferred into GLaDOS body.'), true);
 });
+
+test('benchmark validator traces expose answer and source-bound claims only in live benchmark mode', () => {
+  const original = process.env.AI_LIVE_BENCHMARK;
+  const data = '[SOURCE 1]\nTREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>\nWheatley was transferred into GLaDOS body.\n<<<END_UNTRUSTED_SOURCE_CONTENT>>>';
+  const modelResult = {
+    valid: true, reason: 'ok', unsupported_claims: [], supported: true, relevant: true, complete: true,
+    hallucination: false, confidence: 0.95,
+    claims: [{ claim: 'Wheatley moved into GLaDOS body.', supported: true, source_ids: ['SOURCE 1'], evidence_quote: 'Wheatley was transferred into GLaDOS body.' }],
+  };
+  try {
+    delete process.env.AI_LIVE_BENCHMARK;
+    const ordinary = normalizujWynikWalidatora(modelResult, 'test-model', 'test', new Set(['SOURCE 1']), data, 'Wheatley moved into GLaDOS body.');
+    assert.equal(Object.hasOwn(ordinary.diagnostics, 'benchmarkTrace'), false);
+
+    process.env.AI_LIVE_BENCHMARK = '1';
+    const benchmark = normalizujWynikWalidatora(modelResult, 'test-model', 'test', new Set(['SOURCE 1']), data, 'Wheatley moved into GLaDOS body.');
+    assert.equal(benchmark.diagnostics.benchmarkTrace.answer, 'Wheatley moved into GLaDOS body.');
+    assert.deepEqual(benchmark.diagnostics.benchmarkTrace.claims[0], {
+      claimIndex: 0,
+      claim: 'Wheatley moved into GLaDOS body.',
+      supported: true,
+      sourceIds: ['SOURCE 1'],
+      evidenceQuote: 'Wheatley was transferred into GLaDOS body.',
+      quoteVerified: true,
+      supportVerified: true,
+      supportReason: 'cytat występuje w źródle i bezpośrednio wspiera claim',
+    });
+  } finally {
+    if (original === undefined) delete process.env.AI_LIVE_BENCHMARK;
+    else process.env.AI_LIVE_BENCHMARK = original;
+  }
+});

@@ -6,7 +6,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { normalizeFactText, scoreGoldenFacts } = require('../ai/benchmark-scorer');
-const { buildQuestionForBot, evaluateBenchmarkAnswer, isFailureText, writeBenchmarkReport } = require('../scripts/ai-live-benchmark');
+const { buildQuestionForBot, evaluateBenchmarkAnswer, isFailureText, writeBenchmarkReport, writeStdoutAndWait } = require('../scripts/ai-live-benchmark');
 
 test('benchmark factual normalization preserves words with Polish diacritics and collapses whitespace', () => {
   assert.equal(normalizeFactText('Święty Łukasz  —  przejął kontrolę.'), 'swiety lukasz przejal kontrole');
@@ -66,4 +66,22 @@ test('benchmark report is written atomically as valid JSON at the configured pat
   } finally {
     fs.rmSync(directory, { recursive: true, force: true });
   }
+});
+
+test('benchmark stdout writer waits until the stream flushes', async () => {
+  let completed = false;
+  let written = '';
+  const stream = {
+    write(text, callback) {
+      written = text;
+      setTimeout(() => {
+        completed = true;
+        callback();
+      }, 5);
+      return true;
+    },
+  };
+  await writeStdoutAndWait('{"ok":true}\n', stream);
+  assert.equal(completed, true);
+  assert.equal(written, '{"ok":true}\n');
 });

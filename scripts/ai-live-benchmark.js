@@ -89,6 +89,16 @@ function writeBenchmarkReport(report, destination = process.env.AI_BENCHMARK_JSO
   return serialized;
 }
 
+function writeStdoutAndWait(text, stream = process.stdout) {
+  return new Promise((resolve, reject) => {
+    try {
+      stream.write(text, error => error ? reject(error) : resolve());
+    } catch (error) {
+      reject(error);
+    }
+  });
+}
+
 async function sleep(ms) {
   if (ms > 0) await new Promise(resolve => setTimeout(resolve, ms));
 }
@@ -220,7 +230,8 @@ async function run() {
     diagnostics: diagnostic,
     failures: results.filter(x => !x.answered || x.judgeStatus !== 'accepted' || x.factualPassed === false).slice(0, 100),
   };
-  process.stdout.write(writeBenchmarkReport(report));
+  const serializedReport = writeBenchmarkReport(report);
+  if (!process.env.AI_BENCHMARK_JSON_PATH) await writeStdoutAndWait(serializedReport);
   if (process.env.AI_BENCHMARK_REQUIRE_PERFECT === '1') {
     const factualOk = factualCases.length > 0 && factualPassed === factualCases.length;
     if (answered !== results.length || complete !== results.length || !factualOk) {
@@ -230,7 +241,7 @@ async function run() {
   }
 }
 
-module.exports = { normalizeFactText, scoreGoldenFacts, stratifiedCases, buildQuestionForBot, isFailureText, evaluateBenchmarkAnswer, writeBenchmarkReport, run };
+module.exports = { normalizeFactText, scoreGoldenFacts, stratifiedCases, buildQuestionForBot, isFailureText, evaluateBenchmarkAnswer, writeBenchmarkReport, writeStdoutAndWait, run };
 
 if (require.main === module) {
   run().catch(error => {

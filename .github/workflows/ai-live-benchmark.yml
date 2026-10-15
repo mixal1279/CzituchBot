@@ -25,6 +25,7 @@ jobs:
       AI_BENCHMARK_LIMIT: "5"
       AI_BENCHMARK_DELAY_MS: "750"
       AI_BENCHMARK_REQUIRE_PERFECT: "1"
+      AI_BENCHMARK_JSON_PATH: ai-live-benchmark.json
       AI_PROVIDER_QUOTA_COOLDOWN_MS: "1800000"
       AI_120B_GLOBAL_MAX_REQUESTS: "20"
       CZITUCHBOT_SKIP_STARTUP_IO: "1"
@@ -64,6 +65,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ai-live-benchmark-${{ github.sha }}
-          path: ai-live-benchmark-report.txt
+          path: |
+            ai-live-benchmark-report.txt
+            ai-live-benchmark.json
           if-no-files-found: warn
           retention-days: 1

@@ -480,6 +480,21 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
       mode: evidenceEvaluations[index]?.mode || null,
       reason: evidenceEvaluations[index]?.reason || null,
     })),
+    ...(process.env.AI_LIVE_BENCHMARK === '1' ? {
+      benchmarkTrace: {
+        answer: String(answer || '').slice(0, 2500),
+        claims: claims.map((claim, index) => ({
+          claimIndex: index,
+          claim: String(claim.claim || '').slice(0, 500),
+          supported: claim.supported === true,
+          sourceIds: Array.isArray(claim.source_ids) ? claim.source_ids : [],
+          evidenceQuote: String(claim.evidence_quote || '').slice(0, 500),
+          quoteVerified: Boolean(evidenceQuoteVerified[index]),
+          supportVerified: Boolean(evidenceEvaluations[index]?.ok),
+          supportReason: evidenceEvaluations[index]?.reason || null,
+        })),
+      },
+    } : {}),
     evidenceSourceCount: evidenceAssessment.sourceCount,
     evidenceIndependentHosts: evidenceAssessment.independentHosts,
     localRejectReasons,
