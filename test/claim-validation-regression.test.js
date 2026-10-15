@@ -79,11 +79,11 @@ test('unsupported causal relation remains a hard failure', () => {
 test('purpose clauses are not misclassified as unsupported causal relations', () => {
   const cases = [
     [
-      'Astarion wants to live out his story.',
+      'Astarion chce przeżyć jego historię.',
       'Astarion chce, aby przeżyć jego historię.',
     ],
     [
-      'The Dragonborn uses a shout to absorb a dragon soul.',
+      'Dragonborn używa krzyku, by wchłonąć duszę smoka.',
       'Dragonborn używa krzyku, aby wchłonąć duszę smoka.',
     ],
   ];
