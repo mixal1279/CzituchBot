@@ -367,21 +367,21 @@ console.log('AI regression tests: OK');
   assert.equal(normalizujWynikWalidatora({ ...base, claims: [] }, 'test', 'test', new Set(['REFERENCE 1'])).status, 'inconclusive');
   assert.equal(normalizujWynikWalidatora({
     ...base,
-    claims: [{ claim: 'Fakt', supported: true, source_ids: ['1'], evidence_quote: 'Fakt źródłowy', reason: 'źródło' }]
-  }, 'test', 'test', new Set(['SOURCE 1']), '[SOURCE 1]\nFakt źródłowy').status, 'accepted');
+    claims: [{ claim: 'Fakt', supported: true, source_ids: ['1'], evidence_quote: 'Fakt potwierdzony w źródle testowym.', reason: 'źródło' }]
+  }, 'test', 'test', new Set(['SOURCE 1']), '[SOURCE 1]\nFakt potwierdzony w źródle testowym.').status, 'accepted');
   assert.deepEqual(normalizujWynikWalidatora({
     ...base,
-    claims: [{ claim: 'Fakt', supported: true, source_ids: ['1'], evidence_quote: 'Fakt źródłowy', reason: 'źródło' }]
-  }, 'test', 'test', new Set(['SOURCE 1']), '[SOURCE 1]\nFakt źródłowy').claims[0].source_ids, ['SOURCE 1']);
+    claims: [{ claim: 'Fakt', supported: true, source_ids: ['1'], evidence_quote: 'Fakt potwierdzony w źródle testowym.', reason: 'źródło' }]
+  }, 'test', 'test', new Set(['SOURCE 1']), '[SOURCE 1]\nFakt potwierdzony w źródle testowym.').claims[0].source_ids, ['SOURCE 1']);
 
   assert.equal(normalizujWynikWalidatora({
     ...base,
-    claims: [{ claim: 'Fakt', supported: true, source_ids: ['REFERENCE 1'], evidence_quote: 'Fakt źródłowy', reason: 'źródło' }]
-  }, 'test', 'test', new Set(['REFERENCE 1']), '[REFERENCE 1]\nFakt źródłowy').status, 'accepted');
+    claims: [{ claim: 'Fakt', supported: true, source_ids: ['REFERENCE 1'], evidence_quote: 'Fakt potwierdzony w źródle testowym.', reason: 'źródło' }]
+  }, 'test', 'test', new Set(['REFERENCE 1']), '[REFERENCE 1]\nFakt potwierdzony w źródle testowym.').status, 'accepted');
   assert.equal(normalizujWynikWalidatora({
     ...base,
-    claims: [{ claim: 'Fakt', supported: true, source_ids: ['REFERENCE 999'], evidence_quote: 'Fakt źródłowy', reason: 'źródło' }]
-  }, 'test', 'test', new Set(['REFERENCE 1']), '[REFERENCE 1]\nFakt źródłowy').status, 'rejected');
+    claims: [{ claim: 'Fakt', supported: true, source_ids: ['REFERENCE 999'], evidence_quote: 'Fakt potwierdzony w źródle testowym.', reason: 'źródło' }]
+  }, 'test', 'test', new Set(['REFERENCE 1']), '[REFERENCE 1]\nFakt potwierdzony w źródle testowym.').status, 'rejected');
 
   // Gdy pełna odpowiedź zawiera jeden niepoparty szczegół, zachowujemy
   // wyłącznie atomowy claim z poprawnym source_id i zweryfikowanym evidence.
