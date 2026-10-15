@@ -3,6 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { normalizujWynikWalidatora } = require('../ai/validator');
+const { parseEvidenceText } = require('../ai/pipeline');
 const { parseEvidenceBlocks, quoteExists, buildEvidenceRepairContext, normalizeEvidenceText, classifyClaimType, evidenceRelationSignals, rankEvidenceForClaim, removeLeadingImageFilenameNoise } = require('../ai/evidence');
 
 function base(claim, sourceId, quote, answer = claim) {
@@ -54,6 +55,8 @@ test('unmarked evidence blocks do not treat Polish title or URL metadata as sour
     'TREŚĆ: Wheatley przejął kontrolę nad systemem Aperture.',
   ].join('\n');
   const blocks = parseEvidenceBlocks(data);
+  const pipelineBlocks = parseEvidenceText(data);
+  assert.equal(pipelineBlocks[0].content, blocks[0].content);
   assert.equal(quoteExists(blocks[0].content, 'GLaDOS - Portal Wiki # GLaDOS'), false);
   assert.equal(quoteExists(blocks[0].content, 'https://example.com/glados'), false);
   assert.deepEqual(
