@@ -270,17 +270,21 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
     intent: 'web_fact',
     is_lore: /lore|fabuł|histori|kanon|canon/i.test(String(answer || '')),
   });
-  const unknownSourceClaimIndexes = claims.map((c, index) => c.supported && (!c.source_ids.length || (allowed && c.source_ids.some(id => !allowed.has(id)))) ? index : -1).filter(index => index >= 0);
-  // Canonical evidence binding: the quoted span must resolve to an allowed source.
-  // Semantic support is evaluated against that same source block, while quote integrity
-  // and high-risk causal/action mismatches are checked deterministically.
+  // Canonical evidence binding: repair a malformed model-generated source ID only
+  // when the exact quote resolves to exactly one authorized source. Semantic support
+  // is still checked below; ambiguous or paraphrased quotes are never rebound.
   const parsedEvidenceBlocks = parseEvidenceBlocks(dane);
   const allowedBlocks = allowed
     ? parsedEvidenceBlocks.filter(block => allowed.has(block.sourceId))
     : parsedEvidenceBlocks;
-  // Never silently rebind a validator claim to a different source just because
-  // the same quote happens to occur there. The model must bind each claim to
-  // the explicitly declared, allowed source IDs.
+  for (const claim of claims) {
+    if (!claim.supported || !claim.evidence_quote || !claim.source_ids.length) continue;
+    const idsAreAllowed = !allowed || claim.source_ids.every(id => allowed.has(id));
+    if (idsAreAllowed) continue;
+    const exactMatches = allowedBlocks.filter(block => quoteExists(block.content, claim.evidence_quote));
+    if (exactMatches.length === 1) claim.source_ids = [exactMatches[0].sourceId];
+  }
+  const unknownSourceClaimIndexes = claims.map((c, index) => c.supported && (!c.source_ids.length || (allowed && c.source_ids.some(id => !allowed.has(id)))) ? index : -1).filter(index => index >= 0);
   const effectiveClaimSourceIds = claims.map(c =>
     Array.isArray(c.source_ids) ? c.source_ids : []
   );
