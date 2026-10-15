@@ -56,7 +56,10 @@ function parseEvidenceText(text) {
   // Keep evidence parsing and metadata removal identical in the validator and
   // evidence-policy path. A second parser here previously let page titles/URLs
   // influence evidence scoring even when the validator correctly stripped them.
-  return parseEvidenceBlocks(text);
+  return parseEvidenceBlocks(text).map(block => ({
+    ...block,
+    title: block.title || block.sourceId,
+  }));
 }
 
 function evaluateEvidence(question, routing, sources) {
