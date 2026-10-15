@@ -358,7 +358,7 @@ function sprawdzPokrycieClaimamiOdpowiedzi(answer, claims) {
       const semanticCoverage = Math.max(
         covered,
         conceptCoverage >= 0.5 ? 0.62 : 0,
-        entityCoverage >= 0.5 && covered >= 0.25 ? 0.62 : 0
+        entityCoverage >= 0.75 && covered >= 0.25 ? 0.62 : 0
       );
       return Math.max(best, semanticCoverage);
     }, 0);
