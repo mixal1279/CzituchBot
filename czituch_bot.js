@@ -2179,6 +2179,9 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
   });
   aiState.recordTiming('request_start', { requestTimeoutMs: aiState.maxCzasMs });
   let daneDoWalidacji = null;
+  // Summary hooks can run on early retrieval exits, before generation starts.
+  // Declare the binding up front to avoid a temporal-dead-zone error.
+  let wynikGeneracji = null;
   const budzetPrzekroczony = () => aiState.isExpired();
   const pozostalyCzasMs = () => aiState.remainingMs();
   // Dzielimy pozostały deadline między aktualną i potencjalne kolejne próby.
@@ -3086,7 +3089,7 @@ function oczyscOdpowiedzPrzedWalidacja(tekst) {
     .trim();
 }
 
-  let wynikGeneracji = await generujOdpowiedz(max_tokens, systemPrompt);
+  wynikGeneracji = await generujOdpowiedz(max_tokens, systemPrompt);
   let odp = oczyscOdpowiedzPrzedWalidacja(ograniczDoPelnychZdanAI(usunMarkeryWewnetrzneAI(filtrBezpieczenstwa(wynikGeneracji.tekst)), responseCfg.maxSentences, 1800, responseCfg.maxWords));
   if (!odp) { console.log(`[AI][${requestId}] final status=unavailable — brak odpowiedzi`); zalogujPodsumowanieAI('unavailable'); return; }
   console.log(`[AI][${requestId}] generator=${wynikGeneracji.provider}/${wynikGeneracji.model} liczba prób 120B=${liczbaProb120b}`);
