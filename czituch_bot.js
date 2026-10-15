@@ -2490,10 +2490,16 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
       if (!aiState.reserveTavily('retrieval')) break;
       console.log(`[Tavily] 🔍 Query: "${query}" | Domeny: ${JSON.stringify(domenySpecjalistyczne)}`);
       const wynik = await searchTavilyFn(query, {
-        domains: domenySpecjalistyczne
-          || (pytanieOrazBilly ? domenyTavilyBilly : null)
+        // Persona-specific domain restrictions must take precedence over the
+        // general/specialized game-domain list. The previous order made these
+        // restrictions unreachable whenever domenySpecjalistyczne was an array.
+        domains: (pytanieOrazBilly ? domenyTavilyBilly : null)
           || (pytanieOrazEdzzi ? domenyTavilyEdzzi : null)
-          || (pytanieOrazAngie ? domenyTavilyAngie : null),
+          || (pytanieOrazAngie ? domenyTavilyAngie : null)
+          || domenySpecjalistyczne
+          || domeny
+          || tavilyOptions.domains
+          || null,
         time_range: aiPlan.retrievalTimeRange || zakresTavilyDlaPytania(pytanie, null),
         _skipRewrite: true,
         returnMeta: true,
