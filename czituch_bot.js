@@ -2750,11 +2750,19 @@ Pytanie użytkownika: ${pytanie}`;
     const timeoutMs = timeoutDlaGeneracji();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
+      // All providers must use the same bounded prompt contract so the original
+      // question survives missing or oversized evidence context.
+      const messages = buildMessages(overrideSystemPrompt);
       const response = await fetch('https://api.xkiro.com/v1/chat/completions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${KONFIGURACJA.xkiroKey}` },
-        body: JSON.stringify({          model,
-          messages: [{ role: 'system', content: overrideSystemPrompt }, ...przygotujHistorieDoModelu(historiaRozmowy, 4), { role: 'user', content: String(kontekstAI || '').slice(0, 10000) }],
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: 'system', content: messages.system },
+            ...messages.history,
+            { role: 'user', content: messages.user },
+          ],
           temperature,
           max_tokens: maxTok,
         }),
@@ -2950,14 +2958,21 @@ Pytanie użytkownika: ${pytanie}`;
       modelCalls: aiState.modelCalls,
       maxModelCalls: aiState.maxModelCalls,
     }) : null;
+    const fallbackLimit = phase === 'repair'
+      ? 0
+      : Math.max(0, aiState.maxInitialGeneracji - aiState.initialGeneracje);
+    // Select beyond the limit first, then filter unavailable credentials/cooldowns.
+    // Otherwise unconfigured endpoints can occupy the first N slots and hide a
+    // configured provider later in the fallback chain.
     let candidateSteps = nextFallbacks({
       failure: failureType,
       attempted,
       failedProviders: [...failedFallbackProviders],
-      maxFallbacks: phase === 'repair'
-        ? 0
-        : Math.max(0, aiState.maxInitialGeneracji - aiState.initialGeneracje),
-    });
+      maxFallbacks: GENERATION_FALLBACK_CHAIN.length,
+    })
+      .filter(providerConfiguredForRequest)
+      .filter(step => !isProviderQuotaBlocked(step))
+      .slice(0, fallbackLimit);
     if (phase === 'repair') {
       // Semantic repair should not blindly repeat the model that just produced
       // the rejected answer. Prefer the next healthy provider in the chain,
@@ -3127,6 +3142,8 @@ function oczyscOdpowiedzPrzedWalidacja(tekst) {
       const reason = String(walidacja.reason || 'validator nie potwierdził odpowiedzi').trim().slice(0, 500);
       const feedback = [
         'Twoja poprzednia odpowiedź nie przeszła walidacji.',
+        `PYTANIE ORYGINALNE — odpowiedz dokładnie na nie: ${String(pytanie || '').slice(0, 1500)}`,
+        `POPRZEDNIA ODPOWIEDŹ DO POPRAWY: ${String(odp || '').slice(0, 4000) || '[brak treści]'}`,
         `Powód: ${reason}`,
         unsupported.length ? `Niepotwierdzone twierdzenia: ${unsupported.join(' | ')}` : 'Validator nie wskazał konkretnego twierdzenia.',
         evidenceRepairContext ? '[EVIDENCE REPAIR MAP]\n' + evidenceRepairContext : '[EVIDENCE REPAIR MAP] Brak bezpiecznego fragmentu do ponownego użycia.',
