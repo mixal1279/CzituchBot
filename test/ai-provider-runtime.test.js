@@ -240,7 +240,8 @@ test('Groq cooldown parser honors duration hints with or without seconds', () =>
     assert.equal(quotaCooldownMsFromError('Please try again in 2m'), 120000);
     assert.equal(quotaCooldownMsFromError('Please try again in 1h30m'), 5400000);
     assert.equal(quotaCooldownMsFromError('Please try again in 3m22.176s'), 202176);
-    assert.equal(quotaCooldownMsFromError('Please try again in 5.43s'), 60000);
+    assert.equal(quotaCooldownMsFromError('Please try again in 5.43s'), 5430);
+    assert.equal(quotaCooldownMsFromError('Please try again in 1.5s'), 1500);
     assert.equal(quotaCooldownMsFromError('HTTP 429: high demand'), 60000);
   } finally {
     if (previous === undefined) delete process.env.AI_PROVIDER_QUOTA_COOLDOWN_MS;
