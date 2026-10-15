@@ -24,6 +24,10 @@ const CROSS_LANGUAGE_CONCEPTS = [
   ['elf', /\bhigh\s+elf\b|\belves?\b|elf\w*/i],
   ['wampir', /vampire\w*|wampir\w*/i],
   ['klasa_rogue', /\brogue\b|thief\w*|lotr\w*|zlodziej\w*/i],
+  ['towarzysz', /\bcompanions?\b|recruit\w*|party member\w*|towarzysz\w*|zrekrut\w*/i],
+  ['grywalnosc_postaci', /play as|playable character|control\w*|sterow\w*|mozna nim grac|nim grac/i],
+  ['smok_na_ziemi', /stay on the ground|on the ground|land(?:s|ed|ing)? on the ground|dragonrend|wyladow\w*|pozostac na ziemi|na ziemi/i],
+  ['odpornosc_zywiolowa', /resistan\w*|ward\w*|spellbreaker|odpornosc\w*|wardy|tarcze?\w*/i],
 ];
 function pojeciaCrossLanguage(value) {
   const text = normalizujClaim(value);
@@ -33,6 +37,9 @@ function pojeciaCrossLanguage(value) {
 const COVERAGE_STOPWORDS = new Set(['jest','byla','bylo','byli','zostal','zostala','zostalo','oraz','ktory','ktora','ktore','przez','jako','jego','jej','this','that','with','from','were','was','have','has']);
 const KNOWN_ENTITY_ALIAS_PATTERNS = [
   { canonical: 'greatsword', pattern: /\b(?:greatsword|wielk(?:i|iego|iemu|im|imi)\s+miec(?:z|za|zem|zowi|zu))\b/iu },
+  { canonical: 'dragonrend', pattern: /\b(?:dragonrend|smocza\s+zguba)\b/iu },
+  { canonical: 'spellbreaker', pattern: /\b(?:spellbreaker|zaklinacz\s+spellbreaker)\b/iu },
+  { canonical: 'extended relaxation center', pattern: /\b(?:extended\s+relaxation\s+center|centrum\s+przedluzonego\s+relaksu)\b/iu },
 ];
 function normalizujClaim(value) {
   return String(value || '')
