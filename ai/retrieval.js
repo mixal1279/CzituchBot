@@ -96,9 +96,16 @@ function buildAdvancedRetrievalPlan(question, routing = {}, baseQueries = []) {
   const legacy = Array.isArray(baseQueries) ? baseQueries : [];
   const merged = [];
   const seen = new Set();
-  // Clause queries are reserved first so compound questions cannot lose a
-  // sub-question when the global five-query cap is applied.
-  for (const item of [...clausePlan, ...corePlan, ...legacy.map(query => ({ query, priority: 'fallback', reason: 'legacy' }))]) {
+
+  // Preserve the exact user question and game/entity-qualified versions before
+  // clause decomposition. Otherwise a compound question can fill all five
+  // slots with fragments that no longer identify the game being discussed.
+  const entity = String(routing.game || routing.entity || routing.resolved_entity?.name || '').trim();
+  const game = String(routing.game || routing.resolved_entity?.game || '').trim();
+  const contextQueryCount = Math.min(corePlan.length, 1 + (entity ? 1 : 0) + (game && game !== entity ? 1 : 0));
+  const primaryContext = corePlan.slice(0, contextQueryCount);
+  const remainingCore = corePlan.slice(contextQueryCount);
+  for (const item of [...primaryContext, ...clausePlan, ...remainingCore, ...legacy.map(query => ({ query, priority: 'fallback', reason: 'legacy' }))]) {
     const q = String(item?.query || '').replace(/\s+/g, ' ').trim();
     const key = normalizujToken(q);
     if (q.length < 8 || seen.has(key)) continue;
