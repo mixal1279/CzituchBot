@@ -25,7 +25,10 @@ function ocenJakoscOdpowiedzi(question, answer, routing = {}, profile = 'simple'
   if (!wymagajacy) return { ok: true, score: 1, issues: [] };
 
   const issues = [];
-  if (a.length < (profile === 'lore' || profile === 'gameplay' ? 70 : 35)) issues.push('odpowiedź jest zbyt krótka');
+  // Character-count floors reject concise but complete answers. Prefer a minimum
+  // amount of substantive content; sentence completion and intent checks remain separate gates.
+  const minContentTokens = profile === 'lore' || profile === 'gameplay' ? 4 : 2;
+  if (tokens(a).length < minContentTokens) issues.push('odpowiedź jest zbyt krótka');
   if (!/[.!?]$/.test(a)) issues.push('odpowiedź nie kończy się pełnym zdaniem');
 
   const qTokens = tokens(q);
