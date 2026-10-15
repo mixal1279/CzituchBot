@@ -221,7 +221,7 @@ function buildRetrievalPlan(question, routing = {}, options = {}) {
   const q = String(question || '').replace(/\s+/g, ' ').trim();
   if (!q || routing.needs_web === false) return [];
 
-  const entity = String(routing.game || routing.entity || routing.resolved_entity?.name || '').trim();
+  const entity = String(routing.resolved_entity?.name || routing.entity || routing.game || '').trim();
   const game = String(routing.game || routing.resolved_entity?.game || '').trim();
   const base = [];
   const add = (x, reason = 'primary') => {
