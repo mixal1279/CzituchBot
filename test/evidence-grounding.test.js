@@ -46,6 +46,22 @@ test('evidence parser strips leading page metadata before quote validation and c
   assert.equal(candidates[0].quote, 'GLaDOS was transferred into a potato battery after Wheatley took control.');
 });
 
+test('unmarked evidence blocks do not treat Polish title or URL metadata as source content', () => {
+  const data = [
+    '[SOURCE 1]',
+    'TYTUŁ: GLaDOS - Portal Wiki # GLaDOS',
+    'URL: https://example.com/glados',
+    'TREŚĆ: Wheatley przejął kontrolę nad systemem Aperture.',
+  ].join('\n');
+  const blocks = parseEvidenceBlocks(data);
+  assert.equal(quoteExists(blocks[0].content, 'GLaDOS - Portal Wiki # GLaDOS'), false);
+  assert.equal(quoteExists(blocks[0].content, 'https://example.com/glados'), false);
+  assert.deepEqual(
+    rankEvidenceForClaim('GLaDOS stworzyła system Aperture.', blocks, new Set(['SOURCE 1'])),
+    [],
+  );
+});
+
 test('evidence ranking strips leading image filenames but preserves verbatim source quotes', () => {
   const content = 'BG3 Astarion.png BG3 Astarion.png Astarion is an Origin character in Baldur’s Gate 3. You can play as Astarion or recruit him as a companion.';
   const blocks = parseEvidenceBlocks(`[SOURCE 1]
