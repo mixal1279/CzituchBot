@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { normalizujWynikWalidatora } = require('../ai/validator');
-const { parseEvidenceBlocks, quoteExists, buildEvidenceRepairContext, normalizeEvidenceText, classifyClaimType, evidenceRelationSignals } = require('../ai/evidence');
+const { parseEvidenceBlocks, quoteExists, buildEvidenceRepairContext, normalizeEvidenceText, classifyClaimType, evidenceRelationSignals, rankEvidenceForClaim, removeLeadingImageFilenameNoise } = require('../ai/evidence');
 
 function base(claim, sourceId, quote, answer = claim) {
   return normalizujWynikWalidatora({
@@ -27,6 +27,20 @@ test('evidence parser preserves source identity and exact content', () => {
   assert.equal(blocks[0].title, 'Test');
   assert.equal(quoteExists(blocks[0].content, 'Arthur returned to camp.'), true);
   assert.equal(quoteExists(blocks[0].content, 'Arthur invented a new camp.'), false);
+});
+
+test('evidence ranking strips leading image filenames but preserves verbatim source quotes', () => {
+  const content = 'BG3 Astarion.png BG3 Astarion.png Astarion is an Origin character in Baldur’s Gate 3. You can play as Astarion or recruit him as a companion.';
+  const blocks = parseEvidenceBlocks(`[SOURCE 1]
+TYTUŁ: BG3 Astarion.png
+TREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>
+${content}
+<<<END_UNTRUSTED_SOURCE_CONTENT>>>`);
+  assert.equal(removeLeadingImageFilenameNoise(content), 'Astarion is an Origin character in Baldur’s Gate 3. You can play as Astarion or recruit him as a companion.');
+  const candidates = rankEvidenceForClaim('Astarion is an Origin character in Baldur’s Gate 3.', blocks, new Set(['SOURCE 1']));
+  assert.ok(candidates.length > 0);
+  assert.equal(candidates[0].quote, 'Astarion is an Origin character in Baldur’s Gate 3.');
+  assert.equal(quoteExists(blocks[0].content, candidates[0].quote), true);
 });
 
 test('evidence normalization handles ł, day inflections, and Polish month inflections', () => {
