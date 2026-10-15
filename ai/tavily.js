@@ -143,7 +143,7 @@ function filtrujMaterialPoSlowachTavily(material, pytanie) {
   if (!text || keywords.length < 1) return text;
 
   const sentences = text
-    .split(/(?<=[.!?])\\s+|\\n+/)
+    .split(/(?<=[.!?])\s+|\n+/)
     .map(s => s.trim())
     .filter(Boolean);
   if (sentences.length <= 2) return text;
@@ -173,7 +173,7 @@ function filtrujMaterialPoSlowachTavily(material, pytanie) {
 
   // Preserve causal mechanism sentences when they sit near a matched event,
   // even if they share no lexical keyword with the query.
-  const causal = /\\b(?:because|since|therefore|due to|as a result|caused|led to|so that|because of|ponieważ|poniewaz|gdyż|gdyz|dlatego|w rezultacie|w wyniku|z powodu|spowodował|spowodowal|umożliwił|umozliwil)\\b/i;
+  const causal = /\b(?:because|since|therefore|due to|as a result|caused|led to|so that|because of|ponieważ|poniewaz|gdyż|gdyz|dlatego|w rezultacie|w wyniku|z powodu|spowodował|spowodowal|umożliwił|umozliwil)\b/i;
   for (let i = 0; i < sentences.length; i++) {
     if (causal.test(sentences[i]) && (keepIndexes.has(i - 1) || keepIndexes.has(i + 1))) {
       keepIndexes.add(i);
