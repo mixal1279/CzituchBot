@@ -145,3 +145,54 @@ test('validator rejects a coarse claims payload that cannot cover a multi-senten
   assert.equal(result.status, 'rejected');
   assert.equal(result.diagnostics.localRejectReasons.includes('claims_too_coarse_for_answer'), true);
 });
+
+
+test('validator accepts supported causal synthesis from one authorized source block', () => {
+  const source = '[SOURCE 1]\nTYTUŁ: Portal 2 lore\nTREŚĆ: Chell and Wheatley force a core transfer on GLaDOS so that they can both escape Aperture Science. Wheatley is put in its place, putting him in control of the facility.';
+  const answer = 'Wheatley przejął kontrolę nad obiektem, aby razem z Chell uciec z Aperture Science.';
+  const result = normalizujWynikWalidatora({
+    valid: true, reason: 'confirmed', unsupported_claims: [],
+    supported: true, relevant: true, complete: true, hallucination: false, confidence: 0.96,
+    claims: [{
+      claim: answer,
+      supported: true,
+      source_ids: ['SOURCE 1'],
+      evidence_quote: 'Wheatley is put in its place, putting him in control of the facility.',
+    }],
+  }, 'test-model', 'test', new Set(['SOURCE 1']), source, answer);
+  assert.equal(result.status, 'accepted', JSON.stringify(result.diagnostics));
+  assert.equal(result.diagnostics.evidenceBindings[0].mode, 'source_block_synthesis');
+});
+
+test('validator does not mistake a Polish sentence starter for a proper name', () => {
+  const source = '[SOURCE 1]\nTYTUŁ: Dragon combat guide\nTREŚĆ: If you are fighting a fire breathing dragon, use frost spells or frost enchanted weapons and vice versa for a frost breathing dragon.';
+  const answer = 'Przeciw ognistemu oddechowi stosuje się zaklęcia i bronie lodowe, a przeciw lodowemu – ogniste.';
+  const result = normalizujWynikWalidatora({
+    valid: true, reason: 'confirmed', unsupported_claims: [],
+    supported: true, relevant: true, complete: true, hallucination: false, confidence: 0.96,
+    claims: [{
+      claim: answer,
+      supported: true,
+      source_ids: ['SOURCE 1'],
+      evidence_quote: 'If you are fighting a fire breathing dragon, use frost spells or frost enchanted weapons and vice versa for a frost breathing dragon.',
+    }],
+  }, 'test-model', 'test', new Set(['SOURCE 1']), source, answer);
+  assert.equal(result.status, 'accepted', JSON.stringify(result.diagnostics));
+});
+
+test('validator can verify a short exact quote when the same source provides the entity context', () => {
+  const source = '[SOURCE 1]\nTYTUŁ: Baldur’s Gate 3 character guide\nTREŚĆ: Astarion is an Origin character in Baldur’s Gate 3. He is a High Elf and a Vampire.\n';
+  const answer = 'Astarion jest wysokim elfem.';
+  const result = normalizujWynikWalidatora({
+    valid: true, reason: 'confirmed', unsupported_claims: [],
+    supported: true, relevant: true, complete: true, hallucination: false, confidence: 0.96,
+    claims: [{
+      claim: answer,
+      supported: true,
+      source_ids: ['SOURCE 1'],
+      evidence_quote: 'He is a High Elf.',
+    }],
+  }, 'test-model', 'test', new Set(['SOURCE 1']), source, answer);
+  assert.equal(result.status, 'accepted', JSON.stringify(result.diagnostics));
+  assert.equal(result.diagnostics.evidenceBindings[0].mode, 'source_block_synthesis');
+});
