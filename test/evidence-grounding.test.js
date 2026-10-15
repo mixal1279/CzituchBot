@@ -57,7 +57,7 @@ test('unmarked evidence blocks do not treat Polish title or URL metadata as sour
   assert.equal(quoteExists(blocks[0].content, 'GLaDOS - Portal Wiki # GLaDOS'), false);
   assert.equal(quoteExists(blocks[0].content, 'https://example.com/glados'), false);
   assert.deepEqual(
-    rankEvidenceForClaim('GLaDOS stworzyła system Aperture.', blocks, new Set(['SOURCE 1'])),
+    rankEvidenceForClaim('GLaDOS stworzyła Companion Cube.', blocks, new Set(['SOURCE 1'])),
     [],
   );
 });
