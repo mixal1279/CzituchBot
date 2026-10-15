@@ -208,8 +208,17 @@ function wariantyNazwyDoDopasowania(entity) {
 function czyNazwaWlasnaWystepuje(entity, evidenceNormalized) {
   const evidenceTokens = normalizujClaim(evidenceNormalized).split(' ').filter(Boolean);
   if (!evidenceTokens.length) return false;
-  return wariantyNazwyDoDopasowania(entity).some(variant => {
-    const normalized = normalizujClaim(variant).split(' ').filter(Boolean);
+
+  // Preserve spaces for canonical multi-word aliases. The inflection helper is
+  // optimized for single-token names and intentionally removes whitespace.
+  const variants = new Set([normalizujClaim(entity)]);
+  for (const variant of wariantyNazwyDoDopasowania(entity)) {
+    const normalizedVariant = normalizujClaim(variant);
+    if (normalizedVariant) variants.add(normalizedVariant);
+  }
+
+  return [...variants].some(variant => {
+    const normalized = String(variant || '').split(' ').filter(Boolean);
     if (!normalized.length || normalized.length > evidenceTokens.length) return false;
     for (let start = 0; start <= evidenceTokens.length - normalized.length; start++) {
       if (normalized.every((token, offset) => evidenceTokens[start + offset] === token)) return true;
