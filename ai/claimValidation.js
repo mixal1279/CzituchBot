@@ -86,7 +86,7 @@ function wyodrebnijNazwyWlasne(value) {
     'większość', 'wiekszosc', 'część', 'czesc', 'każdy', 'kazdy',
     'pierwszy', 'drugi', 'trzeci', 'można', 'mozna', 'może', 'moze',
     'jest', 'są', 'sa', 'był', 'byla', 'było', 'bylo', 'byli',
-    'to', 'ten', 'ta', 'te', 'jego', 'jej', 'oni', 'one'
+    'to', 'ten', 'ta', 'te', 'jego', 'jej', 'oni', 'one', 'smoki', 'najlepszym', 'gracz', 'gracze', 'wrog', 'postać', 'postac', 'pytanie', 'odpowiedź', 'odpowiedz'
   ]);
   const candidates = [];
   const aliasSpans = [];
