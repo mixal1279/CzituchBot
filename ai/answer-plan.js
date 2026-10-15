@@ -2,13 +2,13 @@
 
 const SLOT_PATTERNS = Object.freeze({
   why: /\b(dlaczego|czemu|z jakiego powodu|why|how come)\b/i,
-  how: /\b(jak|w jaki sposób|how)\b/i,
+  // „Jak” samo w sobie nie oznacza instrukcji: rozróżniamy mechanizm działania od pytań o czas i procedurę.\n  how: /\b(jak działa|jak funkcjonuje|w jaki sposób działa|na czym polega|how does .{1,80} work|how do .{1,80} work)\b/i,
   when: /\b(kiedy|w którym roku|w jakim roku|when)\b/i,
   where: /\b(gdzie|dokąd|skąd|where)\b/i,
   who: /\b(kto|kim|czyj|who|whose)\b/i,
-  quantity: /\b(ile|jak dużo|jak wiele|how many|how much)\b/i,
+  quantity: /\b(ile|jak długo|jak dlugo|jak dużo|jak wiele|how long|how many|how much)\b/i,
   comparison: /\b(czym\s+(?:się\s+)?różni|czym\s+różni\s+się|różnica|porównaj|lepszy|gorszy|vs\.?|versus|difference|compare)\b/i,
-  steps: /\b(jak zrobić|jak wykonać|jak zdobyć|jak przejść|jak naprawić|jak użyć|instrukcja|krok po kroku|how to|walkthrough)\b/i,
+  steps: /\b(jak zrobić|jak wykonać|jak zdobyć|jak przejść|jak pokonać|jak znaleźć|jak znalezc|jak odblokować|jak odblokowac|jak aktywować|jak aktywowac|jak naprawić|jak naprawic|jak użyć|jak uzyc|instrukcja|krok po kroku|how to|walkthrough)\b/i,
   outcome: /\b(co\s+(?:się\s+)?stało(?:\s+się)?|co dalej|jaki był skutek|konsekw\p{L}*|what happened|what happened next)\b/iu,
   relationship: /\b(relacj\p{L}*|związek|przyjaźń|wróg|sojusz|relationship|friend|enemy|alliance)\b/iu,
 });
@@ -91,12 +91,12 @@ function extractAnswerSignals(answer) {
   const where = /\b(w|we|na|do|z|ze)\s+[a-ząćęłńóśźż0-9-]+/.test(text)
     && !/\b(?:w|we|na|do)\s+(?:odpowiednim|okreslonym|okreslonej|miejscu|miejsca)\b/.test(text);
   const causalMarker = /\b(dlaczego|czemu|powod|poniewaz|bo|because|because of|due to)\b/.exec(text)?.[0] || '';
-  const procedural = /\b(nalezy|trzeba|mozna|sposob|krok|najpierw|potem|nastepnie|first|then|step)\b/.exec(text)?.[0] || '';
+  const procedural = /\b(nalezy|trzeba|mozna|sposob|krok|najpierw|potem|nastepnie|first|then|step)\b/.exec(text)?.[0] || '';\n  const mechanism = /\b(dziala|funkcjonuje|polega|mechanizm|umozliw\w*|pozwala)\b/.exec(text)?.[0] || '';
   const relationshipMarker = /\b(?:relacj\p{L}*|zwiazk\p{L}*|przyjac\p{L}*|wrog\p{L}*|sojusz\p{L}*|zdrad\p{L}*|partner\p{L}*)\b/u.exec(text)?.[0] || '';
 
   return {
     why: Boolean(causalMarker) && hasMeaningfulTail(text, causalMarker),
-    how: Boolean(procedural) && hasMeaningfulTail(text, procedural),
+    how: Boolean(mechanism) && hasMeaningfulTail(text, mechanism),
     when: /\b(?:19|20)\d{2}\b|\b(?:w|od|do)\s+(?:styczniu|lutym|marcu|kwietniu|maju|czerwcu|lipcu|sierpniu|wrzesniu|pazdzierniku|listopadzie|grudniu)\b|\b(?:wtedy|nastepnie|pozniej|wcześniej|wczesniej)\b/.test(text),
     where,
     location: where,
