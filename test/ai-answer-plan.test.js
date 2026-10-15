@@ -32,6 +32,24 @@ test('v26 judge detects grounded but incomplete causal answer', () => {
   assert.ok(result.missing.includes('causal_explanation'));
 });
 
+test('high-score answer is still repaired when one mandatory slot is missing', () => {
+  const plan = {
+    complexity: 'high',
+    requirements: [
+      { id: 'entity_context', required: true },
+      { id: 'why', required: true },
+      { id: 'causal_explanation', required: true },
+      { id: 'relationship', required: true },
+    ],
+  };
+  const answer = 'Wheatley przejął kontrolę, ponieważ wykorzystał wymianę rdzeni.';
+  const result = judgeAnswer(answer, plan);
+  assert.equal(result.score, 0.75);
+  assert.equal(result.status, 'repair');
+  assert.deepEqual(result.missing, ['relationship']);
+  assert.match(result.reason, /relationship/);
+});
+
 test('v26 judge accepts complete causal answer', () => {
   const plan = buildAnswerPlan('Dlaczego Wheatley przejął kontrolę nad GLaDOS?', {
     intent:'web_fact', is_lore:true, entity:'Wheatley', game:'Portal 2',
