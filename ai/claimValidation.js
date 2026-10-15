@@ -1,7 +1,7 @@
 'use strict';
 
 const NEGATION_RE = /(?<![\p{L}])(?:nie|nigdy|brak|bez|zaden|zadna|zadne|never|no|not|doesn't|isn't|cannot|won't)(?![\p{L}])/iu;
-const CAUSAL_RE = /(?<![\p{L}])(?:bo|poniewaz|gdyz|dlatego|because|therefore|caused|causes|consequently|hence|as\s+a\s+result|led\s+to|resulted\s+in|because\s+of|due\s+to|so\s+that|in\s+order\s+to|z\s+powodu|dzieki|spowodow\w*|doprowadz\w*|umozliw\w*)(?![\p{L}])/iu;
+const CAUSAL_RE = /(?<![\p{L}])(?:bo|poniewaz|gdyz|dlatego|because|therefore|caused|causes|consequently|hence|as\s+a\s+result|led\s+to|leading\s+to|resulted\s+in|resulting\s+in|because\s+of|due\s+to|so\s+that|in\s+order\s+to|thereby|thus|allow(?:s|ed|ing)?|enabl(?:e|es|ed|ing)|which\s+(?:let|lets|allowed|allows|enabled|enables)|putting\s+(?:him|her|them|it)\s+in\s+control|z\s+powodu|dzieki|spowodow\w*|doprowadz\w*|umozliw\w*)(?![\p{L}])/iu;
 const TEMPORAL_RE = /(?<![\p{L}])(?:19|20)\d{2}(?![\p{L}])|(?<![\p{L}])(?:styczen|luty|marzec|kwiecien|maj|czerwiec|lipiec|sierpien|wrzesien|pazdziernik|listopad|grudzien|wczoraj|dzisiaj|jutro|today|yesterday|tomorrow)(?![\p{L}])/iu;
 const CROSS_LANGUAGE_CONCEPTS = [
   ['porwanie', /kidnap\w*|abduct\w*|captur\w*|porwan\w*|uprowadz\w*/i],
@@ -16,6 +16,14 @@ const CROSS_LANGUAGE_CONCEPTS = [
   ['tworzenie', /creat\w*|develop\w*|build\w*|made\b|stworz\w*|tworz\w*|opracow\w*/i],
   ['praca', /work\w*|employ\w*|job\w*|prac\w*|zatrud\w*/i],
   ['lokalizacja', /found|find\w*|locat\w*|location\w*|znalezc\w*|znajduj\w*|lokaliz\w*|lezy|polozen\w*/i],
+  ['ogien', /fire\w*|flame\w*|ogn\w*|plomien\w*/i],
+  ['lod', /frost\w*|\bice\b|lod\w*|mroz\w*/i],
+  ['smok', /dragon\w*|smok\w*/i],
+  ['zaklecie', /spell\w*|magic\w*|zakle\w*/i],
+  ['bron', /weapon\w*|sword\w*|bron\w*/i],
+  ['elf', /\bhigh\s+elf\b|\belves?\b|elf\w*/i],
+  ['wampir', /vampire\w*|wampir\w*/i],
+  ['klasa_rogue', /\brogue\b|thief\w*|lotr\w*|zlodziej\w*/i],
 ];
 function pojeciaCrossLanguage(value) {
   const text = normalizujClaim(value);
@@ -86,7 +94,12 @@ function wyodrebnijNazwyWlasne(value) {
     'większość', 'wiekszosc', 'część', 'czesc', 'każdy', 'kazdy',
     'pierwszy', 'drugi', 'trzeci', 'można', 'mozna', 'może', 'moze',
     'jest', 'są', 'sa', 'był', 'byla', 'było', 'bylo', 'byli',
-    'to', 'ten', 'ta', 'te', 'jego', 'jej', 'oni', 'one', 'smoki', 'najlepszym', 'gracz', 'gracze', 'wrog', 'postać', 'postac', 'pytanie', 'odpowiedź', 'odpowiedz'
+    'to', 'ten', 'ta', 'te', 'jego', 'jej', 'oni', 'one', 'smoki', 'najlepszym', 'gracz', 'gracze', 'wrog', 'postać', 'postac', 'pytanie', 'odpowiedź', 'odpowiedz',
+    'przeciw', 'misja', 'misji', 'mission', 'quest', 'transfer', 'core', 'initial', 'first',
+    'a', 'an', 'the', 'if', 'it', 'he', 'she', 'they', 'we', 'you', 'his', 'her', 'their',
+    'this', 'these', 'those', 'once', 'with', 'against', 'during', 'after', 'before', 'from', 'for', 'as',
+    'how', 'why', 'when', 'where', 'who', 'what', 'which', 'while', 'then', 'also', 'one', 'two',
+    'znajduje', 'znaleziono', 'położony', 'polozony', 'broń', 'bron', 'sposób', 'sposob', 'metoda'
   ]);
   const candidates = [];
   const aliasSpans = [];
@@ -243,17 +256,29 @@ function czyRelacjaPrzyczynowaPokrywaClaim(evidence, claim) {
     .split(/(?<=[.!?])\s+/)
     .map(s => s.trim())
     .filter(Boolean);
-  const relationRe = /(?<![\p{L}])(?:bo|poniewaz|gdyz|dlatego|z powodu|dzieki|spowod\w*|doprowadz\w*|umozliw\w*|because|therefore|due to|caused|led to|so that)(?![\p{L}])/iu;
-  return sentences.some(sentence => {
-    const normalized = normalizujClaim(sentence);
+  const windows = [];
+  for (let i = 0; i < sentences.length; i++) {
+    // Causal relations can span an event sentence and the result sentence.
+    windows.push(sentences.slice(i, Math.min(sentences.length, i + 3)).join(' '));
+  }
+  const relationRe = /(?<![\p{L}])(?:bo|poniewaz|gdyz|dlatego|z powodu|dzieki|spowod\w*|doprowadz\w*|umozliw\w*|because|therefore|due to|caused|led to|leading to|resulted in|resulting in|so that|in order to|thereby|thus|allow(?:s|ed|ing)?|enabl(?:e|s|ed|ing)|which\s+(?:let|lets|allowed|allows|enabled|enables)|putting\s+(?:him|her|them|it)\s+in\s+control)(?![\p{L}])/iu;
+  const claimConcepts = pojeciaCrossLanguage(claimText);
+  return windows.some(window => {
+    const normalized = normalizujClaim(window);
     if (!relationRe.test(normalized)) return false;
     const entityOk = !claimEntities.length || claimEntities.every(entity => czyNazwaWlasnaWystepuje(entity, normalized));
-    const evidenceTokens = tokenyPokryciaBezStop(sentence);
+    const evidenceTokens = tokenyPokryciaBezStop(window);
     const matchedTokens = claimTokens.filter(token => evidenceTokens.some(other => tokenyPokrywajaSie(token, other)));
     const tokenOverlapScore = claimTokens.length ? matchedTokens.length / claimTokens.length : 0;
-    return entityOk && tokenOverlapScore >= 0.22;
+    const evidenceConcepts = pojeciaCrossLanguage(window);
+    const sharedConcepts = [...claimConcepts].filter(concept => evidenceConcepts.has(concept));
+    return entityOk && (
+      tokenOverlapScore >= 0.22
+      || (sharedConcepts.length > 0 && tokenOverlapScore >= 0.10)
+    );
   });
 }
+
 function zgodnoscStrukturalna(evidence, claim, options = {}) {
   const e = String(evidence || '');
   const c = String(claim || '');
