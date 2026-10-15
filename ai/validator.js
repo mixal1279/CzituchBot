@@ -323,9 +323,13 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
   ));
 
   const sentenceCount = answerCoverage.totalSentences ?? null;
+  // The generator contract requires atomic factual claims. One broad claim must
+  // not cover several answer sentences just because the answer's average score
+  // passes a coarse sentence-count heuristic.
+  const factualSentenceCount = Number(answerCoverage.checkedSentences || 0);
   const claimGranularityOk = !answer || !sentenceCount || sentenceCount <= 1
     ? true
-    : answerCoverage.ok && claims.length >= Math.min(3, Math.ceil(sentenceCount / 3));
+    : answerCoverage.ok && claims.length >= Math.min(12, factualSentenceCount);
   const evidenceContractOk = !dane || !answer || evidenceAssessment.status !== 'weak' || (claims.length > 0 && unsupportedEvidenceClaimIndexes.length === 0 && unknownSourceClaimIndexes.length === 0 && evidenceAssessment.sourceCount >= 1);
 
   const claimContractOk = claims.length > 0
