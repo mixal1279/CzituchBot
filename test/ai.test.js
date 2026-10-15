@@ -804,3 +804,22 @@ console.log('AI regression tests: OK');
   );
   assert.equal(impossibleQuote.length, 0, 'repair context must not offer ellipsis-composed quotes');
 }
+
+
+{
+  const { parseEvidenceBlocks, quoteExists, ensureEvidenceSourceId, buildEvidenceCandidatesFromSources } = require('../ai/evidence');
+  const blocks = parseEvidenceBlocks('[SOURCE 1]\nTYTUŁ: Test\nURL: https://example.com\nTREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>\nWheatley przejął kontrolę nad systemem Aperture.\n<<<END_UNTRUSTED_SOURCE_CONTENT>>>');
+  assert.equal(ensureEvidenceSourceId(blocks[0]), 'SOURCE 1');
+  assert.equal(ensureEvidenceSourceId({ id: 'S1', url: 'https://example.com' }), null);
+
+  const candidates = buildEvidenceCandidatesFromSources(blocks, 'Wheatley przejął kontrolę nad systemem Aperture.', {
+    allowedSourceIds: new Set(['SOURCE 1']),
+    limit: 3,
+  });
+  assert.ok(candidates.length > 0);
+  assert.equal(candidates[0].source_id, 'SOURCE 1');
+  assert.equal(quoteExists(blocks[0].content, candidates[0].evidence_quote), true);
+  assert.deepEqual(buildEvidenceCandidatesFromSources(blocks, 'Wheatley przejął kontrolę.', {
+    allowedSourceIds: new Set(['SOURCE 99']),
+  }), []);
+}
