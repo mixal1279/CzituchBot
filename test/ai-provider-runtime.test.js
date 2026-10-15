@@ -247,3 +247,13 @@ test('Groq cooldown parser honors duration hints with or without seconds', () =>
     else process.env.AI_PROVIDER_QUOTA_COOLDOWN_MS = previous;
   }
 });
+
+test('a shorter later quota error cannot shorten an active provider cooldown', () => {
+  resetProviderQuotaCooldowns();
+  const provider = 'groq:openai/gpt-oss-120b';
+  markProviderQuota(provider, 120000);
+  const checkAt = Date.now() + 60000;
+  markProviderQuota(provider, 1000);
+  assert.equal(isProviderQuotaBlocked(provider, checkAt), true);
+  resetProviderQuotaCooldowns();
+});
