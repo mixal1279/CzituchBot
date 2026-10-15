@@ -190,7 +190,9 @@ assert.match(require('fs').readFileSync(require('path').join(__dirname, '..', 'c
   assert.ok(plan.length >= 2);
   assert.equal(plan[0].query, question);
   assert.match(plan[1].query, /Wheatley/i);
+  assert.match(plan[1].query, /Portal 2/i);
   assert.match(plan[2].query, /Portal 2/i);
+  assert.match(plan[2].query, /Wheatley/i);
   assert.ok(plan.some(x => /Portal 2/i.test(x.query)));
   assert.equal(shouldRunAdditionalRetrieval({text:'krótko',sourceCount:1}), true);
   assert.equal(rankRetrievalNeed({routing:{is_lore:true},sourceCount:1,textLength:100}), 'high');
