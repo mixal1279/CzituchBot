@@ -212,19 +212,7 @@ function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '') {
     if (quoteStructural.ok) {
       return { ok: true, sourceId: id, mode: 'exact_quote', reason: 'cytat występuje w źródle i bezpośrednio wspiera claim' };
     }
-    const supported = zgodnoscStrukturalna(block.content, claim, {
-      allowCrossLanguageExactEvidence: true,
-      allowDistributedEvidence: false,
-    });
-    if (supported.ok) {
-      return {
-        ok: true,
-        sourceId: id,
-        mode: 'source_context',
-        reason: 'cytat jest rzeczywistym fragmentem źródła, a ten sam source block wspiera claim',
-      };
-    }
-    reasons.push(supported.reason || 'evidence nie potwierdza claimu');
+    reasons.push(quoteStructural.reason || 'wybrany cytat nie potwierdza claimu bezpośrednio');
   }
 
   return { ok: false, reason: reasons[0] || 'brak zweryfikowanego evidence' };
