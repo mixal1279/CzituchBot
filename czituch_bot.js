@@ -71,7 +71,7 @@ const { resolveGameEntity, scoreExternalGameCandidate, externalGameCandidateMatc
 const { extractExplicitUserMemories, mergeMemoryRecords, buildVerifiedMemoryContext, pruneExpiredMemories } = require('./ai/memory');
 const { parseMemoryCommand, forgetMemories, describeMemories } = require('./ai/memory_manager');
 const { decomposeQuestion, isMultiPartQuestion, buildAdvancedRetrievalPlan, buildSupplementalRetrievalQuery } = require('./ai/retrieval');
-const { classifyFailure, nextFallbacks, selectRepairFallbacks, repairBudgetBlockReason, GENERATION_FALLBACK_CHAIN, markProviderQuota, isProviderQuotaBlocked, quotaCooldownMsFromError } = require('./ai/fallback');
+const { classifyFailure, nextFallbacks, selectRepairFallbacks, filterAvailableFallbacks, repairBudgetBlockReason, GENERATION_FALLBACK_CHAIN, markProviderQuota, isProviderQuotaBlocked, quotaCooldownMsFromError } = require('./ai/fallback');
 const { createGroqCompletion, awaitWithAbortTimeout, computeValidatorTimeout, computeGenerationTimeout } = require('./ai/provider-runtime');
 const { createAIMetrics, recordAIMetric, snapshotAIMetrics } = require('./ai/metrics');
 const { DEFAULTS, sanitizeRequestText } = require('./ai/limits');
@@ -2964,15 +2964,14 @@ Pytanie użytkownika: ${pytanie}`;
     // Select beyond the limit first, then filter unavailable credentials/cooldowns.
     // Otherwise unconfigured endpoints can occupy the first N slots and hide a
     // configured provider later in the fallback chain.
-    let candidateSteps = nextFallbacks({
+    let candidateSteps = filterAvailableFallbacks(nextFallbacks({
       failure: failureType,
       attempted,
       failedProviders: [...failedFallbackProviders],
+      // Filter credentials before applying the slot cap. Otherwise missing-key
+      // providers at the front of the chain can hide configured providers later.
       maxFallbacks: GENERATION_FALLBACK_CHAIN.length,
-    })
-      .filter(providerConfiguredForRequest)
-      .filter(step => !isProviderQuotaBlocked(step))
-      .slice(0, fallbackLimit);
+    }), GENERATION_FALLBACK_CHAIN.filter(providerConfiguredForRequest)).slice(0, fallbackLimit);
     if (phase === 'repair') {
       // Semantic repair should not blindly repeat the model that just produced
       // the rejected answer. Prefer the next healthy provider in the chain,
