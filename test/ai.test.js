@@ -708,3 +708,95 @@ console.log('AI regression tests: OK');
   assert.equal(result.status, 'rejected');
   assert.equal(result.partialAnswer, null);
 }
+
+
+{
+  const { dopasowanieSemantyczne } = require('../ai/claimValidation');
+
+  const aperture = dopasowanieSemantyczne(
+    'Wheatley first appeared in Aperture Laboratories as an Intelligence Dampening Sphere, designed to be attached to GLaDOS to make her behave by generating an endless stream of terrible ideas.',
+    'Wheatley początkowo znajdował się w Laboratoriach Aperture jako rdzeń osobowości zaprojektowany tak, aby zmuszać GLaDOS do zachowania poprzez generowanie strumienia głupich pomysłów.'
+  );
+  assert.equal(aperture.ok, true, aperture.reason);
+
+  const relaxationCenter = dopasowanieSemantyczne(
+    'Wheatley took control of the Extended Relaxation Center prior to the events of Portal 2.',
+    'Wheatley przejął kontrolę nad Centrum Rozszerzonego Relaksu przed wydarzeniami z gry.'
+  );
+  assert.equal(relaxationCenter.ok, true, relaxationCenter.reason);
+}
+
+{
+  // A negative fact in the neighbouring sentence must not flip the polarity
+  // of an exact positive quote.
+  const source = '[SOURCE 1]\nAstarion is a High Elf Rogue vampire spawn. Another character is not playable in this scene.';
+  const result = normalizujWynikWalidatora({
+    valid: true,
+    reason: 'Exact positive quote.',
+    confidence: 0.95,
+    unsupported_claims: [],
+    supported: true,
+    relevant: true,
+    complete: true,
+    hallucination: false,
+    claims: [{
+      claim: 'Astarion to wysoki elf i łotrzyk.',
+      supported: true,
+      source_ids: ['SOURCE 1'],
+      evidence_quote: 'Astarion is a High Elf Rogue vampire spawn.',
+      reason: 'Exact source quote.',
+    }],
+  }, 'test-model', 'gemini', new Set(['SOURCE 1']), source,
+  'Astarion to wysoki elf i łotrzyk.');
+  assert.equal(result.status, 'accepted', JSON.stringify(result.diagnostics.unsupportedEvidenceClaims));
+}
+
+{
+  // A unique exact quote may be rebound only to a source already authorized
+  // in this request; semantic validation still decides whether it supports the claim.
+  const source = '[SOURCE 1]\nThis source discusses unrelated puzzles and machinery.\n[SOURCE 2]\nAstarion is an Origin character in Baldur\'s Gate 3.';
+  const payload = {
+    valid: true,
+    reason: 'The quote was assigned to the wrong source ID.',
+    confidence: 0.95,
+    unsupported_claims: [],
+    supported: true,
+    relevant: true,
+    complete: true,
+    hallucination: false,
+    claims: [{
+      claim: 'Astarion is an Origin character in Baldur\'s Gate 3.',
+      supported: true,
+      source_ids: ['SOURCE 1'],
+      evidence_quote: 'Astarion is an Origin character in Baldur\'s Gate 3.',
+      reason: 'Exact quote.',
+    }],
+  };
+  const result = normalizujWynikWalidatora(
+    payload, 'test-model', 'gemini', new Set(['SOURCE 1', 'SOURCE 2']), source,
+    'Astarion is an Origin character in Baldur\'s Gate 3.'
+  );
+  assert.equal(result.status, 'accepted', JSON.stringify(result.diagnostics.unsupportedEvidenceClaims));
+  assert.deepEqual(result.claims[0].source_ids, ['SOURCE 2']);
+
+  const fabricated = normalizujWynikWalidatora({
+    ...payload,
+    claims: [{
+      ...payload.claims[0],
+      evidence_quote: 'Astarion is definitely the leader of the thieves guild.',
+    }],
+  }, 'test-model', 'gemini', new Set(['SOURCE 1', 'SOURCE 2']), source,
+  'Astarion is definitely the leader of the thieves guild.');
+  assert.equal(fabricated.status, 'rejected');
+}
+
+{
+  const { rankEvidenceForClaim } = require('../ai/evidence');
+  const impossibleQuote = rankEvidenceForClaim(
+    'Dragonrend forcibly causes the target dragon to stay on the ground.',
+    [{ sourceId: 'SOURCE 1', title: 'Skyrim', url: '', content: 'Dragonrend shout [...] forcibly causes the target dragon to stay on the ground.' }],
+    new Set(['SOURCE 1']),
+    3
+  );
+  assert.equal(impossibleQuote.length, 0, 'repair context must not offer ellipsis-composed quotes');
+}
