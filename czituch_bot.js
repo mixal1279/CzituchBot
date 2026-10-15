@@ -85,6 +85,7 @@ const { createRequestId, sanitizeQuestion, planRequest, evaluateEvidence, should
 const { buildAnswerPlan } = require('./ai/answer-plan');
 const { judgeAnswer } = require('./ai/answer-judge');
 const { parseEvidenceBlocks, buildQuestionEvidenceContext } = require('./ai/evidence');
+const { buildBoundedEvidencePrompt } = require('./ai/prompt-context');
 
 // =============================================
 //  MINECRAFT JAVA 26.1 — LOKALNE RECEPTURY
@@ -2546,7 +2547,7 @@ Pytanie użytkownika: ${pytanie}`
   const buildMessages = (overrideSystemPrompt = systemPrompt) => ({
     system: overrideSystemPrompt,
     history: przygotujHistorieDoModelu(historiaRozmowy, 4),
-    user: String(kontekstAI || pytanie).slice(0, 10000),
+    user: buildBoundedEvidencePrompt(kontekstAI || pytanie, pytanie, 10000),
   });
   const buildOpenRouterMessages = (overrideSystemPrompt = systemPrompt) => {
     const m = buildMessages(overrideSystemPrompt);
@@ -2804,13 +2805,14 @@ Pytanie użytkownika: ${pytanie}`;
     if (model === 'openai/gpt-oss-120b') liczbaProb120b++;
     let groqTimeoutMs = null;
     try {
-      const kontekstDoGroq = String(kontekstAI || '').slice(0, 10000);
+      const messages = buildMessages(overrideSystemPrompt);
+      const kontekstDoGroq = messages.user;
       const controller = new AbortController();
       groqTimeoutMs = timeoutDlaGeneracji();
       if (groqTimeoutMs === null) return wynikPusty('groq', model, 'AI request deadline too short for generation');
       const response = await awaitWithAbortTimeout(createGroqCompletion(groqClient, {
           model,
-          messages: [{ role: 'system', content: overrideSystemPrompt }, ...przygotujHistorieDoModelu(historiaRozmowy, 4), { role: 'user', content: kontekstDoGroq }],
+          messages: [{ role: 'system', content: messages.system }, ...messages.history, { role: 'user', content: kontekstDoGroq }],
           temperature,
           max_completion_tokens: maxTok,
           reasoning_effort: model === 'openai/gpt-oss-120b' ? 'medium' : 'low',
