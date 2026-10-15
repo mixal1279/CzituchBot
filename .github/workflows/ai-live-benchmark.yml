@@ -2,14 +2,12 @@ name: AI live benchmark
 
 on:
   workflow_dispatch:
+  # Pushes to the workflow file may cancel an already-running benchmark, but
+  # must never start a new live benchmark. Run it only through workflow_dispatch.
   push:
     branches:
       - fix/ai-core-retrieval-validator-hardening
     paths:
-      - 'ai/**'
-      - 'czituch_bot.js'
-      - 'scripts/ai-live-benchmark.js'
-      - 'test/**'
       - '.github/workflows/ai-live-benchmark.yml'
 
 concurrency:
@@ -19,6 +17,7 @@ concurrency:
 
 jobs:
   live-benchmark:
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
