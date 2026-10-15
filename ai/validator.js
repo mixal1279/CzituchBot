@@ -282,7 +282,7 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
     const idsAreAllowed = !allowed || claim.source_ids.every(id => allowed.has(id));
     if (idsAreAllowed) continue;
     const exactMatches = allowedBlocks.filter(block => quoteExists(block.content, claim.evidence_quote));
-    if (exactMatches.length === 1) claim.source_ids = [exactMatches[0].sourceId];
+    if (exactMatches.length === 1 && claim.source_ids[0] === exactMatches[0].sourceId) claim.source_ids = [exactMatches[0].sourceId];
   }
   const unknownSourceClaimIndexes = claims.map((c, index) => c.supported && (!c.source_ids.length || (allowed && c.source_ids.some(id => !allowed.has(id)))) ? index : -1).filter(index => index >= 0);
   const effectiveClaimSourceIds = claims.map(c =>
