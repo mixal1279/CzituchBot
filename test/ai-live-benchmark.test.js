@@ -10,8 +10,8 @@ test('benchmark factual normalization preserves words with Polish diacritics and
 });
 
 test('live benchmark anchors the game before the question instead of after its question mark', () => {
-  assert.equal(buildQuestionForBot({ game: 'Skyrim', question: 'Jak pokonać smoka?' }), 'Gra: Skyrim. Pytanie: Jak pokonać smoka?');
-  assert.equal(buildQuestionForBot({ game: 'Portal 2', question: 'Dlaczego Wheatley przejął kontrolę nad GLaDOS?' }), 'Gra: Portal 2. Pytanie: Dlaczego Wheatley przejął kontrolę nad GLaDOS?');
+  assert.equal(buildQuestionForBot({ game: 'Skyrim', question: 'Jak pokonać smoka?' }), 'W grze Skyrim: Jak pokonać smoka?');
+  assert.equal(buildQuestionForBot({ game: 'Portal 2', question: 'Dlaczego Wheatley przejął kontrolę nad GLaDOS?' }), 'W grze Portal 2: Dlaczego Wheatley przejął kontrolę nad GLaDOS?');
 });
 
 test('live benchmark does not duplicate a game already named in the question', () => {
