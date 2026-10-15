@@ -109,3 +109,9 @@ test('evidence repair context returns verbatim candidates from authorized source
   assert.match(repair, /CANDIDATE SOURCE: SOURCE 1/);
   assert.match(repair, /Wheatley przejął kontrolę/);
 });
+
+test('evidence quote verification rejects disconnected fragments joined by ellipses', () => {
+  const source = 'Wheatley was transferred into GLaDOS body. He later gained control of Aperture.';
+  assert.equal(quoteExists(source, 'Wheatley was transferred into GLaDOS body. ... He later gained control of Aperture.'), false);
+  assert.equal(quoteExists(source, 'Wheatley was transferred into GLaDOS body.'), true);
+});
