@@ -27,6 +27,11 @@ const CROSS_LANGUAGE_CONCEPTS = [
   ['towarzysz', /\bcompanions?\b|recruit\w*|party member\w*|minion\w*|summon\w*|towarzysz\w*|zrekrut\w*|wezw\w*|przywol\w*/i],
   ['ataki_dystansowe', /\branged\b|\bbow\b|luk\w*|dystansow\w*/i],
   ['modyfikacja_zachowania', /\bbehav\w*|make her behave|intelligence dampening|zmusz\w*|zachow\w*|rdzen osobowosci/i],
+  ['walka_konna', /horseback|mounted combat|on horseback|konskiego grzbietu|na koniu|z konia|walczac z konia/i],
+  ['pozycja_zdystansu', /far back|high up|at range|dystans\w*|z daleka|na dystans/i],
+  ['gigantyczne_zwierzeta', /giant dogs?|gigantyczn\w*\s+ps\w*|wielkie psy/i],
+  ['ostroznosc', /cautious\w*|approach cautiously|ostrozn\w*|ostrozne podejscie/i],
+  ['zagrozenie', /lethal|dangerous|deadly|niebezpiecz\w*|zabojcz\w*/i],
   ['grywalnosc_postaci', /play as|playable character|control\w*|sterow\w*|mozna nim grac|nim grac/i],
   ['smok_na_ziemi', /stay on the ground|on the ground|land(?:s|ed|ing)? on the ground|dragonrend|wyladow\w*|pozostac na ziemi|na ziemi/i],
   ['odpornosc_zywiolowa', /resistan\w*|ward\w*|spellbreaker|odpornosc\w*|wardy|tarcze?\w*/i],
@@ -44,6 +49,8 @@ const KNOWN_ENTITY_ALIAS_PATTERNS = [
   { canonical: 'extended relaxation center', pattern: /\b(?:extended\s+relaxation\s+center|centrum\s+(?:przedluzonego|rozszerzonego)\s+relaksu)\b/iu },
   { canonical: 'aperture laboratories', pattern: /\b(?:aperture\s+laboratories|laboratori(?:a|ach|ami|ow|ów)\s+aperture)\b/iu },
   { canonical: 'aperture science', pattern: /\baperture\s+science\b/iu },
+  { canonical: 'bloody baron', pattern: /\b(?:bloody\s+baron|baron(?:a)?\s+krwaw(?:y|ego|ym)|krwaw(?:y|ego|emu)\s+baron(?:a|em|owi)?)\b/iu },
+  { canonical: 'wild hunt', pattern: /\b(?:wild\s+hunt|dziki\s+gon|dzikiego\s+gonu|dzikim\s+gonem)\b/iu },
 ];
 function normalizujClaim(value) {
   return String(value || '')
@@ -122,7 +129,7 @@ function wyodrebnijNazwyWlasne(value) {
     'pierwszy', 'drugi', 'trzeci', 'można', 'mozna', 'może', 'moze',
     'jest', 'są', 'sa', 'był', 'byla', 'było', 'bylo', 'byli',
     'to', 'ten', 'ta', 'te', 'jego', 'jej', 'oni', 'one', 'smoki', 'najlepszym', 'gracz', 'gracze', 'wrog', 'postać', 'postac', 'pytanie', 'odpowiedź', 'odpowiedz',
-    'przeciw', 'przed', 'przez', 'po', 'podczas', 'dzięki', 'dzieki', 'wokół', 'wokol', 'wśród', 'wsrod', 'według', 'wedlug', 'zanim', 'mimo', 'wskutek',
+    'przeciw', 'przed', 'przez', 'po', 'podczas', 'dzięki', 'dzieki', 'wokół', 'wokol', 'wśród', 'wsrod', 'według', 'wedlug', 'zanim', 'mimo', 'wskutek', 'dowiedziawszy',
     'misja', 'misji', 'mission', 'quest', 'transfer', 'core', 'initial', 'first',
     'a', 'an', 'the', 'if', 'it', 'he', 'she', 'they', 'we', 'you', 'his', 'her', 'their',
     'this', 'these', 'those', 'once', 'with', 'against', 'during', 'after', 'before', 'from', 'for', 'as',
@@ -211,7 +218,17 @@ function czyNazwaWlasnaWystepuje(entity, evidenceNormalized) {
 
   // Preserve spaces for canonical multi-word aliases. The inflection helper is
   // optimized for single-token names and intentionally removes whitespace.
-  const variants = new Set([normalizujClaim(entity)]);
+  const entityNormalized = normalizujClaim(entity);
+  const knownAlias = KNOWN_ENTITY_ALIAS_PATTERNS.find(alias => normalizujClaim(alias.canonical) === entityNormalized);
+  const evidenceText = String(evidenceNormalized || '');
+  if (knownAlias && knownAlias.pattern.test(evidenceText)) return true;
+  // "the Baron" is used as shorthand for the Bloody Baron in Witcher 3 sources;
+  // require identifying names from the same game in the passage.
+  if (entityNormalized === 'bloody baron'
+    && /\bthe\s+baron\b/i.test(evidenceText)
+    && /\b(?:geralt|ciri|velen|novigrad|witcher)\b/i.test(evidenceText)) return true;
+
+  const variants = new Set([entityNormalized]);
   for (const variant of wariantyNazwyDoDopasowania(entity)) {
     const normalizedVariant = normalizujClaim(variant);
     if (normalizedVariant) variants.add(normalizedVariant);
@@ -281,6 +298,7 @@ function dopasowanieSemantyczne(evidence, claim) {
   const normalizedEvidence = normalizujClaim(evidence);
   const missingEntities = entities.filter(entity => !czyNazwaWlasnaWystepuje(entity, normalizedEvidence));
   if (missingEntities.length) return { ok: false, reason: 'dowód nie zawiera wszystkich istotnych nazw własnych claimu' };
+  if (sharedConcepts.length >= 2) return { ok: true, mode: 'multiple_cross_language_concepts', sharedConcepts, overlap };
   if (sharedConcepts.length >= 1 && entities.length >= 1) return { ok: true, mode: 'concept_and_entity', sharedConcepts, overlap };
   if (overlap >= (entities.length ? 0.34 : 0.45)) return { ok: true, mode: 'token_overlap', overlap, sharedConcepts };
   if (sharedConcepts.length >= 2) return { ok: true, mode: 'multiple_concepts', sharedConcepts, overlap };
