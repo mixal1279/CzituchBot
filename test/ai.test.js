@@ -17,7 +17,7 @@ const { createRequestBudget, sanitizeRequestText } = require('../ai/limits');
 const { rerankujWynikiTavily, wykryjKonfliktyZrodelTavily, zbudujRaportKonfliktowTavily, sanityzujTrescZrodlaTavily } = require('../ai/tavily');
 const { ocenJakoscOdpowiedzi } = require('../ai/quality');
 const { quoteExists, buildEvidenceRepairContext } = require('../ai/evidence');
-const { wyodrebnijNazwyWlasne } = require('../ai/claimValidation');
+const { wyodrebnijNazwyWlasne, dopasowanieSemantyczne } = require('../ai/claimValidation');
 const { classifyPipelineFailure } = require('../ai/pipeline');
 
 const policy = (q, recipe) => recipe(q) ? 'minecraft_recipe' : /pogoda/i.test(q) ? 'weather' : /ile trwa/i.test(q) ? 'hltb' : /dzisiaj|najnowsz/i.test(q) ? 'web_fact' : 'conversation';
@@ -823,4 +823,27 @@ console.log('AI regression tests: OK');
   assert.deepEqual(buildEvidenceCandidatesFromSources(blocks, 'Wheatley przejął kontrolę.', {
     allowedSourceIds: new Set(['SOURCE 99']),
   }), []);
+}
+
+
+{
+  const witcherEvidence = 'Geralt agrees to locate the missing wife and daughter of the Baron in exchange for information about Ciri. This task takes Geralt all over Velen and into Novigrad.';
+  const witcherClaim = 'Geralt odnajduje rodzinę Barona Krwawego w zamian za informacje o Ciri.';
+  const baronMatch = dopasowanieSemantyczne(witcherEvidence, witcherClaim);
+  assert.equal(baronMatch.ok, true, JSON.stringify(baronMatch));
+
+  const huntEvidence = 'The Baron tells Geralt that Ciri said that the Wild Hunt was chasing her.';
+  const huntClaim = 'Baron mówi Geraltowi, że Ciri uciekała przed Dzikim Gonem.';
+  const huntMatch = dopasowanieSemantyczne(huntEvidence, huntClaim);
+  assert.equal(huntMatch.ok, true, JSON.stringify(huntMatch));
+
+  const portalEvidence = 'Wheatley took control of the Extended Relaxation Center prior to the events of Portal 2.';
+  const portalClaim = 'Wheatley przejął kontrolę nad Centrum Rozszerzonego Relaksu przed wydarzeniami z gry.';
+  assert.equal(dopasowanieSemantyczne(portalEvidence, portalClaim).ok, true);
+
+  const unrelated = dopasowanieSemantyczne(
+    'The Wild Hunt was chasing Ciri through the forest.',
+    'Geralt kupił miecz u kowala w Novigradzie.'
+  );
+  assert.equal(unrelated.ok, false, 'cross-language aliases must not accept unrelated claims');
 }
