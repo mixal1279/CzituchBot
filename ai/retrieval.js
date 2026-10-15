@@ -100,7 +100,7 @@ function buildAdvancedRetrievalPlan(question, routing = {}, baseQueries = []) {
   // Preserve the exact user question and game/entity-qualified versions before
   // clause decomposition. Otherwise a compound question can fill all five
   // slots with fragments that no longer identify the game being discussed.
-  const entity = String(routing.game || routing.entity || routing.resolved_entity?.name || '').trim();
+  const entity = String(routing.resolved_entity?.name || routing.entity || routing.game || '').trim();
   const game = String(routing.game || routing.resolved_entity?.game || '').trim();
   const contextQueryCount = Math.min(corePlan.length, 1 + (entity ? 1 : 0) + (game && game !== entity ? 1 : 0));
   const primaryContext = corePlan.slice(0, contextQueryCount);
