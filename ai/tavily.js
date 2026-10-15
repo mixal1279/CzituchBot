@@ -708,5 +708,6 @@ module.exports = {
   wykryjKonfliktyZrodelTavily,
   zbudujRaportKonfliktowTavily,
   sanityzujTrescZrodlaTavily,
+  filtrujMaterialPoSlowachTavily,
   czyWymagaSecondaryRetrieval,
 };
