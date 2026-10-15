@@ -92,7 +92,8 @@ function extractAnswerSignals(answer) {
   const where = /\b(w|we|na|do|z|ze)\s+[a-ząćęłńóśźż0-9-]+/.test(text)
     && !/\b(?:w|we|na|do)\s+(?:odpowiednim|okreslonym|okreslonej|miejscu|miejsca)\b/.test(text);
   const causalMarker = /\b(dlaczego|czemu|powod|poniewaz|bo|because|because of|due to)\b/.exec(text)?.[0] || '';
-  const procedural = /\b(nalezy|trzeba|mozna|sposob|krok|najpierw|potem|nastepnie|first|then|step)\b/.exec(text)?.[0] || '';\n  const mechanism = /\b(dziala|funkcjonuje|polega|mechanizm|umozliw\w*|pozwala)\b/.exec(text)?.[0] || '';
+  const procedural = /\b(nalezy|trzeba|mozna|sposob|krok|najpierw|potem|nastepnie|first|then|step)\b/.exec(text)?.[0] || '';
+  const mechanism = /\b(dziala|funkcjonuje|polega|mechanizm|umozliw\w*|pozwala)\b/.exec(text)?.[0] || '';
   const relationshipMarker = /\b(?:relacj\p{L}*|zwiazk\p{L}*|przyjac\p{L}*|wrog\p{L}*|sojusz\p{L}*|zdrad\p{L}*|partner\p{L}*)\b/u.exec(text)?.[0] || '';
 
   return {
