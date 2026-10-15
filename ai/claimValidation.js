@@ -106,7 +106,7 @@ function wyodrebnijNazwyWlasne(value) {
     'a', 'an', 'the', 'if', 'it', 'he', 'she', 'they', 'we', 'you', 'his', 'her', 'their',
     'this', 'these', 'those', 'once', 'with', 'against', 'during', 'after', 'before', 'from', 'for', 'as',
     'how', 'why', 'when', 'where', 'who', 'what', 'which', 'while', 'then', 'also', 'one', 'two',
-    'znajduje', 'znaleziono', 'położony', 'polozony', 'broń', 'bron', 'sposób', 'sposob', 'metoda',
+    'znajduje', 'znaleziono', 'położony', 'polozony', 'broń', 'bron', 'sposób', 'sposob', 'metoda', 'warto', 'użyj', 'uzyj', 'należy', 'nalezy',
     'later', 'another', 'eventually', 'meanwhile', 'afterward', 'afterwards', 'sometime', 'suddenly', 'finally'
   ]);
   const candidates = [];
