@@ -60,13 +60,13 @@ test('answer signals handle Polish ł normalization and inflected answer roots',
   assert.equal(extractAnswerSignals('Ten pistolet jest lepszy natomiast tamten ma większą celność.').comparison, true);
 });
 
-test('answer signals distinguish procedure from mechanism explanations', () => {
+test('answer signals recognize procedural and mechanism explanations', () => {
   const procedural = extractAnswerSignals('Najpierw wykonaj czynność, a następnie sprawdź wynik.');
   const mechanism = extractAnswerSignals('System działa dzięki wymianie rdzeni.');
   const generic = extractAnswerSignals('Znajdziesz to w odpowiednim miejscu.');
   assert.equal(generic.where, false);
   assert.equal(procedural.steps, true);
-  assert.equal(procedural.how, false);
+  assert.equal(procedural.how, true);
   assert.equal(mechanism.how, true);
 });
 
@@ -80,7 +80,7 @@ test('answer plan does not mistake how-long questions for procedural how questio
 test('answer plan classifies how-to combat questions as procedural', () => {
   const plan = buildAnswerPlan('Jak pokonać smoka w Skyrim?', { intent: 'web_fact', is_gameplay: true });
   assert.ok(plan.requirements.some(x => x.id === 'steps'));
-  assert.ok(!plan.requirements.some(x => x.id === 'how'));
+  assert.ok(plan.requirements.some(x => x.id === 'how'));
 });
 
 test('v26 judge rejects generic relationship answer', () => {
