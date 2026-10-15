@@ -2,7 +2,7 @@
 
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { createGroqCompletion, awaitWithAbortTimeout, computeValidatorTimeout, computeGenerationTimeout } = require('../ai/provider-runtime');
+const { createGroqCompletion, awaitWithAbortTimeout, computeValidatorTimeout, computeValidatorReserveMs, computeGenerationTimeout } = require('../ai/provider-runtime');
 const { classifyFailure, shouldRetryFailure, nextFallbacks, selectRepairFallbacks, filterAvailableFallbacks, repairBudgetBlockReason, resetProviderQuotaCooldowns, markProviderQuota, isProviderQuotaBlocked, quotaCooldownMsFromError } = require('../ai/fallback');
 
 test('Groq request body never contains signal; AbortSignal is passed in SDK transport options', async () => {
@@ -201,4 +201,33 @@ test('fallback filtering does not let unconfigured providers consume fallback sl
   const configured = ['xkiro:default', 'openrouter:default'];
   assert.deepEqual(filterAvailableFallbacks(candidates, configured), ['xkiro:default', 'openrouter:default']);
   assert.deepEqual(filterAvailableFallbacks(candidates, ['openrouter:default']).slice(0, 1), ['openrouter:default']);
+});
+
+
+test('adaptive validator reserve follows the remaining slot count and deadline', () => {
+  assert.equal(computeValidatorReserveMs(15000, 1, 4), 10500);
+  assert.equal(computeValidatorReserveMs(12000, 1, 4), 6500);
+  assert.equal(computeValidatorReserveMs(8000, 1, 4), 2500);
+  assert.equal(computeValidatorReserveMs(12000, 3, 4), 6500);
+  assert.equal(computeValidatorReserveMs(8000, 4, 4), 2500);
+});
+
+test('provider capacity pressure is transient rather than a quota cooldown', () => {
+  assert.equal(classifyFailure('HTTP 429: high demand, temporarily unavailable'), 'transient');
+  assert.equal(quotaCooldownMsFromError('HTTP 429: high demand, temporarily unavailable'), 60000);
+  assert.equal(classifyFailure('HTTP 429: tokens per day limit exceeded'), 'quota');
+});
+
+test('repair is skipped when less than the minimum generation plus fallback reserve remains', () => {
+  const budget = {
+    remainingMs: 8499,
+    generations: 1,
+    maxGenerations: 6,
+    repairGenerations: 0,
+    maxRepairGenerations: 1,
+    modelCalls: 1,
+    maxModelCalls: 12,
+  };
+  assert.equal(repairBudgetBlockReason(budget), 'insufficient_time_for_fallback');
+  assert.equal(repairBudgetBlockReason({ ...budget, remainingMs: 8500 }), null);
 });
