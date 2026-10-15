@@ -130,12 +130,17 @@ function pobierzBlokZrodla(dane, sourceId) {
 }
 
 function normalizujIdZrodla(value) {
-  const raw = String(value || '').trim();
-  // Models sometimes copy the visible header including square brackets.
-  // Canonicalize [SOURCE 8], SOURCE 8, and 8 to the same internal ID.
-  const match = raw.match(/^\[?\s*(?:SOURCE\s*)?(\d+)\s*\]?$/i);
-  return match ? `SOURCE ${match[1]}` : raw;
+  const raw = String(value || '').trim().replace(/^\\[|\\]$/g, '').trim();
+  const normalized = raw.replace(/\\s+/g, ' ').replace(/_/g, ' ').toLocaleUpperCase('en-US');
+  const multiple = normalized.split(/\\s*,\\s*(?=(?:\\[?\\s*(?:SOURCE|REFERENCE)\\b)/i).filter(Boolean);
+  if (multiple.length > 1) return multiple.map(normalizujIdZrodla);
+  const source = normalized.match(/^(?:\\[?\\s*)?SOURCE\\s*#?\\s*(\\d+)\\s*\\]?$/i) || normalized.match(/^(\\d+)$/);
+  if (source) return `SOURCE ${source[1]}`;
+  const reference = normalized.match(/^(?:\\[?\\s*)?REFERENCE\\s+(.+?)\\s*\\]?$/i);
+  if (reference) return `REFERENCE ${reference[1].trim()}`;
+  return raw;
 }
+
 function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '') {
   if (!Array.isArray(sourceIds) || !sourceIds.length || typeof evidenceQuote !== 'string') {
     return { ok: false, reason: 'brak poprawnego source_id lub evidence_quote' };
