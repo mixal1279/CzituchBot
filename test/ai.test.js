@@ -339,7 +339,8 @@ console.log('AI regression tests: OK');
   const source = require('fs').readFileSync(require('path').join(__dirname, '..', 'czituch_bot.js'), 'utf8');
   assert.match(source, /planowaneQueryRetrieval/);
   assert.match(source, /item\?\.reason === 'lore'/);
-  assert.match(source, /slice\(0, 2\)/);
+  assert.match(source, /selectRetrievalQueries\(/);
+  assert.match(source, /maxQueries: Math\.min\(3,/);
 }
 
 {
