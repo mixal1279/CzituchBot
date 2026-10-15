@@ -185,8 +185,12 @@ assert.match(require('fs').readFileSync(require('path').join(__dirname, '..', 'c
   assert.equal(forgotten.records[0].status, 'revoked');
 }
 {
-  const plan = buildAdvancedRetrievalPlan('Kim jest Wheatley i dlaczego przejął kontrolę?', {game:'Portal 2', is_lore:true, needs_fresh_data:false}, ['Kim jest Wheatley?']);
+  const question = 'Kim jest Wheatley i dlaczego przejął kontrolę?';
+  const plan = buildAdvancedRetrievalPlan(question, {entity:'Wheatley', game:'Portal 2', is_lore:true, needs_fresh_data:false}, ['Kim jest Wheatley?']);
   assert.ok(plan.length >= 2);
+  assert.equal(plan[0].query, question);
+  assert.match(plan[1].query, /Wheatley/i);
+  assert.match(plan[2].query, /Portal 2/i);
   assert.ok(plan.some(x => /Portal 2/i.test(x.query)));
   assert.equal(shouldRunAdditionalRetrieval({text:'krótko',sourceCount:1}), true);
   assert.equal(rankRetrievalNeed({routing:{is_lore:true},sourceCount:1,textLength:100}), 'high');
