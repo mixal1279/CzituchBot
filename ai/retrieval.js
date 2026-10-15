@@ -3,9 +3,9 @@
 const { buildRetrievalPlan: buildCoreRetrievalPlan } = require('./core');
 
 function isMultiPartQuestion(question) {
-  const q = String(question || '').replace(/\\s+/g, ' ').trim();
+  const q = String(question || '').replace(/\s+/g, ' ').trim();
   if (!q) return false;
-  const interrogatives = q.match(/\\b(?:kto|kim|co|czym|jaki|jaka|jakie|dlaczego|czemu|kiedy|gdzie|ile|czy|jak)\\b/giu) || [];
+  const interrogatives = q.match(/\b(?:kto|kim|co|czym|jaki|jaka|jakie|dlaczego|czemu|kiedy|gdzie|ile|czy|jak)\b/giu) || [];
   return interrogatives.length >= 2 || decomposeQuestion(q).length >= 2;
 }
 function unique(items){const out=[],seen=new Set();for(const item of Array.isArray(items)?items:[]){const q=String(item||'').replace(/\s+/g,' ').trim(),k=q.toLocaleLowerCase('pl-PL');if(q.length>=8&&!seen.has(k)){seen.add(k);out.push(q);}}return out;}
