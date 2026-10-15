@@ -81,6 +81,19 @@ function normalizujToken(value) {
     .replace(/\s+/g, ' ').trim();
 }
 
+// Build supplemental searches only from the original question and its resolved game.
+// Unsupported claims are intentionally excluded: a rejected model claim may contain
+// a hallucinated location or even details from a different game.
+function buildSupplementalRetrievalQuery(question, routing = {}, causalQuestion = false) {
+  const q = String(question || '').replace(/\\s+/g, ' ').trim();
+  if (!q) return '';
+  const game = String(routing.resolved_entity?.game || routing.game || '').replace(/\\s+/g, ' ').trim();
+  const hasGame = game && normalizujToken(q).includes(normalizujToken(game));
+  const anchor = game && !hasGame ? game : '';
+  const intent = causalQuestion ? 'cause reason motivation' : 'guide walkthrough location';
+  return [anchor, q, intent].filter(Boolean).join(' ').replace(/\\s+/g, ' ').trim().slice(0, 300);
+}
+
 function sourceHost(url){try{return new URL(url).hostname.toLowerCase().replace(/^www\./,'');}catch(_){return '';}}
 function sourceQualityScore(source = {}) {
   const score = Number(source.score);
@@ -101,4 +114,4 @@ for(const result of list){const tokens=sourceTokens(result);const tokenSet=new S
 const independentHosts=new Set(independent.map(x=>x.host).filter(Boolean));return {hosts:hosts.size,providers:providers.size,independentSources:independent.length,independentHosts:independentHosts.size,duplicatePairs};}
 function shouldRunAdditionalRetrieval({status='ok',text='',sourceCount=0,queryCount=1,results=[],requireDiversity=false}={}){const list=Array.isArray(results)?results:[];if(status!=='ok'||!String(text).trim()||String(text).length<900||sourceCount<2)return true;if(requireDiversity){const d=sourceDiversity(list);if(d.independentHosts<2)return true;}const strong=list.filter(r=>sourceQualityScore(r)>=0.55).length;if(strong<1)return true;return false;}
 function rankRetrievalNeed({routing={},sourceCount=0,textLength=0,validatorStatus=null,results=[]}={}){let score=0;if(routing.needs_fresh_data)score+=3;if(routing.is_lore||routing.is_gameplay)score+=2;if(sourceCount<2)score+=2;if(textLength<900)score++;if(validatorStatus==='rejected'||validatorStatus==='inconclusive')score+=3;const d=sourceDiversity(results);if(sourceCount>=2&&d.independentHosts<2)score+=2;return score>=5?'high':score>=3?'medium':'low';}
-module.exports={decomposeQuestion,extractCarryoverEntities,buildAdvancedRetrievalPlan,shouldRunAdditionalRetrieval,rankRetrievalNeed,sourceDiversity,sourceQualityScore,normalizujToken};
+module.exports={decomposeQuestion,extractCarryoverEntities,buildAdvancedRetrievalPlan,buildSupplementalRetrievalQuery,shouldRunAdditionalRetrieval,rankRetrievalNeed,sourceDiversity,sourceQualityScore,normalizujToken};
