@@ -2,6 +2,14 @@ name: AI live benchmark
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - fix/ai-core-retrieval-validator-hardening
+    paths:
+      - 'ai/**'
+      - 'czituch_bot.js'
+      - 'scripts/ai-live-benchmark.js'
+      - 'test/**'
 
 concurrency:
   group: ai-live-benchmark
