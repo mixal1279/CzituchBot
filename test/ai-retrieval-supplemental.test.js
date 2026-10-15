@@ -2,7 +2,19 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { buildSupplementalRetrievalQuery } = require('../ai/retrieval');
+const { buildSupplementalRetrievalQuery, isMultiPartQuestion } = require('../ai/retrieval');
+
+
+test('a single question mark does not classify a question as multi-part', () => {
+  assert.equal(isMultiPartQuestion('W grze Skyrim: Jak pokonać smoka?'), false);
+  assert.equal(isMultiPartQuestion('W grze Portal 2: Dlaczego Wheatley przejął kontrolę nad GLaDOS?'), false);
+  assert.equal(isMultiPartQuestion('W grze Baldur\'s Gate 3: Kim jest Astarion?'), false);
+});
+
+test('compound questions remain multi-part without relying on punctuation', () => {
+  assert.equal(isMultiPartQuestion('Gdzie znaleźć miecz i jak go ulepszyć?'), true);
+  assert.equal(isMultiPartQuestion('Kiedy Geralt przybywa do Novigradu i co tam robi?'), true);
+});
 
 test('supplemental retrieval anchors the original question to its resolved game', () => {
   const query = buildSupplementalRetrievalQuery('Gdzie znaleźć Wielki Miecz?', { game: 'Elden Ring' });
