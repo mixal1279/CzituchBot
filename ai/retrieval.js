@@ -2,6 +2,36 @@
 
 const { buildRetrievalPlan: buildCoreRetrievalPlan } = require('./core');
 
+function selectRetrievalQueries({
+  atomicQueries = [],
+  causalQuery = null,
+  specializedQueries = [],
+  fallbackQueries = [],
+  maxQueries = 3,
+} = {}) {
+  const limit = Math.max(0, Math.min(3, Math.floor(Number(maxQueries) || 0)));
+  const selected = [];
+  const seen = new Set();
+  const add = value => {
+    const query = String(value || '').replace(/\\s+/g, ' ').trim();
+    const key = query.toLocaleLowerCase('pl-PL');
+    if (query.length < 8 || seen.has(key) || selected.length >= limit) return;
+    seen.add(key);
+    selected.push(query);
+  };
+
+  // A causal query already contains the original question. Give it and one
+  // profile-specific query priority, so atomic sub-questions cannot crowd out
+  // the evidence most likely to answer the actual intent.
+  if (causalQuery) add(causalQuery);
+  else add((Array.isArray(atomicQueries) ? atomicQueries : [])[0]);
+  add((Array.isArray(specializedQueries) ? specializedQueries : [])[0]);
+  for (const query of Array.isArray(atomicQueries) ? atomicQueries : []) add(query);
+  for (const query of Array.isArray(specializedQueries) ? specializedQueries : []) add(query);
+  for (const query of Array.isArray(fallbackQueries) ? fallbackQueries : []) add(query);
+  return selected;
+}
+
 function isMultiPartQuestion(question) {
   const q = String(question || '').replace(/\s+/g, ' ').trim();
   if (!q) return false;
@@ -121,4 +151,4 @@ for(const result of list){const tokens=sourceTokens(result);const tokenSet=new S
 const independentHosts=new Set(independent.map(x=>x.host).filter(Boolean));return {hosts:hosts.size,providers:providers.size,independentSources:independent.length,independentHosts:independentHosts.size,duplicatePairs};}
 function shouldRunAdditionalRetrieval({status='ok',text='',sourceCount=0,queryCount=1,results=[],requireDiversity=false}={}){const list=Array.isArray(results)?results:[];if(status!=='ok'||!String(text).trim()||String(text).length<900||sourceCount<2)return true;if(requireDiversity){const d=sourceDiversity(list);if(d.independentHosts<2)return true;}const strong=list.filter(r=>sourceQualityScore(r)>=0.55).length;if(strong<1)return true;return false;}
 function rankRetrievalNeed({routing={},sourceCount=0,textLength=0,validatorStatus=null,results=[]}={}){let score=0;if(routing.needs_fresh_data)score+=3;if(routing.is_lore||routing.is_gameplay)score+=2;if(sourceCount<2)score+=2;if(textLength<900)score++;if(validatorStatus==='rejected'||validatorStatus==='inconclusive')score+=3;const d=sourceDiversity(results);if(sourceCount>=2&&d.independentHosts<2)score+=2;return score>=5?'high':score>=3?'medium':'low';}
-module.exports={decomposeQuestion,isMultiPartQuestion,extractCarryoverEntities,buildAdvancedRetrievalPlan,buildSupplementalRetrievalQuery,shouldRunAdditionalRetrieval,rankRetrievalNeed,sourceDiversity,sourceQualityScore,normalizujToken};
+module.exports={decomposeQuestion,isMultiPartQuestion,extractCarryoverEntities,buildAdvancedRetrievalPlan,buildSupplementalRetrievalQuery,selectRetrievalQueries,shouldRunAdditionalRetrieval,rankRetrievalNeed,sourceDiversity,sourceQualityScore,normalizujToken};
