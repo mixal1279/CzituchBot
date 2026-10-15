@@ -3,9 +3,19 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { normalizeFactText, scoreGoldenFacts } = require('../ai/benchmark-scorer');
+const { buildQuestionForBot } = require('../scripts/ai-live-benchmark');
 
 test('benchmark factual normalization preserves words with Polish diacritics and collapses whitespace', () => {
   assert.equal(normalizeFactText('Święty Łukasz  —  przejął kontrolę.'), 'swiety lukasz przejal kontrole');
+});
+
+test('live benchmark anchors the game before the question instead of after its question mark', () => {
+  assert.equal(buildQuestionForBot({ game: 'Skyrim', question: 'Jak pokonać smoka?' }), 'Gra: Skyrim. Pytanie: Jak pokonać smoka?');
+  assert.equal(buildQuestionForBot({ game: 'Portal 2', question: 'Dlaczego Wheatley przejął kontrolę nad GLaDOS?' }), 'Gra: Portal 2. Pytanie: Dlaczego Wheatley przejął kontrolę nad GLaDOS?');
+});
+
+test('live benchmark does not duplicate a game already named in the question', () => {
+  assert.equal(buildQuestionForBot({ game: 'Skyrim', question: 'Jak pokonać smoka w Skyrim?' }), 'Jak pokonać smoka w Skyrim?');
 });
 
 test('gold facts require normalized whole phrases, not accidental substrings', () => {
