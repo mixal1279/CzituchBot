@@ -144,15 +144,19 @@ function scoreSource(source, query, options = {}) {
   const authority = AUTHORITY[s.authority] ?? AUTHORITY.unknown;
 
   let entityBonus = 0;
-  const entity = String(options.entity || '').trim();
-  if (entity) {
+  const entityCandidates = [
+    ...(Array.isArray(options.entities) ? options.entities : []),
+    options.entity,
+  ].map(value => String(value || '').trim()).filter(Boolean);
+  const h = normalize(haystack);
+  for (const entity of new Set(entityCandidates)) {
     const e = normalize(entity);
-    const h = normalize(haystack);
-    if (e && h.includes(e)) entityBonus = 0.18;
-    else {
-      const overlap = tokenOverlap(entity, haystack);
-      if (overlap >= 0.6) entityBonus = 0.10;
+    if (e && h.includes(e)) {
+      entityBonus = Math.max(entityBonus, 0.18);
+      continue;
     }
+    const overlap = tokenOverlap(entity, haystack);
+    if (overlap >= 0.6) entityBonus = Math.max(entityBonus, 0.10);
   }
 
   let freshnessBonus = 0;
@@ -257,8 +261,15 @@ function buildRetrievalPlan(question, routing = {}, options = {}) {
 function assessEvidence(results = [], question, routing = {}) {
   const normalized = (Array.isArray(results) ? results : [])
     .filter(Boolean)
-    .map((s,i) => scoreSource(s, question, {
-      entity: routing.game || routing.entity || routing.resolved_entity?.name,
+    .map(s => scoreSource(s, question, {
+      // Score against both the resolved character/item and its parent game.
+      // A game name must not shadow a more specific entity mention.
+      entities: [
+        routing.resolved_entity?.name,
+        routing.entity,
+        routing.game,
+        routing.resolved_entity?.game,
+      ],
       freshness: routing.freshness,
     }));
 
