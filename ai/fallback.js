@@ -67,12 +67,30 @@ function resetProviderQuotaCooldowns() {
 
 function quotaCooldownMsFromError(error) {
   const message = String(error?.message || error || '');
-  if (/(?:high demand|overloaded|temporarily unavailable|capacity exceeded)/i.test(message)) return 60_000;
+  const isOverload = /(?:high demand|overloaded|temporarily unavailable|capacity exceeded)/i.test(message);
   const configured = Number(process.env.AI_PROVIDER_QUOTA_COOLDOWN_MS) || 60_000;
-  const match = message.match(/retry[- ]after\s*[=:]\s*(\d+(?:\.\d+)?)\s*(?:s|sec(?:ond)?s?)?/i);
-  if (!match) return configured;
-  const retryAfterMs = Math.max(0, Number(match[1])) * 1000;
-  return Math.max(configured, Math.ceil(retryAfterMs), 1_000);
+  let retryAfterMs = null;
+
+  const retryAfterMatch = message.match(/retry[- ]after\s*[=:]\s*(\d+(?:\.\d+)?)\s*(?:s|sec(?:ond)?s?)?/i);
+  if (retryAfterMatch) {
+    retryAfterMs = Math.max(0, Number(retryAfterMatch[1]) * 1000);
+  }
+
+  // Groq uses "try again in 1h2m3s", "3m22.176s", "5.43s", and sometimes
+  // omits the seconds component ("2m" or "1h30m").
+  const tryAgainMatch = message.match(/try again in\s+(?:(\d+(?:\.\d+)?)h)?\s*(?:(\d+(?:\.\d+)?)m(?!s))?\s*(?:(\d+(?:\.\d+)?)s)?/i);
+  if (tryAgainMatch && (tryAgainMatch[1] || tryAgainMatch[2] || tryAgainMatch[3])) {
+    const hours = Number(tryAgainMatch[1] || 0);
+    const minutes = Number(tryAgainMatch[2] || 0);
+    const seconds = Number(tryAgainMatch[3] || 0);
+    const groqRetryAfterMs = Math.max(0, (hours * 3600 + minutes * 60 + seconds) * 1000);
+    retryAfterMs = Math.max(retryAfterMs || 0, groqRetryAfterMs, 60_000);
+  }
+
+  if (retryAfterMs !== null) {
+    return Math.max(isOverload ? 60_000 : 1_000, Math.ceil(retryAfterMs));
+  }
+  return isOverload ? 60_000 : configured;
 }
 
 function markProviderQuota(provider, cooldownMs = Number(process.env.AI_PROVIDER_QUOTA_COOLDOWN_MS) || 60_000) {
