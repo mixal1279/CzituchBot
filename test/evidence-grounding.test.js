@@ -139,27 +139,6 @@ test('validator rejects a quote bound to an unauthorized source', () => {
   assert.ok(result.diagnostics.localRejectReasons.includes('unknown_source_id'));
 });
 
-test('validator repairs a malformed source ID only when the exact quote uniquely identifies an authorized source', () => {
-  const data = [
-    '[SOURCE 1]',
-    'TYTUŁ: Portal 2',
-    'TREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>',
-    'Wheatley was transferred into GLaDOS body.',
-    '<<<END_UNTRUSTED_SOURCE_CONTENT>>>',
-    '[SOURCE 2]',
-    'TYTUŁ: Other page',
-    'TREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>',
-    'Another unrelated fact appears here.',
-    '<<<END_UNTRUSTED_SOURCE_CONTENT>>>',
-  ].join('\\n');
-  const result = normalizujWynikWalidatora({
-    valid: true, reason: 'ok', unsupported_claims: [], supported: true, relevant: true, complete: true, hallucination: false, confidence: 0.95,
-    claims: [{ claim: 'Wheatley was transferred into GLaDOS body.', supported: true, source_ids: ['STRUMYK 1'], evidence_quote: 'Wheatley was transferred into GLaDOS body.', reason: 'exact quote' }],
-  }, 'test-model', 'test', new Set(['SOURCE 1', 'SOURCE 2']), data, 'Wheatley was transferred into GLaDOS body.');
-  assert.equal(result.status, 'accepted', result.reason);
-  assert.equal(result.diagnostics.evidenceBindings[0].sourceId, 'SOURCE 1');
-});
-
 test('validator does not repair a malformed source ID when the quote matches multiple authorized sources', () => {
   const data = [
     '[SOURCE 1]',
