@@ -787,6 +787,7 @@ console.log('AI regression tests: OK');
     ...payload,
     claims: [{
       ...payload.claims[0],
+      claim: 'Astarion is definitely the leader of the thieves guild.',
       evidence_quote: 'Astarion is definitely the leader of the thieves guild.',
     }],
   }, 'test-model', 'gemini', new Set(['SOURCE 1', 'SOURCE 2']), source,
