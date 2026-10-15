@@ -1,8 +1,8 @@
 'use strict';
 
-const NEGATION_RE = /\b(?:nie|nigdy|brak|bez|żaden|żadna|żadne|never|no|not)\b/iu;
-const CAUSAL_RE = /(?:\b(?:bo|poniewaz|gdyz|dlatego|because|therefore|caused|causes|consequently|hence)\b|\b(?:as\s+a\s+result|led\s+to|resulted\s+in|because\s+of|due\s+to|so\s+that|in\s+order\s+to)\b|\bz\s+powodu\b|\bdzieki\b|\bprzez\b|\bspowodow\w*\b|\bdoprowadz\w*\b|\bumozliw\w*\b)/iu;
-const TEMPORAL_RE = /\b(?:19|20)\d{2}\b|\b(?:styczeń|luty|marzec|kwiecień|maj|czerwiec|lipiec|sierpień|wrzesień|październik|listopad|grudzień)\b|\b(?:wczoraj|dzisiaj|jutro|today|yesterday|tomorrow)\b/iu;
+const NEGATION_RE = /(?<![\p{L}])(?:nie|nigdy|brak|bez|zaden|zadna|zadne|never|no|not|doesn't|isn't|cannot|won't)(?![\p{L}])/iu;
+const CAUSAL_RE = /(?<![\p{L}])(?:bo|poniewaz|gdyz|dlatego|because|therefore|caused|causes|consequently|hence|as\s+a\s+result|led\s+to|resulted\s+in|because\s+of|due\s+to|so\s+that|in\s+order\s+to|z\s+powodu|dzieki|spowodow\w*|doprowadz\w*|umozliw\w*)(?![\p{L}])/iu;
+const TEMPORAL_RE = /(?<![\p{L}])(?:19|20)\d{2}(?![\p{L}])|(?<![\p{L}])(?:styczen|luty|marzec|kwiecien|maj|czerwiec|lipiec|sierpien|wrzesien|pazdziernik|listopad|grudzien|wczoraj|dzisiaj|jutro|today|yesterday|tomorrow)(?![\p{L}])/iu;
 const CROSS_LANGUAGE_CONCEPTS = [
   ['porwanie', /kidnap\w*|abduct\w*|captur\w*|porwan\w*|uprowadz\w*/i],
   ['obrazenia', /injur\w*|wound\w*|hurt\w*|rann\w*|obraż\w*/i],
@@ -22,7 +22,7 @@ function pojeciaCrossLanguage(value) {
   return new Set(CROSS_LANGUAGE_CONCEPTS.filter(([, re]) => re.test(text)).map(([name]) => name));
 }
 
-const COVERAGE_STOPWORDS = new Set(['jest','była','było','byli','został','została','zostało','oraz','który','która','które','przez','jako','jego','jej','this','that','with','from','were','was','have','has']);
+const COVERAGE_STOPWORDS = new Set(['jest','byla','bylo','byli','zostal','zostala','zostalo','oraz','ktory','ktora','ktore','przez','jako','jego','jej','this','that','with','from','were','was','have','has']);
 const KNOWN_ENTITY_ALIAS_PATTERNS = [
   { canonical: 'greatsword', pattern: /\b(?:greatsword|wielk(?:i|iego|iemu|im|imi)\s+miec(?:z|za|zem|zowi|zu))\b/iu },
 ];
@@ -30,6 +30,7 @@ function normalizujClaim(value) {
   return String(value || '')
     .toLocaleLowerCase('pl-PL')
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/ł/g, 'l')
     .replace(/[^\p{L}\p{N}%]+/gu, ' ')
     .replace(/\s+/g, ' ')
     .trim();
@@ -98,7 +99,7 @@ function wyodrebnijNazwyWlasne(value) {
     }
   }
   const sentenceRe = /(^|[.!?]\s*)([^.!?]*)(?=[.!?]|$)/gu;
-  const capitalizedRe = /\b[A-ZĄĆĘŁŃÓŚŹŻ][\p{L}\d'’.-]*/gu;
+  const capitalizedRe = /(?<![\p{L}\p{N}_])[A-ZĄĆĘŁŃÓŚŹŻ][\p{L}\d'’.-]*/gu;
 
   for (const sentenceMatch of raw.matchAll(sentenceRe)) {
     const sentence = sentenceMatch[2] || '';
@@ -242,7 +243,7 @@ function czyRelacjaPrzyczynowaPokrywaClaim(evidence, claim) {
     .split(/(?<=[.!?])\s+/)
     .map(s => s.trim())
     .filter(Boolean);
-  const relationRe = /(?:bo|poniewaz|gdyz|dlatego|z powodu|w celu|dzieki|przez|spowod\w*|doprowadz\w*|umozliw\w*|because|therefore|due to|caused|led to|so that)/i;
+  const relationRe = /(?<![\p{L}])(?:bo|poniewaz|gdyz|dlatego|z powodu|dzieki|spowod\w*|doprowadz\w*|umozliw\w*|because|therefore|due to|caused|led to|so that)(?![\p{L}])/iu;
   return sentences.some(sentence => {
     const normalized = normalizujClaim(sentence);
     if (!relationRe.test(normalized)) return false;
