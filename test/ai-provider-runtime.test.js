@@ -231,3 +231,19 @@ test('repair is skipped when less than the minimum generation plus fallback rese
   assert.equal(repairBudgetBlockReason(budget), 'insufficient_time_for_fallback');
   assert.equal(repairBudgetBlockReason({ ...budget, remainingMs: 8500 }), null);
 });
+
+
+test('Groq cooldown parser honors duration hints with or without seconds', () => {
+  const previous = process.env.AI_PROVIDER_QUOTA_COOLDOWN_MS;
+  process.env.AI_PROVIDER_QUOTA_COOLDOWN_MS = '5000';
+  try {
+    assert.equal(quotaCooldownMsFromError('Please try again in 2m'), 120000);
+    assert.equal(quotaCooldownMsFromError('Please try again in 1h30m'), 5400000);
+    assert.equal(quotaCooldownMsFromError('Please try again in 3m22.176s'), 202176);
+    assert.equal(quotaCooldownMsFromError('Please try again in 5.43s'), 60000);
+    assert.equal(quotaCooldownMsFromError('HTTP 429: high demand'), 60000);
+  } finally {
+    if (previous === undefined) delete process.env.AI_PROVIDER_QUOTA_COOLDOWN_MS;
+    else process.env.AI_PROVIDER_QUOTA_COOLDOWN_MS = previous;
+  }
+});
