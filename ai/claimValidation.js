@@ -24,7 +24,9 @@ const CROSS_LANGUAGE_CONCEPTS = [
   ['elf', /\bhigh\s+elf\b|\belves?\b|elf\w*/i],
   ['wampir', /vampire\w*|wampir\w*/i],
   ['klasa_rogue', /\brogue\b|thief\w*|lotr\w*|zlodziej\w*/i],
-  ['towarzysz', /\bcompanions?\b|recruit\w*|party member\w*|towarzysz\w*|zrekrut\w*/i],
+  ['towarzysz', /\bcompanions?\b|recruit\w*|party member\w*|minion\w*|summon\w*|towarzysz\w*|zrekrut\w*|wezw\w*|przywol\w*/i],
+  ['ataki_dystansowe', /\branged\b|\bbow\b|luk\w*|dystansow\w*/i],
+  ['modyfikacja_zachowania', /\bbehav\w*|make her behave|intelligence dampening|zmusz\w*|zachow\w*|rdzen osobowosci/i],
   ['grywalnosc_postaci', /play as|playable character|control\w*|sterow\w*|mozna nim grac|nim grac/i],
   ['smok_na_ziemi', /stay on the ground|on the ground|land(?:s|ed|ing)? on the ground|dragonrend|wyladow\w*|pozostac na ziemi|na ziemi/i],
   ['odpornosc_zywiolowa', /resistan\w*|ward\w*|spellbreaker|odpornosc\w*|wardy|tarcze?\w*/i],
@@ -38,11 +40,27 @@ const COVERAGE_STOPWORDS = new Set(['jest','byla','bylo','byli','zostal','zostal
 const KNOWN_ENTITY_ALIAS_PATTERNS = [
   { canonical: 'greatsword', pattern: /\b(?:greatsword|wielk(?:i|iego|iemu|im|imi)\s+miec(?:z|za|zem|zowi|zu))\b/iu },
   { canonical: 'dragonrend', pattern: /\b(?:dragonrend|smocza\s+zguba)\b/iu },
-  { canonical: 'spellbreaker', pattern: /\b(?:spellbreaker|zaklinacz\s+spellbreaker)\b/iu },
-  { canonical: 'extended relaxation center', pattern: /\b(?:extended\s+relaxation\s+center|centrum\s+przedluzonego\s+relaksu)\b/iu },
+  { canonical: 'spellbreaker', pattern: /\b(?:spellbreaker|zaklinacz\s+spellbreaker|łamacz(?:a|owi|em|u)?\s+zakl(?:ę|e)ć)\b/iu },
+  { canonical: 'extended relaxation center', pattern: /\b(?:extended\s+relaxation\s+center|centrum\s+(?:przedluzonego|rozszerzonego)\s+relaksu)\b/iu },
 ];
 function normalizujClaim(value) {
   return String(value || '')
+    .replace(/\bdoesn['’]t\b/giu, 'does not')
+    .replace(/\bisn['’]t\b/giu, 'is not')
+    .replace(/\baren['’]t\b/giu, 'are not')
+    .replace(/\bwasn['’]t\b/giu, 'was not')
+    .replace(/\bweren['’]t\b/giu, 'were not')
+    .replace(/\bdon['’]t\b/giu, 'do not')
+    .replace(/\bdidn['’]t\b/giu, 'did not')
+    .replace(/\bhaven['’]t\b/giu, 'have not')
+    .replace(/\bhasn['’]t\b/giu, 'has not')
+    .replace(/\bhadn['’]t\b/giu, 'had not')
+    .replace(/\bwouldn['’]t\b/giu, 'would not')
+    .replace(/\bshouldn['’]t\b/giu, 'should not')
+    .replace(/\bcouldn['’]t\b/giu, 'could not')
+    .replace(/\bmustn['’]t\b/giu, 'must not')
+    .replace(/\bcan['’]t\b/giu, 'cannot')
+    .replace(/\bwon['’]t\b/giu, 'will not')
     .toLocaleLowerCase('pl-PL')
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     .replace(/ł/g, 'l')
@@ -102,7 +120,8 @@ function wyodrebnijNazwyWlasne(value) {
     'pierwszy', 'drugi', 'trzeci', 'można', 'mozna', 'może', 'moze',
     'jest', 'są', 'sa', 'był', 'byla', 'było', 'bylo', 'byli',
     'to', 'ten', 'ta', 'te', 'jego', 'jej', 'oni', 'one', 'smoki', 'najlepszym', 'gracz', 'gracze', 'wrog', 'postać', 'postac', 'pytanie', 'odpowiedź', 'odpowiedz',
-    'przeciw', 'misja', 'misji', 'mission', 'quest', 'transfer', 'core', 'initial', 'first',
+    'przeciw', 'przed', 'przez', 'po', 'podczas', 'dzięki', 'dzieki', 'wokół', 'wokol', 'wśród', 'wsrod', 'według', 'wedlug', 'zanim', 'mimo', 'wskutek',
+    'misja', 'misji', 'mission', 'quest', 'transfer', 'core', 'initial', 'first',
     'a', 'an', 'the', 'if', 'it', 'he', 'she', 'they', 'we', 'you', 'his', 'her', 'their',
     'this', 'these', 'those', 'once', 'with', 'against', 'during', 'after', 'before', 'from', 'for', 'as',
     'how', 'why', 'when', 'where', 'who', 'what', 'which', 'while', 'then', 'also', 'one', 'two',
@@ -188,10 +207,12 @@ function czyNazwaWlasnaWystepuje(entity, evidenceNormalized) {
   const evidenceTokens = normalizujClaim(evidenceNormalized).split(' ').filter(Boolean);
   if (!evidenceTokens.length) return false;
   return wariantyNazwyDoDopasowania(entity).some(variant => {
-    // NormalizujClaim usuwa apostrofy i łączniki; porównujemy tokeny
-    // po identycznej normalizacji po obu stronach.
     const normalized = normalizujClaim(variant).split(' ').filter(Boolean);
-    return normalized.length === 1 && evidenceTokens.includes(normalized[0]);
+    if (!normalized.length || normalized.length > evidenceTokens.length) return false;
+    for (let start = 0; start <= evidenceTokens.length - normalized.length; start++) {
+      if (normalized.every((token, offset) => evidenceTokens[start + offset] === token)) return true;
+    }
+    return false;
   });
 }
 
@@ -200,7 +221,8 @@ function sprawdzTwardeKonflikty(evidence, claim, options = {}) {
   const c = String(claim || '');
   const evidenceNegated = wyodrebnijMarkery(e, NEGATION_RE);
   const claimNegated = wyodrebnijMarkery(c, NEGATION_RE);
-  if (!options.allowDistributedEvidence && claimNegated !== evidenceNegated) return { ok: false, reason: 'claim i dowód mają inną negację' };
+  if (!options.ignoreNegation && !options.allowDistributedEvidence && claimNegated !== evidenceNegated) return { ok: false, reason: 'claim i dowód mają inną negację' };
+  if (options.checkNegationOnly) return { ok: true };
 
   const evidenceNumbers = wyodrebnijLiczbyIDaty(e);
   const claimNumbers = wyodrebnijLiczbyIDaty(c);
