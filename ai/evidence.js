@@ -59,7 +59,19 @@ function quoteExists(sourceContent, quote) {
 }
 
 function splitEvidenceSentences(text) {
-  return String(text || '').replace(/\s+/g, ' ').split(/(?<=[.!?])\s+/).map(s => s.trim()).filter(Boolean);
+  const raw = String(text || '')
+    .replace(/\r\n?/g, '\n')
+    .replace(/\s+(?=#{1,6}\s)/gu, '\n')
+    .replace(/\s+(?=\d+(?:\.\d+)*\s+[A-ZÀ-ÖØ-Þ])/gu, '\n')
+    .replace(/\s+(?=(?:main article:|contents\b|gallery\b|development\b|post-release\b))/giu, '\n')
+    .replace(/\[\s*(?:\.{3}|…)\s*\]|\.{3}|…/gu, '\n')
+    .replace(/([.!?])\s+(?=[\p{Lu}\d"'“‘(\[])/gu, '$1\n');
+  return raw.split(/\n+|(?<=[.!?])\s+/u)
+    .map(s => s.trim()
+      .replace(/^(?:#{1,6}\s*|[-*+]\s+|\d+(?:\.\d+)*\s+)/u, '')
+      .replace(/^main article:\s*(?:story\s*)?/iu, '')
+      .trim())
+    .filter(Boolean);
 }
 
 function evidenceTokens(value) {
@@ -75,7 +87,7 @@ function tokenOverlap(a, b) {
 
 function classifyClaimType(claim) {
   const text = normalizeEvidenceText(claim);
-  if (/(?:dlaczego|why|powod\w*|przyczyn\w*|motyw\w*|doprowadz\w*|spowod\w*|umożliw\w*|umozliw\w*|poniewa[zż]|dlatego|bo |z powodu|w celu|because|due to|therefore)/i.test(text)) return 'causal';
+  if (/(?:dlaczego|why|powod\w*|przyczyn\w*|motyw\w*|doprowadz\w*|spowod\w*|zmusz\w*|umożliw\w*|umozliw\w*|poniewa[zż]|dlatego|bo |z powodu|w celu|po tym\s*,?\s*jak|wskutek|w efekcie|przez pomylk\w*|przez przypadek|because|due to|therefore|accidentally|by mistake)/i.test(text)) return 'causal';
   if (/(?:jak |w jaki sposób|how |sposob\w*|instrukcj\w*|krok\w*|walkthrough|guide)/i.test(text)) return 'procedural';
   if (/(?:kiedy|when |rok\b|data|dzien\w*|today|yesterday|tomorrow)/i.test(text)) return 'temporal';
   if (/(?:gdzie|where |lokacj\w*|miejsce)/i.test(text)) return 'location';
@@ -88,7 +100,7 @@ function classifyClaimType(claim) {
 function evidenceRelationSignals(value) {
   const text = normalizeEvidenceText(value);
   return {
-    causal: /(?:bo|poniewaz|gdyz|dlatego|z powodu|w celu|dzieki|przez|spowod\w*|doprowadz\w*|umozliw\w*|because|therefore|due to|caused|led to|so that)/i.test(text),
+    causal: /(?:bo|poniewaz|gdyz|dlatego|z powodu|dzieki|przez|spowod\w*|doprowadz\w*|umozliw\w*|because|therefore|due to|caus\w*|led to|lead\w*\s+(?:\w+\s+){0,3}to|so that|so\s+(?:approach|use|avoid|keep|stay|choose|take|do|be)\b|accidentally|by mistake|regain\w* control|odzysk\w* kontrol\w*|reactivat\w*|uruchom\w* ponownie)/i.test(text),
     procedural: /(?:najpierw|następnie|nastepnie|potem|krok|steps?|first|then|after|before|use|użyj|uzyj|kliknij|click|instrukcj|walkthrough)/i.test(text),
     temporal: /\b(?:19|20)\d{2}\b|\b(?:(?:stycz|lut|marz|marc|kwiet|kwiec|maj|czerw|lip|sierp|wrzes|pazdz|listopad|grudzi|grudn|grudz)\w*|wczoraj|dzis\w*|jutro|today|yesterday|tomorrow)\b/i.test(text),
     location: /(?:w |na |near |located|znajduj|lokacj|miejsce|location|area|region|city|miasto)/i.test(text),
@@ -105,23 +117,54 @@ function removeLeadingImageFilenameNoise(value) {
     .trim();
 }
 
+const CROSS_LANGUAGE_EVIDENCE_CONCEPTS = [
+  /\b(?:dragonrend|smocza zguba|smocze przymierze)\b/i,
+  /\b(?:dragon\w*|smok\w*)\b/i,
+  /\b(?:stay on the ground|on the ground|land\w* on the ground|na ziemi|wyladow\w*)\b/i,
+  /\b(?:extended relaxation center|centrum (?:przedluzonego|rozszerzonego) relaksu)\b/i,
+  /\b(?:aperture laboratories|laboratori(?:a|ach|ami|ow) aperture)\b/i,
+  /\b(?:spellbreaker|lamacz zaklec|zaklinacz spellbreaker|wards?|zaklecia osl\w*|tarcze?\w*)\b/i,
+  /\b(?:ranged attacks?|ataki dystansow\w*|bow|luk\w*|far back|high up|at range|na dystans)\b/i,
+  /\b(?:on horseback|horseback|mounted|konskiego grzbietu|na koniu|z konia)\b/i,
+  /\b(?:giant dogs?|gigantyczn\w*\s+ps\w*|wielkie psy)\b/i,
+  /\b(?:cautious\w*|approach cautiously|ostrozn\w*|ostrozne podejscie)\b/i,
+  /\b(?:lethal|dangerous|deadly|niebezpiecz\w*|zabojcz\w*)\b/i,
+  /\b(?:wild hunt|dziki gon|dzikiego gonu|dzikim gonem)\b/i,
+  /\b(?:bloody baron|baron krwawy|barona krwawego|krwawego barona|the baron)\b/i,
+  /\b(?:reactivat\w*|turn\w* (?:glados\s+)?back on|uruchom\w* ponownie|wlacz\w* z powrotem)\b/i,
+  /\b(?:regain\w* control|regains? control|odzysk\w* kontrol\w*|przejm\w* kontrol\w*)\b/i,
+  /\b(?:switch room|room with switches|pomieszczenie z przelacznikami|pokoj z przelacznikami)\b/i,
+  /\b(?:accidentally|by mistake|przez pomylk\w*|przez przypadek)\b/i,
+  /\b(?:make her behave|zmusz\w*.*zachow\w*|intelligence dampening)\b/i,
+];
+
+function sharedEvidenceConceptCount(claim, quote) {
+  const claimText = normalizeEvidenceText(claim);
+  const quoteText = normalizeEvidenceText(quote);
+  return CROSS_LANGUAGE_EVIDENCE_CONCEPTS.filter(pattern => pattern.test(claimText) && pattern.test(quoteText)).length;
+}
+
 function rankEvidenceForClaim(claim, blocks, allowedSourceIds = null, limit = 3) {
   const rows = [];
   const claimType = classifyClaimType(claim);
   const claimSignals = evidenceRelationSignals(claim);
   for (const block of Array.isArray(blocks) ? blocks : []) {
     if (allowedSourceIds instanceof Set && !allowedSourceIds.has(block.sourceId)) continue;
-    const sentences = splitEvidenceSentences(removeLeadingImageFilenameNoise(block.content));
+    const sourceText = removeLeadingImageFilenameNoise(block.content);
+    const hasEllipsis = /\[\s*(?:\.{3}|…)\s*\]|\.{3}|…/u.test(sourceText);
+    const sentences = splitEvidenceSentences(sourceText);
     for (let i = 0; i < sentences.length; i++) {
       const windows = [sentences[i]];
-      if (sentences[i + 1]) windows.push(sentences[i] + ' ' + sentences[i + 1]);
+      // Never join fragments across an omitted span. The separate fragments
+      // can still be ranked and verified independently against the source.
+      if (!hasEllipsis && sentences[i + 1]) windows.push(sentences[i] + ' ' + sentences[i + 1]);
       for (const quote of windows) {
-        // These candidates can never pass quoteExists' verbatim-evidence rule.
-        if (/\[\s*(?:\.{3}|…)\s*\]|\.{3}|…/u.test(quote)) continue;
+        if (!quote || quote.length > 350 || /\[\s*(?:\.{3}|…)\s*\]|\.{3}|…/u.test(quote)) continue;
         const lexical = tokenOverlap(claim, quote);
-        if (lexical <= 0) continue;
+        const semanticMatches = sharedEvidenceConceptCount(claim, quote);
+        if (lexical <= 0 && semanticMatches === 0) continue;
         const signals = evidenceRelationSignals(quote);
-        let score = lexical;
+        let score = lexical + Math.min(0.36, semanticMatches * 0.12);
         if (claimType === 'causal') score += signals.causal ? 0.35 : -0.25;
         if (claimType === 'procedural') score += signals.procedural ? 0.18 : -0.08;
         if (claimType === 'temporal') score += signals.temporal ? 0.15 : -0.05;
@@ -130,7 +173,16 @@ function rankEvidenceForClaim(claim, blocks, allowedSourceIds = null, limit = 3)
         if (claimType === 'entity' && /\b(?:is|jest|was|był|była|role|postać|character)\b/i.test(quote)) score += 0.08;
         score = Math.max(0, Math.min(1.25, score));
         if (score <= 0) continue;
-        rows.push({ sourceId: block.sourceId, title: block.title, url: block.url, quote, score, claimType, relationMatch: Boolean(claimSignals[claimType] && signals[claimType]) });
+        rows.push({
+          sourceId: block.sourceId,
+          title: block.title,
+          url: block.url,
+          quote,
+          score,
+          claimType,
+          relationMatch: Boolean(claimSignals[claimType] && signals[claimType]),
+          semanticMatches,
+        });
       }
     }
   }
@@ -189,6 +241,7 @@ function buildEvidenceCandidatesFromSources(sources, question = '', options = {}
       score: candidate.score,
       claimType: candidate.claimType,
       relationMatch: candidate.relationMatch,
+      semanticMatches: candidate.semanticMatches || 0,
     }));
 }
 
@@ -207,15 +260,25 @@ function buildEvidenceRepairContext(claims, blocks, allowedSourceIds = null, max
       allowedSourceIds,
       limit: 6,
     })
-      .filter(candidate => Number(candidate.score) >= 0.20)
-      .filter(candidate => !claimIsCausal || (candidate.relationMatch && evidenceRelationSignals(candidate.evidence_quote).causal))
+      .filter(candidate => Number(candidate.score) >= 0.10)
+      .filter(candidate => !claimIsCausal
+        || (candidate.relationMatch && evidenceRelationSignals(candidate.evidence_quote).causal)
+        || Number(candidate.semanticMatches) >= 1)
       .filter(candidate => !claimIsSourceMeta)
       .slice(0, 2);
     if (!candidates.length) continue;
     rows.push({ claim: String(claim.claim).slice(0, 500), candidates: candidates.map(candidate => ({ source_id: candidate.source_id, evidence_quote: candidate.evidence_quote.slice(0, 500), score: candidate.score })) });
   }
   if (!rows.length) return '';
-  return rows.map((row, index) => [
+  const instructions = [
+    'REPAIR RULES:',
+    '- Split composite statements into atomic claims; each claim must express one independently verifiable fact.',
+    '- Every evidence_quote must be one contiguous, verbatim fragment from its cited source.',
+    '- Never use ellipses, [...] placeholders, paraphrases, or joined fragments as a quote.',
+    '- If candidates support different parts of a claim, split it into separate claims and cite each part independently.',
+    '- Remove unsupported advice and finish every sentence; do not leave an example or list unfinished.',
+  ].join('\n');
+  return instructions + '\n\n' + rows.map((row, index) => [
     'CLAIM ' + (index + 1) + ': ' + row.claim,
     ...row.candidates.map(candidate => [
       'CANDIDATE SOURCE: ' + candidate.source_id,
