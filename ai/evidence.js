@@ -22,7 +22,7 @@ function removeLeadingSourceMetadataNoise(value) {
       lines.shift();
       continue;
     }
-    if (/^(?:page\s+title|document\s+title|source\s+title|title|url|host|hostname|filename|file\s+name)\s*:\s*\S.*$/i.test(line)) {
+    if (/^(?:page\s+title|document\s+title|source\s+title|title|tytuł|tytul|nagłówek|naglowek|źródło|zrodlo|adres|url|host|hostname|filename|file\s+name|nazwa\s+pliku)\s*:\s*\S.*$/i.test(line)) {
       lines.shift();
       continue;
     }
