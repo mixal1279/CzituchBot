@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { buildSupplementalRetrievalQuery, isMultiPartQuestion } = require('../ai/retrieval');
+const { buildSupplementalRetrievalQuery, isMultiPartQuestion, selectRetrievalQueries } = require('../ai/retrieval');
 
 
 test('a single question mark does not classify a question as multi-part', () => {
@@ -38,4 +38,31 @@ test('causal supplemental retrieval adds causal search terms while preserving th
   const query = buildSupplementalRetrievalQuery('Dlaczego Wheatley przejął kontrolę nad GLaDOS?', { game: 'Portal 2' }, true);
   assert.match(query, /Portal 2/i);
   assert.match(query, /cause reason motivation/i);
+});
+
+test('retrieval planning preserves causal and specialized queries ahead of extra atomic clauses', () => {
+  const queries = selectRetrievalQueries({
+    atomicQueries: ['Question part one about Wheatley', 'Question part two about GLaDOS'],
+    causalQuery: 'Why did Wheatley gain control of GLaDOS and why did this happen?',
+    specializedQueries: ['Portal 2 lore and Wheatley control mechanism'],
+    fallbackQueries: ['Generic fallback search query'],
+    maxQueries: 2,
+  });
+  assert.deepEqual(queries, [
+    'Why did Wheatley gain control of GLaDOS and why did this happen?',
+    'Portal 2 lore and Wheatley control mechanism',
+  ]);
+});
+
+test('retrieval planning keeps original atomic question and specialized query for non-causal intents', () => {
+  const queries = selectRetrievalQueries({
+    atomicQueries: ['How to defeat a dragon in Skyrim?', 'Where to find the weapon?'],
+    specializedQueries: ['Skyrim combat guide for dragon fights'],
+    fallbackQueries: ['Generic fallback search query'],
+    maxQueries: 2,
+  });
+  assert.deepEqual(queries, [
+    'How to defeat a dragon in Skyrim?',
+    'Skyrim combat guide for dragon fights',
+  ]);
 });
