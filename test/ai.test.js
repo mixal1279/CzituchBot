@@ -19,6 +19,7 @@ const { ocenJakoscOdpowiedzi } = require('../ai/quality');
 const { quoteExists, buildEvidenceRepairContext } = require('../ai/evidence');
 const { wyodrebnijNazwyWlasne, dopasowanieSemantyczne } = require('../ai/claimValidation');
 const { classifyPipelineFailure } = require('../ai/pipeline');
+const { scoreSource, assessEvidence } = require('../ai/core');
 
 const policy = (q, recipe) => recipe(q) ? 'minecraft_recipe' : /pogoda/i.test(q) ? 'weather' : /ile trwa/i.test(q) ? 'hltb' : /dzisiaj|najnowsz/i.test(q) ? 'web_fact' : 'conversation';
 
@@ -850,4 +851,28 @@ console.log('AI regression tests: OK');
     'Geralt kupił miecz u kowala w Novigradzie.'
   );
   assert.equal(unrelated.ok, false, 'cross-language aliases must not accept unrelated claims');
+}
+
+
+{
+  const source = {
+    title: 'Wheatley - Portal 2 Wiki',
+    url: 'https://example.org/portal2/wheatley',
+    content: 'Wheatley is an intelligence core in Portal 2.',
+    authority: 'specialized',
+  };
+  const withoutEntity = scoreSource(source, 'What does this character do?', { entities: [] });
+  const withBothAnchors = scoreSource(source, 'What does this character do?', {
+    entities: ['Wheatley', 'Portal 2'],
+  });
+  assert.ok(withBothAnchors.coreScore > withoutEntity.coreScore);
+
+  const assessed = assessEvidence([source], 'What does Wheatley do?', {
+    entity: 'Wheatley',
+    game: 'Portal 2',
+    resolved_entity: { name: 'Wheatley', game: 'Portal 2' },
+    is_lore: true,
+  });
+  assert.equal(assessed.sourceCount, 1);
+  assert.ok(assessed.sources[0].coreScore >= withBothAnchors.coreScore);
 }
