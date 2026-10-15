@@ -37,7 +37,7 @@ test('evidence parser strips leading page metadata before quote validation and c
     'URL: https://example.com/glados',
     'GLaDOS was transferred into a potato battery after Wheatley took control.',
     '<<<END_UNTRUSTED_SOURCE_CONTENT>>>',
-  ].join('\\n');
+  ].join('\n');
   const blocks = parseEvidenceBlocks(data);
   assert.equal(blocks[0].content, 'GLaDOS was transferred into a potato battery after Wheatley took control.');
   assert.equal(quoteExists(blocks[0].content, 'Title: GLaDOS - Portal Wiki # GLaDOS.'), false);
