@@ -76,6 +76,16 @@ test('unsupported causal relation remains a hard failure', () => {
   assert.match(result.reason, /przyczynową/);
 });
 
+test('one shared concept cannot cover a sentence that adds multiple unsupported events', () => {
+  const { sprawdzPokrycieClaimamiOdpowiedzi } = require('../ai/claimValidation');
+  const result = sprawdzPokrycieClaimamiOdpowiedzi(
+    'Arthur betrayed Dutch, rescued John, and ended the conflict with Micah.',
+    [{ claim: 'Arthur betrayed Dutch.' }],
+  );
+  assert.equal(result.ok, false);
+  assert.deepEqual(result.uncoveredSentenceIndexes, [0]);
+});
+
 test('English causal relation markers remain hard failures when evidence lacks the cause', () => {
   for (const marker of ['led to', 'resulted in', 'as a result']) {
     const result = zgodnoscStrukturalna(
