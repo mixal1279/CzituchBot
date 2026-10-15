@@ -13,7 +13,8 @@ on:
 
 concurrency:
   group: ai-live-benchmark
-  cancel-in-progress: false
+  # A newer commit must benchmark the current code, not wait behind a stale run.
+  cancel-in-progress: true
 
 jobs:
   live-benchmark:
