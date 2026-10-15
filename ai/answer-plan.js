@@ -44,6 +44,8 @@ function buildAnswerPlan(question, routing = {}) {
   }
   if (routing.is_lore) slots.add('entity_context');
   if (routing.is_gameplay) slots.add('steps');
+  // Procedural questions satisfy the broad how-intent as well as the steps slot.
+  if (slots.has('steps')) slots.add('how');
   if (slots.has('why')) {
     slots.add('causal_explanation');
     // Dowód przyczyny jest wymaganiem wewnętrznego kontraktu, nie osobnym sygnałem odpowiedzi.
@@ -98,7 +100,7 @@ function extractAnswerSignals(answer) {
 
   return {
     why: Boolean(causalMarker) && hasMeaningfulTail(text, causalMarker),
-    how: Boolean(mechanism) && hasMeaningfulTail(text, mechanism),
+    how: Boolean(mechanism || procedural) && hasMeaningfulTail(text, mechanism || procedural),
     when: /\b(?:19|20)\d{2}\b|\b(?:w|od|do)\s+(?:styczniu|lutym|marcu|kwietniu|maju|czerwcu|lipcu|sierpniu|wrzesniu|pazdzierniku|listopadzie|grudniu)\b|\b(?:wtedy|nastepnie|pozniej|wcześniej|wczesniej)\b/.test(text),
     where,
     location: where,
