@@ -116,6 +116,8 @@ function rankEvidenceForClaim(claim, blocks, allowedSourceIds = null, limit = 3)
       const windows = [sentences[i]];
       if (sentences[i + 1]) windows.push(sentences[i] + ' ' + sentences[i + 1]);
       for (const quote of windows) {
+        // These candidates can never pass quoteExists' verbatim-evidence rule.
+        if (/\[\s*(?:\.{3}|…)\s*\]|\.{3}|…/u.test(quote)) continue;
         const lexical = tokenOverlap(claim, quote);
         if (lexical <= 0) continue;
         const signals = evidenceRelationSignals(quote);
