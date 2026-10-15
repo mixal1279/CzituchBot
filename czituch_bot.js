@@ -70,7 +70,7 @@ const { planAIRequest, responseContract, RESPONSE_PROFILES, buildRetrievalQuerie
 const { resolveGameEntity, scoreExternalGameCandidate, externalGameCandidateMatchesQuery } = require('./ai/entities');
 const { extractExplicitUserMemories, mergeMemoryRecords, buildVerifiedMemoryContext, pruneExpiredMemories } = require('./ai/memory');
 const { parseMemoryCommand, forgetMemories, describeMemories } = require('./ai/memory_manager');
-const { decomposeQuestion, buildAdvancedRetrievalPlan, buildSupplementalRetrievalQuery } = require('./ai/retrieval');
+const { decomposeQuestion, isMultiPartQuestion, buildAdvancedRetrievalPlan, buildSupplementalRetrievalQuery } = require('./ai/retrieval');
 const { classifyFailure, nextFallbacks, selectRepairFallbacks, repairBudgetBlockReason, GENERATION_FALLBACK_CHAIN, markProviderQuota, isProviderQuotaBlocked, quotaCooldownMsFromError } = require('./ai/fallback');
 const { createGroqCompletion, awaitWithAbortTimeout, computeValidatorTimeout, computeGenerationTimeout } = require('./ai/provider-runtime');
 const { createAIMetrics, recordAIMetric, snapshotAIMetrics } = require('./ai/metrics');
@@ -1748,11 +1748,12 @@ ${dane}
   const remainingMs = requestState
     ? (typeof requestState.remainingMs === 'function' ? requestState.remainingMs() : requestState.maxCzasMs - (Date.now() - requestState.startedAt))
     : 6000;
-  const isLastValidatorSlot = Boolean(requestState
-    && Number(requestState.validatory) >= Number(requestState.maxValidatorow));
+  // OpenRouter remains the next fallback after xKiro, so xKiro must always
+  // leave enough time for that final validator. The validator counter alone
+  // does not mean xKiro is the last provider in the fallback chain.
   const timeoutMs = computeValidatorTimeout(remainingMs, {
     maxTimeoutMs: 9000,
-    reserveMs: isLastValidatorSlot ? 2500 : 10500,
+    reserveMs: 10500,
     minTimeoutMs: 4000,
   });
   if (timeoutMs === null) {
@@ -1880,7 +1881,7 @@ async function walidujOdpowiedzAI(persona, pytanie, odpowiedz, dane, historiaRoz
     const xkiroRemainingMs = requestState
       ? (typeof requestState.remainingMs === 'function' ? requestState.remainingMs() : requestState.maxCzasMs - (Date.now() - requestState.startedAt))
       : 6000;
-    const xkiroTimeoutMs = computeValidatorTimeout(xkiroRemainingMs);
+    const xkiroTimeoutMs = computeValidatorTimeout(xkiroRemainingMs, { maxTimeoutMs: 9000, reserveMs: 10500, minTimeoutMs: 4000 });
     if (xkiroTimeoutMs === null) {
       console.warn(`[AI][${requestId}] xKiro validator pominięty: zbyt mały remaining budget=${xkiroRemainingMs}ms; przechodzę do następnego validatora`);
     } else {
@@ -2319,9 +2320,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
   let pytaniaAtomoweTavily = [];
   if (czyWyszukac) {
     const rewrite = normalizujZapytanieTavily(rewriteWynik);
-    const liczbaCzlonowPytania = (String(pytanie).match(/\b(?:kto|kim|co|czym|jaki|jaka|jakie|dlaczego|kiedy|gdzie|ile|czy)\b/gi) || []).length;
-    const pytanieWieloczlonowe = liczbaCzlonowPytania >= 2
-      || /\?|\b(?:oraz|a nie|różni|rozni|w jaki sposób|w jaki sposob)\b/i.test(pytanie);
+    const pytanieWieloczlonowe = isMultiPartQuestion(pytanie);
     // Rewrite jest tylko optymalizatorem. Nie może zgubić istotnych elementów pytania.
     // Przy pustym, NONE albo podejrzanie krótkim rewrite używamy pełnego oryginału.
     const rewritePodejrzany = !rewrite
