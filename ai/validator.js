@@ -4,7 +4,7 @@
 const { assessEvidence } = require('./core');
 
 const { sprawdzTwardeFaktyOdpowiedzi } = require('./response');
-const { czyDowodSemantyczniePokrywaClaim, czyRelacjaPrzyczynowaPokrywaClaim, zgodnoscStrukturalna, sprawdzTwardeKonflikty, sprawdzPokrycieClaimamiOdpowiedzi } = require('./claimValidation');
+const { czyDowodSemantyczniePokrywaClaim, czyRelacjaPrzyczynowaPokrywaClaim, zgodnoscStrukturalna, sprawdzTwardeKonflikty, sprawdzSprzecznosciSemantyczne, sprawdzPokrycieClaimamiOdpowiedzi } = require('./claimValidation');
 const { parseEvidenceBlocks, quoteExists, rankEvidenceForClaim, buildEvidenceRepairContext } = require('./evidence');
 
 // Kontrakt walidatora jest celowo mały: generator potrzebuje tylko jasnego
@@ -146,7 +146,7 @@ function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '') {
     return { ok: false, reason: 'brak poprawnego source_id lub evidence_quote' };
   }
   const quote = evidenceQuote.trim();
-  if (quote.length < 20 || quote.length > 500) {
+  if (quote.length < 12 || quote.length > 500) {
     return { ok: false, reason: 'evidence_quote ma nieprawidłową długość' };
   }
 
@@ -155,7 +155,7 @@ function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '') {
   const quoteNorm = claimNorm ? String(quote).toLocaleLowerCase('pl-PL')
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/ł/g, 'l') : '';
 
-  const causalRe = /(?:\b(?:bo|poniewaz|gdyz|dlatego|because|therefore|caused|causes|consequently|hence)\b|\b(?:as\s+a\s+result|led\s+to|resulted\s+in|because\s+of|due\s+to|so\s+that|in\s+order\s+to)\b|\bz\s+powodu\b|\bdzieki\b|\bspowodow\w*\b|\bdoprowadz\w*\b|\bumozliw\w*\b)/iu;
+  const causalRe = /(?:\b(?:bo|poniewaz|gdyz|dlatego|because|therefore|caused|causes|consequently|hence)\b|\b(?:as\s+a\s+result|led\s+to|leading\s+to|resulted\s+in|resulting\s+in|because\s+of|due\s+to|so\s+that|in\s+order\s+to|thereby|thus)\b|\b(?:allow(?:s|ed|ing)?|enabl(?:e|es|ed|ing)|which\s+(?:let|lets|allowed|allows|enabled|enables)|putting\s+(?:him|her|them|it)\s+in\s+control)\b|\bz\s+powodu\b|\bdzieki\b|\bspowodow\w*\b|\bdoprowadz\w*\b|\bumozliw\w*\b)/iu;
   const claimCausal = causalRe.test(claimNorm);
   const quoteCausal = causalRe.test(quoteNorm);
 
@@ -205,6 +205,20 @@ function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '') {
       continue;
     }
 
+    // The quote must not contradict the claim. A verified quote may be only
+    // one part of a supported claim, so use the same authorized source block
+    // for cross-sentence synthesis after checking hard conflicts against the quote.
+    const quoteHard = sprawdzTwardeKonflikty(quote, claim);
+    if (!quoteHard.ok) {
+      reasons.push(quoteHard.reason || 'wybrany cytat zawiera konflikt liczbowy, czasowy lub negację');
+      continue;
+    }
+    const quoteConflict = sprawdzSprzecznosciSemantyczne(quote, claim);
+    if (!quoteConflict.ok) {
+      reasons.push(quoteConflict.reason || 'wybrany cytat przeczy claimowi');
+      continue;
+    }
+
     const quoteStructural = zgodnoscStrukturalna(quote, claim, {
       allowCrossLanguageExactEvidence: true,
       allowDistributedEvidence: false,
@@ -212,7 +226,24 @@ function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '') {
     if (quoteStructural.ok) {
       return { ok: true, sourceId: id, mode: 'exact_quote', reason: 'cytat występuje w źródle i bezpośrednio wspiera claim' };
     }
-    reasons.push(quoteStructural.reason || 'wybrany cytat nie potwierdza claimu bezpośrednio');
+
+    // The selected quote can omit the antecedent, a character's name, or a
+    // second attribute that is stated elsewhere in the *same* authorized
+    // source. Accept synthesis only when the source block independently passes
+    // the full structural checks; never search another source to repair it.
+    const sourceStructural = zgodnoscStrukturalna(block.content, claim, {
+      allowCrossLanguageExactEvidence: true,
+      allowDistributedEvidence: true,
+    });
+    if (sourceStructural.ok) {
+      return {
+        ok: true,
+        sourceId: id,
+        mode: 'source_block_synthesis',
+        reason: 'claim jest wsparty w obrębie tego samego autoryzowanego bloku źródła',
+      };
+    }
+    reasons.push(sourceStructural.reason || quoteStructural.reason || 'wybrany cytat nie potwierdza claimu bezpośrednio');
   }
 
   return { ok: false, reason: reasons[0] || 'brak zweryfikowanego evidence' };
