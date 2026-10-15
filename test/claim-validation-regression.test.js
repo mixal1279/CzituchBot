@@ -75,3 +75,20 @@ test('unsupported causal relation remains a hard failure', () => {
   assert.equal(result.ok, false);
   assert.match(result.reason, /przyczynową/);
 });
+
+test('purpose clauses are not misclassified as unsupported causal relations', () => {
+  const cases = [
+    [
+      'Astarion wants to live out his story.',
+      'Astarion chce, aby przeżyć jego historię.',
+    ],
+    [
+      'The Dragonborn uses a shout to absorb a dragon soul.',
+      'Dragonborn używa krzyku, aby wchłonąć duszę smoka.',
+    ],
+  ];
+  for (const [evidence, claim] of cases) {
+    const result = zgodnoscStrukturalna(evidence, claim, { allowCrossLanguageExactEvidence: true });
+    assert.equal(result.ok, true, result.reason);
+  }
+});
