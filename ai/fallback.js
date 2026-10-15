@@ -84,7 +84,9 @@ function quotaCooldownMsFromError(error) {
     const minutes = Number(tryAgainMatch[2] || 0);
     const seconds = Number(tryAgainMatch[3] || 0);
     const groqRetryAfterMs = Math.max(0, (hours * 3600 + minutes * 60 + seconds) * 1000);
-    retryAfterMs = Math.max(retryAfterMs || 0, groqRetryAfterMs, 60_000);
+    // Honor provider-supplied short TPM retry windows; the global cooldown
+    // is a fallback only when the response gives no retry duration.
+    retryAfterMs = Math.max(retryAfterMs || 0, groqRetryAfterMs, 1_000);
   }
 
   if (retryAfterMs !== null) {
