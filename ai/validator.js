@@ -141,7 +141,7 @@ function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '') {
     return { ok: false, reason: 'brak poprawnego source_id lub evidence_quote' };
   }
   const quote = evidenceQuote.trim();
-  if (quote.length < 3 || quote.length > 500) {
+  if (quote.length < 20 || quote.length > 500) {
     return { ok: false, reason: 'evidence_quote ma nieprawidłową długość' };
   }
 
@@ -209,7 +209,7 @@ function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '') {
     }
     const supported = zgodnoscStrukturalna(block.content, claim, {
       allowCrossLanguageExactEvidence: true,
-      allowDistributedEvidence: true,
+      allowDistributedEvidence: false,
     });
     if (supported.ok) {
       return {
