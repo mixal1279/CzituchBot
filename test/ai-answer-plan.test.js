@@ -60,10 +60,27 @@ test('answer signals handle Polish ł normalization and inflected answer roots',
   assert.equal(extractAnswerSignals('Ten pistolet jest lepszy natomiast tamten ma większą celność.').comparison, true);
 });
 
-test('v26 answer signals reject generic where and procedural answers', () => {
-  const signals = extractAnswerSignals('Znajdziesz to w odpowiednim miejscu. Najpierw wykonaj czynność.');
-  assert.equal(signals.where, false);
-  assert.equal(signals.how, true);
+test('answer signals distinguish procedure from mechanism explanations', () => {
+  const procedural = extractAnswerSignals('Najpierw wykonaj czynność, a następnie sprawdź wynik.');
+  const mechanism = extractAnswerSignals('System działa dzięki wymianie rdzeni.');
+  const generic = extractAnswerSignals('Znajdziesz to w odpowiednim miejscu.');
+  assert.equal(generic.where, false);
+  assert.equal(procedural.steps, true);
+  assert.equal(procedural.how, false);
+  assert.equal(mechanism.how, true);
+});
+
+test('answer plan does not mistake how-long questions for procedural how questions', () => {
+  const plan = buildAnswerPlan('Jak długo trwa główna fabuła Skyrim?');
+  assert.ok(plan.requirements.some(x => x.id === 'quantity'));
+  assert.ok(!plan.requirements.some(x => x.id === 'how'));
+  assert.ok(!plan.requirements.some(x => x.id === 'steps'));
+});
+
+test('answer plan classifies how-to combat questions as procedural', () => {
+  const plan = buildAnswerPlan('Jak pokonać smoka w Skyrim?', { intent: 'web_fact', is_gameplay: true });
+  assert.ok(plan.requirements.some(x => x.id === 'steps'));
+  assert.ok(!plan.requirements.some(x => x.id === 'how'));
 });
 
 test('v26 judge rejects generic relationship answer', () => {
