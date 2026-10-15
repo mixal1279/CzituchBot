@@ -76,6 +76,17 @@ test('unsupported causal relation remains a hard failure', () => {
   assert.match(result.reason, /przyczynową/);
 });
 
+test('English causal relation markers remain hard failures when evidence lacks the cause', () => {
+  for (const marker of ['led to', 'resulted in', 'as a result']) {
+    const result = zgodnoscStrukturalna(
+      'Wheatley took control of the system.',
+      'Wheatley took control of the system, which ' + marker + ' his escape.',
+    );
+    assert.equal(result.ok, false, marker + ': ' + result.reason);
+    assert.match(result.reason, /przyczynow|semantyczn|pokrycie/i);
+  }
+});
+
 test('purpose clauses are not misclassified as unsupported causal relations', () => {
   const cases = [
     [
