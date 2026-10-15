@@ -106,3 +106,10 @@ test('request context reserves all shared validator slots, including the final O
   assert.equal(ctx.reserveValidator('openrouter'), true);
   assert.equal(ctx.reserveValidator('over-budget'), false);
 });
+
+test('production pipeline uses shared validator limit', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const source = fs.readFileSync(path.join(__dirname, '..', 'czituch_bot.js'), 'utf8');
+  assert.match(source, /maxValidatorow:\\s*DEFAULTS\\.maxValidators/);
+});
