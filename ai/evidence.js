@@ -79,7 +79,7 @@ function removeLeadingImageFilenameNoise(value) {
   // Strip only leading filename tokens for candidate ranking; the original source
   // remains unchanged and quote verification still checks against its real content.
   return String(value || '')
-    .replace(/^(?:\\s*[\\p{L}\\p{N}_()'’ -]+\\.(?:png|jpe?g|webp|gif|svg)\\s*)+/iu, '')
+    .replace(/^(?:\s*[\p{L}\p{N}_()'’ -]+\.(?:png|jpe?g|webp|gif|svg)\s*)+/iu, '')
     .trim();
 }
 
