@@ -37,6 +37,8 @@ function classifyFailure(error = '') {
   const text = error && typeof error === 'object'
     ? [error.message, error.reason, error.error, error.diagnostic].filter(Boolean).join(' ')
     : String(error?.message || error || '');
+  // Some providers use HTTP 429 for temporary capacity pressure, not exhausted quota.
+  if (/(?:high demand|overloaded|temporarily unavailable|capacity exceeded)/i.test(text)) return 'transient';
   for (const [type, pattern] of DETAIL_CLASSIFIERS) {
     if (pattern.test(text)) return type;
   }
@@ -64,8 +66,10 @@ function resetProviderQuotaCooldowns() {
 }
 
 function quotaCooldownMsFromError(error) {
+  const message = String(error?.message || error || '');
+  if (/(?:high demand|overloaded|temporarily unavailable|capacity exceeded)/i.test(message)) return 60_000;
   const configured = Number(process.env.AI_PROVIDER_QUOTA_COOLDOWN_MS) || 60_000;
-  const match = String(error?.message || error || '').match(/retry[- ]after\s*[=:]\s*(\d+(?:\.\d+)?)\s*(?:s|sec(?:ond)?s?)?/i);
+  const match = message.match(/retry[- ]after\s*[=:]\s*(\d+(?:\.\d+)?)\s*(?:s|sec(?:ond)?s?)?/i);
   if (!match) return configured;
   const retryAfterMs = Math.max(0, Number(match[1])) * 1000;
   return Math.max(configured, Math.ceil(retryAfterMs), 1_000);
@@ -143,6 +147,10 @@ function repairBudgetBlockReason({
   }
   if (Number.isFinite(Number(repairGenerations)) && Number.isFinite(Number(maxRepairGenerations)) && Number(repairGenerations) >= Number(maxRepairGenerations)) {
     return 'repair_generation_budget_exhausted';
+  }
+  // A repair needs a minimum generation window plus a reserved validation/fallback window.
+  if (Number.isFinite(Number(remainingMs)) && Number(remainingMs) < 8500) {
+    return 'insufficient_time_for_fallback';
   }
   return null;
 }
