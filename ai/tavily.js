@@ -143,7 +143,7 @@ function filtrujMaterialPoSlowachTavily(material, pytanie) {
   if (!text || keywords.length < 1) return text;
 
   const sentences = text
-    .split(/(?<=[.!?])\s+|\n+/)
+    .split(/(?<=[.!?])\\s+|\\n+/)
     .map(s => s.trim())
     .filter(Boolean);
   if (sentences.length <= 2) return text;
@@ -154,19 +154,38 @@ function filtrujMaterialPoSlowachTavily(material, pytanie) {
     for (const keyword of keywords) {
       if (normalized.includes(keyword)) score += keyword.length >= 6 ? 2 : 1;
     }
-    // Pierwsze zdanie często identyfikuje obiekt strony; zachowujemy je przy remisie.
     if (index === 0) score += 0.25;
     return { sentence, score, index };
   });
 
   const relevant = scored.filter(x => x.score > 0).sort((a, b) => b.score - a.score || a.index - b.index);
-  // Heurystyka nie może wyzerować źródła: gdy nic nie pasuje, zwracamy pełny materiał.
   if (!relevant.length) return text;
 
-  const keep = relevant.slice(0, 10).sort((a, b) => a.index - b.index).map(x => x.sentence);
-  // Jeżeli filtr wyciął prawie wszystko, zostawiamy jeszcze jedno zdanie kontekstowe.
-  if (keep.length < 2 && sentences.length > 1) keep.push(sentences.find(s => !keep.includes(s)) || '');
-  return keep.filter(Boolean).join(' ');
+  // Keep fewer primary matches and their adjacent sentences. Explanations often
+  // express the cause in different words from the question, so keyword-only
+  // filtering must not discard the sentence immediately explaining an event.
+  const keepIndexes = new Set();
+  for (const item of relevant.slice(0, 8)) {
+    keepIndexes.add(item.index);
+    if (item.index > 0) keepIndexes.add(item.index - 1);
+    if (item.index + 1 < sentences.length) keepIndexes.add(item.index + 1);
+  }
+
+  // Preserve causal mechanism sentences when they sit near a matched event,
+  // even if they share no lexical keyword with the query.
+  const causal = /\\b(?:because|since|therefore|due to|as a result|caused|led to|so that|because of|ponieważ|poniewaz|gdyż|gdyz|dlatego|w rezultacie|w wyniku|z powodu|spowodował|spowodowal|umożliwił|umozliwil)\\b/i;
+  for (let i = 0; i < sentences.length; i++) {
+    if (causal.test(sentences[i]) && (keepIndexes.has(i - 1) || keepIndexes.has(i + 1))) {
+      keepIndexes.add(i);
+    }
+  }
+
+  // Bound the output while prioritizing the selected relevant/context windows.
+  return [...keepIndexes]
+    .sort((a, b) => a - b)
+    .slice(0, 16)
+    .map(index => sentences[index])
+    .join(' ');
 }
 
 function poziomAutorytetuTavily(url, requestedDomains = []) {
