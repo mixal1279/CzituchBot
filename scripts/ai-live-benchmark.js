@@ -46,7 +46,7 @@ function buildQuestionForBot(item) {
   const question = String(item?.question || '').trim();
   const game = String(item?.game || '').trim();
   if (!game || question.toLocaleLowerCase('pl-PL').includes(game.toLocaleLowerCase('pl-PL'))) return question;
-  return `${question} (kontekst gry: ${game})`;
+  return `Gra: ${game}. Pytanie: ${question}`;
 }
 
 function isFailureText(text) {
