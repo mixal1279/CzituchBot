@@ -2303,14 +2303,33 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
   const czyPytanieOYouTube = kategoriaAI === 'youtube';
   const [rewriteWynik, miastoPogoda, domeny, youtuberNazwa, gryHLTB] = await Promise.all([
     czyWyszukac
-      ? (zarezerwujModel('search-rewrite') ? groqClient.chat.completions.create({
-          model: AI_MODELS.queryRewrite, // lekka klasyfikacja/rewrite — 20b wystarczy, szybszy/tańszy niż 120b, nie wycofywany 16.08.2026
-          max_tokens: 220, reasoning_effort: 'low', include_reasoning: false, temperature: 0,
-          messages: [
-            { role: 'system', content: 'Na podstawie ewentualnego kontekstu poprzedniej rozmowy oraz nowego pytania, przepisz nowe pytanie jako krótkie, precyzyjne, samodzielne zapytanie do wyszukiwarki. Jeśli nowe pytanie odnosi się do czegoś wspomnianego wcześniej (np. "to", "taki", "coś podobnego"), rozwiąż to odniesienie na podstawie kontekstu. Jeśli dotyczy Minecrafta lub innej gry, przetłumacz nazwy przedmiotów/mechanik na ich oficjalne ANGIELSKIE nazwy (np. "buzdygan" → "Mace Minecraft 1.21", "stół kowalski" → "smithing table") i dodaj nazwę gry — to JEDYNY przypadek, w którym tłumaczysz na angielski. Jeśli pytanie dotyczy osoby, nicku, twórcy internetowego, streamera lub czegokolwiek, co może być polskojęzyczne, zostaw zapytanie PO POLSKU (nie tłumacz nicków ani nazw własnych na angielski) — angielskie zapytanie o polskojęzyczną osobę zwraca gorsze, często niepowiązane wyniki. Jeśli po analizie kontekstu pytanie nadal nie dotyczy żadnego faktu możliwego do wyszukania (np. to żart, opinia, lub coś niezwiązane z żadną konkretną rzeczą/faktem), odpowiedz dokładnie: NONE. Tylko samo zapytanie albo NONE, bez wyjaśnień.' },
-            { role: 'user', content: ostatniaWymiana ? `Kontekst poprzedniej rozmowy:\n${ostatniaWymiana}\n\nNowe pytanie: ${pytanie}` : pytanie }
-          ]
-        }).then(r => (r.choices[0].message.content || '').trim()).catch(() => null) : Promise.resolve(null))
+      ? (zarezerwujModel('search-rewrite') ? (async () => {
+          // Rewrite is an optimization, never a prerequisite for retrieval. The
+          // unbounded request previously blocked Promise.all for ~45s, consuming
+          // the entire 40s AI deadline before Tavily could run. Fall back to the
+          // original question after a short, abortable budget.
+          const rewriteTimeoutMs = Math.min(2500, pozostalyCzasMs());
+          const rewriteController = new AbortController();
+          try {
+            const rewriteResult = await awaitWithAbortTimeout(
+              createGroqCompletion(groqClient, {
+                model: AI_MODELS.queryRewrite,
+                max_tokens: 220, reasoning_effort: 'low', include_reasoning: false, temperature: 0,
+                messages: [
+                  { role: 'system', content: 'Na podstawie ewentualnego kontekstu poprzedniej rozmowy oraz nowego pytania, przepisz nowe pytanie jako krótkie, precyzyjne, samodzielne zapytanie do wyszukiwarki. Jeśli nowe pytanie odnosi się do czegoś wspomnianego wcześniej (np. "to", "taki", "coś podobnego"), rozwiąż to odniesienie na podstawie kontekstu. Jeśli dotyczy Minecrafta lub innej gry, przetłumacz nazwy przedmiotów/mechanik na ich oficjalne ANGIELSKIE nazwy (np. "buzdygan" → "Mace Minecraft 1.21", "stół kowalski" → "smithing table") i dodaj nazwę gry — to JEDYNY przypadek, w którym tłumaczysz na angielski. Jeśli pytanie dotyczy osoby, nicku, twórcy internetowego, streamera lub czegokolwiek, co może być polskojęzyczne, zostaw zapytanie PO POLSKU (nie tłumacz nicków ani nazw własnych na angielski) — angielskie zapytanie o polskojęzyczną osobę zwraca gorsze, często niepowiązane wyniki. Jeśli po analizie kontekstu pytanie nadal nie dotyczy żadnego faktu możliwego do wyszukania (np. to żart, opinia, lub coś niezwiązane z żadną konkretną rzeczą/faktem), odpowiedz dokładnie: NONE. Tylko samo zapytanie albo NONE, bez wyjaśnień.' },
+                  { role: 'user', content: ostatniaWymiana ? `Kontekst poprzedniej rozmowy:\n${ostatniaWymiana}\n\nNowe pytanie: ${pytanie}` : pytanie }
+                ]
+              }, { signal: rewriteController.signal }),
+              rewriteTimeoutMs,
+              rewriteController,
+              'search rewrite'
+            );
+            return (rewriteResult?.choices?.[0]?.message?.content || '').trim() || null;
+          } catch (error) {
+            console.warn(`[Tavily] ⏱️ Rewrite pominięty (${error?.message || error}); używam oryginalnego pytania.`);
+            return null;
+          }
+        })() : Promise.resolve(null))
       : Promise.resolve(null),
     czyPytanieOPogodzie ? wyodrebnijMiastoPogoda(pytanie, aiState) : Promise.resolve(null),
     czyWyszukac ? wybierzDomenyDlaPytania(pytanie, false, aiState) : Promise.resolve(null),
