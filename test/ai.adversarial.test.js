@@ -161,7 +161,7 @@ test('validator accepts supported causal synthesis from one authorized source bl
     }],
   }, 'test-model', 'test', new Set(['SOURCE 1']), source, answer);
   assert.equal(result.status, 'accepted', JSON.stringify(result.diagnostics));
-  assert.equal(result.diagnostics.evidenceBindings[0].mode, 'source_block_synthesis');
+  assert.equal(result.diagnostics.evidenceBindings[0].mode, 'source_context');
 });
 
 test('validator does not mistake a Polish sentence starter for a proper name', () => {
@@ -194,5 +194,22 @@ test('validator can verify a short exact quote when the same source provides the
     }],
   }, 'test-model', 'test', new Set(['SOURCE 1']), source, answer);
   assert.equal(result.status, 'accepted', JSON.stringify(result.diagnostics));
-  assert.equal(result.diagnostics.evidenceBindings[0].mode, 'source_block_synthesis');
+  assert.equal(result.diagnostics.evidenceBindings[0].mode, 'source_context');
+});
+
+
+test('validator does not combine a named character and a distant attribute from the same page', () => {
+  const source = '[SOURCE 1]\nTYTUŁ: Baldur’s Gate 3 character guide\nTREŚĆ: Astarion is an Origin character in Baldur’s Gate 3. The party travels for a long time. Later the party explores another region. He is a High Elf.';
+  const answer = 'Astarion jest wysokim elfem.';
+  const result = normalizujWynikWalidatora({
+    valid: true, reason: 'confirmed', unsupported_claims: [],
+    supported: true, relevant: true, complete: true, hallucination: false, confidence: 0.96,
+    claims: [{
+      claim: answer,
+      supported: true,
+      source_ids: ['SOURCE 1'],
+      evidence_quote: 'He is a High Elf.',
+    }],
+  }, 'test-model', 'test', new Set(['SOURCE 1']), source, answer);
+  assert.equal(result.status, 'rejected', JSON.stringify(result.diagnostics));
 });
