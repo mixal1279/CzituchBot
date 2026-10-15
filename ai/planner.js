@@ -45,16 +45,16 @@ function buildRetrievalQueries(question, routing = {}, options = {}) {
   if (!original || routing?.needs_web === false) return [];
 
   const queries = [];
-  const entity = String(routing?.game || routing?.entity || '').trim();
+  const entity = String(routing?.resolved_entity?.name || routing?.entity || routing?.game || '').trim();
+  const game = String(routing?.game || routing?.resolved_entity?.game || '').trim();
   const keywords = slowaZapytania(original);
-  const normalizedOriginal = normalizujQueryToken(original);
   const normalizedEntity = normalizujQueryToken(entity);
 
   dodajUnikalneQuery(queries, original);
 
   if (entity && keywords.length) {
     const filtered = keywords.filter(k => !normalizedEntity.includes(k)).slice(0, 8);
-    dodajUnikalneQuery(queries, [entity, ...filtered].join(' '));
+    dodajUnikalneQuery(queries, [entity, ...(game && normalizujQueryToken(game) !== normalizedEntity ? [game] : []), ...filtered].join(' '));
   }
 
   if (routing?.is_lore) {
