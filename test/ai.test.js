@@ -251,6 +251,12 @@ assert.match(require('fs').readFileSync(require('path').join(__dirname, '..', 'c
   assert.match(retrieval[0], /Portal 2/i);
   assert.ok(retrieval.some(q => /historia|fabuła|lore/i.test(q)));
 
+  const characterRetrieval = buildRetrievalQueries('Dlaczego przejął kontrolę?', {
+    needs_web: true, is_lore: true, entity: 'Wheatley', game: 'Portal 2'
+  });
+  assert.match(characterRetrieval[1], /Wheatley/i);
+  assert.match(characterRetrieval[1], /Portal 2/i);
+
   const freshRetrieval = buildRetrievalQueries('Co nowego dzisiaj w Minecraft?', {
     needs_web: true, freshness: 'live', entity: 'Minecraft', game: 'Minecraft'
   });
