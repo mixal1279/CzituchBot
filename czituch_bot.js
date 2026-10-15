@@ -70,7 +70,7 @@ const { planAIRequest, responseContract, RESPONSE_PROFILES, buildRetrievalQuerie
 const { resolveGameEntity, scoreExternalGameCandidate, externalGameCandidateMatchesQuery } = require('./ai/entities');
 const { extractExplicitUserMemories, mergeMemoryRecords, buildVerifiedMemoryContext, pruneExpiredMemories } = require('./ai/memory');
 const { parseMemoryCommand, forgetMemories, describeMemories } = require('./ai/memory_manager');
-const { decomposeQuestion, isMultiPartQuestion, buildAdvancedRetrievalPlan, buildSupplementalRetrievalQuery } = require('./ai/retrieval');
+const { decomposeQuestion, isMultiPartQuestion, buildAdvancedRetrievalPlan, buildSupplementalRetrievalQuery, selectRetrievalQueries } = require('./ai/retrieval');
 const { classifyFailure, nextFallbacks, selectRepairFallbacks, filterAvailableFallbacks, repairBudgetBlockReason, GENERATION_FALLBACK_CHAIN, markProviderQuota, isProviderQuotaBlocked, quotaCooldownMsFromError } = require('./ai/fallback');
 const { createGroqCompletion, awaitWithAbortTimeout, computeValidatorTimeout, computeGenerationTimeout } = require('./ai/provider-runtime');
 const { createAIMetrics, recordAIMetric, snapshotAIMetrics } = require('./ai/metrics');
@@ -2418,20 +2418,19 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
   if (!pogodaKontekst && !hltbKontekst && !infoKanalu && czyWyszukac && pytaniaAtomoweTavily.length && aiState.tavilySearches < aiState.maxWyszukanTavily && !budzetPrzekroczony()) {
     const materialyTavily = [];
     let sourceOffset = 0;
-    const planowaneQueryRetrieval = (() => {
-      const primary = [
-        ...pytaniaAtomoweTavily.filter(Boolean),
-        ...(causalRetrievalQuery ? [causalRetrievalQuery] : []),
-      ];
-      const specialized = advancedRetrievalPlan
-        .filter(item => aiPlan.responseProfile === 'lore'
-          ? item?.reason === 'lore'
-          : aiPlan.responseProfile === 'gameplay' ? item?.reason === 'gameplay' : false)
-        .map(item => item.query)
-        .filter(Boolean);
-      const fallback = advancedRetrievalPlan.map(item => item?.query).filter(Boolean);
-      return [...new Set([...primary, ...specialized, ...fallback])].slice(0, 2);
-    })();
+    const specializedRetrievalQueries = advancedRetrievalPlan
+      .filter(item => aiPlan.responseProfile === 'lore'
+        ? item?.reason === 'lore'
+        : aiPlan.responseProfile === 'gameplay' ? item?.reason === 'gameplay' : false)
+      .map(item => item.query)
+      .filter(Boolean);
+    const planowaneQueryRetrieval = selectRetrievalQueries({
+      atomicQueries: pytaniaAtomoweTavily,
+      causalQuery: causalRetrievalQuery,
+      specializedQueries: specializedRetrievalQueries,
+      fallbackQueries: advancedRetrievalPlan.map(item => item?.query).filter(Boolean),
+      maxQueries: Math.min(3, Math.max(0, aiState.maxWyszukanTavily - aiState.tavilySearches)),
+    });
     const kolejkaTavily = planowaneQueryRetrieval.length
       ? planowaneQueryRetrieval
       : [pytaniaAtomoweTavily[0]];
