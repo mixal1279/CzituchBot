@@ -13,7 +13,7 @@ function selectRetrievalQueries({
   const selected = [];
   const seen = new Set();
   const add = value => {
-    const query = String(value || '').replace(/\\s+/g, ' ').trim();
+    const query = String(value || '').replace(/\s+/g, ' ').trim();
     const key = query.toLocaleLowerCase('pl-PL');
     if (query.length < 8 || seen.has(key) || selected.length >= limit) return;
     seen.add(key);
