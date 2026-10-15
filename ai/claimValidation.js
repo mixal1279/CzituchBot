@@ -256,26 +256,15 @@ function czyRelacjaPrzyczynowaPokrywaClaim(evidence, claim) {
     .split(/(?<=[.!?])\s+/)
     .map(s => s.trim())
     .filter(Boolean);
-  const windows = [];
-  for (let i = 0; i < sentences.length; i++) {
-    // Causal relations can span an event sentence and the result sentence.
-    windows.push(sentences.slice(i, Math.min(sentences.length, i + 3)).join(' '));
-  }
-  const relationRe = /(?<![\p{L}])(?:bo|poniewaz|gdyz|dlatego|z powodu|dzieki|spowod\w*|doprowadz\w*|umozliw\w*|because|therefore|due to|caused|led to|leading to|resulted in|resulting in|so that|in order to|thereby|thus|allow(?:s|ed|ing)?|enabl(?:e|s|ed|ing)|which\s+(?:let|lets|allowed|allows|enabled|enables)|putting\s+(?:him|her|them|it)\s+in\s+control)(?![\p{L}])/iu;
-  const claimConcepts = pojeciaCrossLanguage(claimText);
-  return windows.some(window => {
-    const normalized = normalizujClaim(window);
+  const relationRe = /(?<![\p{L}])(?:bo|poniewaz|gdyz|dlatego|z powodu|dzieki|spowod\w*|doprowadz\w*|umozliw\w*|because|therefore|due to|caused|led to|leading to|resulted in|resulting in|so that|in order to|thereby|thus|allow(?:s|ed|ing)?|enabl(?:e|es|ed|ing)|which\s+(?:let|lets|allowed|allows|enabled|enables)|putting\s+(?:him|her|them|it)\s+in\s+control)(?![\p{L}])/iu;
+  return sentences.some(sentence => {
+    const normalized = normalizujClaim(sentence);
     if (!relationRe.test(normalized)) return false;
     const entityOk = !claimEntities.length || claimEntities.every(entity => czyNazwaWlasnaWystepuje(entity, normalized));
-    const evidenceTokens = tokenyPokryciaBezStop(window);
+    const evidenceTokens = tokenyPokryciaBezStop(sentence);
     const matchedTokens = claimTokens.filter(token => evidenceTokens.some(other => tokenyPokrywajaSie(token, other)));
     const tokenOverlapScore = claimTokens.length ? matchedTokens.length / claimTokens.length : 0;
-    const evidenceConcepts = pojeciaCrossLanguage(window);
-    const sharedConcepts = [...claimConcepts].filter(concept => evidenceConcepts.has(concept));
-    return entityOk && (
-      tokenOverlapScore >= 0.22
-      || (sharedConcepts.length > 0 && tokenOverlapScore >= 0.10)
-    );
+    return entityOk && tokenOverlapScore >= 0.22;
   });
 }
 
