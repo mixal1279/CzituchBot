@@ -113,3 +113,34 @@ test('production pipeline uses shared validator limit', () => {
   const source = fs.readFileSync(path.join(__dirname, '..', 'czituch_bot.js'), 'utf8');
   assert.match(source, /maxValidatorow:\s*DEFAULTS\.maxValidators/);
 });
+
+
+test('validator and model-call slots are reserved atomically', () => {
+  const blocked = createAIRequestContext({ maxValidatorow: 1, maxModelCalls: 0 });
+  assert.equal(blocked.reserveValidatorModel('validator:blocked'), false);
+  assert.equal(blocked.validatory, 0);
+  assert.equal(blocked.modelCalls, 0);
+
+  const allowed = createAIRequestContext({ maxValidatorow: 1, maxModelCalls: 1 });
+  assert.equal(allowed.reserveValidatorModel('validator:allowed'), true);
+  assert.equal(allowed.validatory, 1);
+  assert.equal(allowed.modelCalls, 1);
+  assert.equal(allowed.reserveValidatorModel('validator:over-budget'), false);
+  assert.equal(allowed.validatory, 1);
+  assert.equal(allowed.modelCalls, 1);
+});
+
+test('repair generation is not reserved below the 8.5 second time floor', () => {
+  const ctx = createAIRequestContext({
+    startedAt: Date.now() - 2000,
+    maxCzasMs: 10000,
+    maxGeneracji: 4,
+    maxInitialGeneracji: 3,
+    maxRepairGeneracji: 1,
+    maxModelCalls: 6,
+  });
+  assert.ok(ctx.remainingMs() < 8500);
+  assert.equal(ctx.reserveGeneration('gemini', 'repair-model', 'repair'), false);
+  assert.equal(ctx.repairGeneracje, 0);
+  assert.equal(ctx.modelCalls, 0);
+});
