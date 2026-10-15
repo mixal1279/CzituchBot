@@ -50,7 +50,43 @@ function buildQuestionForBot(item) {
 }
 
 function isFailureText(text) {
-  return /nie mam wystarczających danych|nie mogę wiarygodnie potwierdzić|nie mogę potwierdzić tej informacji|nie będę zgadywać/i.test(String(text || ''));
+  const normalized = normalizeFactText(text);
+  return /^(?:benchmark\s+)?(?:nie mam wystarczajacych danych(?: zeby odpowiedziec na to pewnie)?|nie moge wiarygodnie potwierdzic|nie moge potwierdzic tej informacji|nie bede zgadywac|chwilowo nie moge potwierdzic tej informacji wiec nie bede zgadywac)$/i.test(normalized);
+}
+
+function evaluateBenchmarkAnswer(answer, item) {
+  const text = String(answer || '');
+  const plan = buildAnswerPlan(item.question, { ...item.routing, game: item.game });
+  const judge = judgeAnswer(text, plan);
+  const answered = Boolean(text.trim()) && !isFailureText(text);
+  const abstained = Boolean(text.trim()) && !answered;
+  return {
+    answered,
+    abstained,
+    completeness: answered ? judge.score : 0,
+    judgeStatus: answered ? judge.status : (abstained ? 'abstained' : 'unanswered'),
+    judgeReason: answered ? judge.reason : (abstained ? 'pipeline returned a refusal instead of a substantive answer' : 'pipeline returned no answer'),
+    missing: answered ? judge.missing : plan.requirements.map(requirement => requirement.id),
+    judge,
+  };
+}
+
+function writeBenchmarkReport(report, destination = process.env.AI_BENCHMARK_JSON_PATH) {
+  if (!report || typeof report !== 'object' || Array.isArray(report)) throw new TypeError('benchmark report must be a JSON object');
+  const serialized = `${JSON.stringify(report, null, 2)}\n`;
+  JSON.parse(serialized);
+  if (!destination) return serialized;
+  const outputPath = path.resolve(destination);
+  fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+  const temporaryPath = `${outputPath}.${process.pid}.${Date.now()}.tmp`;
+  try {
+    fs.writeFileSync(temporaryPath, serialized, { encoding: 'utf8', mode: 0o600 });
+    fs.renameSync(temporaryPath, outputPath);
+  } catch (error) {
+    try { fs.unlinkSync(temporaryPath); } catch (_) {}
+    throw error;
+  }
+  return serialized;
 }
 
 async function sleep(ms) {
@@ -84,24 +120,25 @@ async function run() {
         },
       );
 
-      const plan = buildAnswerPlan(item.question, { ...item.routing, game: item.game });
-      const judge = judgeAnswer(answer, plan);
+      const evaluation = evaluateBenchmarkAnswer(answer, item);
+      const { judge } = evaluation;
       const factual = scoreGoldenFacts(answer, item.expected?.factual);
       results.push({
         id: item.id,
         category: item.category,
         answer,
-        answered: Boolean(answer.trim()) && !isFailureText(answer),
-        completeness: judge.score,
-        judgeStatus: judge.status,
+        answered: evaluation.answered,
+        abstained: evaluation.abstained,
+        completeness: evaluation.completeness,
+        judgeStatus: evaluation.judgeStatus,
         rejectionReason: [
-          judge.status !== 'accepted' ? judge.reason : null,
+          evaluation.judgeStatus !== 'accepted' ? evaluation.judgeReason : null,
           ...(summary?.validatorResults || [])
             .filter(result => result.status === 'rejected')
             .map(result => [result.reason, ...(result.validationDiagnostics?.localRejectReasons || [])].filter(Boolean).join(': ')),
           ...(summary?.fallbackReasons || []),
         ].filter(Boolean).join(' | ') || null,
-        missing: judge.missing,
+        missing: evaluation.missing,
         factualScore: factual.score,
         factualPassed: factual.passed,
         factualMissing: factual.missing,
@@ -122,6 +159,7 @@ async function run() {
         category: item.category,
         answer,
         answered: false,
+        abstained: false,
         completeness: 0,
         judgeStatus: 'error',
         rejectionReason: String(error?.message || error),
@@ -146,7 +184,7 @@ async function run() {
     if ((i + 1) % 10 === 0 || i + 1 === cases.length) {
       const answered = results.filter(x => x.answered).length / results.length;
       const complete = results.filter(x => x.judgeStatus === 'accepted').length / results.length;
-      console.log(`[LIVE BENCHMARK] ${i + 1}/${cases.length} answered=${(answered * 100).toFixed(1)}% complete=${(complete * 100).toFixed(1)}%`);
+      console.error(`[LIVE BENCHMARK] ${i + 1}/${cases.length} answered=${(answered * 100).toFixed(1)}% complete=${(complete * 100).toFixed(1)}%`);
     }
     await sleep(delayMs);
   }
@@ -182,7 +220,7 @@ async function run() {
     diagnostics: diagnostic,
     failures: results.filter(x => !x.answered || x.judgeStatus !== 'accepted' || x.factualPassed === false).slice(0, 100),
   };
-  console.log(JSON.stringify(report, null, 2));
+  process.stdout.write(writeBenchmarkReport(report));
   if (process.env.AI_BENCHMARK_REQUIRE_PERFECT === '1') {
     const factualOk = factualCases.length > 0 && factualPassed === factualCases.length;
     if (answered !== results.length || complete !== results.length || !factualOk) {
@@ -192,7 +230,7 @@ async function run() {
   }
 }
 
-module.exports = { normalizeFactText, scoreGoldenFacts, stratifiedCases, buildQuestionForBot, run };
+module.exports = { normalizeFactText, scoreGoldenFacts, stratifiedCases, buildQuestionForBot, isFailureText, evaluateBenchmarkAnswer, writeBenchmarkReport, run };
 
 if (require.main === module) {
   run().catch(error => {

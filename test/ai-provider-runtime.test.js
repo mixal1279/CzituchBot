@@ -71,10 +71,10 @@ test('xKiro timeout policy preserves enough time for the OpenRouter validator fa
 
 test('generation timeout skips calls that cannot run for long enough while preserving fallback reserve', () => {
   assert.equal(computeGenerationTimeout(25000), 12000);
-  assert.equal(computeGenerationTimeout(16000), 11500);
-  assert.equal(computeGenerationTimeout(10000), 5500);
-  assert.equal(computeGenerationTimeout(8500), 4000);
-  assert.equal(computeGenerationTimeout(8499), null);
+  assert.equal(computeGenerationTimeout(16000), 9500);
+  assert.equal(computeGenerationTimeout(12000), 5500);
+  assert.equal(computeGenerationTimeout(10500), 4000);
+  assert.equal(computeGenerationTimeout(10499), null);
   assert.equal(computeGenerationTimeout(4499), null);
   assert.equal(computeGenerationTimeout(Number.NaN), null);
 });

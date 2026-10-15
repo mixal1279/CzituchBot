@@ -1,7 +1,7 @@
 'use strict';
 
 const NEGATION_RE = /\b(?:nie|nigdy|brak|bez|żaden|żadna|żadne|never|no|not)\b/iu;
-const CAUSAL_RE = /(?:\b(?:bo|poniewaz|gdyz|dlatego|because|therefore|caused|causes|consequently|hence)\b|\b(?:as\s+a\s+result|led\s+to|resulted\s+in|because\s+of|due\s+to)\b|\bz\s+powodu\b|\bdzieki\b|\bprzez\b|\bspowodow\w*\b|\bdoprowadz\w*\b|\bumozliw\w*\b)/iu;
+const CAUSAL_RE = /(?:\b(?:bo|poniewaz|gdyz|dlatego|because|therefore|caused|causes|consequently|hence)\b|\b(?:as\s+a\s+result|led\s+to|resulted\s+in|because\s+of|due\s+to|so\s+that|in\s+order\s+to)\b|\bz\s+powodu\b|\bdzieki\b|\bprzez\b|\bspowodow\w*\b|\bdoprowadz\w*\b|\bumozliw\w*\b)/iu;
 const TEMPORAL_RE = /\b(?:19|20)\d{2}\b|\b(?:styczeń|luty|marzec|kwiecień|maj|czerwiec|lipiec|sierpień|wrzesień|październik|listopad|grudzień)\b|\b(?:wczoraj|dzisiaj|jutro|today|yesterday|tomorrow)\b/iu;
 const CROSS_LANGUAGE_CONCEPTS = [
   ['porwanie', /kidnap\w*|abduct\w*|captur\w*|porwan\w*|uprowadz\w*/i],
@@ -15,6 +15,7 @@ const CROSS_LANGUAGE_CONCEPTS = [
   ['zdrada', /betray\w*|traitor\w*|zdradz\w*|zdrajc\w*/i],
   ['tworzenie', /creat\w*|develop\w*|build\w*|made\b|stworz\w*|tworz\w*|opracow\w*/i],
   ['praca', /work\w*|employ\w*|job\w*|prac\w*|zatrud\w*/i],
+  ['lokalizacja', /found|find\w*|locat\w*|location\w*|znalezc\w*|znajduj\w*|lokaliz\w*|lezy|polozen\w*/i],
 ];
 function pojeciaCrossLanguage(value) {
   const text = normalizujClaim(value);
@@ -22,6 +23,9 @@ function pojeciaCrossLanguage(value) {
 }
 
 const COVERAGE_STOPWORDS = new Set(['jest','była','było','byli','został','została','zostało','oraz','który','która','które','przez','jako','jego','jej','this','that','with','from','were','was','have','has']);
+const KNOWN_ENTITY_ALIAS_PATTERNS = [
+  { canonical: 'greatsword', pattern: /\b(?:greatsword|wielk(?:i|iego|iemu|im|imi)\s+miec(?:z|za|zem|zowi|zu))\b/iu },
+];
 function normalizujClaim(value) {
   return String(value || '')
     .toLocaleLowerCase('pl-PL')
@@ -84,6 +88,15 @@ function wyodrebnijNazwyWlasne(value) {
     'to', 'ten', 'ta', 'te', 'jego', 'jej', 'oni', 'one'
   ]);
   const candidates = [];
+  const aliasSpans = [];
+  for (const alias of KNOWN_ENTITY_ALIAS_PATTERNS) {
+    const pattern = new RegExp(alias.pattern.source, 'giu');
+    for (const match of raw.matchAll(pattern)) {
+      const start = Number(match.index || 0);
+      aliasSpans.push({ start, end: start + match[0].length });
+      candidates.push({ token: alias.canonical, offset: start });
+    }
+  }
   const sentenceRe = /(^|[.!?]\s*)([^.!?]*)(?=[.!?]|$)/gu;
   const capitalizedRe = /\b[A-ZĄĆĘŁŃÓŚŹŻ][\p{L}\d'’.-]*/gu;
 
@@ -94,6 +107,7 @@ function wyodrebnijNazwyWlasne(value) {
     for (const match of sentence.matchAll(capitalizedRe)) {
       const token = match[0];
       const tokenOffset = Number(match.index || 0);
+      if (aliasSpans.some(span => tokenOffset >= span.start && tokenOffset < span.end)) continue;
       const before = sentence.slice(0, tokenOffset);
       const atSentenceStart = firstCandidate && !before.trim();
       firstCandidate = false;

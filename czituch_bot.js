@@ -2182,7 +2182,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
   const budzetPrzekroczony = () => aiState.isExpired();
   const pozostalyCzasMs = () => aiState.remainingMs();
   // Dzielimy pozostały deadline między aktualną i potencjalne kolejne próby.
-  // Dzięki temu jeden zawieszony provider nie może zjeść całych 25 s i zablokować fallbacku.
+  // Każda generacja pozostawia minimum 6,5 s na końcowy walidator i jego fallback.
   const timeoutDlaGeneracji = () => computeGenerationTimeout(pozostalyCzasMs());
   const zarezerwujModel = (purpose = 'model') => {
     const reserved = aiState.reserveModel(purpose);
@@ -3185,10 +3185,9 @@ function oczyscOdpowiedzPrzedWalidacja(tekst) {
       // Dokładnie jeden cykl retry po odrzuceniu walidacji. Fallbacki providerów
       // pozostają wewnątrz jednego cyklu generacji i nie uruchamiamy kolejnego retry.
       const repairRemainingMs = pozostalyCzasMs();
-      // A repair generation needs at least 4 s for the provider call plus
-      // the 4.5 s reserve used by computeGenerationTimeout for final validation.
-      // The old 5 s gate admitted attempts that could never receive a valid timeout.
-      const minRepairGenerationBudgetMs = 8500;
+      // Repair needs at least a 4 s generation window plus 6.5 s reserved for
+      // the final validator. A lower gate would admit a call that cannot finish safely.
+      const minRepairGenerationBudgetMs = 10_500;
       aiState.recordTiming('repair_generation_decision', {
         remainingMsBeforeRepair: repairRemainingMs,
         willAttempt: Number.isFinite(repairRemainingMs) && repairRemainingMs >= minRepairGenerationBudgetMs,
@@ -3240,7 +3239,7 @@ function oczyscOdpowiedzPrzedWalidacja(tekst) {
     if (walidacja.status === 'accepted') {
       answerJudge = judgeAnswer(odp, answerPlan);
       console.log(`[AI][${requestId}] answer-judge=${JSON.stringify(answerJudge)}`);
-      if (answerJudge.status === 'repair' && answerJudge.repairable && !budzetPrzekroczony() && pozostalyCzasMs() >= 5000) {
+      if (answerJudge.status === 'repair' && answerJudge.repairable && !budzetPrzekroczony() && timeoutDlaGeneracji() !== null) {
         const verifiedEvidenceContext = (walidacja.claims || [])
           .filter(claim => claim?.supported && claim?.source_ids?.length && claim?.evidence_quote)
           .slice(0, 6)

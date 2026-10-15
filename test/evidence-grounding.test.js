@@ -96,6 +96,18 @@ test('validator accepts an exact quoted span without requiring the whole source 
   assert.equal(result.diagnostics.evidenceBindings[0].mode, 'exact_quote');
 });
 
+test('validator accepts the original Elden Ring Greatsword location claim against English source text', () => {
+  const quote = '## Where to Find the Greatsword The Greatsword can be found inside a coffin carriage chest on the western side of the Caelid Region, located along the road past the Rotview Balcony, northwest of the Caelem Ruins.';
+  const claim = 'Wielki Miecz znajduje się w regionie Caelid, po zachodniej stronie, przy drodze mijającej Rotview Balcony i na północny zachód od ruin Caelem.';
+  const data = `[SOURCE 1]\nTYTUŁ: Elden Ring guide\nTREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>\n${quote}\n<<<END_UNTRUSTED_SOURCE_CONTENT>>>`;
+  const result = normalizujWynikWalidatora({
+    valid: true, reason: 'ok', unsupported_claims: [], supported: true, relevant: true, complete: true, hallucination: false, confidence: 0.99,
+    claims: [{ claim, supported: true, source_ids: ['SOURCE 1'], evidence_quote: quote }],
+  }, 'test-model', 'test', new Set(['SOURCE 1']), data, claim);
+  assert.equal(result.status, 'accepted', JSON.stringify(result.diagnostics));
+  assert.equal(result.diagnostics.evidenceBindings[0].mode, 'exact_quote');
+});
+
 test('validator can use the same source block as bounded context when the quote uses a pronoun', () => {
   const data = '[SOURCE 1]\nTYTUŁ: RDR2\nTREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>\nArthur Morgan wrócił do obozu. On uratował Johna podczas wydarzeń w górach.\n<<<END_UNTRUSTED_SOURCE_CONTENT>>>';
   const result = normalizujWynikWalidatora({
@@ -129,6 +141,18 @@ test('validator rejects a real quote when the claim adds an unsupported causal r
   assert.equal(result.status, 'rejected');
 });
 
+test('validator recognizes an English so-that source relation for a Polish Portal 2 causal claim', () => {
+  const quote = 'Chell and Wheatley force a core transfer on GLaDOS so that Wheatley can take control of the facility so they can both escape.';
+  const data = `[SOURCE 15]\nTYTUŁ: Portal 2 walkthrough\nTREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>\n${quote}\n<<<END_UNTRUSTED_SOURCE_CONTENT>>>`;
+  const claim = 'Chell i Wheatley wymusili transfer rdzenia z GLaDOS, co umożliwiło Wheatleyowi przejęcie kontroli nad całym ośrodkiem.';
+  const result = normalizujWynikWalidatora({
+    valid: true, reason: 'confirmed', unsupported_claims: [], supported: true, relevant: true, complete: true, hallucination: false, confidence: 0.99,
+    claims: [{ claim, supported: true, source_ids: ['SOURCE 15'], evidence_quote: quote }],
+  }, 'test-model', 'test', new Set(['SOURCE 15']), data, claim);
+  assert.equal(result.status, 'accepted', JSON.stringify(result.diagnostics));
+  assert.equal(result.diagnostics.evidenceBindings[0].mode, 'exact_quote');
+});
+
 test('validator rejects a quote bound to an unauthorized source', () => {
   const data = '[SOURCE 1]\nTYTUŁ: Test\nTREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>\nFakt znajduje się tutaj.\n<<<END_UNTRUSTED_SOURCE_CONTENT>>>';
   const result = normalizujWynikWalidatora({
@@ -137,6 +161,20 @@ test('validator rejects a quote bound to an unauthorized source', () => {
   }, 'test-model', 'test', new Set(['SOURCE 1']), data);
   assert.equal(result.status, 'rejected');
   assert.ok(result.diagnostics.localRejectReasons.includes('unknown_source_id'));
+});
+
+test('validator removes an extra wrong source ID when the quote uniquely matches a cited authorized source', () => {
+  const quote = 'The Greatsword is found in Caelid.';
+  const data = [
+    '[SOURCE 1]', 'TREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>', quote, '<<<END_UNTRUSTED_SOURCE_CONTENT>>>',
+    '[SOURCE 3]', 'TREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>', 'A different fact is present here.', '<<<END_UNTRUSTED_SOURCE_CONTENT>>>',
+  ].join('\n');
+  const result = normalizujWynikWalidatora({
+    valid: true, reason: 'ok', unsupported_claims: [], supported: true, relevant: true, complete: true, hallucination: false, confidence: 0.99,
+    claims: [{ claim: quote, supported: true, source_ids: ['SOURCE 1', 'SOURCE 3'], evidence_quote: quote }],
+  }, 'test-model', 'test', new Set(['SOURCE 1', 'SOURCE 3']), data, quote);
+  assert.equal(result.status, 'accepted', JSON.stringify(result.diagnostics));
+  assert.deepEqual(result.claims[0].source_ids, ['SOURCE 1']);
 });
 
 test('validator does not repair a malformed source ID when the quote matches multiple authorized sources', () => {

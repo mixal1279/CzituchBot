@@ -49,6 +49,16 @@ test('semantic paraphrase remains possible when a supported concept and entity m
   assert.equal(result.ok, true, result.reason);
 });
 
+test('Polish localized Elden Ring weapon name aliases to the English Greatsword entity', () => {
+  const { wyodrebnijNazwyWlasne: extractNames } = require('../ai/claimValidation');
+  assert.deepEqual(extractNames('Wielki Miecz znajduje się w Caelid.'), ['greatsword', 'caelid']);
+  const result = zgodnoscStrukturalna(
+    'The Greatsword can be found in Caelid.',
+    'Wielki Miecz można znaleźć w Caelid.',
+  );
+  assert.equal(result.ok, true, result.reason);
+});
+
 test('numeric/date conflicts remain hard failures', () => {
   const result = zgodnoscStrukturalna(
     'Wheatley przejął kontrolę w 2011 roku.',

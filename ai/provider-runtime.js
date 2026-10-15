@@ -84,7 +84,8 @@ function computeValidatorTimeout(remainingMs, {
  */
 function computeGenerationTimeout(remainingMs, {
   maxTimeoutMs = 12000,
-  reserveMs = 4500,
+  // Keep enough time for the final validator: 4 s minimum plus its 2.5 s reserve.
+  reserveMs = 6500,
   minTimeoutMs = 4000,
 } = {}) {
   const remaining = Number(remainingMs);

@@ -150,7 +150,7 @@ function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '') {
   const quoteNorm = claimNorm ? String(quote).toLocaleLowerCase('pl-PL')
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '') : '';
 
-  const causalRe = /(?:\b(?:bo|poniewaz|gdyz|dlatego|because|therefore|caused|causes|consequently|hence)\b|\b(?:as\s+a\s+result|led\s+to|resulted\s+in|because\s+of|due\s+to)\b|\bz\s+powodu\b|\bdzieki\b|\bspowodow\w*\b|\bdoprowadz\w*\b|\bumozliw\w*\b)/iu;
+  const causalRe = /(?:\b(?:bo|poniewaz|gdyz|dlatego|because|therefore|caused|causes|consequently|hence)\b|\b(?:as\s+a\s+result|led\s+to|resulted\s+in|because\s+of|due\s+to|so\s+that|in\s+order\s+to)\b|\bz\s+powodu\b|\bdzieki\b|\bspowodow\w*\b|\bdoprowadz\w*\b|\bumozliw\w*\b)/iu;
   const claimCausal = causalRe.test(claimNorm);
   const quoteCausal = causalRe.test(quoteNorm);
 
@@ -270,19 +270,18 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
     intent: 'web_fact',
     is_lore: /lore|fabuł|histori|kanon|canon/i.test(String(answer || '')),
   });
-  // Canonical evidence binding: repair a malformed model-generated source ID only
-  // when the exact quote resolves to exactly one authorized source. Semantic support
-  // is still checked below; ambiguous or paraphrased quotes are never rebound.
+  // Canonical evidence binding: trim an over-broad citation only when the exact quote
+  // uniquely matches one of the model-cited, authorized blocks. Never repair a wholly
+  // fabricated ID by searching unrelated sources; ambiguous quotes remain rejected.
   const parsedEvidenceBlocks = parseEvidenceBlocks(dane);
   const allowedBlocks = allowed
     ? parsedEvidenceBlocks.filter(block => allowed.has(block.sourceId))
     : parsedEvidenceBlocks;
   for (const claim of claims) {
     if (!claim.supported || !claim.evidence_quote || !claim.source_ids.length) continue;
-    const idsAreAllowed = !allowed || claim.source_ids.every(id => allowed.has(id));
-    if (idsAreAllowed) continue;
-    const exactMatches = allowedBlocks.filter(block => quoteExists(block.content, claim.evidence_quote));
-    if (exactMatches.length === 1 && claim.source_ids[0] === exactMatches[0].sourceId) claim.source_ids = [exactMatches[0].sourceId];
+    const citedIds = new Set(claim.source_ids.filter(id => !allowed || allowed.has(id)));
+    const exactMatches = allowedBlocks.filter(block => citedIds.has(block.sourceId) && quoteExists(block.content, claim.evidence_quote));
+    if (exactMatches.length === 1) claim.source_ids = [exactMatches[0].sourceId];
   }
   const unknownSourceClaimIndexes = claims.map((c, index) => c.supported && (!c.source_ids.length || (allowed && c.source_ids.some(id => !allowed.has(id)))) ? index : -1).filter(index => index >= 0);
   const effectiveClaimSourceIds = claims.map(c =>
