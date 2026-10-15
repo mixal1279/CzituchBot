@@ -222,14 +222,22 @@ function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '') {
       continue;
     }
 
+    const quoteSentenceContext = buildBoundedSourceContext(block.content, quote, 0) || quote;
     const sourceContext = buildBoundedSourceContext(block.content, quote, 1);
     const verificationContext = sourceContext || quote;
 
-    // The evidence quote is guaranteed to exist in this authorized source, but
-    // it may omit details (such as the date or a subject expressed in the prior
-    // sentence). Validate hard conflicts against the bounded context, not the
-    // isolated quote or the unbounded full page.
-    const contextHard = sprawdzTwardeKonflikty(verificationContext, claim);
+    // Negation must be checked against the sentence containing the exact quote.
+    // A neighbouring sentence may discuss an unrelated negative fact; using it
+    // for the polarity check caused valid positive claims to be rejected.
+    const quoteNegation = sprawdzTwardeKonflikty(quoteSentenceContext, claim, { checkNegationOnly: true });
+    if (!quoteNegation.ok) {
+      reasons.push(quoteNegation.reason || 'claim i dowód mają inną negację');
+      continue;
+    }
+
+    // Adjacent context remains available for dates, quantities and local
+    // anaphora, but it cannot override the quote sentence's polarity.
+    const contextHard = sprawdzTwardeKonflikty(verificationContext, claim, { ignoreNegation: true });
     if (!contextHard.ok) {
       reasons.push(contextHard.reason || 'kontekst cytatu zawiera konflikt liczbowy, czasowy lub negację');
       continue;
@@ -327,9 +335,9 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
     intent: 'web_fact',
     is_lore: /lore|fabuł|histori|kanon|canon/i.test(String(answer || '')),
   });
-  // Canonical evidence binding: trim an over-broad citation only when the exact quote
-  // uniquely matches one of the model-cited, authorized blocks. Never repair a wholly
-  // fabricated ID by searching unrelated sources; ambiguous quotes remain rejected.
+  // Canonical evidence binding: prefer an exact match among cited, authorized blocks.
+  // If the model picked the wrong ID, allow a unique exact match in this request's
+  // authorized evidence pool. Every rebound claim still passes local semantic checks.
   const parsedEvidenceBlocks = parseEvidenceBlocks(dane);
   const allowedBlocks = allowed
     ? parsedEvidenceBlocks.filter(block => allowed.has(block.sourceId))
@@ -338,7 +346,17 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
     if (!claim.supported || !claim.evidence_quote || !claim.source_ids.length) continue;
     const citedIds = new Set(claim.source_ids.filter(id => !allowed || allowed.has(id)));
     const exactMatches = allowedBlocks.filter(block => citedIds.has(block.sourceId) && quoteExists(block.content, claim.evidence_quote));
-    if (exactMatches.length === 1) claim.source_ids = [exactMatches[0].sourceId];
+    if (exactMatches.length === 1) {
+      claim.source_ids = [exactMatches[0].sourceId];
+      continue;
+    }
+    // If the model chose the wrong ID, a unique exact quote match among the
+    // request's authorized evidence blocks is safe to rebind. The claim is still
+    // subjected to local semantic, numeric, temporal, negation and causal checks.
+    if (exactMatches.length === 0) {
+      const authorizedExactMatches = allowedBlocks.filter(block => quoteExists(block.content, claim.evidence_quote));
+      if (authorizedExactMatches.length === 1) claim.source_ids = [authorizedExactMatches[0].sourceId];
+    }
   }
   const unknownSourceClaimIndexes = claims.map((c, index) => c.supported && (!c.source_ids.length || (allowed && c.source_ids.some(id => !allowed.has(id)))) ? index : -1).filter(index => index >= 0);
   const effectiveClaimSourceIds = claims.map(c =>
