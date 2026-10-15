@@ -349,8 +349,12 @@ function sprawdzPokrycieClaimamiOdpowiedzi(answer, claims) {
       const covered = tokens.filter(t => row.tokens.some(c => tokenyPokrywajaSie(t, c))).length / Math.max(tokens.length, 1);
       const sharedConcepts = [...sentenceConcepts].filter(concept => row.concepts.has(concept)).length;
       const sharedEntities = sentenceEntities.filter(entity => row.entities.includes(entity)).length;
-      const conceptCoverage = row.concepts.size ? sharedConcepts / row.concepts.size : 0;
-      const entityCoverage = row.entities.length ? sharedEntities / row.entities.length : 0;
+      // Coverage asks whether the answer sentence is represented by a claim,
+      // so the sentence—not the potentially shorter claim—is the denominator.
+      // Using row.*.size here let one shared concept/name make a long sentence
+      // appear fully covered even when it added other events or characters.
+      const conceptCoverage = sentenceConcepts.size ? sharedConcepts / sentenceConcepts.size : 0;
+      const entityCoverage = sentenceEntities.length ? sharedEntities / sentenceEntities.length : 0;
       const semanticCoverage = Math.max(
         covered,
         conceptCoverage >= 0.5 ? 0.62 : 0,
