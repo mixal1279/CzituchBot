@@ -130,13 +130,13 @@ function pobierzBlokZrodla(dane, sourceId) {
 }
 
 function normalizujIdZrodla(value) {
-  const raw = String(value || '').trim().replace(/^\\[|\\]$/g, '').trim();
-  const normalized = raw.replace(/\\s+/g, ' ').replace(/_/g, ' ').toLocaleUpperCase('en-US');
-  const multiple = normalized.split(/\\s*,\\s*(?=(?:\\[?\\s*(?:SOURCE|REFERENCE)\\b)/i).filter(Boolean);
+  const raw = String(value || '').trim().replace(/^\[|\]$/g, '').trim();
+  const normalized = raw.replace(/\s+/g, ' ').replace(/_/g, ' ').toLocaleUpperCase('en-US');
+  const multiple = normalized.split(/\s*,\s*(?=(?:\[?\s*(?:SOURCE|REFERENCE)\b)/i).filter(Boolean);
   if (multiple.length > 1) return multiple.map(normalizujIdZrodla);
-  const source = normalized.match(/^(?:\\[?\\s*)?SOURCE\\s*#?\\s*(\\d+)\\s*\\]?$/i) || normalized.match(/^(\\d+)$/);
+  const source = normalized.match(/^(?:\[?\s*)?SOURCE\s*#?\s*(\d+)\s*\]?$/i) || normalized.match(/^(\d+)$/);
   if (source) return `SOURCE ${source[1]}`;
-  const reference = normalized.match(/^(?:\\[?\\s*)?REFERENCE\\s+(.+?)\\s*\\]?$/i);
+  const reference = normalized.match(/^(?:\[?\s*)?REFERENCE\s+(.+?)\s*\]?$/i);
   if (reference) return `REFERENCE ${reference[1].trim()}`;
   return raw;
 }
