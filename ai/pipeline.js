@@ -1,5 +1,7 @@
 'use strict';
 
+const { parseEvidenceBlocks } = require('./evidence');
+
 const {
   buildRetrievalPlan,
   assessEvidence,
@@ -51,20 +53,10 @@ function planRequest(question, routing, plannerFn, retrievalFn) {
 }
 
 function parseEvidenceText(text) {
-  const value = String(text || '');
-  const re = /^\[(SOURCE \d+|REFERENCE [^\]\r\n]+)\]\s*$/gmi;
-  const matches = [...value.matchAll(re)];
-  return matches.map((m, i) => {
-    const start = m.index + m[0].length;
-    const end = i + 1 < matches.length ? matches[i + 1].index : value.length;
-    const block = value.slice(start, end);
-    return {
-      sourceId: m[1].trim(),
-      title: block.match(/TYTUŁ:\s*([^\r\n]+)/i)?.[1] || m[1],
-      url: block.match(/URL:\s*(https?:\/\/[^\s\r\n]+)/i)?.[1] || '',
-      content: (block.match(/TREŚĆ:\s*<<<UNTRUSTED_SOURCE_CONTENT>>>\s*([\s\S]*?)<<<END_UNTRUSTED_SOURCE_CONTENT>>>/i)?.[1] || block).trim(),
-    };
-  });
+  // Keep evidence parsing and metadata removal identical in the validator and
+  // evidence-policy path. A second parser here previously let page titles/URLs
+  // influence evidence scoring even when the validator correctly stripped them.
+  return parseEvidenceBlocks(text);
 }
 
 function evaluateEvidence(question, routing, sources) {
