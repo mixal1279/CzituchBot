@@ -132,7 +132,7 @@ function pobierzBlokZrodla(dane, sourceId) {
 function normalizujIdZrodla(value) {
   const raw = String(value || '').trim().replace(/^\[|\]$/g, '').trim();
   const normalized = raw.replace(/\s+/g, ' ').replace(/_/g, ' ').toLocaleUpperCase('en-US');
-  const multiple = normalized.split(/\s*,\s*(?=(?:\[?\s*(?:SOURCE|REFERENCE)\b)/i).filter(Boolean);
+  const multiple = normalized.split(/\s*,\s*(?=(?:\[?\s*(?:SOURCE|REFERENCE)\b))/i).filter(Boolean);
   if (multiple.length > 1) return multiple.map(normalizujIdZrodla);
   const source = normalized.match(/^(?:\[?\s*)?SOURCE\s*#?\s*(\d+)\s*\]?$/i) || normalized.match(/^(\d+)$/);
   if (source) return `SOURCE ${source[1]}`;
