@@ -9,6 +9,7 @@ const { wyodrebnijJednostkoweWartosci } = require('../ai/claimValidation');
 const { decomposeQuestion, sourceDiversity, shouldRunAdditionalRetrieval } = require('../ai/retrieval');
 const { createAIRequestContext } = require('../ai/requestContext');
 const { createAIMetrics, recordAIMetric, snapshotAIMetrics } = require('../ai/metrics');
+const { ocenJakoscOdpowiedzi } = require('../ai/quality');
 
 test('secondary provider receives the remaining timeout', async () => {
   let observedSignal = false;
@@ -195,4 +196,23 @@ test('Tavily sentence filtering preserves adjacent causal context with different
   const filtered = filtrujMaterialPoSlowachTavily(source, 'Why did Wheatley gain control of GLaDOS in Portal 2?');
   assert.match(filtered, /Wheatley was transferred into GLaDOS body/);
   assert.match(filtered, /Because the transfer placed him in the central AI system/);
+});
+
+test('quality gate accepts a concise complete lore answer but rejects a content-free fragment', () => {
+  const routing = { entity: 'Wheatley', game: 'Portal 2' };
+  const concise = ocenJakoscOdpowiedzi(
+    'Dlaczego Wheatley przejął kontrolę nad GLaDOS?',
+    'Wheatley przejął kontrolę nad systemem Aperture.',
+    routing,
+    'lore',
+  );
+  assert.equal(concise.ok, true, JSON.stringify(concise));
+  const fragment = ocenJakoscOdpowiedzi(
+    'Dlaczego Wheatley przejął kontrolę nad GLaDOS?',
+    'Wheatley wygrał.',
+    routing,
+    'lore',
+  );
+  assert.equal(fragment.ok, false);
+  assert.ok(fragment.issues.includes('odpowiedź jest zbyt krótka'));
 });
