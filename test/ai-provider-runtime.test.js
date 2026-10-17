@@ -178,7 +178,8 @@ test('repair after validator rejection selects only configured healthy providers
 
 test('repair checks shared model-call and generation limits before selecting a provider', () => {
   const budget = {
-    remainingMs: 5000,
+    // Naprawa wymaga co najmniej 8,5 s (osobny test niżej), więc ten test używa wyraźnie więcej.
+    remainingMs: 20000,
     generations: 5,
     maxGenerations: 6,
     repairGenerations: 0,

@@ -389,10 +389,16 @@ console.log('AI regression tests: OK');
     ...base,
     claims: [{ claim: 'Fakt', supported: true, source_ids: ['REFERENCE 1'], evidence_quote: 'Fakt potwierdzony w źródle testowym.', reason: 'źródło' }]
   }, 'test', 'test', new Set(['REFERENCE 1']), '[REFERENCE 1]\nFakt potwierdzony w źródle testowym.').status, 'accepted');
+  // Nieistniejące ID jest przepinane na jedyne dozwolone źródło z dosłownym cytatem...
   assert.equal(normalizujWynikWalidatora({
     ...base,
     claims: [{ claim: 'Fakt', supported: true, source_ids: ['REFERENCE 999'], evidence_quote: 'Fakt potwierdzony w źródle testowym.', reason: 'źródło' }]
-  }, 'test', 'test', new Set(['REFERENCE 1']), '[REFERENCE 1]\nFakt potwierdzony w źródle testowym.').status, 'rejected');
+  }, 'test', 'test', new Set(['REFERENCE 1']), '[REFERENCE 1]\nFakt potwierdzony w źródle testowym.').status, 'accepted');
+  // ...ale odrzucane, gdy cytatu nie ma w żadnym dozwolonym źródle.
+  assert.equal(normalizujWynikWalidatora({
+    ...base,
+    claims: [{ claim: 'Fakt', supported: true, source_ids: ['REFERENCE 999'], evidence_quote: 'Fakt potwierdzony w źródle testowym.', reason: 'źródło' }]
+  }, 'test', 'test', new Set(['REFERENCE 1']), '[REFERENCE 1]\nCałkowicie inna treść źródła.').status, 'rejected');
 
   // Gdy pełna odpowiedź zawiera jeden niepoparty szczegół, zachowujemy
   // wyłącznie atomowy claim z poprawnym source_id i zweryfikowanym evidence.
@@ -807,14 +813,20 @@ console.log('AI regression tests: OK');
 }
 
 {
-  const { rankEvidenceForClaim } = require('../ai/evidence');
-  const impossibleQuote = rankEvidenceForClaim(
+  const { rankEvidenceForClaim, quoteExists } = require('../ai/evidence');
+  const sourceText = 'Dragonrend shout [...] forcibly causes the target dragon to stay on the ground.';
+  const candidates = rankEvidenceForClaim(
     'Dragonrend forcibly causes the target dragon to stay on the ground.',
-    [{ sourceId: 'SOURCE 1', title: 'Skyrim', url: '', content: 'Dragonrend shout [...] forcibly causes the target dragon to stay on the ground.' }],
+    [{ sourceId: 'SOURCE 1', title: 'Skyrim', url: '', content: sourceText }],
     new Set(['SOURCE 1']),
     3
   );
-  assert.equal(impossibleQuote.length, 0, 'repair context must not offer ellipsis-composed quotes');
+  // Kandydaci to dosłowne fragmenty po obu stronach wielokropka; żaden nie skleja ich ze sobą.
+  for (const candidate of candidates) {
+    assert.ok(!/\[\.\.\.\]|…/.test(candidate.quote), 'repair context must not offer ellipsis-composed quotes');
+    assert.ok(quoteExists(sourceText, candidate.quote), 'every repair candidate must be a verbatim source quote');
+  }
+  assert.ok(!candidates.some(c => /Dragonrend.*forcibly/i.test(c.quote)), 'fragments across the ellipsis must not be joined');
 }
 
 

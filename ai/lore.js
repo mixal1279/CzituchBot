@@ -6,7 +6,7 @@ const GAMELORE_NAME = 'GameLore Wiki';
 
 const LORE_INTENT_RE = /\b(?:lore|fabuł[aeęy]|histori(?:a|ę|ii)\s+(?:gry|postaci|świata)|kim\s+(?:[\p{L}]+\s+){0,2}(?:jest|był|była|byli)(?=\s|$)|kto\s+(?:[\p{L}]+\s+){0,2}(?:to|jest|był|była)(?=\s|$)|co\s+się\s+stało|co\s+się\s+wydarzyło|dlaczego\b|pochodzeni[ae]|backstory|kanon|canon|timeline|histori[aęy]\s+świata|świat\s+gry|wydarzeni(?:a|ach)\s+w\s+grze|relacj[ae]\s+(?:między|z)|zwi[aą]zk(?:u|i|iem|ach)|konflikt(?:u|em|ach)?|wpływ(?:u|em)?|wpłyn(?:ął|ęło|ęła|ęły)|postaci(?:ą|e|ach)\s+w\s+grze)/iu;
 const GAME_TITLE_RE = /\b(?:minecraft|portal(?:\s+2)?|red\s+dead(?:\s+redemption)?(?:\s+2)?|cyberpunk(?:\s+2077)?|wied[źz]min(?:\s+3)?|witcher(?:\s+3)?|gta(?:\s+[iv1-6]+)?|grand\s+theft\s+auto|fallout(?:\s+\d+)?|skyrim|starfield|elden\s+ring|dark\s+souls|baldur[’']?s\s+gate(?:\s+3)?|the\s+last\s+of\s+us|god\s+of\s+war|assassin'?s\s+creed|fortnite)\b/i;
-const GAME_CONTEXT_RE = /\b(?:gra|gry|game|gaming|w\s+(?:tej|tejże)\s+grze|w\s+grze|z\s+gry|postać|postaci|boss|bohater|bohaterka|fabuła|lore|kanon|canon|quest|misja|świat\s+gry)\b/i;
+const GAME_CONTEXT_RE = /(?<![\p{L}\p{N}_])(?:gra|gry|grze|grę|grą|gier|game|gaming|w\s+(?:tej|tejże)\s+grze|w\s+grze|z\s+gry|postać|postaci|boss|bohater|bohaterka|fabuła|lore|kanon|canon|quest|misja|świat\s+gry)(?![\p{L}\p{N}_])/iu;
 
 function czyPytanieOLore(pytanie, domeny = null) {
   const p = String(pytanie || '').trim();

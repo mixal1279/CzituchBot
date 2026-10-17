@@ -23,7 +23,9 @@ function createRequestId(randomUUID = null) {
 }
 
 function sanitizeQuestion(question, sanitizeFn, maxLength = 500) {
-  const value = String(typeof sanitizeFn === 'function' ? sanitizeFn(question) : question || '').trim();
+  // Sanityzator przycina tekst do limitu, więc dajemy mu zapas (+2): inaczej `> maxLength` nigdy
+  // się nie spełnia, a zbyt długie pytanie jest po cichu ucinane zamiast odrzucone jako too_long.
+  const value = String(typeof sanitizeFn === 'function' ? sanitizeFn(question, maxLength + 2) : question || '').trim();
   if (!value) return { ok: false, reason: 'empty' };
   if (value.length > maxLength) return { ok: false, reason: 'too_long', maxLength };
   return { ok: true, value };

@@ -58,10 +58,11 @@ async function searchGeminiWeb({ apiKey, query, fetchFn = fetch, startIndex = 0,
   if (!apiKey || !query) return { status: 'disabled', text: '', sources: [] };
   try {
     const data = await fetchJson(fetchFn,
-      `https://generativelanguage.googleapis.com/v1beta/models/${AI_MODELS.webSearch}:generateContent?key=${encodeURIComponent(apiKey)}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/${AI_MODELS.webSearch}:generateContent`,
       {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        // Klucz w nagłówku, nie w URL: adres trafia do logów błędów, proxy i raportów.
+        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
         body: JSON.stringify({
           contents: [{ role: 'user', parts: [{ text: String(query).slice(0, 1200) }] }],
           tools: [{ google_search: {} }],

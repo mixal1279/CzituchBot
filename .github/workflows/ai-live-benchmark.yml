@@ -2,6 +2,11 @@ name: AI live benchmark
 
 on:
   workflow_dispatch:
+    inputs:
+      seed:
+        description: 'Ziarno rotacji przypadków (0 = stały zestaw, >0 = inne pytania z każdej kategorii)'
+        required: false
+        default: '0'
   # Pushes to the workflow file may cancel an already-running benchmark, but
   # must never start a new live benchmark. Run it only through workflow_dispatch.
   push:
@@ -24,13 +29,15 @@ jobs:
     env:
       AI_LIVE_BENCHMARK: "1"
       AI_BENCHMARK_LIMIT: "5"
-      AI_BENCHMARK_DELAY_MS: "750"
+      AI_BENCHMARK_DELAY_MS: "5000"
+      AI_BENCHMARK_SEED: ${{ inputs.seed || '0' }}
       AI_BENCHMARK_REQUIRE_PERFECT: "1"
       AI_BENCHMARK_JSON_PATH: ai-live-benchmark.json
       AI_PROVIDER_QUOTA_COOLDOWN_MS: "1800000"
       AI_120B_GLOBAL_MAX_REQUESTS: "20"
       CZITUCHBOT_SKIP_STARTUP_IO: "1"
-      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+      # Osobny klucz CI chroni dzienny limit tokenów produkcyjnego bota (jeśli secret istnieje).
+      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY_CI || secrets.GROQ_API_KEY }}
       TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       EXA_API_KEY: ${{ secrets.EXA_API_KEY }}
@@ -53,12 +60,38 @@ jobs:
         run: npm install
       - name: Preflight Tavily
         run: node scripts/tavily-preflight.js
+      - name: Preflight Groq
+        run: node scripts/groq-preflight.js
 
       - name: Run 5-case live benchmark
         shell: bash
         run: |
           set -o pipefail
           npm run ai:benchmark:live 2>&1 | tee ai-live-benchmark-report.txt
+
+      - name: Publish summary
+        if: always()
+        shell: bash
+        run: |
+          node -e '
+            const fs = require("fs");
+            if (!fs.existsSync("ai-live-benchmark.json")) { console.log("Brak raportu JSON."); process.exit(0); }
+            const r = JSON.parse(fs.readFileSync("ai-live-benchmark.json", "utf8"));
+            const d = r.diagnostics || {};
+            const lines = [
+              "## AI live benchmark",
+              r.valid === false ? "**WYNIK NIEWAŻNY: Groq niedostępny lub limit dzienny wyczerpany.**" : "",
+              "- przypadków: " + r.total + " (ziarno " + (r.seed || 0) + ")",
+              "- odpowiedzi: " + r.answeredAccuracy + ", kompletność: " + r.completenessAccuracy + ", factual: " + r.factualAccuracy,
+              "- błędy providerów: " + ((d.providerFailures || []).join(", ") || "brak"),
+              "- odrzucone przez walidator: " + d.validatorRejected + ", niejednoznaczne: " + d.validatorInconclusive,
+              "",
+              "| przypadek | odpowiedź | judge | status końcowy |",
+              "|---|---|---|---|",
+              ...(r.failures || []).map(f => "| " + f.id + " | " + f.answered + " | " + f.judgeStatus + " | " + f.finalStatus + " |"),
+            ];
+            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, lines.filter(l => l !== undefined).join("\n") + "\n");
+          '
 
       - name: Upload benchmark report
         if: always()
@@ -70,4 +103,4 @@ jobs:
             ai-live-benchmark-report.txt
             ai-live-benchmark.json
           if-no-files-found: warn
-          retention-days: 1
+          retention-days: 7

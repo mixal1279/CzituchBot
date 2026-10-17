@@ -17,7 +17,7 @@ const defaultLimit = Math.min(10, benchmark.cases.length);
 const requestedLimit = Number(process.env.AI_BENCHMARK_LIMIT);
 const limit = Math.max(1, Math.min(benchmark.cases.length, Number.isFinite(requestedLimit) && requestedLimit > 0 ? requestedLimit : defaultLimit));
 const delayMs = Math.max(0, Number(process.env.AI_BENCHMARK_DELAY_MS) || 0);
-function stratifiedCases(all, requested) {
+function stratifiedCases(all, requested, seed = 0) {
   if (requested >= all.length) return [...all];
   const groups = new Map();
   for (const item of all) {
@@ -25,6 +25,10 @@ function stratifiedCases(all, requested) {
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(item);
   }
+  // Ziarno przesuwa start w każdej kategorii, żeby nie testować w kółko tych samych pytań
+  // (stały zestaw zachęca do dopasowania kodu do benchmarku). Ziarno 0 zachowuje stary wybór.
+  const offset = Math.max(0, Math.floor(Number(seed)) || 0);
+  if (offset) for (const bucket of groups.values()) if (bucket.length > 1) bucket.push(...bucket.splice(0, offset % bucket.length));
   const keys = [...groups.keys()];
   const selected = [];
   let cursor = 0;
@@ -37,7 +41,8 @@ function stratifiedCases(all, requested) {
   }
   return selected;
 }
-const cases = stratifiedCases(benchmark.cases, limit);
+const benchmarkSeed = Math.max(0, Math.floor(Number(process.env.AI_BENCHMARK_SEED)) || 0);
+const cases = stratifiedCases(benchmark.cases, limit, benchmarkSeed);
 
 // The gold case's game field is context for the bot, not just the judge.
 // Without passing it to the production pipeline, short prompts like "Jak pokonać smoka?"
@@ -215,9 +220,15 @@ async function run() {
       : null,
     providerFailures: [...new Set(results.flatMap(x => (x.generationAttempts || []).filter(a => a.status === 'error').map(a => `${a.provider}:${a.model}:${a.failure || 'unknown'}`)))],
   };
+  // Jeśli Groq nie odpowiedział ani razu (limit dzienny, awaria), wynik mierzy limity, nie kod.
+  const groqAttempts = results.flatMap(x => (x.generationAttempts || []).filter(a => /groq/i.test(String(a.provider || ''))));
+  const providerOutage = groqAttempts.length > 0 && groqAttempts.every(a => a.status === 'error');
+  diagnostic.providerOutage = providerOutage;
   const report = {
     benchmark: benchmark.name,
     mode: 'live',
+    seed: benchmarkSeed,
+    valid: !providerOutage,
     total: results.length,
     answeredAccuracy: Number((answered / results.length).toFixed(4)),
     completenessAccuracy: Number((complete / results.length).toFixed(4)),
@@ -232,8 +243,14 @@ async function run() {
   };
   const serializedReport = writeBenchmarkReport(report);
   if (!process.env.AI_BENCHMARK_JSON_PATH) await writeStdoutAndWait(serializedReport);
+  if (providerOutage) {
+    console.error('[LIVE BENCHMARK] WYNIK NIEWAŻNY: Groq nie zwrócił żadnej odpowiedzi (limit dzienny lub awaria). Nie oceniaj jakości kodu po tym runie.');
+    process.exitCode = 3;
+    return;
+  }
   if (process.env.AI_BENCHMARK_REQUIRE_PERFECT === '1') {
-    const factualOk = factualCases.length > 0 && factualPassed === factualCases.length;
+    // Tylko wybrane przypadki mają gold facts. Przy rotacji ziarnem może ich nie być w próbce.
+    const factualOk = factualCases.length > 0 ? factualPassed === factualCases.length : benchmarkSeed > 0;
     if (answered !== results.length || complete !== results.length || !factualOk) {
       console.error(`[LIVE BENCHMARK] wymagane ${results.length}/${results.length}; odpowiedzi=${answered}/${results.length}, kompletność=${complete}/${results.length}, factual=${factualPassed}/${factualCases.length}`);
       process.exitCode = 1;

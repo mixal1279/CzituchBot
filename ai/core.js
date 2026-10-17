@@ -46,6 +46,7 @@ const AUTHORITY = {
 function normalize(value) {
   return String(value || '')
     .toLocaleLowerCase('pl-PL')
+    .replace(/ł/g, 'l')
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .replace(/[^\p{L}\p{N}]+/gu, ' ')
@@ -53,9 +54,13 @@ function normalize(value) {
     .trim();
 }
 
-function tokens(value) {
+// Numery części („Portal 2”, „Wiedźmin 3”) i cyfry rzymskie odróżniają gry z jednej serii,
+// ale w ogólnej trafności zaniżałyby źródła, które liczby nie powtarzają. Dlatego
+// uwzględniamy je tylko na żądanie (dopasowanie encji).
+function tokens(value, options = {}) {
+  const keepNumbers = options.keepNumbers === true;
   return [...new Set(normalize(value).split(' ')
-    .filter(t => t.length >= 3 && !STOPWORDS.has(t)))];
+    .filter(t => (t.length >= 3 || (keepNumbers && (/^\d{1,2}$/.test(t) || /^(?:ii|iii|iv|vi|vii|viii|ix)$/.test(t)))) && !STOPWORDS.has(t)))];
 }
 
 function hostOf(url) {
@@ -63,9 +68,9 @@ function hostOf(url) {
   catch (_) { return ''; }
 }
 
-function tokenOverlap(query, text) {
-  const q = tokens(query);
-  const t = new Set(tokens(text));
+function tokenOverlap(query, text, options = {}) {
+  const q = tokens(query, options);
+  const t = new Set(tokens(text, options));
   if (!q.length || !t.size) return 0;
   return q.filter(x => t.has(x)).length / q.length;
 }
@@ -136,7 +141,7 @@ function normalizeSource(source = {}, index = 0) {
 }
 
 function scoreSource(source, query, options = {}) {
-  const s = normalizeSource(source);
+  const s = normalizeSource(source, Number(options.index) || 0);
   const q = String(query || '');
   const haystack = [s.title, s.content].join(' ');
   const relevance = Math.min(1, tokenOverlap(q, haystack) * 1.15);
@@ -155,7 +160,7 @@ function scoreSource(source, query, options = {}) {
       entityBonus = Math.max(entityBonus, 0.18);
       continue;
     }
-    const overlap = tokenOverlap(entity, haystack);
+    const overlap = tokenOverlap(entity, haystack, { keepNumbers: true });
     if (overlap >= 0.6) entityBonus = Math.max(entityBonus, 0.10);
   }
 
@@ -261,7 +266,8 @@ function buildRetrievalPlan(question, routing = {}, options = {}) {
 function assessEvidence(results = [], question, routing = {}) {
   const normalized = (Array.isArray(results) ? results : [])
     .filter(Boolean)
-    .map(s => scoreSource(s, question, {
+    .map((s, index) => scoreSource(s, question, {
+      index,
       // Score against both the resolved character/item and its parent game.
       // A game name must not shadow a more specific entity mention.
       entities: [
@@ -290,15 +296,20 @@ function assessEvidence(results = [], question, routing = {}) {
   const strong = selected.filter(x => x.coreScore >= 0.55);
   const relevant = selected.filter(x => x.relevance >= 0.35 || x.titleRelevance >= 0.45);
 
+  // Niezależne potwierdzenie musi pochodzić ze źródeł trafnych. Wcześniej nietrafne źródło
+  // z drugiej domeny wystarczało, żeby „weak” zamienić w „usable”/„strong”.
+  const evidenceHosts = new Set([...strong, ...relevant].map(x => x.host).filter(Boolean));
+
   let status = 'weak';
-  if (strong.length >= 2 && hosts.size >= 2 && relevant.length >= 2) status = 'strong';
-  else if (strong.length >= 1 && relevant.length >= 1 && hosts.size >= 2) status = 'usable';
+  if (strong.length >= 2 && evidenceHosts.size >= 2 && relevant.length >= 2) status = 'strong';
+  else if (strong.length >= 1 && relevant.length >= 1 && evidenceHosts.size >= 2) status = 'usable';
 
   return {
     status,
     sources: selected,
     sourceCount: selected.length,
     independentHosts: hosts.size,
+    relevantHosts: evidenceHosts.size,
     strongSources: strong.length,
     relevantSources: relevant.length,
     coverageScore: Number(Math.min(1,

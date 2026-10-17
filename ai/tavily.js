@@ -9,6 +9,13 @@ const { searchSecondaryProviders, formatSources } = require('./webRetrieval');
 const { sanitizeUntrustedText } = require('./untrustedText');
 const { createGroqCompletion } = require('./provider-runtime');
 
+
+// Jedna lista autorytetu domen (wcześniej dwie kopie w tym pliku rozjechały się:
+// np. eurogamer tylko w jednej, docs.npmjs.com tylko w drugiej).
+const DOMENY_OFICJALNE = ['minecraft.net', 'rockstargames.com', 'thewitcher.com', 'playstation.com', 'naughtydog.com', 'bandainamcoent.com', 'larian.com', 'baldursgate3.game', 'nvidia.com', 'openai.com', 'anthropic.com', 'microsoft.com', 'apple.com', 'discord.com', 'twitch.tv', 'kick.com'];
+const DOMENY_WYSPECJALIZOWANE = ['minecraft.wiki', 'gamelore.fandom.com', 'steamdb.info', 'gamefaqs.gamespot.com', 'developer.mozilla.org', 'docs.npmjs.com'];
+const DOMENY_PRZEWODNIKI = ['ign.com', 'gamespot.com', 'pcgamer.com', 'fandom.com', 'eurogamer.net', 'eurogamer.pl'];
+
 const TAVILY_CACHE_TTL_MS = 10 * 60 * 1000; // domyślne / pytania o świeże wiadomości
 const TAVILY_REWRITE_TTL_MS = 6 * 60 * 60 * 1000;
 const TAVILY_PERSIST_DEBOUNCE_MS = 5000;
@@ -207,10 +214,25 @@ function wykryjKonfliktyZrodelTavily(results, sourceQuestion, requestedDomains =
   const lista = Array.isArray(results) ? results : [];
   const konflikty = [];
   const questionKeywords = slowaKluczoweTavily(sourceQuestion).filter(k => k.length >= 5);
+  const askedWhen = /(?<![\p{L}\p{N}_])(?:kiedy|którym\s+roku|w\s+którym|jaka\s+data|od\s+kiedy|data\s+premiery|rok\s+wydania|wyszed\p{L}*|wydan\p{L}*)(?![\p{L}\p{N}_])/iu.test(String(sourceQuestion || ''));
   const evidence = lista.map((r, index) => {
     const text = String(r?.content || '').replace(/\s+/g, ' ').trim();
-    const numbers = [...new Set((text.match(/\b(?:19|20)\d{2}\b|\b\d+(?:[.,]\d+)?\s*(?:godzin|h|min|dni|lat|%|GB|MB)\b/gi) || []).map(x => x.toLowerCase()))];
-    const negated = /\b(?:nie|nigdy|brak|nie jest|nie był|nie była|nie zosta[łl]|false|no)\b/i.test(text);
+    // Porównujemy tylko zdania dotyczące pytania. Samo słowo „nie” albo inny rok w innym
+    // kontekście (alfa 2009 vs wydanie 2011) nie jest sprzecznością źródeł.
+    // Gdy temat pytania jest w tytule, cała strona jest o tym temacie (zdania mogą go nie powtarzać).
+    const titleOnTopic = questionKeywords.length
+      && questionKeywords.some(k => normalizujTokenTavily(String(r?.title || '')).includes(k));
+    const scopeText = (questionKeywords.length && !titleOnTopic
+      ? text.split(/(?<=[.!?])\s+/).filter(sentence => {
+        const normalizedSentence = normalizujTokenTavily(sentence);
+        return questionKeywords.some(k => normalizedSentence.includes(k));
+      })
+      : [text]).join(' ');
+    const numberPattern = askedWhen
+      ? /(?<![\p{L}\p{N}_])(?:1\d{3}|20\d{2})(?![\p{L}\p{N}_])|(?<![\p{L}\p{N}_.,])\d+(?:[.,]\d+)?\s*(?:godzin|h|min|dni|lat|%|GB|MB)(?![\p{L}\p{N}_])/giu
+      : /(?<![\p{L}\p{N}_.,])\d+(?:[.,]\d+)?\s*(?:godzin|h|min|dni|lat|%|GB|MB)(?![\p{L}\p{N}_])/giu;
+    const numbers = [...new Set((scopeText.match(numberPattern) || []).map(x => x.toLowerCase()))];
+    const negated = /(?<![\p{L}\p{N}_])(?:nigdy|nie\s+(?:jest|był[aoy]?|zosta[łl]\p{L}*|istnieje|występuje|wystepuje)|false)(?![\p{L}\p{N}_])/iu.test(scopeText);
     const haystack = normalizujTokenTavily([r?.title, text].filter(Boolean).join(' '));
     const topical = !questionKeywords.length || questionKeywords.filter(k => haystack.includes(k)).length >= Math.min(1, questionKeywords.length);
     return {
@@ -339,11 +361,11 @@ function ocenaZrodlaLokalnie(url, requestedDomains = []) {
       const clean = String(d || '').toLowerCase().replace(/^www\./, '');
       return clean && (host === clean || host.endsWith('.' + clean));
     });
-    const official = ['minecraft.net', 'rockstargames.com', 'thewitcher.com', 'playstation.com', 'naughtydog.com', 'bandainamcoent.com', 'larian.com', 'baldursgate3.game', 'nvidia.com', 'openai.com', 'anthropic.com', 'microsoft.com', 'apple.com', 'discord.com', 'twitch.tv', 'kick.com']
+    const official = DOMENY_OFICJALNE
       .some(d => host === d || host.endsWith('.' + d));
-    const specialized = ['minecraft.wiki', 'gamelore.fandom.com', 'steamdb.info', 'gamefaqs.gamespot.com', 'developer.mozilla.org']
+    const specialized = DOMENY_WYSPECJALIZOWANE
       .some(d => host === d || host.endsWith('.' + d));
-    const guide = ['ign.com', 'gamespot.com', 'pcgamer.com', 'fandom.com', 'eurogamer.net', 'eurogamer.pl']
+    const guide = DOMENY_PRZEWODNIKI
       .some(d => host === d || host.endsWith('.' + d));
     if (official) return 'oficjalne';
     if (specialized || requested) return 'wyspecjalizowane';
@@ -454,11 +476,11 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
         const clean = String(d || '').toLowerCase().replace(/^www\./, '');
         return clean && (host === clean || host.endsWith(`.${clean}`));
       });
-      const official = ['minecraft.net', 'rockstargames.com', 'thewitcher.com', 'playstation.com', 'naughtydog.com', 'bandainamcoent.com', 'larian.com', 'baldursgate3.game', 'nvidia.com', 'openai.com', 'anthropic.com', 'microsoft.com', 'apple.com', 'discord.com', 'twitch.tv', 'kick.com']
+      const official = DOMENY_OFICJALNE
         .some(d => host === d || host.endsWith(`.${d}`));
-      const specialized = ['minecraft.wiki', 'gamelore.fandom.com', 'steamdb.info', 'docs.npmjs.com', 'developer.mozilla.org', 'gamefaqs.gamespot.com']
+      const specialized = DOMENY_WYSPECJALIZOWANE
         .some(d => host === d || host.endsWith(`.${d}`));
-      const guide = ['ign.com', 'gamespot.com', 'pcgamer.com', 'fandom.com']
+      const guide = DOMENY_PRZEWODNIKI
         .some(d => host === d || host.endsWith(`.${d}`));
       if (official) return 'oficjalne';
       if (specialized || requested) return 'wyspecjalizowane';

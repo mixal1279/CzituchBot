@@ -76,7 +76,7 @@ const { createGroqCompletion, awaitWithAbortTimeout, computeValidatorTimeout, co
 const { createAIMetrics, recordAIMetric, snapshotAIMetrics } = require('./ai/metrics');
 const { DEFAULTS, sanitizeRequestText } = require('./ai/limits');
 const { createAIRequestContext } = require('./ai/requestContext');
-const { sprawdzTwardeFaktyOdpowiedzi, sprawdzFormatOdpowiedzi } = require('./ai/response');
+const { sprawdzTwardeFaktyOdpowiedzi, sprawdzFormatOdpowiedzi, maskSentenceAbbreviations } = require('./ai/response');
 const { Firestore } = require('@google-cloud/firestore');
 const { ocenJakoscOdpowiedzi } = require('./ai/quality');
 const { AI_MODELS } = require('./ai/modelConfig');
@@ -2092,7 +2092,8 @@ function ograniczDoPelnychZdanAI(tekst, maxZdania = 2, limit = 1800, maxSlowa = 
 
   // Kontrakt 2 zdań jest wymuszany lokalnie, nie tylko przez prompt.
   // Kropka dziesiętna (np. 2.5) nie jest końcem zdania.
-  const sentenceEnds = [...t.matchAll(/[.!?]+(?=\s|$)/g)]
+  // Skróty („2020 r.”, „ok.”, „m.in.”) też nie kończą zdania; maska zachowuje indeksy.
+  const sentenceEnds = [...maskSentenceAbbreviations(t).matchAll(/[.!?]+(?=\s|$)/g)]
     .slice(0, maxZdania)
     .map(m => m.index + m[0].length);
   if (sentenceEnds.length >= maxZdania) {
@@ -2103,7 +2104,7 @@ function ograniczDoPelnychZdanAI(tekst, maxZdania = 2, limit = 1800, maxSlowa = 
   if (words.length > maxSlowa) t = words.slice(0, maxSlowa).join(' ');
   if (t.length <= limit) return t;
   const prefix = t.slice(0, limit);
-  const matches = [...prefix.matchAll(/[.!?]+(?=\s|$)/g)];
+  const matches = [...maskSentenceAbbreviations(prefix).matchAll(/[.!?]+(?=\s|$)/g)];
   if (!matches.length) return '';
   const end = matches[Math.min(matches.length, maxZdania) - 1].index + matches[Math.min(matches.length, maxZdania) - 1][0].length;
   return prefix.slice(0, end).trim();

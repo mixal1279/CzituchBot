@@ -153,14 +153,25 @@ test('validator recognizes an English so-that source relation for a Polish Porta
   assert.equal(result.diagnostics.evidenceBindings[0].mode, 'exact_quote');
 });
 
-test('validator rejects a quote bound to an unauthorized source', () => {
+test('validator rejects a quote that exists only in an unauthorized source', () => {
+  const block = (id, text) => `[${id}]\nTYTUŁ: Test\nTREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>\n${text}\n<<<END_UNTRUSTED_SOURCE_CONTENT>>>`;
+  const data = [block('SOURCE 1', 'Zupełnie inny tekst bez tego faktu.'), block('SOURCE 2', 'Fakt znajduje się tutaj.')].join('\n');
+  const result = normalizujWynikWalidatora({
+    valid: true, reason: 'ok', unsupported_claims: [], supported: true, relevant: true, complete: true, hallucination: false, confidence: 0.99,
+    claims: [{ claim: 'Fakt znajduje się tutaj.', supported: true, source_ids: ['SOURCE 2'], evidence_quote: 'Fakt znajduje się tutaj.' }],
+  }, 'test-model', 'test', new Set(['SOURCE 1']), data);
+  assert.equal(result.status, 'rejected');
+  assert.ok(result.diagnostics.localRejectReasons.includes('unknown_source_id'));
+});
+
+test('validator rebinds a nonexistent source ID only to the single authorized block containing the exact quote', () => {
   const data = '[SOURCE 1]\nTYTUŁ: Test\nTREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>\nFakt znajduje się tutaj.\n<<<END_UNTRUSTED_SOURCE_CONTENT>>>';
   const result = normalizujWynikWalidatora({
     valid: true, reason: 'ok', unsupported_claims: [], supported: true, relevant: true, complete: true, hallucination: false, confidence: 0.99,
     claims: [{ claim: 'Fakt znajduje się tutaj.', supported: true, source_ids: ['SOURCE 99'], evidence_quote: 'Fakt znajduje się tutaj.' }],
   }, 'test-model', 'test', new Set(['SOURCE 1']), data);
-  assert.equal(result.status, 'rejected');
-  assert.ok(result.diagnostics.localRejectReasons.includes('unknown_source_id'));
+  assert.equal(result.status, 'accepted');
+  assert.deepEqual(result.claims[0].source_ids, ['SOURCE 1']);
 });
 
 test('validator removes an extra wrong source ID when the quote uniquely matches a cited authorized source', () => {

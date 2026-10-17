@@ -37,6 +37,18 @@ const CHARACTER_ALIASES = [
   { name: 'Kratos', game: 'God of War', aliases: ['kratos'] },
   { name: 'Ellie', game: 'The Last of Us', aliases: ['ellie'] },
   { name: 'Joel Miller', game: 'The Last of Us', aliases: ['joel miller', 'joel'] },
+  { name: 'Astarion', game: 'Baldur’s Gate 3', aliases: ['astarion'] },
+  { name: 'Gale', game: 'Baldur’s Gate 3', aliases: ['gale'] },
+  { name: 'Shadowheart', game: 'Baldur’s Gate 3', aliases: ['shadowheart'] },
+  { name: 'Karlach', game: 'Baldur’s Gate 3', aliases: ['karlach'] },
+  { name: 'Vesemir', game: 'The Witcher 3: Wild Hunt', aliases: ['vesemir'] },
+  { name: 'Yennefer', game: 'The Witcher 3: Wild Hunt', aliases: ['yennefer'] },
+  { name: 'Triss Merigold', game: 'The Witcher 3: Wild Hunt', aliases: ['triss merigold', 'triss'] },
+  { name: 'Krwawy Baron', game: 'The Witcher 3: Wild Hunt', aliases: ['krwawy baron', 'krwawego barona', 'krwawemu baronowi', 'krwawym baronem', 'bloody baron'] },
+  { name: 'Malenia', game: 'Elden Ring', aliases: ['malenia'] },
+  { name: 'Radahn', game: 'Elden Ring', aliases: ['radahn'] },
+  { name: 'Steve', game: 'Minecraft', aliases: ['steve'] },
+  { name: 'Alex', game: 'Minecraft', aliases: ['alex'] },
   { name: 'Lord Farquaad', game: 'Shrek', aliases: ['lord farquaad', 'lord farquad', 'farquaad', 'farquad'] },
 ];
 
@@ -44,6 +56,10 @@ const CHARACTER_ALIASES = [
 // również kontekst gry. Zapobiega to deterministycznemu przypisywaniu np.
 // „Arthur” do RDR2 bez żadnego sygnału kontekstowego.
 const CONTEXT_REQUIRED_CHARACTER_ALIASES = new Set([
+  'gale',
+  'steve',
+  'alex',
+  'triss',
   'arthur',
   'dutch',
   'johnny',
@@ -67,9 +83,12 @@ function tokenPasujeDoAliasu(token, aliasToken) {
   if (token === aliasToken) return true;
   // Dopuszczamy typowe końcówki fleksyjne (maks. 3 znaki), ale nie dowolny
   // prefiks. To zachowuje np. „Wiedźminem” bez dopasowywania „Minecraftowo”.
-  return aliasToken.length >= 6
-    && token.startsWith(aliasToken)
-    && token.length - aliasToken.length <= 2;
+  if (aliasToken.length < 6 || !token.startsWith(aliasToken)) return false;
+  const extra = token.length - aliasToken.length;
+  if (extra <= 2) return true;
+  // Celownik/narzędnik/miejscownik liczby mnogiej: „Wheatleyowi”, „Geraltowi”,
+  // „Geraltami”. Wąska lista końcówek, żeby nie łapać „Minecraftowo”.
+  return extra === 3 && /^(?:owi|iem|iom|ego|emu|ych|ymi|ach|ami)$/.test(token.slice(aliasToken.length));
 }
 
 function containsAlias(text, alias) {
@@ -116,11 +135,13 @@ function findAlias(text, entries, options = {}) {
         0.72 + Math.min(aliasLength(alias), 30) / 100 + (exact ? 0.04 : 0),
       );
       const candidate = { entry, alias, confidence, exact };
-      if (!best
-        || candidate.exact !== best.exact
-        || candidate.confidence > best.confidence) {
-        best = candidate;
-      }
+      // Dokładny alias zawsze wygrywa z nieścisłym (odmienionym); przy tej samej
+      // dokładności decyduje pewność. Wcześniej `exact !==` podmieniało też
+      // dokładny alias na mniej dokładny, zależnie od kolejności w tabeli.
+      const better = !best
+        || (candidate.exact && !best.exact)
+        || (candidate.exact === best.exact && candidate.confidence > best.confidence);
+      if (better) best = candidate;
     }
   }
   return best;
@@ -139,9 +160,39 @@ function scoreExternalGameCandidate(query, candidateName) {
   return overlap;
 }
 
+// Aliasy będące zwykłymi słowami są uznawane za grę tylko z kontekstem gamingowym.
+const AMBIGUOUS_GAME_ALIAS_CONTEXT = {
+  mc: /(?:^| )(?:gra|gry|grze|gier|game|serwer|server|mod|mody|survival|redstone|creeper|nether|ender|biom|craft|steve|alex|minecraft)(?: |$)/,
+  portal: /(?:^| )(?:gra|gry|grze|gier|game|valve|aperture|chell|glados|wheatley|gun|test chamber|portal 2|portal2)(?: |$)/,
+};
+
+function gameAliasesForText(normalizedText) {
+  return GAME_ALIASES.map((entry) => ({
+    ...entry,
+    aliases: entry.aliases.filter((alias) => {
+      const rule = AMBIGUOUS_GAME_ALIAS_CONTEXT[alias];
+      return !rule || rule.test(normalizedText);
+    }),
+  })).filter((entry) => entry.aliases.length);
+}
+
+function followedByForeignSurname(rawText, alias, entry) {
+  const tokens = String(rawText || '').match(/[\p{L}][\p{L}’']*/gu) || [];
+  // Znane są tylko tokeny tej samej postaci (np. „Arthur Morgan”), bo „Miller”
+  // należy do innej postaci („Joel Miller”).
+  const known = new Set();
+  for (const a of [entry.name, ...entry.aliases]) for (const t of tokenyEncji(a)) known.add(t);
+  for (let i = 0; i < tokens.length - 1; i++) {
+    if (normalizujEncje(tokens[i]) !== alias) continue;
+    const next = tokens[i + 1];
+    if (/^\p{Lu}/u.test(next) && !known.has(normalizujEncje(next))) return true;
+  }
+  return false;
+}
+
 function resolveGameEntity(text) {
   const normalizedText = normalizujEncje(text);
-  const game = findAlias(normalizedText, GAME_ALIASES);
+  const game = findAlias(normalizedText, gameAliasesForText(normalizedText));
   const character = findAlias(normalizedText, CHARACTER_ALIASES, {});
 
   if (character) {
@@ -150,7 +201,13 @@ function resolveGameEntity(text) {
 
     // Krótkie aliasy pozostają obsługiwane dla kompatybilności z istniejącym
     // routingiem, ale bez kontekstu gry dostają niższe zaufanie.
-    const ambiguityPenalty = shortAlias && !containsAlias(normalizedText, character.entry.game) ? 0.08 : 0;
+    const gameMentioned = Boolean(game && (game.entry.name === character.entry.game
+      || character.entry.game.startsWith(game.entry.name)))
+      || containsAlias(normalizedText, character.entry.game);
+    const ambiguityPenalty = shortAlias && !gameMentioned ? 0.08 : 0;
+    // „Arthur Miller”, „Joel Spolsky”: krótkie imię z dopisanym innym nazwiskiem
+    // to inna osoba, nie postać z gry.
+    if (shortAlias && !gameMentioned && followedByForeignSurname(text, character.alias, character.entry)) return null;
     return {
       type: 'character',
       name: character.entry.name,

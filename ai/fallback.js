@@ -1,10 +1,10 @@
 'use strict';
 
 const CLASSIFIERS = Object.freeze({
-  quota: /(?:429|quota|rate.?limit|tokens per day|tokens per minute|TPD|TPM|credit|insufficient)/i,
-  auth: /(?:401|403|unauthori[sz]ed|forbidden|invalid.*key|api.?key|missing.*key|brak .*key)/i,
-  invalid_request: /(?:invalid.*request|bad request|400|invalid.*schema|malformed.*json|json.*invalid)/i,
-  transient: /(?:timeout|timed ?out|ETIMEDOUT|ECONNRESET|5\d\d|temporar|overloaded|unavailable|fetch failed|aborted|abort|network error|socket hang up)/i,
+  quota: /(?:(?<![\d.,])429(?!\d)|quota|rate.?limit|tokens per day|tokens per minute|TPD|TPM|credit|insufficient)/i,
+  auth: /(?:(?<![\d.,])40[13](?!\d)|unauthori[sz]ed|forbidden|invalid.*key|api.?key|missing.*key|brak .*key)/i,
+  invalid_request: /(?:invalid.*request|bad request|(?<![\d.,])400(?!\d)|invalid.*schema|malformed.*json|json.*invalid)/i,
+  transient: /(?:timeout|timed ?out|ETIMEDOUT|ECONNRESET|(?<![\d.,])5\d\d(?!\d|\s*(?:tokens?|ms|chars?|znak|bytes?|words|slów))|temporar|overloaded|unavailable|fetch failed|aborted|abort|network error|socket hang up)/i,
   provider_cooldown: /(?:generation cooldown|provider cooldown|temporarily disabled)/i,
 });
 
@@ -22,6 +22,21 @@ const DETAIL_CLASSIFIERS = Object.freeze([
   ['validator_rejection', /(?:validator rejected|validator rejection|grounded_reject|unsupported_or_unverified_claims)/i],
 ]);
 
+// Diagnostyka dostawcy (formatProviderError) to duży JSON z polami takimi jak
+// timeoutMs czy requestContract. Klasyfikowanie całego tekstu regexami dawało
+// fałszywe trafienia (np. 429 TPD jako timeout_abort przez słowo "timeoutMs").
+// Klasyfikujemy po rdzeniu: kod HTTP + komunikat błędu.
+function extractErrorCore(raw) {
+  const text = String(raw || '');
+  const msg = text.match(/"message"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+  const st = text.match(/"status"\s*:\s*(\d{3})(?!\d)/);
+  if (!msg && !st) return text;
+  let message = msg ? msg[1] : '';
+  try { message = JSON.parse('"' + message + '"'); } catch (_) { /* zostaw surowy */ }
+  const core = [st ? 'HTTP ' + st[1] : '', message].filter(Boolean).join(' ').trim();
+  return core || text;
+}
+
 function classifyFailure(error = '') {
   const status = error && typeof error === 'object' ? String(error.status || '').toLowerCase() : '';
   if (status === 'accepted') return null;
@@ -35,8 +50,8 @@ function classifyFailure(error = '') {
     return 'provider_unavailable';
   }
   const text = error && typeof error === 'object'
-    ? [error.message, error.reason, error.error, error.diagnostic].filter(Boolean).join(' ')
-    : String(error?.message || error || '');
+    ? [error.message, error.reason, error.error, error.diagnostic].filter(Boolean).map(extractErrorCore).join(' ')
+    : extractErrorCore(String(error?.message || error || ''));
   // Some providers use HTTP 429 for temporary capacity pressure, not exhausted quota.
   if (/(?:high demand|overloaded|temporarily unavailable|capacity exceeded)/i.test(text)) return 'transient';
   for (const [type, pattern] of DETAIL_CLASSIFIERS) {

@@ -11,13 +11,14 @@ const SOURCE_POLICIES = {
   conversation: { preferred: [], fallback: [] },
 };
 
+// Tokeny są normalizowane (bez ogonków), więc stopwordy też — inaczej „może”, „można” nigdy nie pasują.
 const QUERY_STOPWORDS = new Set([
   'czy', 'jak', 'jaki', 'jaka', 'jakie', 'co', 'czym', 'kto', 'kim', 'kiedy',
   'gdzie', 'ile', 'dlaczego', 'jest', 'są', 'to', 'ten', 'ta', 'te', 'do', 'na',
   'w', 'we', 'z', 'ze', 'o', 'od', 'po', 'dla', 'i', 'oraz', 'a', 'czyli',
   'może', 'mogę', 'można', 'się', 'mi', 'mnie', 'jego', 'jej', 'ich', 'tym',
   'tę', 'tą', 'być', 'ma', 'mają', 'miał', 'była', 'było', 'były',
-]);
+].map(word => normalizujQueryToken(word)));
 
 function normalizujQueryToken(value) {
   return String(value || '')
@@ -84,8 +85,9 @@ const RESPONSE_PROFILES = {
 function detectResponseProfile(question, routing) {
   const p = String(question || '').toLocaleLowerCase('pl-PL');
   if (routing?.is_gameplay) return 'gameplay';
-  if (routing?.is_lore) return /\b(?:timeline|chronolog|kolejnoś|kolejnosc|oś czasu|os czasu)\b/i.test(p) ? 'timeline' : 'lore';
-  if (/\b(?:porówn|porown|różnic|roznic|vs\.?|versus|lepszy|lepsza|lepsze)\b/i.test(p)) return 'comparison';
+  if (routing?.is_lore) return /(?<![\p{L}\p{N}_])(?:timeline|chronolog\p{L}*|kolejno[śs][ćc]\p{L}*|oś czasu|os czasu)(?![\p{L}\p{N}_])/iu.test(p) ? 'timeline' : 'lore';
+  // Rdzenie ze słowem odmienionym (porównaj, różni się, różnica) — `\b` po rdzeniu nigdy nie pasował.
+  if (/(?<![\p{L}\p{N}_])(?:porówn\p{L}*|porown\p{L}*|różnic\p{L}*|roznic\p{L}*|różni\p{L}*|rozni\p{L}*|vs\.?|versus|lepsz\p{L}*)(?![\p{L}\p{N}_])/iu.test(p)) return 'comparison';
   if (/\b(?:kod|api|oauth|docker|node\.?js|javascript|python|program|serwer|błąd|blad|error|config|konfigurac)\b/i.test(p)) return 'technical';
   if (routing?.intent === 'conversation') return 'chat';
   return 'simple';
@@ -123,6 +125,7 @@ function responseContract(profile) {
     'Zawsze kończ pełne zdania i odpowiadaj bezpośrednio na pytanie, zanim dodasz kontekst.',
     'Jeśli materiał pozwala odpowiedzieć częściowo, odpowiedz na potwierdzoną część zamiast automatycznie odmawiać.',
     'Nie zastępuj odpowiedzi ogólnym komunikatem o braku danych, jeśli źródła zawierają odpowiedź na pytanie.',
+    'Każde zdanie musi mieć bezpośrednie oparcie w źródłach: pomiń niepotwierdzone szczegóły zamiast dopisywać zdania o braku danych albo domysły — walidator odrzuca całą odpowiedź, jeśli choć jedno zdanie nie ma pokrycia.',
     'Dla pytań gameplay podawaj kolejność działań, jeśli jest potrzebna do wykonania zadania.',
     'Dla pytań lore nie dopowiadaj spoilerów, których nie wymaga pytanie; gdy występuje interpretacja lub niepewność, oznacz ją wprost.',
     'Oddzielaj fakty potwierdzone przez źródła od interpretacji i nie przedstawiaj interpretacji jako kanonu.'

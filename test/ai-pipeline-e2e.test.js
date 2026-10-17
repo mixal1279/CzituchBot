@@ -120,7 +120,7 @@ test('actual zapytajAI pipeline survives validator rejection and succeeds after 
   assert.match(sent.at(-1), /GLaDOS/i);
 });
 
-test('HLTB miss falls through to Tavily for a boss fight question', async () => {
+test('boss fight question skips HLTB and goes straight to Tavily', async () => {
   let hltbCalls = 0;
   let retrievalCalls = 0;
   const sent = [];
@@ -174,7 +174,67 @@ test('HLTB miss falls through to Tavily for a boss fight question', async () => 
     },
   );
 
+  // HLTB podaje czas przejścia całej gry; nawet trafienie dałoby błędną odpowiedź na pytanie o czas walki.
+  assert.equal(hltbCalls, 0, 'pytanie o walkę nie powinno trafiać do HLTB');
+  assert.ok(retrievalCalls >= 1, 'pipeline powinien od razu wykonać wyszukiwanie Tavily');
+  assert.match(sent.at(-1) || '', /Malenią/i, 'pipeline powinien wysłać odpowiedź po retrievalu');
+});
+
+test('HLTB miss falls through to Tavily for a completion time question', async () => {
+  let hltbCalls = 0;
+  let retrievalCalls = 0;
+  const sent = [];
+  const answer = 'Przejście Elden Ring trwa około 60 godzin.';
+  const fakeGroq = {
+    chat: { completions: { create: async () => ({ choices: [{ message: { content: answer }, finish_reason: 'stop' }] }) } },
+  };
+  const fakeSearch = async () => {
+    retrievalCalls++;
+    return {
+      status: 'ok',
+      text: [
+        '[SOURCE 1]',
+        'TYTUŁ: Czas przejścia Elden Ring',
+        'TREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>',
+        'Przejście Elden Ring trwa około 60 godzin.',
+        '<<<END_UNTRUSTED_SOURCE_CONTENT>>>',
+        '[SOURCE 2]',
+        'TYTUŁ: Druga relacja o czasie gry',
+        'TREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>',
+        'Główny wątek Elden Ring zajmuje około 60 godzin.',
+        '<<<END_UNTRUSTED_SOURCE_CONTENT>>>',
+      ].join('\n'),
+      meta: { sourceCount: 2 },
+    };
+  };
+  const fakeValidator = async () => ({
+    status: 'accepted', ok: true, valid: true, supported: true, relevant: true,
+    complete: true, hallucination: false, confidence: 0.95, unsupported_claims: [],
+    claims: [{ claim: answer, supported: true, source_ids: ['SOURCE 1'], evidence_quote: answer }],
+    reason: 'fixture: potwierdzone',
+  });
+
+  await zapytajAI(
+    'tester',
+    'Ile trwa Elden Ring?',
+    [],
+    'Odpowiadaj po polsku. Korzystaj wyłącznie z danych referencyjnych.',
+    async message => sent.push(String(message)),
+    {
+      aiProfile: 'generic',
+      memoryUserId: 'hltb-fallback-test-2',
+      __testDeps: {
+        groq: fakeGroq,
+        searchTavily: fakeSearch,
+        validateAI: fakeValidator,
+        loadMemory: async () => [],
+        pobierzCzasHLTB: async () => { hltbCalls++; return null; },
+        maxWyszukanTavily: 3,
+      },
+    },
+  );
+
   assert.equal(hltbCalls, 1, 'HLTB powinien zostać sprawdzony dla rozpoznanego tytułu');
   assert.ok(retrievalCalls >= 1, 'po braku HLTB pipeline powinien wykonać wyszukiwanie Tavily');
-  assert.match(sent.at(-1) || '', /Malenią/i, 'pipeline powinien wysłać odpowiedź po retrievalu');
+  assert.match(sent.at(-1) || '', /Elden Ring/i, 'pipeline powinien wysłać odpowiedź po retrievalu');
 });
