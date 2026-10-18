@@ -56,7 +56,12 @@ function createFirestoreState(db, options = {}) {
       async write() { throw new Error('Firestore jest wyłączony.'); },
       async readToken() { return null; },
       async writeToken() { throw new Error('Firestore jest wyłączony.'); },
-      async loadCache() { return {}; },
+      async loadCache(_cacheName, legacyFile = null) {
+        try {
+          const parsed = JSON.parse(await fs.promises.readFile(legacyFile, 'utf8'));
+          return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+        } catch (_) { return {}; }
+      },
       async saveCache() {},
     };
   }
@@ -88,7 +93,7 @@ function createFirestoreState(db, options = {}) {
   async function loadCache(cacheName, legacyFile = null) {
     const stored = await read('cache', cacheName);
     if (stored && typeof stored === 'object' && !Array.isArray(stored)) {
-      if (legacyFile) await removeLegacyAfterVerified(legacyFile, stored);
+      if (legacyFile) await removeLegacyAfterVerified(legacyFile, stored, cacheName);
       return stored;
     }
 
@@ -105,17 +110,17 @@ function createFirestoreState(db, options = {}) {
 
     // Zapisujemy nawet pusty obiekt, aby po pierwszym uruchomieniu źródłem prawdy był Firestore.
     await write('cache', cacheName, legacy);
-    if (legacyFile) await removeLegacyAfterVerified(legacyFile, legacy);
+    if (legacyFile) await removeLegacyAfterVerified(legacyFile, legacy, cacheName);
     return legacy;
   }
 
-  async function removeLegacyAfterVerified(file, expected) {
+  async function removeLegacyAfterVerified(file, expected, cacheName) {
     try {
       const stat = await fs.promises.stat(file);
       if (!stat.isFile()) return;
       const parsed = JSON.parse(await fs.promises.readFile(file, 'utf8'));
       if (JSON.stringify(parsed) !== JSON.stringify(expected)) return;
-      const check = await read('cache', path.basename(file, path.extname(file)));
+      const check = await read('cache', cacheName);
       // Cache document IDs can be logical names rather than file names. Only remove
       // when the caller has already loaded the stored value and confirmed equality.
       if (check && JSON.stringify(check) === JSON.stringify(expected)) {
