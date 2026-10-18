@@ -4505,7 +4505,7 @@ function wczytajCacheHoroskopow() {
 }
 
 async function zapiszCacheHoroskopow(cache) {
-  FIRESTORE_STATE.saveCache('horoscopes', cache).catch(err => console.error('[Firestore cache/horoskopy] Zapis nieudany:', err.message));
+  await FIRESTORE_STATE.saveCache('horoscopes', cache).catch(err => console.error('[Firestore cache/horoskopy] Zapis nieudany:', err.message));
 }
 
 const horoskopDzienneCache = wczytajCacheHoroskopow();
@@ -4646,7 +4646,7 @@ function wczytajCacheBulek() {
 }
 
 async function zapiszCacheBulek(cache) {
-  FIRESTORE_STATE.saveCache('daily_bulka', cache).catch(err => console.error('[Firestore cache/bułka] Zapis nieudany:', err.message));
+  await FIRESTORE_STATE.saveCache('daily_bulka', cache).catch(err => console.error('[Firestore cache/bułka] Zapis nieudany:', err.message));
 }
 
 const bulkaDzienneCache = wczytajCacheBulek();
@@ -4720,7 +4720,7 @@ function wczytajCacheArbuzow() {
 }
 
 async function zapiszCacheArbuzow(cache) {
-  FIRESTORE_STATE.saveCache('daily_arbuz', cache).catch(err => console.error('[Firestore cache/arbuz] Zapis nieudany:', err.message));
+  await FIRESTORE_STATE.saveCache('daily_arbuz', cache).catch(err => console.error('[Firestore cache/arbuz] Zapis nieudany:', err.message));
 }
 
 const arbuzDzienneCache = wczytajCacheArbuzow();
@@ -4779,7 +4779,7 @@ function wczytajCacheCiastek() {
 }
 
 async function zapiszCacheCiastek(cache) {
-  FIRESTORE_STATE.saveCache('daily_ciastko', cache).catch(err => console.error('[Firestore cache/ciastko] Zapis nieudany:', err.message));
+  await FIRESTORE_STATE.saveCache('daily_ciastko', cache).catch(err => console.error('[Firestore cache/ciastko] Zapis nieudany:', err.message));
 }
 
 const ciastkoDzienneCache = wczytajCacheCiastek();
@@ -4799,7 +4799,7 @@ function wczytajCacheCm() {
 }
 
 async function zapiszCacheCm(cache) {
-  FIRESTORE_STATE.saveCache('stream_cm', cache).catch(err => console.error('[Firestore cache/!cm] Zapis nieudany:', err.message));
+  await FIRESTORE_STATE.saveCache('stream_cm', cache).catch(err => console.error('[Firestore cache/!cm] Zapis nieudany:', err.message));
 }
 
 
@@ -7454,6 +7454,10 @@ const startBot = async () => {
 
   // ---- Ekonomia – odtwórz wypłaty lokat oczekujące po ewentualnym restarcie ----
   await odtworzLokatyPoStarcie();
+
+  // Przenieś cache i stan przed uruchomieniem platform, aby pierwsze wiadomości nie użyły pustych map.
+  await ensurePersistentCachesReady();
+  await BILLY_BAKERY.initialize(FIRESTORE_STATE);
 
   // ---- Uruchom platformy równolegle ----
   // Kick: obsługa kanałów EdzziLive i ArbuzikLive została wyłączona.
