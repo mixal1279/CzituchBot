@@ -4320,8 +4320,9 @@ function wczytajStanTikTok() {
 }
 
 async function zapiszStanTikTok(stan) {
+  const snapshot = stan && typeof stan === 'object' ? { ...stan } : {};
   for (const key of Object.keys(tiktokTrackingState)) delete tiktokTrackingState[key];
-  Object.assign(tiktokTrackingState, stan && typeof stan === 'object' ? stan : {});
+  Object.assign(tiktokTrackingState, snapshot);
   await FIRESTORE_STATE.saveCache('tiktok_tracking', tiktokTrackingState);
 }
 
