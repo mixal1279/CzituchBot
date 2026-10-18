@@ -5334,23 +5334,40 @@ async function zapiszTokenYT(tokens) {
 }
 
 async function wczytajTokenYT() {
+  let credentials = null;
+  let firestoreReadFailed = false;
   try {
-    let credentials = await FIRESTORE_STATE.readToken('youtube');
+    credentials = await FIRESTORE_STATE.readToken('youtube');
+  } catch (err) {
+    firestoreReadFailed = true;
+    console.error('[YT Auth] Błąd odczytu tokenu z Firestore; sprawdzam kopie zapasowe bez nadpisywania dokumentu:', err.message);
+  }
+
+  try {
     if (!credentials) {
       const legacyDoc = await db.collection('config').doc('youtube_token').get();
       if (legacyDoc.exists) {
         credentials = legacyDoc.data();
-        try {
-          await zapiszTokenYT(credentials);
-          await db.collection('config').doc('youtube_token').delete();
-          console.log('[YT Auth] ✅ Stary token przeniesiony do szyfrowanego magazynu');
-        } catch (migrationError) {
-          console.warn('[YT Auth] Migracja do szyfrowanego magazynu nieudana; zachowuję istniejący token:', migrationError.message);
+        if (!firestoreReadFailed) {
+          try {
+            await zapiszTokenYT(credentials);
+            await db.collection('config').doc('youtube_token').delete();
+            console.log('[YT Auth] ✅ Stary token przeniesiony do szyfrowanego magazynu');
+          } catch (migrationError) {
+            console.warn('[YT Auth] Migracja do szyfrowanego magazynu nieudana; zachowuję istniejący token:', migrationError.message);
+          }
+        } else {
+          console.warn('[YT Auth] Używam starego tokenu jako kopii zapasowej; nie nadpisuję dokumentu, którego nie udało się odszyfrować.');
         }
       } else {
-        try { credentials = await FIRESTORE_STATE.migrateTokenFile('youtube', KONFIGURACJA.ytTokenFile); }
-        catch (migrationError) {
-          console.warn('[YT Auth] Migracja tokenu z pliku nieudana; plik pozostaje bez zmian:', migrationError.message);
+        if (!firestoreReadFailed) {
+          try { credentials = await FIRESTORE_STATE.migrateTokenFile('youtube', KONFIGURACJA.ytTokenFile); }
+          catch (migrationError) {
+            console.warn('[YT Auth] Migracja tokenu z pliku nieudana; plik pozostaje bez zmian:', migrationError.message);
+            try { credentials = JSON.parse(await fs.promises.readFile(KONFIGURACJA.ytTokenFile, 'utf8')); }
+            catch (readError) { if (readError.code !== 'ENOENT') console.error('[YT Auth] Błąd odczytu pliku tokenu:', readError.message); }
+          }
+        } else {
           try { credentials = JSON.parse(await fs.promises.readFile(KONFIGURACJA.ytTokenFile, 'utf8')); }
           catch (readError) { if (readError.code !== 'ENOENT') console.error('[YT Auth] Błąd odczytu pliku tokenu:', readError.message); }
         }
@@ -5361,7 +5378,9 @@ async function wczytajTokenYT() {
       console.log('[YT Auth] ✅ Wczytano token YouTube');
       return true;
     }
-  } catch (err) { console.error('[YT Auth] Błąd wczytywania:', err.message); }
+  } catch (err) {
+    console.error('[YT Auth] Błąd wczytywania tokenu i kopii zapasowych:', err.message);
+  }
   return false;
 }
 
@@ -7439,10 +7458,23 @@ const startBot = async () => {
     await zalogujYouTube();
   } else {
     await wyswietlKontoYoutube();
-    oauth2Client.on('tokens', async (newTokens) => {
-      const current = await FIRESTORE_STATE.readToken('youtube') || oauth2Client.credentials || {};
-      await zapiszTokenYT({ ...current, ...newTokens });
-      console.log('[YT Auth] 🔄 Token automatycznie odświeżony');
+    oauth2Client.on('tokens', (newTokens) => {
+      // EventEmitter does not await async listeners. Catch every persistence failure
+      // here so a transient Firestore outage cannot become an unhandled rejection.
+      void (async () => {
+        try {
+          let current = oauth2Client.credentials || {};
+          try {
+            current = await FIRESTORE_STATE.readToken('youtube') || current;
+          } catch (readError) {
+            console.warn('[YT Auth] Nie udało się odczytać poprzedniego tokenu z Firestore; używam danych klienta OAuth:', readError.message);
+          }
+          await zapiszTokenYT({ ...current, ...newTokens });
+          console.log('[YT Auth] 🔄 Token automatycznie odświeżony i zapisany');
+        } catch (saveError) {
+          console.error('[YT Auth] Nie udało się trwale zapisać odświeżonego tokenu; token pozostaje w pamięci:', saveError.message);
+        }
+      })();
     });
     // Wymuś jedno, pojedyncze odświeżenie tokenu PRZED odpaleniem 4 równoległych
     // youtubeWatcherów. Bez tego, jeśli token access wygasł, kilka zapytań
