@@ -19,19 +19,21 @@ function loadCache(file) {
 
 let stateStore = null;
 let initializePromise = null;
+let cacheReady = false;
 const CACHE_IDS = {
   [PIEKARZ_CACHE_FILE]: 'billy_piekarz_stream',
   [KAJZERKA_CACHE_FILE]: 'billy_kajzerka_day',
 };
 
 function saveCache(file, cache) {
-  if (stateStore?.enabled) {
+  if (stateStore?.enabled && cacheReady) {
     stateStore.saveCache(CACHE_IDS[file], cache)
       .catch(err => console.warn('[Bułka] Nie udało się zapisać cache w Firestore ' + file + ': ' + err.message));
     return;
   }
+  // Until Firestore has loaded successfully, keep the local file as a durable fallback.
   try {
-    fs.writeFileSync(file, JSON.stringify(cache, null, 2));
+    fs.writeFileSync(file, JSON.stringify(cache, null, 2), { mode: 0o600 });
   } catch (err) {
     console.warn('[Bułka] Nie udało się zapisać cache ' + file + ': ' + err.message);
   }
@@ -41,21 +43,33 @@ const piekarzCache = loadCache(PIEKARZ_CACHE_FILE);
 const kajzerkaCache = loadCache(KAJZERKA_CACHE_FILE);
 
 async function initialize(store) {
-  if (!store?.enabled) return;
+  if (!store?.enabled) return false;
   if (initializePromise) return initializePromise;
-  stateStore = store;
   initializePromise = (async () => {
     const [piekarze, kajzerki] = await Promise.all([
-      stateStore.loadCache(CACHE_IDS[PIEKARZ_CACHE_FILE], PIEKARZ_CACHE_FILE),
-      stateStore.loadCache(CACHE_IDS[KAJZERKA_CACHE_FILE], KAJZERKA_CACHE_FILE),
+      store.loadCache(CACHE_IDS[PIEKARZ_CACHE_FILE], PIEKARZ_CACHE_FILE),
+      store.loadCache(CACHE_IDS[KAJZERKA_CACHE_FILE], KAJZERKA_CACHE_FILE),
     ]);
+    // Preserve entries created while loading; Firestore wins for duplicate keys.
+    const mergedPiekarze = { ...piekarzCache, ...piekarze };
+    const mergedKajzerki = { ...kajzerkaCache, ...kajzerki };
     for (const key of Object.keys(piekarzCache)) delete piekarzCache[key];
-    Object.assign(piekarzCache, piekarze);
+    Object.assign(piekarzCache, mergedPiekarze);
     for (const key of Object.keys(kajzerkaCache)) delete kajzerkaCache[key];
-    Object.assign(kajzerkaCache, kajzerki);
+    Object.assign(kajzerkaCache, mergedKajzerki);
+    await Promise.all([
+      store.saveCache(CACHE_IDS[PIEKARZ_CACHE_FILE], piekarzCache),
+      store.saveCache(CACHE_IDS[KAJZERKA_CACHE_FILE], kajzerkaCache),
+    ]);
+    stateStore = store;
+    cacheReady = true;
+    return true;
   })().catch(error => {
+    stateStore = null;
+    cacheReady = false;
     initializePromise = null;
-    console.error('[Bułka] Nie udało się wczytać cache z Firestore:', error.message);
+    console.error('[Bułka] Nie udało się wczytać cache z Firestore; pozostawiam cache lokalny:', error.message);
+    return false;
   });
   return initializePromise;
 }
