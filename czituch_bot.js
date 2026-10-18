@@ -1545,7 +1545,7 @@ function czyPytanieBillyFaktograficzne(pytanie, kategoriaAI) {
 // Gdy źródło jest po angielsku, porównanie leksykalne polskiego claimu z angielskim cytatem daje
 // pokrycie ~0,25. Tłumaczenie claimu pozwala sprawdzić liczby, nazwy, negację i przyczynę w jednym
 // języku. Lokalnie weryfikujemy, że tłumaczenie nie zmienia tych elementów (ai/claimValidation.js).
-const CLAIM_EN_PROMPT = ' Gdy evidence_quote jest po angielsku, dodaj do każdego claimu pole "claim_en": wierne tłumaczenie claimu na angielski z tymi samymi liczbami, nazwami własnymi i negacjami, bez dodawania faktów. Gdy cytat jest po polsku, pomiń claim_en.';
+const CLAIM_EN_PROMPT = ' Dla każdego claimu ustaw pole "claim_en" na wierne angielskie tłumaczenie claimu, gdy evidence_quote jest po angielsku; zachowaj bez zmian liczby, jednostki, nazwy własne i negacje oraz nie dodawaj faktów. Gdy evidence_quote nie jest po angielsku, ustaw "claim_en" na pusty string ("").';
 
 const { VALIDATOR_JSON_SCHEMA, GEMINI_VALIDATOR_JSON_SCHEMA, wytnijJsonWalidatora, normalizujWynikWalidatora, wyodrebnijIdentyfikatoryZrodel } = AI_VALIDATOR;
 

@@ -245,7 +245,7 @@ test('benchmark validator traces expose answer and source-bound claims only in l
   const modelResult = {
     valid: true, reason: 'ok', unsupported_claims: [], supported: true, relevant: true, complete: true,
     hallucination: false, confidence: 0.95,
-    claims: [{ claim: 'Wheatley moved into GLaDOS body.', supported: true, source_ids: ['SOURCE 1'], evidence_quote: 'Wheatley was transferred into GLaDOS body.' }],
+    claims: [{ claim: 'Wheatley moved into GLaDOS body.', claim_en: 'Wheatley moved into GLaDOS body.', supported: true, source_ids: ['SOURCE 1'], evidence_quote: 'Wheatley was transferred into GLaDOS body.' }],
   };
   try {
     delete process.env.AI_LIVE_BENCHMARK;
@@ -258,6 +258,8 @@ test('benchmark validator traces expose answer and source-bound claims only in l
     assert.deepEqual(benchmark.diagnostics.benchmarkTrace.claims[0], {
       claimIndex: 0,
       claim: 'Wheatley moved into GLaDOS body.',
+      claimEn: 'Wheatley moved into GLaDOS body.',
+      claimEnConsistency: { ok: true },
       supported: true,
       sourceIds: ['SOURCE 1'],
       evidenceQuote: 'Wheatley was transferred into GLaDOS body.',

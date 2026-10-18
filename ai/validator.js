@@ -34,7 +34,7 @@ const GEMINI_VALIDATOR_JSON_SCHEMA = {
           claim_en: { type: 'string' },
           reason: { type: 'string' },
         },
-        required: ['claim', 'supported', 'source_ids', 'evidence_quote', 'reason'],
+        required: ['claim', 'supported', 'source_ids', 'evidence_quote', 'reason', 'claim_en'],
       },
     },
   },
