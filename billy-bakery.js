@@ -394,7 +394,8 @@ function getBillyBulkaForDay(dateKey, options = {}) {
   return { variant, alreadyAssigned: false };
 }
 
-function handleCommand({ message, nick, login, streamId }) {
+function handleCommand({ message, nick, login, streamId }, options = {}) {
+  const rng = options.rng || Math.random;
   if (!message || !nick) return null;
   const text = String(message).trim();
   const match = text.match(/^!(zakwas|wyzwanie|piekarz|swiezy|smak|okruszek|przypalony)(?:\s+@?([a-zA-Z0-9_]+))?$/i);
@@ -405,29 +406,29 @@ function handleCommand({ message, nick, login, streamId }) {
     const targetKey = (hasTarget ? match[2] : (login || nick)).toLowerCase();
 
     if (command === 'zakwas') {
-      const result = rollZakwas();
+      const result = rollZakwas(rng);
       return '🍞 @' + target + ' ma dziś ' + result.value + '% zakwasu — ' + result.comment;
     }
     if (command === 'swiezy') {
-      const result = rollFromBands(SWIEZOSC_KOMENTARZE);
+      const result = rollFromBands(SWIEZOSC_KOMENTARZE, rng);
       return '🥐 @' + target + ' ma dziś ' + result.value + '% świeżości — ' + result.comment;
     }
     if (command === 'przypalony') {
-      const result = rollFromBands(PRZYPALENIE_KOMENTARZE);
+      const result = rollFromBands(PRZYPALENIE_KOMENTARZE, rng);
       return '🔥 @' + target + ' ma dziś ' + result.value + '% przypalenia — ' + result.comment;
     }
     if (command === 'smak') {
-      return '🥐 @' + target + ' ma dziś smak na ' + choose(SMAKI, Math.random) + '. Piekarz zatwierdza ten wybór!';
+      return '🥐 @' + target + ' ma dziś smak na ' + choose(SMAKI, rng) + '. Piekarz zatwierdza ten wybór!';
     }
     if (command === 'okruszek') {
-      return '🍞 @' + target + ', znaleziono u Ciebie ' + randomInt(Math.random, 1, 100) + ' okruszków. Schowaj je dobrze, bo wróble już patrzą!';
+      return '🍞 @' + target + ', znaleziono u Ciebie ' + randomInt(rng, 1, 100) + ' okruszków. Schowaj je dobrze, bo wróble już patrzą!';
     }
     if (command === 'wyzwanie') {
-      const result = rollWyzwanie();
+      const result = rollWyzwanie(rng);
       return '🎯 Wyzwanie dla @' + target + ': ' + result.text;
     }
     if (command === 'piekarz') {
-      const result = getPiekarzForStream(targetKey, streamId);
+      const result = getPiekarzForStream(targetKey, streamId, options);
       const title = result.title;
       if (result.alreadyAssigned) {
         return '🍞 @' + target + ', masz już tytuł na ten stream: ' + title.name + '! ' + title.description;
@@ -444,7 +445,7 @@ function handleCommand({ message, nick, login, streamId }) {
     const isBillySender = !targetLogin && senderLogin === 'billybulka';
     if (isBillyTarget || isBillySender) {
       const dateKey = new Date().toISOString().slice(0, 10);
-      const result = getBillyBulkaForDay(dateKey);
+      const result = getBillyBulkaForDay(dateKey, options);
       return '🥖 @BillyBulka otrzymuje ' + result.variant.name + '! ' + result.variant.description
         + (result.variant.rarity === 'tajna' ? ' ✨ TAJNY WYPIEK!' : '');
     }
