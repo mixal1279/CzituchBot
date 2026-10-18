@@ -4509,8 +4509,7 @@ function wczytajCacheHoroskopow() {
 }
 
 async function zapiszCacheHoroskopow(cache) {
-  if (!await ensurePersistentCachesReady()) return;
-  await FIRESTORE_STATE.saveCache('horoscopes', cache).catch(err => console.error('[Firestore cache/horoskopy] Zapis nieudany:', err.message));
+  await savePersistentCache('horoscopes', cache, '[Firestore cache/horoskopy]');
 }
 
 const horoskopDzienneCache = wczytajCacheHoroskopow();
@@ -4659,8 +4658,7 @@ function wczytajCacheBulek() {
 }
 
 async function zapiszCacheBulek(cache) {
-  if (!await ensurePersistentCachesReady()) return;
-  await FIRESTORE_STATE.saveCache('daily_bulka', cache).catch(err => console.error('[Firestore cache/bułka] Zapis nieudany:', err.message));
+  await savePersistentCache('daily_bulka', cache, '[Firestore cache/bułka]');
 }
 
 const bulkaDzienneCache = wczytajCacheBulek();
@@ -4734,8 +4732,7 @@ function wczytajCacheArbuzow() {
 }
 
 async function zapiszCacheArbuzow(cache) {
-  if (!await ensurePersistentCachesReady()) return;
-  await FIRESTORE_STATE.saveCache('daily_arbuz', cache).catch(err => console.error('[Firestore cache/arbuz] Zapis nieudany:', err.message));
+  await savePersistentCache('daily_arbuz', cache, '[Firestore cache/arbuz]');
 }
 
 const arbuzDzienneCache = wczytajCacheArbuzow();
@@ -4794,8 +4791,7 @@ function wczytajCacheCiastek() {
 }
 
 async function zapiszCacheCiastek(cache) {
-  if (!await ensurePersistentCachesReady()) return;
-  await FIRESTORE_STATE.saveCache('daily_ciastko', cache).catch(err => console.error('[Firestore cache/ciastko] Zapis nieudany:', err.message));
+  await savePersistentCache('daily_ciastko', cache, '[Firestore cache/ciastko]');
 }
 
 const ciastkoDzienneCache = wczytajCacheCiastek();
@@ -4815,12 +4811,49 @@ function wczytajCacheCm() {
 }
 
 async function zapiszCacheCm(cache) {
-  if (!await ensurePersistentCachesReady()) return;
-  await FIRESTORE_STATE.saveCache('stream_cm', cache).catch(err => console.error('[Firestore cache/!cm] Zapis nieudany:', err.message));
+  await savePersistentCache('stream_cm', cache, '[Firestore cache/!cm]');
 }
 
 
 const cmStreamCache = wczytajCacheCm();
+
+const PERSISTENT_CACHE_FILES = {
+  horoscopes: HOROSKOP_CACHE_PLIK,
+  daily_bulka: BULKA_CACHE_PLIK,
+  daily_arbuz: ARBUZ_CACHE_PLIK,
+  daily_ciastko: CIASTKO_CACHE_PLIK,
+  stream_cm: CM_CACHE_PLIK,
+  tiktok_tracking: TIKTOK_STATE_PLIK,
+  hltb_results: './hltb_cache.json',
+  weather_geocoding: './weather_geocoding_cache.json',
+};
+
+async function savePersistentCache(name, value, logPrefix = '[Firestore cache]') {
+  const ready = await ensurePersistentCachesReady();
+  if (!FIRESTORE_STATE.enabled || !ready) {
+    const file = PERSISTENT_CACHE_FILES[name];
+    if (!file) {
+      console.warn(logPrefix + ' Brak lokalnej ścieżki cache; dane pozostają w pamięci:', name);
+      return;
+    }
+    try {
+      await fs.promises.writeFile(file, JSON.stringify(value, null, 2), { mode: 0o600 });
+    } catch (error) {
+      console.error(logPrefix + ' Nie udało się zapisać lokalnej kopii cache:', error.message);
+    }
+    return;
+  }
+  try {
+    await FIRESTORE_STATE.saveCache(name, value);
+  } catch (error) {
+    console.error(logPrefix + ' Zapis nieudany:', error.message);
+    const file = PERSISTENT_CACHE_FILES[name];
+    if (file) {
+      try { await fs.promises.writeFile(file, JSON.stringify(value, null, 2), { mode: 0o600 }); }
+      catch (fallbackError) { console.error(logPrefix + ' Nie udało się też zapisać kopii lokalnej:', fallbackError.message); }
+    }
+  }
+}
 
 let persistentCachesReady = null;
 let persistentCachesRetryAfter = 0;
@@ -4832,12 +4865,7 @@ function mergeObjectContents(target, source) {
 }
 
 async function persistMapCache(name, map) {
-  try {
-    if (!await ensurePersistentCachesReady()) return;
-    await FIRESTORE_STATE.saveCache(name, Object.fromEntries(map));
-  } catch (err) {
-    console.error('[Firestore cache/' + name + '] Zapis nieudany; wynik pozostaje w pamięci:', err.message);
-  }
+  await savePersistentCache(name, Object.fromEntries(map), '[Firestore cache/' + name + ']');
 }
 
 async function ensurePersistentCachesReady() {
@@ -4851,8 +4879,8 @@ async function ensurePersistentCachesReady() {
       FIRESTORE_STATE.loadCache('daily_ciastko', CIASTKO_CACHE_PLIK),
       FIRESTORE_STATE.loadCache('stream_cm', CM_CACHE_PLIK),
       FIRESTORE_STATE.loadCache('tiktok_tracking', TIKTOK_STATE_PLIK),
-      FIRESTORE_STATE.loadCache('hltb_results', null),
-      FIRESTORE_STATE.loadCache('weather_geocoding', null),
+      FIRESTORE_STATE.loadCache('hltb_results', PERSISTENT_CACHE_FILES.hltb_results),
+      FIRESTORE_STATE.loadCache('weather_geocoding', PERSISTENT_CACHE_FILES.weather_geocoding),
     ]);
     mergeObjectContents(horoskopDzienneCache, caches[0]);
     mergeObjectContents(bulkaDzienneCache, caches[1]);
