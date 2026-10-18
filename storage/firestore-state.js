@@ -144,9 +144,15 @@ function createFirestoreState(db, options = {}) {
       if (error.code !== 'ENOENT') throw error;
     }
 
-    // If the local token differs, treat it as the latest state and migrate it
-    // before deleting anything. This avoids silently discarding a rotated refresh token.
-    if (legacy && JSON.stringify(legacy) !== JSON.stringify(stored)) {
+    if (stored && legacy && JSON.stringify(legacy) !== JSON.stringify(stored)) {
+      // Keep a mismatching local file and use it for this run rather than
+      // overwriting either copy: a refresh-token rotation may have happened
+      // while one storage backend was temporarily unavailable.
+      logger.warn?.('[Firestore state] Token lokalny różni się od Firestore; zachowuję plik do czasu udanego odświeżenia:', provider);
+      return legacy;
+    }
+
+    if (legacy && !stored) {
       await writeToken(provider, legacy);
       const verified = await readToken(provider);
       if (JSON.stringify(verified) !== JSON.stringify(legacy)) {
