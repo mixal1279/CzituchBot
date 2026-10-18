@@ -6,7 +6,7 @@
  * === WERSJA: v23 — moduły ai/policy, ai/validator i ai/tavily; rygorystyczny validator JSON + claim-by-claim — Fix: revocation subskrypcji redemption (Billy) nie
  *     resubskrybowywał — WS żył (keepalive), więc watchdog/close nigdy się nie odpalały
  *     i nagrody za punkty kanału przestawały tworzyć karty Trello do końca streama.
- * === WERSJA: 2026-09-30 — Twitch !ai dla billybulka + !cm liczba stała na użytkownika przez cały stream.
+ * === WERSJA: 2026-09-30 — Twitch !ai dla billybulka.
  * Poprzednia zmiana (2026-09-18) — Twitch: wysyłka wiadomości przez Helix Send Chat
  *     Message API (App Access Token, wymagane do odznaki "Chat Bot") zamiast
  *     przez tmi.js/IRC; usunięty kanał/bot mosiaczekk (michal_shotmaker);
@@ -627,75 +627,6 @@ let streamStart = {
   kick:    {}, // { [broadcasterId]: timestampMs }
   youtube: {}, // { [kanalLowercase]: timestampMs }
 };
-
-// !cm na billybulka: liczba jest przypisana do CELU i do konkretnego streama.
-// Cache jest zapisywany na dysku, żeby restart bota podczas trwającego streama
-// nie losował użytkownikom nowych liczb.
-const BILLY_CM_CACHE_PLIK = './billy_cm_stream_cache.json';
-let billyCmStreamCache = { streamKey: null, users: {} };
-try {
-  if (fs.existsSync(BILLY_CM_CACHE_PLIK)) {
-    const parsed = JSON.parse(fs.readFileSync(BILLY_CM_CACHE_PLIK, 'utf8'));
-    if (parsed && typeof parsed === 'object' && typeof parsed.users === 'object') {
-      billyCmStreamCache = {
-        streamKey: parsed.streamKey || null,
-        users: parsed.users || {},
-      };
-    }
-  }
-} catch (err) {
-  console.warn('[Billy !cm] ⚠️ Nie udało się wczytać cache:', err.message);
-}
-
-function zapiszBillyCmCache() {
-  try {
-    fs.writeFileSync(BILLY_CM_CACHE_PLIK, JSON.stringify(billyCmStreamCache, null, 2));
-  } catch (err) {
-    console.error('[Billy !cm] ❌ Błąd zapisu cache:', err.message);
-  }
-}
-
-function ustawBillyCmStream(streamKey) {
-  const key = streamKey ? String(streamKey) : null;
-  if (!key) return;
-  if (billyCmStreamCache.streamKey !== key) {
-    billyCmStreamCache = { streamKey: key, users: {} };
-    zapiszBillyCmCache();
-    console.log(`[Billy !cm] 🎲 Nowy stream — nowa pula liczb (${key})`);
-  }
-}
-
-function billyCmKomenda(nick, message, wyslijFn) {
-  const parts = message.trim().split(/\s+/);
-  const cel = (parts[1]?.replace(/^@/, '') || nick).toLowerCase();
-  const wyswietlanyCel = parts[1]?.replace(/^@/, '') || nick;
-
-  // Stream musi mieć własny identyfikator. Jeśli Twitch API jeszcze go nie podał,
-  // używamy aktualnego streamStart ustawionego przy połączeniu/eventcie online.
-  const streamKey = streamStart.twitch.billybulka;
-  ustawBillyCmStream(streamKey);
-
-  if (!billyCmStreamCache.streamKey) {
-    return wyslijFn(`@${nick} nie mam jeszcze identyfikatora tego streama — spróbuj za chwilę.`);
-  }
-
-  let liczba = billyCmStreamCache.users[cel];
-  if (!Number.isInteger(liczba)) {
-    liczba = Math.floor(Math.random() * 30) + 1;
-    billyCmStreamCache.users[cel] = liczba;
-    zapiszBillyCmCache();
-    console.log(`[Billy !cm] 🎲 @${cel} dostał ${liczba} cm na streamie ${billyCmStreamCache.streamKey}`);
-  }
-
-  const komentarz = MEM_KOMENDY['!cm'].zakresyKomentarzy.find(z => liczba <= z.max)?.komentarz ?? '';
-  const odpowiedz = MEM_KOMENDY['!cm'].odpowiedzi[0]
-    .replace(/\{nick\}/g, `@${nick}`)
-    .replace(/\{cel\}/g, `@${wyswietlanyCel}`)
-    .replace(/\{liczba\}/g, String(liczba))
-    .replace(/\{komentarz\}/g, komentarz);
-
-  return wyslijFn(odpowiedz);
-}
 
 // Mapowanie nazwy kanału (tej samej, którą dostaje zapiszKlip jako `kanal`) na broadcaster_user_id
 function kickBroadcasterIdDlaKanalu(kanal) {
@@ -2405,7 +2336,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
   // wymuszamy zaufane domeny zamiast pozwalać wyszukiwarce przeskoczyć na homonimy.
   const pytanieOrazBilly = jestAI_Billy && /billybulka|bu[łl]ka\b/i.test(pytanie);
   const domenyTavilyBilly = pytanieOrazBilly ? (tavilyOptions.domains || KONFIGURACJA.tavilyBillybulkaDomains) : null;
-  const pytanieOrazEdzzi = jestAI_EdzzI && /edzzi|edzzilive|edzzi_minecraft/i.test(pytanie);
+  const pytanieOrazEdzzi = jestAI_EdzzI && /edzzi|edzzi_minecraft/i.test(pytanie);
   const domenyTavilyEdzzi = pytanieOrazEdzzi ? (tavilyOptions.domains || KONFIGURACJA.tavilyEdzziDomains) : null;
   const pytanieOrazAngie = jestAI_Angie && /angie28|angie|airzel_|kandiaru_/i.test(pytanie);
   const domenyTavilyAngie = pytanieOrazAngie ? (tavilyOptions.domains || KONFIGURACJA.tavilyAngieDomains) : null;
@@ -4521,56 +4452,6 @@ async function wyodrebnijMiastoPogoda(pytanie, requestState = null) {
 }
 
 
-// =============================================
-//  MEM KOMENDY
-// =============================================
-const MEM_KOMENDY = {
-  '!listwa': {
-    wymaga_celu: true,
-    odpowiedzi: [
-      '{cel} oberwał listwą od {nick} 🪵',
-    ],
-  },
-  '!ratio': {
-    wymaga_celu: true,
-    odpowiedzi: [
-      '{cel} dostał ratio od {nick} 📉',
-      '{cel} oberwał ratio + L + nie jesteś tak wysoki jak myślisz od {nick} 📉',
-    ],
-  },
-  '!banhammer': {
-    wymaga_celu: true,
-    odpowiedzi: [
-      '{cel} oberwał banhammerem od {nick} 🔨',
-    ],
-  },
-  '!kubel': {
-    wymaga_celu: true,
-    odpowiedzi: [
-      '{cel} dostał kubłem lodowatej wody od {nick} 🪣',
-    ],
-  },
-  '!clown': {
-    wymaga_celu: true,
-    odpowiedzi: [
-      '{cel} zakłada nos klauna 🤡',
-    ],
-  },
-  '!cm': {
-    celDomyslnyNadawca: true,
-    zakresLiczby: [1, 30],
-    zakresyKomentarzy: [
-      { max: 5,  komentarz: 'lokalny wróbel przeprowadził się tam na stałe 🐦' },
-      { max: 12, komentarz: 'gmina rozważa tam budowę mostu turystycznego 🌉' },
-      { max: 20, komentarz: 'IKEA już projektuje do tego osobną szafkę 🗄️' },
-      { max: 30, komentarz: 'Google Maps dodało to jako punkt orientacyjny 🗺️' },
-    ],
-    odpowiedzi: [
-      '{cel} ma {liczba} cm 📏 – {komentarz}',
-    ],
-  },
-};
-
 // Mapowanie polskich nazw/aliasów znaków zodiaku na angielski parametr API + ładną nazwę PL
 const ZNAKI_ZODIAKU = {
   baran:       { en: 'aries',       pl: 'Baran' },
@@ -4910,77 +4791,10 @@ const CIASTKA = [
   { nazwa: 'ciastko ostatnie w paczce', opis: 'nikt inny go nie wziął, ale to jego czas' },
 ];
 
-// Bufor ostatnich użytkowników czatu (do losowania)
-const CZAT_BUFOR_MAX = 100;
-const czatBufor = {}; // { platforma: [nick1, nick2, ...] }
-
-function dodajDoBufora(nick, platforma) {
-  if (!czatBufor[platforma]) czatBufor[platforma] = [];
-  const buf = czatBufor[platforma];
-  const idx = buf.indexOf(nick.toLowerCase());
-  if (idx !== -1) buf.splice(idx, 1);
-  buf.unshift(nick.toLowerCase());
-  if (buf.length > CZAT_BUFOR_MAX) buf.pop();
-}
-
-function losujZBufora(wykluczNick, platforma) {
-  const buf = (czatBufor[platforma] || []).filter(n => n !== wykluczNick.toLowerCase());
-  if (!buf.length) return null;
-  return buf[Math.floor(Math.random() * buf.length)];
-}
-
-function memKomenda(nick, message, wyslijFn, platforma) {
-  const parts   = message.trim().split(/\s+/);
-  const cmd     = parts[0].toLowerCase();
-  const celRaw  = parts[1]?.replace(/^@/, '') || null;
-  const komenda = MEM_KOMENDY[cmd];
-  if (!komenda) return false;
-
-  let cel = celRaw;
-  if (!cel) {
-    if (komenda.celDomyslnyNadawca) {
-      cel = nick;
-    } else {
-      const wylosowany = losujZBufora(nick, platforma);
-      if (wylosowany) {
-        cel = wylosowany;
-      } else {
-        wyslijFn(`@${nick} Podaj cel: ${cmd} @nick`);
-        return true;
-      }
-    }
-  }
-  const odpowiedzi = komenda.odpowiedzi;
-  const liczba   = komenda.zakresLiczby
-    ? Math.floor(Math.random() * (komenda.zakresLiczby[1] - komenda.zakresLiczby[0] + 1)) + komenda.zakresLiczby[0]
-    : null;
-  const komentarz = (komenda.zakresyKomentarzy && liczba !== null)
-    ? (komenda.zakresyKomentarzy.find(z => liczba <= z.max)?.komentarz ?? '')
-    : null;
-  const odp      = odpowiedzi[Math.floor(Math.random() * odpowiedzi.length)]
-    .replace(/\{nick\}/g, `@${nick}`)
-    .replace(/\{cel\}/g, `@${cel}`)
-    .replace(/\{liczba\}/g, liczba)
-    .replace(/\{komentarz\}/g, komentarz ?? '');
-
-  wyslijFn(odp);
-  return true;
-}
-
-// Listy kanałów i ograniczenia mem-komend — na poziomie modułu, żeby były
-// dostępne zarówno z obslugaWiadomosci (Kick/YouTube), jak i obslugaTwitch (Twitch).
-const ARBUZIK_KANALY = ['arbuziklive', 'arbuzik_minecraft'];
-const EDZZI_KANALY   = ['edzzilive', 'edzzi_minecraft', 'edzzi'];
+// Kanały YouTube obsługiwane przez komendy kanałowe.
+const ARBUZIK_KANALY = ['arbuzik_minecraft'];
+const EDZZI_KANALY   = ['edzzi_minecraft', 'edzzi'];
 const BILLYBULKA_KANALY = ['billybulka'];
-// Mapa: komenda -> lista kanałów, na których wolno jej używać. Komenda spoza
-// tej mapy (np. !listwa) działa wszędzie.
-const OGRANICZENIA_KANALOWE_MEM = {
-  '!ratio':      EDZZI_KANALY,
-  '!banhammer':  EDZZI_KANALY,
-  '!kubel':      EDZZI_KANALY,
-  '!clown':      EDZZI_KANALY,
-  '!cm':         [...BILLYBULKA_KANALY, 'edzzilive', 'edzzi_minecraft', 'edzzi'],
-};
 
 async function obslugaWiadomosci(nick, message, platforma, wyslijFn, kanal = null, nadawca = null) {
   if (!nick || !message) return;
@@ -5048,48 +4862,15 @@ async function obslugaWiadomosci(nick, message, platforma, wyslijFn, kanal = nul
   // które nadal działają równolegle również na Kicku Edzziego.
   const youtubeEdzzi = platforma === 'youtube' && ['edzzi_minecraft', 'edzzi'].includes(kanalNorm);
   if (youtubeEdzzi && msgLower.startsWith('!')) {
-    const dozwoloneKomendyYoutubeEdzzi = ['!ai', '!mamdepresje', '!californiarz', '!cm', '!ciastko'];
+    const dozwoloneKomendyYoutubeEdzzi = ['!ai', '!mamdepresje', '!californiarz', '!ciastko'];
     const komendaYoutubeEdzzi = msgLower.split(/\s+/)[0];
     if (!dozwoloneKomendyYoutubeEdzzi.includes(komendaYoutubeEdzzi)) return;
-  }
-
-  // ---- Mem komendy ----
-  const memCmdRozpoznana = msgLower.split(' ')[0];
-  const memCmds = Object.keys(MEM_KOMENDY);
-  if (memCmds.includes(memCmdRozpoznana)) {
-    const dozwoloneKanaly = OGRANICZENIA_KANALOWE_MEM[memCmdRozpoznana];
-    if (!dozwoloneKanaly || dozwoloneKanaly.includes(kanalNorm)) {
-      ostatnieUzycie[cooldownKey] = teraz;
-      memKomenda(nick, message, wyslijFn, `${platforma}:${kanalNorm || 'brak-kanalu'}`);
-      return;
-    }
-    // Komenda rozpoznana, ale kanał nie ma do niej dostępu — ignorujemy (bez cooldownu).
-  }
-
-  if (msgLower === '!memkomendy') {
-    ostatnieUzycie[cooldownKey] = teraz;
-    if (ARBUZIK_KANALY.includes(kanalNorm)) {
-      return await wyslijFn(`🍉 Komendy: !arbuz`);
-    }
-    if (EDZZI_KANALY.includes(kanalNorm)) {
-      return await wyslijFn(`🪵 Komendy: !listwa @nick | !ratio @nick | !banhammer @nick | !kubel @nick | !clown @nick | !cm @nick`);
-    }
-    if (BILLYBULKA_KANALY.includes(kanalNorm)) {
-      return await wyslijFn(`🪵 Komendy: !cm @nick`);
-    }
-    return await wyslijFn(`🪵 Komendy: !listwa @nick`);
   }
 
   if (msgLower === '!lurk') {
     ostatnieUzycie[cooldownKey] = teraz;
     if (kanalNorm === 'angie28') {
       return await wyslijFn(`@${nick} mówi że sobie idzie🥲. Niemiło`);
-    }
-    if (EDZZI_KANALY.includes(kanalNorm)) {
-      return await wyslijFn(`Psssst. Edzzi. @${nick} wychodzi ze streama i nie wie kiedy wróci`);
-    }
-    if (ARBUZIK_KANALY.includes(kanalNorm)) {
-      return await wyslijFn(`Psssst. Arbuzik. @${nick} wychodzi ze streama i nie wie kiedy wróci`);
     }
     if (kanalNorm === 'billybulka') {
       return await wyslijFn(`@${nick} lurkuje sobie`);
@@ -5161,7 +4942,7 @@ async function obslugaWiadomosci(nick, message, platforma, wyslijFn, kanal = nul
 
   if (msgLower === '!commands' || msgLower === '!komendy') {
     ostatnieUzycie[cooldownKey] = teraz;
-    return await wyslijFn(`📋 Komendy: !iq | !8ball | !sus | !simp | !mamdepresje | !californiarz | !nowyfilm | !ai [pytanie] | !lurk | !klip [opis] | !donate | !memkomendy | !poradnik [gra] [fraza] | !cm | !horoskop | !bułka`);
+    return await wyslijFn(`📋 Komendy: !iq | !8ball | !sus | !simp | !mamdepresje | !californiarz | !nowyfilm | !ai [pytanie] | !lurk | !klip [opis] | !donate | !poradnik [gra] [fraza] | !horoskop | !bułka`);
   }
 
 
@@ -5224,7 +5005,7 @@ async function obslugaWiadomosci(nick, message, platforma, wyslijFn, kanal = nul
   }
 
   // ---- !mamdepresje – Kick EdzziLive oraz kanały YouTube Edzzi ----
-  if (((platforma === 'kick' && kanalNorm === 'edzzilive') || (platforma === 'youtube' && ['edzzi_minecraft', 'edzzi'].includes(kanalNorm))) && msgLower === '!mamdepresje') {
+  if ((platforma === 'youtube' && ['edzzi_minecraft', 'edzzi'].includes(kanalNorm)) && msgLower === '!mamdepresje') {
     ostatnieUzycie[cooldownKey] = teraz;
     const poziom = Math.floor(Math.random() * 101); // 0-100%
 
@@ -5259,7 +5040,7 @@ async function obslugaWiadomosci(nick, message, platforma, wyslijFn, kanal = nul
   }
 
   // ---- !californiarz – Kick EdzziLive oraz kanały YouTube Edzzi ----
-  if (((platforma === 'kick' && kanalNorm === 'edzzilive') || (platforma === 'youtube' && ['edzzi_minecraft', 'edzzi'].includes(kanalNorm))) && msgLower === '!californiarz') {
+  if ((platforma === 'youtube' && ['edzzi_minecraft', 'edzzi'].includes(kanalNorm)) && msgLower === '!californiarz') {
     ostatnieUzycie[cooldownKey] = teraz;
     const procent = Math.floor(Math.random() * 101); // 0-100%
 
@@ -5301,10 +5082,10 @@ async function obslugaWiadomosci(nick, message, platforma, wyslijFn, kanal = nul
 
   if (botNaPrzerwie) {
     const wlasneKomendy = [
-      '!memkomendy', '!lurk', '!mute', '!plagiat', '!commands',
+      '!lurk', '!mute', '!plagiat', '!commands',
       '!donate', '!iq', '!8ball', '!sus', '!simp', '!klip', '!toggleczituch',
       '!ai', '!pestki', '!arbuzki', '!pestka', '!sok', '!skorupa',
-      '!marker', '!listwa', '!ratio', '!banhammer', '!kubel', '!clown', '!cm',
+      '!marker',
       '!tytul', '!kategoria',
       '!księżyce', '!emeraldy', '!bal', '!top', '!sklep', '!ekohelp', '!ekonomia',
       '!kup', '!przelej', '!gamble', '!duel', '!poradnik',
@@ -6574,35 +6355,6 @@ async function obslugaTwitch(nick, message, wyslijFn, config = TWITCH_CONFIG_BIL
   const kanalNorm = kanal ? kanal.toLowerCase() : '';
   const historiaKlucz = `twitch:${kanalNorm || 'brak-kanalu'}:${nick.toLowerCase()}`;
 
-  // ---- Mem komendy (!cm itd.) — tylko na kanale billybulka, i tylko te jawnie dla niego dopuszczone ----
-  if (BILLYBULKA_KANALY.includes(kanalNorm)) {
-    dodajDoBufora(nick, 'twitch');
-
-    if (msgLower === '!memkomendy') {
-      ostatnieUzycie[cooldownKey] = teraz;
-      return await wyslijFn(`🪵 Komendy: !cm @nick`);
-    }
-
-    const memCmdRozpoznana = msgLower.split(' ')[0];
-    if (memCmdRozpoznana === '!cm') {
-      ostatnieUzycie[cooldownKey] = teraz;
-      return await billyCmKomenda(nick, message, wyslijFn);
-    }
-    if (Object.keys(MEM_KOMENDY).includes(memCmdRozpoznana)) {
-      // Na Twitchu (billybulka) NIE stosujemy domyślnego "brak wpisu = wszędzie" jak
-      // na Kick/YouTube — komenda musi mieć billybulka jawnie wpisane w
-      // OGRANICZENIA_KANALOWE_MEM, inaczej np. !listwa "przeciekłoby" tu bez pytania.
-      const dozwoloneKanaly = OGRANICZENIA_KANALOWE_MEM[memCmdRozpoznana];
-      if (dozwoloneKanaly && dozwoloneKanaly.includes(kanalNorm)) {
-        ostatnieUzycie[cooldownKey] = teraz;
-        memKomenda(nick, message, wyslijFn, 'twitch');
-        return;
-      }
-      // Komenda rozpoznana, ale nie jest dopuszczona na tym kanale — ignorujemy (bez cooldownu).
-      return;
-    }
-  }
-
   // Komendy specyficzne dla Billy
   if (kanal === 'billybulka') {
     // !ai korzysta z TEGO SAMEGO pipeline'u AI co pozostałe kanały:
@@ -6691,7 +6443,7 @@ async function obslugaTwitch(nick, message, wyslijFn, config = TWITCH_CONFIG_BIL
 
     if (msgLower === '!komendy') {
       ostatnieUzycie[cooldownKey] = teraz;
-      return await wyslijFn(`Dostępne komendy: !watchtime, !followage, !dc, !tiktok, !ig, !yt, !lurk, !ai, !cm, !horoskop, !bułka`);
+      return await wyslijFn(`Dostępne komendy: !watchtime, !followage, !dc, !tiktok, !ig, !yt, !lurk, !ai, !horoskop, !bułka`);
     }
     if (msgLower === '!yt') {
       ostatnieUzycie[cooldownKey] = teraz;
@@ -7040,11 +6792,6 @@ function podepnijHandleryEventSub(ws, twitchClient, config) {
             clearInterval(billyDiscordInterval);
             billyDiscordInterval = null;
             console.log('[EventSub] Interwał Billy zatrzymany');
-          }
-          if (login.toLowerCase() === 'billybulka') {
-            // Następny stream dostanie nową pulę. Nie kasujemy pliku tutaj —
-            // ustawBillyCmStream() nadpisze go przy nowym streamKey.
-            console.log('[Billy !cm] 🔄 Stream zakończony — następny stream dostanie nowe liczby');
           }
         }
       }
@@ -7511,7 +7258,7 @@ const YT_KANALY_ARBUZIK = [
 //  START
 // =============================================
 const startBot = async () => {
-  console.log('🚀 Uruchamiam CzituchBota (YouTube + Kick + Twitch)...\n');
+  console.log('🚀 Uruchamiam CzituchBota (YouTube + Twitch)...\n');
   console.log('[Wersja] v24.5 AI hardened — GameLore lore + GameFAQs gameplay RAG + unique Tavily source IDs + claim validator | Twitch przez Helix\n');
 
   // ---- YouTube – autoryzacja ----
@@ -7572,7 +7319,7 @@ const startBot = async () => {
   await odtworzLokatyPoStarcie();
 
   // ---- Uruchom platformy równolegle ----
-  uruchomKick();
+  // Kick: obsługa kanałów EdzziLive i ArbuzikLive została wyłączona.
   uruchomTwitch(TWITCH_CONFIG_BILLYBULKA);
   uruchomEventSubBilly();
   // Rozsunięte o 1s każdy — dodatkowe zabezpieczenie przed równoczesnymi
@@ -7582,7 +7329,7 @@ const startBot = async () => {
   setTimeout(() => youtubeWatcher(KONFIGURACJA.youtubeTargetKanal4, wyslijYoutube), 2000);
   setTimeout(() => youtubeWatcher(KONFIGURACJA.youtubeTargetKanal5, wyslijYoutube), 3000);
   setTimeout(() => youtubeWatcher(KONFIGURACJA.youtubeTargetKanal6, wyslijYoutube), 4000);
-  ekoStartScheduler(wyslijKick);
+  // Harmonogram ekonomii nie wysyła już wiadomości na Kick.
 
   console.log('\n🎉 Wszystkie platformy uruchomione!\n');
 };
