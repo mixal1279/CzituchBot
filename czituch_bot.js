@@ -4851,6 +4851,7 @@ const BILLYBULKA_KANALY = ['billybulka'];
 
 async function obslugaWiadomosci(nick, message, platforma, wyslijFn, kanal = null, nadawca = null) {
   if (!nick || !message) return;
+  await ensurePersistentCachesReady();
   if (
     nick.toLowerCase() === KONFIGURACJA.botUser.toLowerCase() ||
     nick.toLowerCase() === KONFIGURACJA.kickBotUser.toLowerCase()
@@ -6416,6 +6417,8 @@ async function pobierzStartStreamu(config = TWITCH_CONFIG_BILLYBULKA) {
 
 async function obslugaTwitch(nick, message, wyslijFn, config = TWITCH_CONFIG_BILLYBULKA, tags = {}) {
   if (!nick || !message) return;
+  await ensurePersistentCachesReady();
+  await BILLY_BAKERY.initialize(FIRESTORE_STATE);
   if (nick.toLowerCase() === config.botNick.toLowerCase()) return;
 
   const msgLower    = message.toLowerCase().trim();
