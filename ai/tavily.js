@@ -360,16 +360,27 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
     if (!stateStore?.enabled) return;
     if (cacheReadyPromise) return cacheReadyPromise;
     cacheReadyPromise = (async () => {
-      const saved = await stateStore.loadCache('tavily_search', cacheFile);
+      const [saved, rewriteSaved] = await Promise.all([
+        stateStore.loadCache('tavily_search', cacheFile),
+        stateStore.loadCache('tavily_rewrite', null),
+      ]);
       const entries = saved?.version === TAVILY_CACHE_VERSION ? saved.entries : saved;
-      if (!entries || typeof entries !== 'object' || Array.isArray(entries)) return;
       cache.clear();
-      for (const [key, value] of Object.entries(entries)) {
-        if (typeof key !== 'string' || key.length > 2048) continue;
-        if (!value || typeof value.wynik !== 'string' || value.wynik.length > 12000) continue;
-        if (value.czas && Date.now() - value.czas < (value.ttl || TAVILY_CACHE_TTL_MS)) cache.set(key, value);
+      if (entries && typeof entries === 'object' && !Array.isArray(entries)) {
+        for (const [key, value] of Object.entries(entries)) {
+          if (typeof key !== 'string' || key.length > 2048) continue;
+          if (!value || typeof value.wynik !== 'string' || value.wynik.length > 12000) continue;
+          if (value.czas && Date.now() - value.czas < (value.ttl || TAVILY_CACHE_TTL_MS)) cache.set(key, value);
+        }
+      }
+      rewriteCache.clear();
+      if (rewriteSaved && typeof rewriteSaved === 'object' && !Array.isArray(rewriteSaved)) {
+        for (const [key, value] of Object.entries(rewriteSaved)) {
+          if (typeof key === 'string' && value?.query && Date.now() - value.czas < TAVILY_REWRITE_TTL_MS) rewriteCache.set(key, value);
+        }
       }
       ograniczCacheTavily(cache);
+      while (rewriteCache.size > TAVILY_REWRITE_MAX_ENTRIES) rewriteCache.delete(rewriteCache.keys().next().value);
     })().catch(error => {
       cacheReadyPromise = null;
       logger.warn?.('[Tavily] Nie udało się wczytać cache z Firestore:', error.message);
@@ -463,6 +474,10 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
           else logger.log(`[Tavily] ↩️ Rewrite odrzucony — używam oryginalnego pytania: "${original}"`);
           rewriteCache.set(rewriteKey, { query: searchQuery, czas: Date.now() });
           if (rewriteCache.size > TAVILY_REWRITE_MAX_ENTRIES) rewriteCache.delete(rewriteCache.keys().next().value);
+          if (stateStore?.enabled) {
+            stateStore.saveCache('tavily_rewrite', Object.fromEntries(rewriteCache))
+              .catch(err => logger.warn?.('[Tavily] Zapis cache przepisywania do Firestore nieudany:', err.message));
+          }
         }
       }
       logger.log(`[Tavily] searchQuery: "${searchQuery}" | domains: ${JSON.stringify(domains)} | time_range: ${time_range}`);
