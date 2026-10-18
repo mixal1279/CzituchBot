@@ -64,14 +64,10 @@ function sprawdzSpojnoscLorePortal2(odpowiedz, pytanie) {
     && /(?:^|[^\p{L}])(?:przejął|przejęła|przejęcie|przej[aą]ł|kontrolę|władzę|wladze)(?=$|[^\p{L}])/iu.test(q);
   if (!pytaOPrzejecie) return { ok: true, unsupported: [] };
 
-  const maMechanizmTransferu = [
-    /transfer(?:ze|u|y)?\s+(?:rdzen(?:ia|i|em)?|rdzeni|ciał(?:a|o|em)?)/i,
-    /transfer(?:ze|u)?[^.!?]{0,120}\bwheatley\b[^.!?]{0,120}\bglados\b/i,
-    /\bwheatley\b[^.!?]{0,180}(?:został|zostaje|została|znalazł|znalazl|znajduje się|znajduje sie)[^.!?]{0,120}(?:w\s+)?ciel(?:e|a|u)?\s+glados\b/i,
-    /\bwheatley\b[^.!?]{0,160}(?:przejął|otrzymał)\s+(?:ciało|body)\s+glados/i,
-    /zamian(?:a|ę|ie)\s+ciał[^.!?]{0,120}\bwheatley\b/i,
-    /\bwheatley\b[^.!?]{0,160}(?:przeniesion\w*|umieszczon\w*|wprowadzon\w*|trafił|trafil|wsadzon\w*)[^.!?]{0,120}(?:w\s+|do\s+)ciał(?:e|a|o|em)\s+glados\b/i,
-  ].some(re => re.test(a));
+  // Celowo NIE wymagamy tu żadnej treści poprawnej odpowiedzi (wcześniej odpowiedź musiała opisywać
+  // „transfer rdzenia”): taki wymóg był kluczem odpowiedzi do jednego pytania i odrzucał poprawne
+  // odpowiedzi sformułowane inaczej. Ugruntowanie w źródłach sprawdza walidator. Poniższe reguły tylko
+  // odrzucają konkretne, znane fałszywe twierdzenia.
 
   const przyciskJakoBezposredniaPrzyczyna =
     /(?:przejął|przejąć|przej[aą]ł|zdobył|uzyskał|dostał|otrzymał)[^.!?]{0,180}(?:bo|ponieważ|dlatego|dzięki|przez)[^.!?]*(?:przycisk|rozwiązania?\s+(?:sytuacji\s+)?patowej|rozwiązania?\s+impasu)/i.test(a)
@@ -105,7 +101,6 @@ function sprawdzSpojnoscLorePortal2(odpowiedz, pytanie) {
   if (przyciskJakoSzansaNaUcieczke) unsupported.push('przycisk rozwiązania impasu błędnie przedstawiono jako szansę Wheatleya na ucieczkę');
   if (gladosJakoProjektantWheatleya) unsupported.push('GLaDOS błędnie przypisano zaprojektowanie lub stworzenie Wheatleya');
   if (celProjektuJakoZmniejszenieGlados) unsupported.push('cel projektu Wheatleya błędnie opisano jako bezpośrednie zmniejszanie inteligencji GLaDOS');
-  if (!maMechanizmTransferu) unsupported.push('brak opisu transferu rdzenia/zamiany ciał jako mechanizmu przejęcia kontroli');
   if (przyciskJakoBezposredniaPrzyczyna || przyciskJakoWylacznaPrzyczyna) unsupported.push('przycisk rozwiązania impasu błędnie przedstawiono jako bezpośrednią przyczynę uzyskania władzy');
   if (przypisujeObnizenieJakoPrzyczyne) unsupported.push('obniżenie inteligencji GLaDOS błędnie przedstawiono jako przyczynę przejęcia kontroli');
   if (rdzenJakoPrzyczynaPrzejecia) unsupported.push('przeznaczenie rdzenia Wheatleya błędnie przedstawiono jako przyczynę przejęcia kontroli');

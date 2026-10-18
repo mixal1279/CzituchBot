@@ -488,11 +488,12 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
       return 'zewnętrzne-niezweryfikowane';
     } catch (_) { return 'nieznane'; }
   };
-  const cacheKey = (query, domains, timeRange, sourceQuestion = '') => `${query.toLowerCase().trim()}|${(domains || []).slice().sort().join(',')}|${timeRange || ''}|${slowaKluczoweTavily(sourceQuestion).join(',')}`;
+  // Głębokość jest częścią klucza: wynik `basic` nie może obsłużyć ponownego, głębszego zapytania.
+  const cacheKey = (query, domains, timeRange, sourceQuestion = '', depth = 'basic') => `${query.toLowerCase().trim()}|${(domains || []).slice().sort().join(',')}|${timeRange || ''}|${slowaKluczoweTavily(sourceQuestion).join(',')}|${depth}`;
 
   return async function szukajTavily(pytanie, options = {}) {
     const original = String(pytanie || '').trim();
-    const { domains, time_range, _skipRewrite = false, returnMeta = false, sourceStartIndex = 0, sourceQuestion = original, remainingMs = 15000, requestState = null } = options;
+    const { domains, time_range, _skipRewrite = false, returnMeta = false, sourceStartIndex = 0, sourceQuestion = original, remainingMs = 15000, requestState = null, searchDepth = 'basic' } = options;
     try {
       let searchQuery = original;
       const rewriteKey = kluczRewrite(original);
@@ -529,7 +530,8 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
         }
       }
       logger.log(`[Tavily] searchQuery: "${searchQuery}" | domains: ${JSON.stringify(domains)} | time_range: ${time_range}`);
-      const key = cacheKey(searchQuery, domains, time_range, sourceQuestion);
+      const depth = searchDepth === 'advanced' ? 'advanced' : 'basic';
+      const key = cacheKey(searchQuery, domains, time_range, sourceQuestion, depth);
       const cached = cache.get(key);
       if (cached && Date.now() - cached.czas < (cached.ttl || TAVILY_CACHE_TTL_MS)) {
         onStatus({ status: 'cache', query: searchQuery });
@@ -548,8 +550,11 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             api_key: apiKey, query: searchQuery,
-            search_depth: historical ? 'advanced' : 'basic',
-            max_results: historical ? 10 : 7,
+            // `advanced` kosztuje 2 kredyty, więc pierwsze zapytanie jest `basic`, a głębsze dopiero
+            // przy kolejnych zapytaniach planu (słaby dowód). Wcześniej prawie każde pytanie
+            // bez zakresu czasu szło jako `advanced`.
+            search_depth: depth,
+            max_results: depth === 'advanced' ? 10 : 7,
             chunks_per_source: 3, include_answer: false,
             include_raw_content: false,
             ...(domains && { include_domains: domains }),
@@ -587,6 +592,7 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
             query: sourceQuestion || searchQuery,
             geminiKey,
             exaKey,
+            tavilyKey: apiKey,
             fetchFn: fetchZTimeout,
             startIndex: primaryResults.length,
             domains,
@@ -691,6 +697,7 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
         query: sourceQuestion || original,
         geminiKey,
         exaKey,
+        tavilyKey: apiKey,
         fetchFn: fetchZTimeout,
         startIndex: 0,
         domains,

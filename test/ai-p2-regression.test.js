@@ -20,7 +20,6 @@ test('Portal 2 lore guard receives the question context for Wheatley takeover cl
 
   const withQuestion = sprawdzTwardeFaktyOdpowiedzi(answer, '', question);
   assert.equal(withQuestion.ok, false);
-  assert.ok(withQuestion.unsupported.some(item => /mechanizmu przejęcia kontroli/.test(item)));
   assert.ok(withQuestion.unsupported.some(item => /przycisk rozwiązania impasu/.test(item)));
 
   const withoutQuestion = sprawdzTwardeFaktyOdpowiedzi(answer, '', '');

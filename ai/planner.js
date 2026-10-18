@@ -132,4 +132,18 @@ function responseContract(profile) {
   ].join('\n');
 }
 
-module.exports = { SOURCE_POLICIES, RESPONSE_PROFILES, detectResponseProfile, buildSourcePolicy, buildRetrievalQueries, planAIRequest, responseContract };
+// Rewrite zapytania modelem (Groq 20b) kosztuje wywołanie i tokeny z dziennego limitu, a pomaga
+// głównie wtedy, gdy pytanie zależy od poprzedniej wymiany („a on?”, „co z nią?”). Bez kontekstu
+// i z rozpoznaną grą/encją pytanie jest już samodzielne.
+function czyPotrzebujeRewrite(pytanie, { hasContext = false, hasEntity = false } = {}) {
+  const q = String(pytanie || '').trim();
+  if (!q) return false;
+  const words = q.split(/\s+/).length;
+  if (hasContext) {
+    const anaphora = /(?<![\p{L}])(?:on|ona|ono|oni|one|jego|jej|ich|tam|tego|tej|tych|tym|ten|ta|wtedy|wcześniej|a\s+co\s+z)(?![\p{L}])/iu.test(q);
+    return anaphora || words <= 5;
+  }
+  return !hasEntity && (q.length > 160 || words >= 25);
+}
+
+module.exports = { czyPotrzebujeRewrite, SOURCE_POLICIES, RESPONSE_PROFILES, detectResponseProfile, buildSourcePolicy, buildRetrievalQueries, planAIRequest, responseContract };

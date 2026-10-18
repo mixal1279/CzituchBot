@@ -164,11 +164,15 @@ test('skróty z kropką nie kończą zdania', () => {
   assert.equal(response.sprawdzFormatOdpowiedzi('Kosztuje ok. 100 zł. Warto kupić. Trzecie.', { maxZdania: 2 }).ok, false);
 });
 
-test('Portal 2: „GLaDOS została wyłączona” nie jest już błędem, „całkowicie wyłączona” nadal jest', () => {
+test('Portal 2: guard odrzuca znane fałszywe twierdzenia, ale nie dyktuje treści poprawnej odpowiedzi', () => {
   const q = 'Dlaczego Wheatley przejął kontrolę nad GLaDOS?';
   const base = 'Wheatley przejął kontrolę po transferze rdzenia, a GLaDOS ';
   assert.equal(response.sprawdzSpojnoscLorePortal2(`${base}została wyłączona i zastąpiona rdzeniem.`, q).ok, true);
   assert.equal(response.sprawdzSpojnoscLorePortal2(`${base}została całkowicie wyłączona.`, q).ok, false);
+  // Poprawna odpowiedź bez frazy „transfer rdzenia” nie jest już odrzucana przez guard deterministyczny.
+  assert.equal(response.sprawdzSpojnoscLorePortal2('Wheatley przejął kontrolę, gdy został umieszczony w głównym układzie zamiast GLaDOS.', q).ok, true);
+  // Znane halucynacje nadal są odrzucane.
+  assert.equal(response.sprawdzSpojnoscLorePortal2('Wheatley przejął kontrolę, bo przycisk dał mu władzę.', q).ok, false);
 });
 
 test('polskie „relikt” nie jest sygnałem gry Cyberpunk', () => {

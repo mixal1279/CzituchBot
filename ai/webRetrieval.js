@@ -143,7 +143,43 @@ async function searchExa({ apiKey, query, fetchFn = fetch, startIndex = 0, domai
   }
 }
 
-async function searchSecondaryProviders({ query, geminiKey, exaKey, fetchFn = fetch, startIndex = 0, domains = [], prefer = 'gemini', timeoutMs = 15000 }) {
+// Opcjonalnie (AI_GEMINI_EXTRACT=1): Gemini służy tylko do znalezienia stron, a ich treść pobiera
+// Tavily Extract. Dzięki temu walidator porównuje cytat z prawdziwym tekstem strony, a nie z
+// parafrazą modelu. Odpowiedź API czytamy defensywnie (kształt nieweryfikowany na żywym API).
+async function extractTavilyPages({ apiKey, urls, fetchFn = fetch, timeoutMs = 12000 }) {
+  const wanted = [...new Set((urls || []).filter(u => /^https?:\/\//i.test(String(u))))].slice(0, 3);
+  if (!apiKey || !wanted.length) return new Map();
+  try {
+    const data = await fetchJson(fetchFn, 'https://api.tavily.com/extract', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({ urls: wanted, extract_depth: 'basic' }),
+    }, Math.max(1000, Math.min(20000, Number(timeoutMs) || 12000)));
+    const out = new Map();
+    for (const item of Array.isArray(data?.results) ? data.results : []) {
+      const url = String(item?.url || '').trim();
+      const text = String(item?.raw_content || item?.content || '').trim();
+      if (url && text.length >= 200) out.set(url, text);
+    }
+    return out;
+  } catch (_) {
+    return new Map();
+  }
+}
+
+async function zastapStreszczeniaTrescia(result, { tavilyKey, fetchFn, timeoutMs, startIndex }) {
+  if (process.env.AI_GEMINI_EXTRACT !== '1' || !tavilyKey || !result?.sources?.length) return result;
+  const pages = await extractTavilyPages({ apiKey: tavilyKey, urls: result.sources.map(x => x.url), fetchFn, timeoutMs });
+  if (!pages.size) return result;
+  const sources = result.sources.map((source, i) => {
+    const page = pages.get(source.url);
+    // Po podmianie to tekst strony, więc provider przestaje być „gemini*” i źródło liczy się normalnie.
+    return page ? normalizeSource({ provider: 'tavily_extract', title: source.title, url: source.url, content: page, score: null }, i) : source;
+  });
+  return { ...result, sources, text: formatSources(sources, startIndex) };
+}
+
+async function searchSecondaryProviders({ query, geminiKey, exaKey, tavilyKey = null, fetchFn = fetch, startIndex = 0, domains = [], prefer = 'gemini', timeoutMs = 15000 }) {
   const order = prefer === 'exa'
     ? [['exa', exaKey], ['gemini', geminiKey]]
     : [['gemini', geminiKey], ['exa', exaKey]];
@@ -153,10 +189,12 @@ async function searchSecondaryProviders({ query, geminiKey, exaKey, fetchFn = fe
     const result = provider === 'exa'
       ? await searchExa({ apiKey: key, query, fetchFn, startIndex, domains, timeoutMs })
       : await searchGeminiWeb({ apiKey: key, query, fetchFn, startIndex, timeoutMs });
-    if (result.status === 'ok' && result.sources.length) return result;
+    if (result.status === 'ok' && result.sources.length) {
+      return provider === 'gemini' ? zastapStreszczeniaTrescia(result, { tavilyKey, fetchFn, timeoutMs, startIndex }) : result;
+    }
     if (result.error) errors.push(`${provider}: ${result.error}`);
   }
   return { status: 'empty', text: '', sources: [], error: errors.join('; ') };
 }
 
-module.exports = { normalizeSource, formatSources, searchGeminiWeb, searchExa, searchSecondaryProviders };
+module.exports = { normalizeSource, formatSources, searchGeminiWeb, searchExa, searchSecondaryProviders, extractTavilyPages };

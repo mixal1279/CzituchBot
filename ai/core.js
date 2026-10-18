@@ -263,6 +263,10 @@ function buildRetrievalPlan(question, routing = {}, options = {}) {
   }));
 }
 
+function czyStreszczenieModelu(source) {
+  return /^gemini/i.test(String(source?.provider || ''));
+}
+
 function assessEvidence(results = [], question, routing = {}) {
   const normalized = (Array.isArray(results) ? results : [])
     .filter(Boolean)
@@ -298,11 +302,15 @@ function assessEvidence(results = [], question, routing = {}) {
 
   // Niezależne potwierdzenie musi pochodzić ze źródeł trafnych. Wcześniej nietrafne źródło
   // z drugiej domeny wystarczało, żeby „weak” zamienić w „usable”/„strong”.
-  const evidenceHosts = new Set([...strong, ...relevant].map(x => x.host).filter(Boolean));
+  // „Źródła” z Gemini grounding to wycinki odpowiedzi modelu z przypisanym URL-em, a nie tekst
+  // strony. Mogą być trafne, ale nie są niezależnym potwierdzeniem.
+  const independent = x => !czyStreszczenieModelu(x);
+  const strongIndependent = strong.filter(independent);
+  const evidenceHosts = new Set([...strongIndependent, ...relevant.filter(independent)].map(x => x.host).filter(Boolean));
 
   let status = 'weak';
-  if (strong.length >= 2 && evidenceHosts.size >= 2 && relevant.length >= 2) status = 'strong';
-  else if (strong.length >= 1 && relevant.length >= 1 && evidenceHosts.size >= 2) status = 'usable';
+  if (strongIndependent.length >= 2 && evidenceHosts.size >= 2 && relevant.length >= 2) status = 'strong';
+  else if (strongIndependent.length >= 1 && relevant.length >= 1 && evidenceHosts.size >= 2) status = 'usable';
 
   return {
     status,
@@ -310,6 +318,7 @@ function assessEvidence(results = [], question, routing = {}) {
     sourceCount: selected.length,
     independentHosts: hosts.size,
     relevantHosts: evidenceHosts.size,
+    modelSummarySources: selected.filter(czyStreszczenieModelu).length,
     strongSources: strong.length,
     relevantSources: relevant.length,
     coverageScore: Number(Math.min(1,

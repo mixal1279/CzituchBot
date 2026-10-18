@@ -99,11 +99,17 @@ const UNIT_ALIASES = new Map([
   ['m','m'], ['meter','m'], ['meters','m'], ['metr','m'], ['metry','m'], ['metrów','m'],
   ['kg','kg'], ['kilogram','kg'], ['kilograms','kg'], ['kilogramów','kg'],
   ['gb','gb'], ['mb','mb'], ['tb','tb'], ['hz','hz'], ['fps','fps'],
+  // Pozostałe przypadki: „po 5 minutach”, „przez godzinę”, „w 10 sekund”, „w 3 dniach”, „od 2 lat”.
+  ['minutę','minute'], ['minucie','minute'], ['minutach','minute'], ['minutami','minute'], ['minutom','minute'],
+  ['godzinę','hour'], ['godzinie','hour'], ['godzinach','hour'], ['godzinami','hour'], ['godzinom','hour'],
+  ['sekundę','second'], ['sekundzie','second'], ['sekundach','second'], ['sekundami','second'], ['sekundom','second'],
+  ['dniach','day'], ['dniami','day'],
+  // Celowo bez „roku”, „latach” i „dniu”: „z 2013 roku”, „w latach 2010”, „w dniu 5 maja” to daty, nie wartości z jednostką.
   ['°c','celsius'], ['°f','fahrenheit'], ['zł','pln'], ['pln','pln'], ['usd','usd'], ['eur','eur'], ['%','percent'],
 ]);
 function wyodrebnijJednostkoweWartosci(value) {
   const text = String(value || '').toLocaleLowerCase('pl-PL').replace(/,/g, '.');
-  const unitPattern = '(?:°c|°f|%|zł|pln|usd|eur|gb|mb|tb|hz|fps|km|kg|h|hr|hrs|sec|mins?|hours?|minutes?|seconds?|godzin(?:a|y)?|godz|minut(?:a|y)?|sekund(?:a|y)?|days?|dzień|dni|dnia|years?|rok|lata|lat|kilometers?|kilometr(?:ów|y)?|meters?|metr(?:ów|y)?|kilograms?|kilogramów)';
+  const unitPattern = '(?:' + [...UNIT_ALIASES.keys()].filter(k => k !== 'm' && k !== 's').sort((a, b) => b.length - a.length).map(k => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|') + ')';
   const out = [];
   const re = new RegExp(`(?:\\b(\\d+(?:\\.\\d+)?)\\s*(${unitPattern})(?=$|[^\\p{L}\\p{N}])|(${unitPattern})(?=$|[^\\p{L}\\p{N}])\\s*(\\d+(?:\\.\\d+)?))`, 'giu');
   for (const m of text.matchAll(re)) {
@@ -474,4 +480,47 @@ function sprawdzPokrycieClaimamiOdpowiedzi(answer, claims) {
 function czyDowodSemantyczniePokrywaClaim(evidence, claim, options = {}) {
   return zgodnoscStrukturalna(evidence, claim, options).ok;
 }
-module.exports = { normalizujClaim, tokenyClaim, czyRelacjaPrzyczynowaPokrywaClaim, wyodrebnijLiczbyIDaty, wyodrebnijJednostkoweWartosci, wyodrebnijNazwyWlasne, zgodnoscStrukturalna, sprawdzTwardeKonflikty, sprawdzSprzecznosciSemantyczne, dopasowanieSemantyczne, sprawdzPokrycieClaimamiOdpowiedzi, czyDowodSemantyczniePokrywaClaim, tokenyPokrywajaSie };
+// --- Tłumaczenie claimu (claim_en) -------------------------------------------------------------
+// Polski claim kontra angielskie źródło dawał pokrycie leksykalne ~0,25, bo wspólne są tylko nazwy
+// własne. Walidator zwraca więc dodatkowo claim_en i twarde kontrole (liczby, nazwy, negacja,
+// przyczyna) robimy w jednym języku. Tłumaczenie pisze jednak model, więc nie wolno mu ufać:
+// musi zgadzać się z oryginałem w tym, co da się sprawdzić mechanicznie.
+const EN_FUNCTION_WORDS = /(?<![\p{L}])(?:the|of|and|is|was|were|are|to|in|for|with|that|he|she|his|her|by|on|as|at|it|its|from|after|before|during|has|had|have|an|this|these|those|their|be|been|not|which|who|can|will|may|only|also|than|then|but|or|if|when|where|lasts?|takes?|does|did)(?![\p{L}])/giu;
+// Polskie słowa funkcyjne: ich obecność wyklucza tekst angielski nawet bez znaków diakrytycznych.
+const PL_FUNCTION_WORDS = /(?<![\p{L}])(?:jest|się|sie|nie|że|ze|przez|oraz|który|która|które|jego|jej|ich|dla|od|po|ale|czy|gdy|bo|są|był|była|było|jak|trwa|walka|gra|gdzie)(?![\p{L}])/iu;
+
+function wyglądaNaAngielski(text) {
+  const t = String(text || '');
+  if (/[ąćęłńóśźżĄĆĘŁŃÓŚŹŻ]/.test(t)) return false;
+  if (PL_FUNCTION_WORDS.test(t)) return false;
+  // Krótki claim typu „Malenia defeated Radahn.” nie ma słów funkcyjnych, ale też nie ma polskich.
+  return (t.match(EN_FUNCTION_WORDS) || []).length >= 1 || t.trim().split(/\s+/).length >= 3;
+}
+
+function zbiorRowny(a, b) {
+  const sa = new Set(a); const sb = new Set(b);
+  return sa.size === sb.size && [...sa].every(x => sb.has(x));
+}
+
+function spojnoscTlumaczeniaClaimu(claimPl, claimEn) {
+  const pl = String(claimPl || '').trim();
+  const en = String(claimEn || '').trim();
+  if (!pl || !en) return { ok: false, reason: 'brak tłumaczenia claimu' };
+  if (en.length > pl.length * 3 + 60) return { ok: false, reason: 'tłumaczenie claimu jest nieproporcjonalnie długie' };
+  if (!wyglądaNaAngielski(en)) return { ok: false, reason: 'claim_en nie wygląda na tekst angielski' };
+  if (!zbiorRowny(wyodrebnijLiczbyIDaty(pl), wyodrebnijLiczbyIDaty(en))) {
+    return { ok: false, reason: 'tłumaczenie claimu zmienia liczby lub daty' };
+  }
+  if (!zbiorRowny(wyodrebnijJednostkoweWartosci(pl), wyodrebnijJednostkoweWartosci(en))) {
+    return { ok: false, reason: 'tłumaczenie claimu zmienia jednostki lub wartości' };
+  }
+  if (wyodrebnijMarkery(pl, NEGATION_RE) !== wyodrebnijMarkery(en, NEGATION_RE)) {
+    return { ok: false, reason: 'tłumaczenie claimu zmienia negację' };
+  }
+  const enNormalized = normalizujClaim(en);
+  const missing = wyodrebnijNazwyWlasne(pl).filter(name => !czyNazwaWlasnaWystepuje(name, enNormalized));
+  if (missing.length) return { ok: false, reason: 'tłumaczenie claimu gubi nazwy własne: ' + missing.slice(0, 3).join(', ') };
+  return { ok: true };
+}
+
+module.exports = { CAUSAL_RE, wyglądaNaAngielski, spojnoscTlumaczeniaClaimu, normalizujClaim, tokenyClaim, czyRelacjaPrzyczynowaPokrywaClaim, wyodrebnijLiczbyIDaty, wyodrebnijJednostkoweWartosci, wyodrebnijNazwyWlasne, zgodnoscStrukturalna, sprawdzTwardeKonflikty, sprawdzSprzecznosciSemantyczne, dopasowanieSemantyczne, sprawdzPokrycieClaimamiOdpowiedzi, czyDowodSemantyczniePokrywaClaim, tokenyPokrywajaSie };

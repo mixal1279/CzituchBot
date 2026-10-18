@@ -42,6 +42,9 @@ function normalizeValue(key, value) {
 }
 
 function makeRecord({ key, value, userId, sourceMessageId, now = Date.now() }) {
+  // Bez identyfikatora użytkownika nie zapisujemy nic: wcześniej wszystkie takie wpisy trafiały do
+  // wspólnego koszyka „unknown” i były widoczne dla każdego użytkownika bez ID.
+  if (!String(userId || '').trim()) return null;
   const normalized = normalizeValue(key, value);
   if (!normalized) return null;
   return {

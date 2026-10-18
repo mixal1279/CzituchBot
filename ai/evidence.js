@@ -44,7 +44,10 @@ function parseEvidenceBlocks(data) {
     const markedContent = block.match(/TREŚĆ:\s*<<<UNTRUSTED_SOURCE_CONTENT>>>\s*([\s\S]*?)<<<END_UNTRUSTED_SOURCE_CONTENT>>>/i)?.[1];
     const rawContent = markedContent ?? block;
     const content = removeLeadingSourceMetadataNoise(rawContent);
-    return { sourceId: match[1].trim(), title: block.match(/TYTUŁ:\s*([^\r\n]+)/i)?.[1] || '', url: block.match(/URL:\s*(https?:\/\/[^\s\r\n]+)/i)?.[1] || '', content };
+    // PROVIDER czytamy tylko z nagłówka (przed treścią), żeby strona nie mogła go podrobić.
+    const header = block.split(/TREŚĆ:/i)[0];
+    const provider = header.match(/^\s*PROVIDER:\s*([^\r\n]+)/im)?.[1]?.trim();
+    return { sourceId: match[1].trim(), title: block.match(/TYTUŁ:\s*([^\r\n]+)/i)?.[1] || '', url: block.match(/URL:\s*(https?:\/\/[^\s\r\n]+)/i)?.[1] || '', content, ...(provider ? { provider } : {}) };
   });
 }
 

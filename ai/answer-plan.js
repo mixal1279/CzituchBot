@@ -107,7 +107,11 @@ function extractAnswerSignals(answer) {
     when: /\b(?:1\d{3}|20\d{2})\b|\b(?:po|przed|podczas|w trakcie|pod koniec|na poczatku)\s+\w+|\b(?:w|od|do)\s+(?:styczniu|lutym|marcu|kwietniu|maju|czerwcu|lipcu|sierpniu|wrzesniu|pazdzierniku|listopadzie|grudniu)\b|\b(?:wtedy|nastepnie|pozniej|wcześniej|wczesniej)\b/.test(text),
     where,
     location: where,
-    who: /\b(?:jest|sa|byl|byla|byli|jako|osoba|postac|gracz|autor|tworca|bohater)\b/.test(text)
+    // Po polsku typowa definicja to „X to Y” („Astarion to wampirzy łotrzyk”), nie tylko „X jest Y”.
+    who: (/\b(?:jest|sa|byl|byla|byli|jako|osoba|postac|gracz|autor|tworca|bohater)\b/.test(text)
+      || /\b\w{3,}\s+to\s+\w{4,}/.test(text)
+      || /\b(?:jeden|jedna|jedno)\s+z\b/.test(text)
+      || /\b(?:towarzysz\w*|czlonek|czlonkini|przywodc\w*|dowodc\w*|zalozyciel\w*|wlasciciel\w*|antagonist\w*|protagonist\w*|zloczyn\w*|sojusznik\w*)\b/.test(text))
       && !/^\s*(?:to|jest)\s+(?:posta[cć]|osoba)\b/.test(text),
     quantity: /\b\d+(?:[.,]\d+)?\s*(?:godzin|godz|h|min|sekund|dni|lat|%|gb|mb|tb|zł|pln|usd|eur)?\b/.test(text),
     comparison: /\b(roznic\w*|rozni\w*|wiecej|mniej|leps\w*|gors\w*|natomiast|podobn\w*|vs|versus|z kolei|w przeciwienstwie|podczas gdy|tymczasem|zas|odmienn\w*|bardziej)\b/.test(text)

@@ -4,7 +4,7 @@
 const { assessEvidence } = require('./core');
 
 const { sprawdzTwardeFaktyOdpowiedzi } = require('./response');
-const { czyDowodSemantyczniePokrywaClaim, czyRelacjaPrzyczynowaPokrywaClaim, zgodnoscStrukturalna, sprawdzTwardeKonflikty, sprawdzSprzecznosciSemantyczne, sprawdzPokrycieClaimamiOdpowiedzi } = require('./claimValidation');
+const { czyDowodSemantyczniePokrywaClaim, czyRelacjaPrzyczynowaPokrywaClaim, zgodnoscStrukturalna, sprawdzTwardeKonflikty, sprawdzSprzecznosciSemantyczne, sprawdzPokrycieClaimamiOdpowiedzi, spojnoscTlumaczeniaClaimu, wyglądaNaAngielski, CAUSAL_RE } = require('./claimValidation');
 const { parseEvidenceBlocks, quoteExists, rankEvidenceForClaim, buildEvidenceRepairContext } = require('./evidence');
 
 // Kontrakt walidatora jest celowo mały: generator potrzebuje tylko jasnego
@@ -30,6 +30,8 @@ const GEMINI_VALIDATOR_JSON_SCHEMA = {
           supported: { type: 'boolean' },
           source_ids: { type: 'array', items: { type: 'string' } },
           evidence_quote: { type: 'string' },
+          // Opcjonalne: angielskie tłumaczenie claimu, gdy evidence_quote jest po angielsku.
+          claim_en: { type: 'string' },
           reason: { type: 'string' },
         },
         required: ['claim', 'supported', 'source_ids', 'evidence_quote', 'reason'],
@@ -173,7 +175,13 @@ function normalizujIdZrodla(value) {
   return raw;
 }
 
-function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '') {
+function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '', options = {}) {
+  // Twarde kontrole robimy na angielskim tłumaczeniu claimu tylko wtedy, gdy cytat jest po angielsku,
+  // a tłumaczenie przeszło mechaniczną kontrolę zgodności z polskim oryginałem.
+  if (options.claimEn && typeof evidenceQuote === 'string' && wyglądaNaAngielski(evidenceQuote)) {
+    const consistency = spojnoscTlumaczeniaClaimu(claim, options.claimEn);
+    if (consistency.ok) claim = String(options.claimEn);
+  }
   if (!Array.isArray(sourceIds) || !sourceIds.length || typeof evidenceQuote !== 'string') {
     return { ok: false, reason: 'brak poprawnego source_id lub evidence_quote' };
   }
@@ -187,7 +195,8 @@ function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '') {
   const quoteNorm = claimNorm ? String(quote).toLocaleLowerCase('pl-PL')
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/ł/g, 'l') : '';
 
-  const causalRe = /(?:\b(?:bo|poniewaz|gdyz|dlatego|because|therefore|caused|causes|consequently|hence)\b|\b(?:as\s+a\s+result|led\s+to|leading\s+to|resulted\s+in|resulting\s+in|because\s+of|due\s+to|so\s+that|in\s+order\s+to|thereby|thus)\b|\b(?:allow(?:s|ed|ing)?|enabl(?:e|es|ed|ing)|which\s+(?:let|lets|allowed|allows|enabled|enables)|putting\s+(?:him|her|them|it)\s+in\s+control)\b|\bz\s+powodu\b|\bdzieki\b|\bspowodow\w*\b|\bdoprowadz\w*\b|\bumozliw\w*\b)/iu;
+  // Jedna wspólna lista znaczników przyczyny (wcześniej druga kopia tu rozjeżdżała się z claimValidation.js).
+  const causalRe = CAUSAL_RE;
   const claimCausal = causalRe.test(claimNorm);
   const quoteCausal = causalRe.test(quoteNorm);
 
@@ -327,6 +336,7 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
       ? claim.source_ids.filter(v => typeof v === 'string' && v.trim()).flatMap(v => { const normalized = normalizujIdZrodla(v); return Array.isArray(normalized) ? normalized : [normalized]; }).map(v => v.slice(0, 80)).slice(0, 5)
       : [],
     evidence_quote: typeof claim?.evidence_quote === 'string' ? claim.evidence_quote.trim().slice(0, 500) : '',
+    claim_en: typeof claim?.claim_en === 'string' ? claim.claim_en.trim().slice(0, 600) : '',
     reason: typeof claim?.reason === 'string' ? claim.reason.trim().slice(0, 240) : '',
   })).filter(c => c.claim);
 
@@ -364,7 +374,7 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
   );
 
   const evidenceEvaluations = claims.map((c, index) =>
-    czyDowodPotwierdzaClaim(dane, effectiveClaimSourceIds[index], c.evidence_quote, c.claim)
+    czyDowodPotwierdzaClaim(dane, effectiveClaimSourceIds[index], c.evidence_quote, c.claim, { claimEn: c.claim_en })
   );
   const evidenceQuoteVerified = evidenceEvaluations.map(result => result.ok);
   const claimSourceVerified = evidenceEvaluations.map(result => result.ok);
@@ -517,11 +527,16 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
   if (maStarePola && wynik.complete !== true) localRejectReasons.push('model_marked_incomplete');
   if (maStarePola && wynik.hallucination !== false) localRejectReasons.push('model_flagged_hallucination');
 
-  // Partial/soft acceptance is intentionally disabled: every accepted response
-  // must satisfy the complete local evidence contract.
+  // Domyślnie częściowa akceptacja jest wyłączona: każda zaakceptowana odpowiedź musi spełniać
+  // pełny lokalny kontrakt dowodowy. Tryb opt-in (AI_ALLOW_PARTIAL_ANSWERS=1) odpowiada wyłącznie
+  // claimami z lokalnie zweryfikowanym cytatem, z zachowaniem wszystkich progów powyżej
+  // (confidence, liczby/daty, negacje, nieznane źródła, format). Pozostałe twierdzenia są pomijane.
+  const softAccepted = !accepted && process.env.AI_ALLOW_PARTIAL_ANSWERS === '1' && partialAccepted;
   const status = accepted
     ? 'accepted'
-    : (sprzecznyWerdykt || niekompletnyPozytywnyWerdykt ? 'inconclusive' : 'rejected');
+    : (softAccepted
+      ? 'soft_accepted'
+      : (sprzecznyWerdykt || niekompletnyPozytywnyWerdykt ? 'inconclusive' : 'rejected'));
   if (!localRejectReasons.length && !accepted) localRejectReasons.push('local_contract_not_satisfied');
   const diagnostics = {
     contractAccepted: accepted,
@@ -582,7 +597,7 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
     status,
     ok: accepted,
     valid: accepted,
-    partialAnswer: null,
+    partialAnswer: softAccepted ? partialAnswerCandidate : null,
     technicalError: false,
     provider,
     model,
