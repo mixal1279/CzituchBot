@@ -4822,8 +4822,6 @@ async function obslugaWiadomosci(nick, message, platforma, wyslijFn, kanal = nul
 
   if (ostatnieUzycie[cooldownKey] && teraz - ostatnieUzycie[cooldownKey] < KONFIGURACJA.cooldown) return;
 
-  // ---- Bufor czatu ----
-  dodajDoBufora(nick, `${platforma}:${kanalNorm || 'brak-kanalu'}`);
 
   // ---- Kick: zmiana tytułu / kategorii streamu (tylko moderatorzy/broadcaster) ----
   if (platforma === 'kick' && (msgLower === '!tytul' || msgLower.startsWith('!tytul ') || msgLower === '!kategoria' || msgLower.startsWith('!kategoria '))) {
