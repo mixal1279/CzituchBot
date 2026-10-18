@@ -154,11 +154,10 @@ function createFirestoreState(db, options = {}) {
     }
 
     if (stored && legacy && JSON.stringify(legacy) !== JSON.stringify(stored)) {
-      // Keep a mismatching local file and use it for this run rather than
-      // overwriting either copy: a refresh-token rotation may have happened
-      // while one storage backend was temporarily unavailable.
-      logger.warn?.('[Firestore state] Token lokalny różni się od Firestore; zachowuję plik do czasu udanego odświeżenia:', provider);
-      return legacy;
+      // Firestore is canonical once it can be decrypted. Keep the local file as a
+      // backup, but do not prefer a possibly stale refresh token.
+      logger.warn?.('[Firestore state] Token lokalny różni się od Firestore; używam Firestore, a plik zachowuję jako kopię zapasową:', provider);
+      return stored;
     }
 
     if (legacy && !stored) {
@@ -167,8 +166,12 @@ function createFirestoreState(db, options = {}) {
       if (JSON.stringify(verified) !== JSON.stringify(legacy)) {
         throw new Error('Weryfikacja migracji tokenu OAuth nie powiodła się.');
       }
-      await fs.promises.unlink(file);
-      logger.info?.('[Firestore state] Token OAuth przeniesiony do Firestore:', provider);
+      try {
+        await fs.promises.unlink(file);
+        logger.info?.('[Firestore state] Token OAuth przeniesiony do Firestore:', provider);
+      } catch (error) {
+        if (error.code !== 'ENOENT') logger.warn?.('[Firestore state] Token zapisany i zweryfikowany, ale nie usunięto starego pliku:', error.message);
+      }
       return verified;
     }
 
