@@ -266,7 +266,35 @@ test('benchmark validator traces expose answer and source-bound claims only in l
       quoteVerified: true,
       supportVerified: true,
       supportReason: 'cytat występuje w źródle i bezpośrednio wspiera claim',
+      ignoredSentenceInitialNames: ['Wheatley'],
     });
+  } finally {
+    if (original === undefined) delete process.env.AI_LIVE_BENCHMARK;
+    else process.env.AI_LIVE_BENCHMARK = original;
+  }
+});
+
+test('validator name oracle keeps a source-backed sentence-initial entity required', () => {
+  const original = process.env.AI_LIVE_BENCHMARK;
+  const data = '[SOURCE 1]\nTREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>\nThey are discussing a transfer, and Wheatley controls the facility.\n<<<END_UNTRUSTED_SOURCE_CONTENT>>>';
+  const answer = 'Wheatley przejął kontrolę nad obiektem.';
+  const modelResult = {
+    valid: true, reason: 'ok', unsupported_claims: [], supported: true, relevant: true, complete: true,
+    hallucination: false, confidence: 0.95,
+    claims: [{
+      claim: answer,
+      claim_en: 'Wheatley controls the facility.',
+      supported: true,
+      source_ids: ['SOURCE 1'],
+      evidence_quote: 'They are discussing a transfer, and Wheatley controls the facility.',
+    }],
+  };
+  try {
+    process.env.AI_LIVE_BENCHMARK = '1';
+    const result = normalizujWynikWalidatora(modelResult, 'test-model', 'test', new Set(['SOURCE 1']), data, answer);
+    assert.equal(result.status, 'accepted', JSON.stringify(result.diagnostics));
+    assert.equal(result.diagnostics.evidenceBindings[0].supportVerified, true);
+    assert.deepEqual(result.diagnostics.benchmarkTrace.claims[0].ignoredSentenceInitialNames, []);
   } finally {
     if (original === undefined) delete process.env.AI_LIVE_BENCHMARK;
     else process.env.AI_LIVE_BENCHMARK = original;

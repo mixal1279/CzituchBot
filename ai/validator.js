@@ -4,7 +4,7 @@
 const { assessEvidence } = require('./core');
 
 const { sprawdzTwardeFaktyOdpowiedzi } = require('./response');
-const { czyDowodSemantyczniePokrywaClaim, czyRelacjaPrzyczynowaPokrywaClaim, zgodnoscStrukturalna, sprawdzTwardeKonflikty, sprawdzSprzecznosciSemantyczne, sprawdzPokrycieClaimamiOdpowiedzi, spojnoscTlumaczeniaClaimu, wyglądaNaAngielski, CAUSAL_RE } = require('./claimValidation');
+const { czyDowodSemantyczniePokrywaClaim, czyRelacjaPrzyczynowaPokrywaClaim, zgodnoscStrukturalna, sprawdzTwardeKonflikty, sprawdzSprzecznosciSemantyczne, sprawdzPokrycieClaimamiOdpowiedzi, spojnoscTlumaczeniaClaimu, zbudujWyroczniaNazw, wyglądaNaAngielski, CAUSAL_RE } = require('./claimValidation');
 const { parseEvidenceBlocks, quoteExists, rankEvidenceForClaim, buildEvidenceRepairContext } = require('./evidence');
 
 // Kontrakt walidatora jest celowo mały: generator potrzebuje tylko jasnego
@@ -30,7 +30,7 @@ const GEMINI_VALIDATOR_JSON_SCHEMA = {
           supported: { type: 'boolean' },
           source_ids: { type: 'array', items: { type: 'string' } },
           evidence_quote: { type: 'string' },
-          // Opcjonalne: angielskie tłumaczenie claimu, gdy evidence_quote jest po angielsku.
+          // Angielskie tłumaczenie claimu; pusty string, gdy evidence_quote nie jest po angielsku.
           claim_en: { type: 'string' },
           reason: { type: 'string' },
         },
@@ -176,10 +176,16 @@ function normalizujIdZrodla(value) {
 }
 
 function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '', options = {}) {
+  const blocks = parseEvidenceBlocks(dane);
+  const nameOracle = options.nameOracle instanceof Set ? options.nameOracle : zbudujWyroczniaNazw(blocks);
+  const ignoredSentenceInitialNames = new Set();
+  const collectIgnoredNames = result => {
+    for (const token of result?.ignoredSentenceInitialNames || []) ignoredSentenceInitialNames.add(token);
+  };
   // Twarde kontrole robimy na angielskim tłumaczeniu claimu tylko wtedy, gdy cytat jest po angielsku,
   // a tłumaczenie przeszło mechaniczną kontrolę zgodności z polskim oryginałem.
   if (options.claimEn && typeof evidenceQuote === 'string' && wyglądaNaAngielski(evidenceQuote)) {
-    const consistency = spojnoscTlumaczeniaClaimu(claim, options.claimEn);
+    const consistency = spojnoscTlumaczeniaClaimu(claim, options.claimEn, { nameOracle });
     if (consistency.ok) claim = String(options.claimEn);
   }
   if (!Array.isArray(sourceIds) || !sourceIds.length || typeof evidenceQuote !== 'string') {
@@ -216,7 +222,6 @@ function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '', opt
   // around the exact quote; do not allow distant text on the same page to support
   // an otherwise ungrounded claim.
 
-  const blocks = parseEvidenceBlocks(dane);
   const byId = new Map(blocks.map(block => [block.sourceId, block]));
   const reasons = [];
 
@@ -261,7 +266,7 @@ function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '', opt
       reasons.push('claim dodaje relację przyczynową nieobecną w kontekście cytatu: ' + id);
       continue;
     }
-    if (claimCausal && !quoteCausal && !czyRelacjaPrzyczynowaPokrywaClaim(verificationContext, claim)) {
+    if (claimCausal && !quoteCausal && !czyRelacjaPrzyczynowaPokrywaClaim(verificationContext, claim, { nameOracle })) {
       reasons.push('kontekst zawiera sygnał przyczynowy, ale nie wiąże go bezpośrednio z claimem: ' + id);
       continue;
     }
@@ -269,9 +274,11 @@ function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '', opt
     const quoteStructural = zgodnoscStrukturalna(quote, claim, {
       allowCrossLanguageExactEvidence: true,
       allowDistributedEvidence: false,
+      nameOracle,
     });
+    collectIgnoredNames(quoteStructural);
     if (quoteStructural.ok) {
-      return { ok: true, sourceId: id, mode: 'exact_quote', reason: 'cytat występuje w źródle i bezpośrednio wspiera claim' };
+      return { ok: true, sourceId: id, mode: 'exact_quote', reason: 'cytat występuje w źródle i bezpośrednio wspiera claim', ignoredSentenceInitialNames: [...ignoredSentenceInitialNames] };
     }
 
     // Bounded same-source synthesis supports local anaphora and facts stated in
@@ -281,13 +288,16 @@ function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '', opt
       const contextStructural = zgodnoscStrukturalna(sourceContext, claim, {
         allowCrossLanguageExactEvidence: true,
         allowDistributedEvidence: true,
+        nameOracle,
       });
+      collectIgnoredNames(contextStructural);
       if (contextStructural.ok) {
         return {
           ok: true,
           sourceId: id,
           mode: 'source_context',
           reason: 'claim jest wsparty przez cytat i jego lokalny kontekst w tym samym źródle',
+          ignoredSentenceInitialNames: [...ignoredSentenceInitialNames],
         };
       }
       reasons.push(contextStructural.reason || quoteStructural.reason || 'kontekst cytatu nie potwierdza claimu');
@@ -296,7 +306,7 @@ function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '', opt
     }
   }
 
-  return { ok: false, reason: reasons[0] || 'brak zweryfikowanego evidence' };
+  return { ok: false, reason: reasons[0] || 'brak zweryfikowanego evidence', ignoredSentenceInitialNames: [...ignoredSentenceInitialNames] };
 }
 
 function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSourceIds = null, dane = '', answer = '') {
@@ -349,6 +359,7 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
   // If the model picked the wrong ID, allow a unique exact match in this request's
   // authorized evidence pool. Every rebound claim still passes local semantic checks.
   const parsedEvidenceBlocks = parseEvidenceBlocks(dane);
+  const nameOracle = zbudujWyroczniaNazw(parsedEvidenceBlocks);
   const allowedBlocks = allowed
     ? parsedEvidenceBlocks.filter(block => allowed.has(block.sourceId))
     : parsedEvidenceBlocks;
@@ -374,7 +385,7 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
   );
 
   const evidenceEvaluations = claims.map((c, index) =>
-    czyDowodPotwierdzaClaim(dane, effectiveClaimSourceIds[index], c.evidence_quote, c.claim, { claimEn: c.claim_en })
+    czyDowodPotwierdzaClaim(dane, effectiveClaimSourceIds[index], c.evidence_quote, c.claim, { claimEn: c.claim_en, nameOracle })
   );
   // Rozdzielamy dwie rzeczy, które wcześniej były jedną zmienną: (1) czy cytat w ogóle występuje
   // dosłownie we wskazanym źródle, (2) czy cały dowód przeszedł lokalne bramki (negacja, nazwy, liczby...).
@@ -589,13 +600,14 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
           // claim_en i wynik mechanicznej kontroli spójności: widać, czy model w ogóle zwraca tłumaczenie
           // i czy odpada ono na liczbach/negacji/nazwach, zanim trafi do twardych bramek.
           claimEn: String(claim.claim_en || '').slice(0, 600),
-          claimEnConsistency: claim.claim_en ? spojnoscTlumaczeniaClaimu(claim.claim, claim.claim_en) : null,
+          claimEnConsistency: claim.claim_en ? spojnoscTlumaczeniaClaimu(claim.claim, claim.claim_en, { nameOracle }) : null,
           supported: claim.supported === true,
           sourceIds: Array.isArray(claim.source_ids) ? claim.source_ids : [],
           evidenceQuote: String(claim.evidence_quote || '').slice(0, 500),
           quoteVerified: Boolean(evidenceQuoteVerified[index]),
           supportVerified: Boolean(evidenceEvaluations[index]?.ok),
           supportReason: evidenceEvaluations[index]?.reason || null,
+          ignoredSentenceInitialNames: evidenceEvaluations[index]?.ignoredSentenceInitialNames || [],
         })),
       },
     } : {}),

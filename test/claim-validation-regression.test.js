@@ -4,6 +4,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
   wyodrebnijNazwyWlasne,
+  zbudujWyroczniaNazw,
+  dopasowanieSemantyczne,
   zgodnoscStrukturalna,
   sprawdzSprzecznosciSemantyczne,
   sprawdzTwardeKonflikty,
@@ -32,6 +34,42 @@ test('real first-word names Artur and Arthur remain detectable', () => {
   assert.ok(wyodrebnijNazwyWlasne('Artur opuścił miasto.').includes('artur'));
   assert.ok(wyodrebnijNazwyWlasne('Arthur opuścił miasto.').includes('arthur'));
   assert.ok(wyodrebnijNazwyWlasne('Dodatkowo Alex ma zielone oczy.').includes('alex'));
+});
+
+test('name oracle preserves source-backed sentence-initial names and filters ordinary Polish starters', () => {
+  const nameOracle = zbudujWyroczniaNazw([{ content: '…and Wheatley is put in its place…' }]);
+  assert.ok(wyodrebnijNazwyWlasne('Wheatley przejął kontrolę.', { nameOracle }).includes('wheatley'));
+  const ordinary = wyodrebnijNazwyWlasne('Miecz znajduje się w wózku. Najpierw użyj Dragonrend.', { nameOracle });
+  assert.equal(ordinary.includes('miecz'), false);
+  assert.equal(ordinary.includes('najpierw'), false);
+  assert.deepEqual([...nameOracle], ['wheatley']);
+});
+
+test('name oracle matches Polish inflection variants of source-backed names', () => {
+  const nameOracle = zbudujWyroczniaNazw([{ content: '…and Wheatley is put in its place…' }]);
+  assert.ok(wyodrebnijNazwyWlasne('Wheatleya opisano w źródle.', { nameOracle }).includes('wheatleya'));
+  assert.ok(zbudujWyroczniaNazw([{ content: 'The source names Wheatley.' }]).has('wheatley'));
+  const extras = zbudujWyroczniaNazw([], ['Bloody Baron']);
+  assert.ok(extras.has('bloody'));
+  assert.ok(extras.has('baron'));
+});
+
+test('known limitation: an invented sentence-initial name is ignored, while an internal acronym remains a name', () => {
+  const nameOracle = zbudujWyroczniaNazw([{ content: 'GLaDOS was discussed later in the source.' }]);
+  const names = wyodrebnijNazwyWlasne('Zorblax usunął głowę GLaDOS.', { nameOracle });
+  assert.equal(names.includes('zorblax'), false);
+  assert.equal(names.includes('glados'), true);
+});
+
+test('semantic matching reports ignored sentence-initial names for benchmark diagnostics', () => {
+  const nameOracle = zbudujWyroczniaNazw([{ content: '…and Wheatley is put in its place…' }]);
+  const result = dopasowanieSemantyczne(
+    'Wheatley controls the facility.',
+    'Zorblax controls the facility.',
+    { nameOracle },
+  );
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.ignoredSentenceInitialNames, ['Zorblax']);
 });
 
 test('apostrophe and Polish inflection variants match source name tokens', () => {

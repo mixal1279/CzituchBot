@@ -130,7 +130,7 @@ function wyodrebnijJednostkoweWartosci(value) {
   }
   return [...new Set(out)];
 }
-function wyodrebnijNazwyWlasne(value) {
+function wyodrebnijNazwyWlasne(value, options = {}) {
   const raw = String(value || '');
   // Pomijamy częste słowa opisowe na początku zdania, ale nie imiona.
   // Wcześniejsze wykluczenie Artur/Arthur odrzucało poprawne nazwy własne.
@@ -172,12 +172,25 @@ function wyodrebnijNazwyWlasne(value) {
   }
   const sentenceRe = /(^|[.!?]\s*)([^.!?]*)(?=[.!?]|$)/gu;
   const capitalizedRe = /(?<![\p{L}\p{N}_])[A-ZĄĆĘŁŃÓŚŹŻ][\p{L}\d'’.-]*/gu;
+  const sentenceMatches = [...raw.matchAll(sentenceRe)];
+  const capitalizedInMiddle = new Set();
+  for (const sentenceMatch of sentenceMatches) {
+    const sentence = sentenceMatch[2] || '';
+    let firstCandidate = true;
+    for (const match of sentence.matchAll(capitalizedRe)) {
+      const tokenOffset = Number(match.index || 0);
+      const atSentenceStart = firstCandidate && !sentence.slice(0, tokenOffset).trim();
+      firstCandidate = false;
+      if (!atSentenceStart) capitalizedInMiddle.add(normalizujTokenWyroczni(match[0]));
+    }
+  }
 
-  for (const sentenceMatch of raw.matchAll(sentenceRe)) {
+  for (const sentenceMatch of sentenceMatches) {
     const sentence = sentenceMatch[2] || '';
     const sentenceOffset = Number(sentenceMatch.index || 0) + String(sentenceMatch[1] || '').length;
     let firstCandidate = true;
-    for (const match of sentence.matchAll(capitalizedRe)) {
+    const matches = [...sentence.matchAll(capitalizedRe)];
+    for (const [matchIndex, match] of matches.entries()) {
       const token = match[0];
       const tokenOffset = Number(match.index || 0);
       if (aliasSpans.some(span => tokenOffset >= span.start && tokenOffset < span.end)) continue;
@@ -186,6 +199,24 @@ function wyodrebnijNazwyWlasne(value) {
       firstCandidate = false;
 
       if (atSentenceStart && genericFirstWords.has(normalizujClaim(token))) continue;
+      if (atSentenceStart && options.nameOracle instanceof Set) {
+        const normalizedToken = normalizujTokenWyroczni(token);
+        const isKnownAlias = KNOWN_ENTITY_ALIAS_PATTERNS.some(alias => alias.pattern.test(token));
+        const hasInternalCapitalOrDigit = /[\p{Lu}\d]/u.test([...token].slice(1).join(''));
+        const next = matches[matchIndex + 1];
+        const hasCapitalizedNextToken = Boolean(next)
+          && /^\s+$/u.test(sentence.slice(tokenOffset + token.length, Number(next.index || 0)));
+        const hasMidSentenceOccurrence = capitalizedInMiddle.has(normalizedToken);
+        const tokenVariants = new Set([normalizedToken, ...wariantyNazwyDoDopasowania(token).map(normalizujTokenWyroczni)]);
+        const isInNameOracle = [...tokenVariants].some(variant => options.nameOracle.has(variant));
+        if (!(isKnownAlias || hasInternalCapitalOrDigit || hasCapitalizedNextToken || hasMidSentenceOccurrence || isInNameOracle)) {
+          // Świadomy kompromis: wymyślona nazwa występująca wyłącznie na początku claimu
+          // i nieobecna w źródłach może zostać pominięta. Inne kontrole pozostają aktywne;
+          // nazwy w środku zdania nadal są ściśle wymagane w dowodzie.
+          if (Array.isArray(options._ignoredSentenceInitialNames)) options._ignoredSentenceInitialNames.push(token);
+          continue;
+        }
+      }
       candidates.push({ token, offset: sentenceOffset + tokenOffset });
     }
   }
@@ -212,6 +243,44 @@ function normalizujTokenNazwy(value) {
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     .replace(/[^\p{L}\p{N}'’.-]+/gu, '')
     .trim();
+}
+function normalizujTokenWyroczni(value) {
+  return normalizujTokenNazwy(value).replace(/[.-]+$/u, '');
+}
+
+let ostatniKluczWyroczniNazw = null;
+let ostatniaWyroczniaNazw = new Set();
+function zbudujWyroczniaNazw(blocks, extraNames = []) {
+  const rows = Array.isArray(blocks) ? blocks : [];
+  const extras = (Array.isArray(extraNames) ? extraNames : [extraNames])
+    .flatMap(name => String(name || '').trim().split(/\s+/u).map(normalizujTokenWyroczni)).filter(Boolean);
+  const key = JSON.stringify([rows.map(block => String(block?.content || '')), extras]);
+  if (key === ostatniKluczWyroczniNazw) return new Set(ostatniaWyroczniaNazw);
+
+  const oracle = new Set();
+  const sentenceRe = /(^|[.!?]\s*)([^.!?]*)(?=[.!?]|$)/gu;
+  const capitalizedRe = /(?<![\p{L}\p{N}_])[A-ZĄĆĘŁŃÓŚŹŻ][\p{L}\d'’.-]*/gu;
+  for (const block of rows) {
+    const raw = String(block?.content || '');
+    for (const sentenceMatch of raw.matchAll(sentenceRe)) {
+      const sentence = sentenceMatch[2] || '';
+      let firstCandidate = true;
+      for (const match of sentence.matchAll(capitalizedRe)) {
+        const token = match[0];
+        const offset = Number(match.index || 0);
+        const atSentenceStart = firstCandidate && !sentence.slice(0, offset).trim();
+        firstCandidate = false;
+        if (atSentenceStart) continue;
+        const normalized = normalizujTokenWyroczni(token);
+        if (normalized) oracle.add(normalized);
+      }
+    }
+  }
+  for (const extra of extras) oracle.add(extra);
+
+  ostatniKluczWyroczniNazw = key;
+  ostatniaWyroczniaNazw = new Set(oracle);
+  return new Set(oracle);
 }
 
 function wariantyNazwyDoDopasowania(entity) {
@@ -322,28 +391,30 @@ function sprawdzSprzecznosciSemantyczne(evidence, claim) {
   return { ok: true };
 }
 
-function dopasowanieSemantyczne(evidence, claim) {
+function dopasowanieSemantyczne(evidence, claim, options = {}) {
   const eConcepts = pojeciaCrossLanguage(evidence);
   const cConcepts = pojeciaCrossLanguage(claim);
   const sharedConcepts = [...cConcepts].filter(x => eConcepts.has(x));
   const ct = tokenyClaim(claim);
   const et = new Set(tokenyClaim(evidence));
   const overlap = ct.length ? ct.filter(t => [...et].some(other => tokenyPokrywajaSie(t, other))).length / ct.length : 0;
-  const entities = wyodrebnijNazwyWlasne(claim);
+  const ignoredSentenceInitialNames = [];
+  const nameOptions = { ...options, _ignoredSentenceInitialNames: ignoredSentenceInitialNames };
+  const entities = wyodrebnijNazwyWlasne(claim, nameOptions);
   const normalizedEvidence = normalizujClaim(evidence);
   const missingEntities = entities.filter(entity => !czyNazwaWlasnaWystepuje(entity, normalizedEvidence));
-  if (missingEntities.length) return { ok: false, reason: 'dowód nie zawiera wszystkich istotnych nazw własnych claimu' };
-  if (sharedConcepts.length >= 2) return { ok: true, mode: 'multiple_cross_language_concepts', sharedConcepts, overlap };
-  if (sharedConcepts.length >= 1 && entities.length >= 1) return { ok: true, mode: 'concept_and_entity', sharedConcepts, overlap };
-  if (overlap >= (entities.length ? 0.34 : 0.45)) return { ok: true, mode: 'token_overlap', overlap, sharedConcepts };
-  if (sharedConcepts.length >= 2) return { ok: true, mode: 'multiple_concepts', sharedConcepts, overlap };
-  return { ok: false, reason: `zbyt małe pokrycie semantyczne (${overlap.toFixed(2)})` };
+  if (missingEntities.length) return { ok: false, reason: 'dowód nie zawiera wszystkich istotnych nazw własnych claimu', ignoredSentenceInitialNames };
+  if (sharedConcepts.length >= 2) return { ok: true, mode: 'multiple_cross_language_concepts', sharedConcepts, overlap, ignoredSentenceInitialNames };
+  if (sharedConcepts.length >= 1 && entities.length >= 1) return { ok: true, mode: 'concept_and_entity', sharedConcepts, overlap, ignoredSentenceInitialNames };
+  if (overlap >= (entities.length ? 0.34 : 0.45)) return { ok: true, mode: 'token_overlap', overlap, sharedConcepts, ignoredSentenceInitialNames };
+  if (sharedConcepts.length >= 2) return { ok: true, mode: 'multiple_concepts', sharedConcepts, overlap, ignoredSentenceInitialNames };
+  return { ok: false, reason: `zbyt małe pokrycie semantyczne (${overlap.toFixed(2)})`, ignoredSentenceInitialNames };
 }
 
-function czyRelacjaPrzyczynowaPokrywaClaim(evidence, claim) {
+function czyRelacjaPrzyczynowaPokrywaClaim(evidence, claim, options = {}) {
   const claimText = String(claim || '');
   const evidenceText = String(evidence || '');
-  const claimEntities = wyodrebnijNazwyWlasne(claimText);
+  const claimEntities = wyodrebnijNazwyWlasne(claimText, options);
   const claimTokens = tokenyPokryciaBezStop(claimText);
   const sentences = evidenceText
     .replace(/\s+/g, ' ')
@@ -358,7 +429,7 @@ function czyRelacjaPrzyczynowaPokrywaClaim(evidence, claim) {
     const evidenceTokens = tokenyPokryciaBezStop(sentence);
     const matchedTokens = claimTokens.filter(token => evidenceTokens.some(other => tokenyPokrywajaSie(token, other)));
     const tokenOverlapScore = claimTokens.length ? matchedTokens.length / claimTokens.length : 0;
-    const semanticMatch = tokenOverlapScore < 0.22 ? dopasowanieSemantyczne(sentence, claimText) : null;
+    const semanticMatch = tokenOverlapScore < 0.22 ? dopasowanieSemantyczne(sentence, claimText, options) : null;
     return entityOk && (tokenOverlapScore >= 0.22 || Boolean(semanticMatch?.ok && semanticMatch.sharedConcepts?.length >= 2));
   });
 }
@@ -390,7 +461,7 @@ function zgodnoscStrukturalna(evidence, claim, options = {}) {
     return { ok: false, reason: 'claim dodaje relację przyczynową nieobecną w dowodzie' };
   }
 
-  const semantic = dopasowanieSemantyczne(e, c);
+  const semantic = dopasowanieSemantyczne(e, c, options);
   if (semantic.ok) return semantic;
 
   const claimTokens = tokenyPokryciaBezStop(c);
@@ -400,7 +471,7 @@ function zgodnoscStrukturalna(evidence, claim, options = {}) {
   const evidenceConcepts = pojeciaCrossLanguage(e);
   const claimConcepts = pojeciaCrossLanguage(c);
   const sharedConcepts = [...claimConcepts].filter(x => evidenceConcepts.has(x));
-  const claimEntities = wyodrebnijNazwyWlasne(c);
+  const claimEntities = wyodrebnijNazwyWlasne(c, options);
   const normalizedEvidence = normalizujClaim(e);
   const entityCoverage = claimEntities.length
     ? claimEntities.filter(entity => czyNazwaWlasnaWystepuje(entity, normalizedEvidence)).length / claimEntities.length
@@ -413,10 +484,10 @@ function zgodnoscStrukturalna(evidence, claim, options = {}) {
   // encji albo wspólnego pojęcia. Twarde kontrole liczb, negacji i przyczyn
   // wykonują się wcześniej i pozostają bez zmian.
   if (tokenCoverage >= 0.26 && (sharedConcepts.length > 0 || (claimEntities.length > 0 && entityCoverage === 1))) {
-    return { ok: true, mode: 'paraphrase', overlap: tokenCoverage, sharedConcepts, entityCoverage };
+    return { ok: true, mode: 'paraphrase', overlap: tokenCoverage, sharedConcepts, entityCoverage, ignoredSentenceInitialNames: semantic.ignoredSentenceInitialNames || [] };
   }
   if (options.allowCrossLanguageExactEvidence === true && sharedConcepts.length > 0 && tokenCoverage >= 0.18) {
-    return { ok: true, overlap: tokenCoverage, mode: 'cross_language_paraphrase', sharedConcepts, entityCoverage };
+    return { ok: true, overlap: tokenCoverage, mode: 'cross_language_paraphrase', sharedConcepts, entityCoverage, ignoredSentenceInitialNames: semantic.ignoredSentenceInitialNames || [] };
   }
   return semantic;
 }
@@ -521,7 +592,7 @@ function zbiorRowny(a, b) {
   return sa.size === sb.size && [...sa].every(x => sb.has(x));
 }
 
-function spojnoscTlumaczeniaClaimu(claimPl, claimEn) {
+function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
   const pl = String(claimPl || '').trim();
   const en = String(claimEn || '').trim();
   if (!pl || !en) return { ok: false, reason: 'brak tłumaczenia claimu' };
@@ -537,9 +608,9 @@ function spojnoscTlumaczeniaClaimu(claimPl, claimEn) {
     return { ok: false, reason: 'tłumaczenie claimu zmienia negację' };
   }
   const enNormalized = normalizujClaim(en);
-  const missing = wyodrebnijNazwyWlasne(pl).filter(name => !czyNazwaWlasnaWystepuje(name, enNormalized));
+  const missing = wyodrebnijNazwyWlasne(pl, options).filter(name => !czyNazwaWlasnaWystepuje(name, enNormalized));
   if (missing.length) return { ok: false, reason: 'tłumaczenie claimu gubi nazwy własne: ' + missing.slice(0, 3).join(', ') };
   return { ok: true };
 }
 
-module.exports = { CAUSAL_RE, wyglądaNaAngielski, spojnoscTlumaczeniaClaimu, normalizujClaim, tokenyClaim, czyRelacjaPrzyczynowaPokrywaClaim, wyodrebnijLiczbyIDaty, wyodrebnijJednostkoweWartosci, wyodrebnijNazwyWlasne, zgodnoscStrukturalna, sprawdzTwardeKonflikty, sprawdzSprzecznosciSemantyczne, dopasowanieSemantyczne, sprawdzPokrycieClaimamiOdpowiedzi, czyDowodSemantyczniePokrywaClaim, tokenyPokrywajaSie };
+module.exports = { CAUSAL_RE, wyglądaNaAngielski, spojnoscTlumaczeniaClaimu, normalizujClaim, tokenyClaim, czyRelacjaPrzyczynowaPokrywaClaim, wyodrebnijLiczbyIDaty, wyodrebnijJednostkoweWartosci, wyodrebnijNazwyWlasne, zbudujWyroczniaNazw, zgodnoscStrukturalna, sprawdzTwardeKonflikty, sprawdzSprzecznosciSemantyczne, dopasowanieSemantyczne, sprawdzPokrycieClaimamiOdpowiedzi, czyDowodSemantyczniePokrywaClaim, tokenyPokrywajaSie };
