@@ -1,6 +1,10 @@
 'use strict';
 
 const NEGATION_RE = /(?<![\p{L}])(?:nie|nigdy|brak|bez|zaden|zadna|zadne|never|no|not|cannot|without|unable|neither|nor|fails?\s+to|\p{L}+n['’]t)(?![\p{L}])/iu;
+// Ta sama lista bez gołego „no”: „no damage” to kwantyfikator zerowy, a nie zaprzeczenie czasownika.
+const NEGATION_STRICT_RE = /(?<![\p{L}])(?:nie|nigdy|brak|bez|zaden|zadna|zadne|never|not|cannot|without|unable|neither|nor|fails?\s+to|\p{L}+n['’]t)(?![\p{L}])/iu;
+// Claim o redukcji/ograniczeniu jest zgodny z dowodem „no damage / take no damage” (zero implikuje zmniejszenie).
+const REDUCTION_RE = /(?<![\p{L}])(?:zmniejsz\w*|ogranicz\w*|redukuj\w*|zredukow\w*|oslab\w*|chron\w*|neutralizuj\w*|reduc\w*|mitigat\w*|lower\w*|decreas\w*|protect\w*)(?![\p{L}])/iu;
 const CAUSAL_RE = /(?<![\p{L}])(?:bo|poniewaz|gdyz|dlatego|because|therefore|caused|causes|consequently|hence|as\s+a\s+result|led\s+to|leading\s+to|resulted\s+in|resulting\s+in|because\s+of|due\s+to|so\s+that|in\s+order\s+to|thereby|thus|allow(?:s|ed|ing)?|enabl(?:e|es|ed|ing)|which\s+(?:let|lets|allowed|allows|enabled|enables)|putting\s+(?:him|her|them|it)\s+in\s+control|so\s+(?:he|she|they|it|we|the)|in\s+exchange(?:\s+for)?|in\s+return(?:\s+for)?|in\s+turn|thanks\s+to|owing\s+to|w\s+zamian(?:\s+za)?|w\s+rewan[zż]u|w\s+wyniku|z\s+powodu|dzieki|spowodow\w*|doprowadz\w*|umozliw\w*)(?![\p{L}])/iu;
 const TEMPORAL_RE = /(?<![\p{L}])(?:19|20)\d{2}(?![\p{L}])|(?<![\p{L}])(?:styczen|luty|marzec|kwiecien|maj|czerwiec|lipiec|sierpien|wrzesien|pazdziernik|listopad|grudzien|wczoraj|dzisiaj|jutro|today|yesterday|tomorrow)(?![\p{L}])/iu;
 const CROSS_LANGUAGE_CONCEPTS = [
@@ -146,7 +150,14 @@ function wyodrebnijNazwyWlasne(value) {
     'this', 'these', 'those', 'once', 'with', 'against', 'during', 'after', 'before', 'from', 'for', 'as',
     'how', 'why', 'when', 'where', 'who', 'what', 'which', 'while', 'then', 'also', 'one', 'two',
     'znajduje', 'znaleziono', 'położony', 'polozony', 'broń', 'bron', 'sposób', 'sposob', 'metoda', 'warto', 'użyj', 'uzyj', 'należy', 'nalezy',
-    'later', 'another', 'eventually', 'meanwhile', 'afterward', 'afterwards', 'sometime', 'suddenly', 'finally'
+    'later', 'another', 'eventually', 'meanwhile', 'afterward', 'afterwards', 'sometime', 'suddenly', 'finally',
+    // Polskie słowa funkcyjne i czasowniki rozkazujące na początku claimu („Nie ma potwierdzenia…”,
+    // „Strzelaj z łuku…”). Lookup idzie po normalizujClaim(), więc wystarczą formy bez znaków diakrytycznych.
+    // Bez tego takie słowo było traktowane jak nazwa własna i musiało wystąpić w (angielskim) dowodzie.
+    'nie', 'brak', 'bez', 'dla', 'pod', 'nad', 'przy', 'zeby', 'ale', 'lub', 'czy', 'tak', 'tylko', 'nawet', 'juz', 'nadal', 'wciaz',
+    'rowniez', 'takze', 'zatem', 'wiec', 'natomiast', 'lecz', 'jezeli', 'skoro', 'pomimo', 'trzeba', 'smok',
+    'zrobil', 'zrobila', 'zrobili', 'strzelaj', 'atakuj', 'unikaj', 'zaatakuj', 'skorzystaj', 'wykorzystaj', 'pamietaj', 'sprobuj',
+    'zacznij', 'pokonaj', 'zabij', 'walcz', 'trzymaj', 'zwieksz'
   ]);
   const candidates = [];
   const aliasSpans = [];
@@ -265,7 +276,14 @@ function sprawdzTwardeKonflikty(evidence, claim, options = {}) {
   const c = String(claim || '');
   const evidenceNegated = wyodrebnijMarkery(e, NEGATION_RE);
   const claimNegated = wyodrebnijMarkery(c, NEGATION_RE);
-  if (!options.ignoreNegation && !options.allowDistributedEvidence && claimNegated !== evidenceNegated) return { ok: false, reason: 'claim i dowód mają inną negację' };
+  if (!options.ignoreNegation && !options.allowDistributedEvidence && claimNegated !== evidenceNegated) {
+    // „take no damage” (kwantyfikator zerowy, bez żadnego innego zaprzeczenia w dowodzie) potwierdza pozytywny
+    // claim o redukcji („zmniejsza obrażenia”). Każde inne rozjechanie negacji nadal jest twardym konfliktem.
+    const zerowyKwantyfikator = !claimNegated && evidenceNegated
+      && !wyodrebnijMarkery(e, NEGATION_STRICT_RE)
+      && wyodrebnijMarkery(c, REDUCTION_RE);
+    if (!zerowyKwantyfikator) return { ok: false, reason: 'claim i dowód mają inną negację' };
+  }
   if (options.checkNegationOnly) return { ok: true };
 
   const evidenceNumbers = wyodrebnijLiczbyIDaty(e);
