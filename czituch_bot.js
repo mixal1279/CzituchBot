@@ -4935,7 +4935,7 @@ async function obslugaWiadomosci(nick, message, platforma, wyslijFn, kanal = nul
     ostatnieUzycie[cooldownKey] = teraz;
 
     const dzisiaj  = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-    const cacheKey = `${nick.toLowerCase()}_${dzisiaj}`;
+    const cacheKey = `${platforma}:${kanalNorm || 'brak-kanalu'}:${nick.toLowerCase()}_${dzisiaj}`;
 
     let arbuz = arbuzDzienneCache[cacheKey];
     if (!arbuz) {
@@ -4967,7 +4967,7 @@ async function obslugaWiadomosci(nick, message, platforma, wyslijFn, kanal = nul
     }
 
     const userKey = cel.toLocaleLowerCase('pl-PL');
-    const cacheKey = `${kanalNorm}:${streamId}:${userKey}`;
+    const cacheKey = `${platforma}:${kanalNorm}:${streamId}:${userKey}`;
     let wynik = cmStreamCache[cacheKey];
 
     if (!Number.isInteger(wynik) || wynik < 1 || wynik > 30) {
@@ -4983,7 +4983,7 @@ async function obslugaWiadomosci(nick, message, platforma, wyslijFn, kanal = nul
     ostatnieUzycie[cooldownKey] = teraz;
 
     const dzisiaj  = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-    const cacheKey = `${nick.toLowerCase()}_${dzisiaj}`;
+    const cacheKey = `${platforma}:${kanalNorm || 'brak-kanalu'}:${nick.toLowerCase()}_${dzisiaj}`;
 
     let ciastko = ciastkoDzienneCache[cacheKey];
     if (!ciastko) {
@@ -6518,7 +6518,7 @@ async function obslugaTwitch(nick, message, wyslijFn, config = TWITCH_CONFIG_BIL
       ostatnieUzycie[cooldownKey] = teraz;
 
       const dzisiaj  = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-      const cacheKey = `${nick.toLowerCase()}_${dzisiaj}`;
+      const cacheKey = `${platforma}:${kanalNorm || 'brak-kanalu'}:${nick.toLowerCase()}_${dzisiaj}`;
 
       let bulka = bulkaDzienneCache[cacheKey];
       if (!bulka) {
