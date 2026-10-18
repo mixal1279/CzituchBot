@@ -5182,6 +5182,26 @@ async function obslugaWiadomosci(nick, message, platforma, wyslijFn, kanal = nul
 
   if (kanalNorm === 'angie28') {
 
+    if (msgLower === '!spierdalam') {
+      ostatnieUzycie[cooldownKey] = teraz;
+      const tekstyUcieczki = [
+        `@${nick} nie wytrzymał tego, co dzieje się na streamie Angie28, i spierdala w siną dal.`,
+        `@${nick} opuścił czat. Powód: Angie28. Nie zadawać pytań.`,
+        `@${nick} wykonuje taktyczny odwrót. Straty: godność i kilka sekund życia.`,
+        `@${nick} zobaczył przyszłość tego streama i uznał, że pora spierdalać.`,
+        `@${nick} ucieka tak szybko, że nawet YouTube nie nadąża z aktualizacją czatu.`,
+        `@${nick} mówi „ja tu tylko na chwilę” i znika bez śladu.`,
+        `@${nick} zarządził ewakuację. Powód ewakuacji pozostaje tajny.`,
+        `@${nick} opuszcza stream Angie28 w trybie awaryjnym.`,
+        `@${nick} właśnie odblokował osiągnięcie: „Dobra, mnie tu nie ma”.`,
+        `@${nick} spierdala. Nie wiadomo dokąd, ale decyzja była natychmiastowa.`,
+        `@${nick} uznał, że to idealny moment na przerwę od internetu.`,
+        `@${nick} wylogował się mentalnie, a teraz próbuje zrobić to fizycznie.`
+      ];
+      const tekst = tekstyUcieczki[Math.floor(Math.random() * tekstyUcieczki.length)];
+      return await wyslijFn(tekst);
+    }
+
     if (msgLower === '!discord') {
       ostatnieUzycie[cooldownKey] = teraz;
       return await wyslijFn(`💬 Discord Angie28: ${angieLinki.discord}`);
