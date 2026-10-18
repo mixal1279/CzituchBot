@@ -113,6 +113,28 @@ test('empty Firestore placeholder does not discard legacy cache entries', async 
   }
 });
 
+test('legacy cache is retained and warning logged when it conflicts with Firestore', async () => {
+  const db = createMockFirestore();
+  await db.collection('bot_runtime_state').doc('cache__daily_cache').set({
+    value: { user: 'firestore-value' }, updatedAt: 'test', schemaVersion: 1,
+  });
+  const warnings = [];
+  const state = createFirestoreState(db, {
+    encryptionKey: TEST_KEY,
+    logger: { info() {}, warn(...args) { warnings.push(args.join(' ')); } },
+  });
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'czituch-state-'));
+  const file = path.join(dir, 'daily-cache.json');
+  await fs.writeFile(file, JSON.stringify({ user: 'legacy-value' }), 'utf8');
+  try {
+    assert.deepEqual(await state.loadCache('daily_cache', file), { user: 'firestore-value' });
+    assert.deepEqual(JSON.parse(await fs.readFile(file, 'utf8')), { user: 'legacy-value' });
+    assert.ok(warnings.some(message => message.includes('różni się od scalonych danych')));
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});
+
 test('legacy cache is migrated and deleted only after Firestore verification', async () => {
   const db = createMockFirestore();
   const state = createFirestoreState(db, { encryptionKey: TEST_KEY, logger: { info() {}, warn() {} } });
