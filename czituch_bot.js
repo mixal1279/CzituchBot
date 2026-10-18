@@ -4301,15 +4301,25 @@ function zapytaj(pytanie) {
 
 const TIKTOK_STATE_PLIK = './tiktok_state.json';
 
-function wczytajStanTikTok() {
+const tiktokTrackingState = (() => {
   try {
-    if (fs.existsSync(TIKTOK_STATE_PLIK)) return JSON.parse(fs.readFileSync(TIKTOK_STATE_PLIK, 'utf8'));
+    if (fs.existsSync(TIKTOK_STATE_PLIK)) {
+      const parsed = JSON.parse(fs.readFileSync(TIKTOK_STATE_PLIK, 'utf8'));
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed;
+    }
   } catch (_) {}
   return {};
+})();
+
+function wczytajStanTikTok() {
+  return tiktokTrackingState;
 }
 
 function zapiszStanTikTok(stan) {
-  try { fs.writeFileSync(TIKTOK_STATE_PLIK, JSON.stringify(stan, null, 2)); } catch (_) {}
+  for (const key of Object.keys(tiktokTrackingState)) delete tiktokTrackingState[key];
+  Object.assign(tiktokTrackingState, stan && typeof stan === 'object' ? stan : {});
+  FIRESTORE_STATE.saveCache('tiktok_tracking', tiktokTrackingState)
+    .catch(err => console.error('[Firestore state/TikTok] Zapis nieudany:', err.message));
 }
 
 async function pobierzWszystkieTikToki(username) {
@@ -4808,12 +4818,14 @@ async function ensurePersistentCachesReady() {
       FIRESTORE_STATE.loadCache('daily_arbuz', ARBUZ_CACHE_PLIK),
       FIRESTORE_STATE.loadCache('daily_ciastko', CIASTKO_CACHE_PLIK),
       FIRESTORE_STATE.loadCache('stream_cm', CM_CACHE_PLIK),
+      FIRESTORE_STATE.loadCache('tiktok_tracking', TIKTOK_STATE_PLIK),
     ]);
     replaceObjectContents(horoskopDzienneCache, caches[0]);
     replaceObjectContents(bulkaDzienneCache, caches[1]);
     replaceObjectContents(arbuzDzienneCache, caches[2]);
     replaceObjectContents(ciastkoDzienneCache, caches[3]);
     replaceObjectContents(cmStreamCache, caches[4]);
+    replaceObjectContents(tiktokTrackingState, caches[5]);
   })().catch(error => {
     persistentCachesReady = null;
     console.error('[Firestore state] Nie udało się wczytać cache — zachowuję stan lokalny:', error.message);
