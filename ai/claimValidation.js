@@ -157,8 +157,9 @@ function wyodrebnijNazwyWlasne(value) {
     'nie', 'brak', 'bez', 'dla', 'pod', 'nad', 'przy', 'zeby', 'ale', 'lub', 'czy', 'tak', 'tylko', 'nawet', 'juz', 'nadal', 'wciaz',
     'rowniez', 'takze', 'zatem', 'wiec', 'natomiast', 'lecz', 'jezeli', 'skoro', 'pomimo', 'trzeba', 'smok',
     'zrobil', 'zrobila', 'zrobili', 'strzelaj', 'atakuj', 'unikaj', 'zaatakuj', 'skorzystaj', 'wykorzystaj', 'pamietaj', 'sprobuj',
-    'zacznij', 'pokonaj', 'zabij', 'walcz', 'trzymaj', 'zwieksz'
-  ]);
+    'zacznij', 'pokonaj', 'zabij', 'walcz', 'trzymaj', 'zwieksz',
+    'najpierw', 'jednoczesnie', 'takie', 'kontynuuj', 'zastosuj', 'miecz', 'wozek', 'wozka'
+  ].map(normalizujClaim));
   const candidates = [];
   const aliasSpans = [];
   for (const alias of KNOWN_ENTITY_ALIAS_PATTERNS) {

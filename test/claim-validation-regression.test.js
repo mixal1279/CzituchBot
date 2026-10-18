@@ -19,6 +19,13 @@ test('sentence-initial generic words are not treated as proper names', () => {
   }
 });
 
+test('diacritics-normalized generic first words are not extracted as names', () => {
+  assert.equal(wyodrebnijNazwyWlasne('Był manicznie szczęśliwy…').includes('byl'), false);
+  assert.equal(wyodrebnijNazwyWlasne('Najpierw użyj krzyku Dragonrend…').includes('najpierw'), false);
+  assert.equal(wyodrebnijNazwyWlasne('Kontynuuj ataki…').includes('kontynuuj'), false);
+  assert.equal(wyodrebnijNazwyWlasne('Nie ma potwierdzenia…').includes('nie'), false);
+});
+
 test('real first-word names Artur and Arthur remain detectable', () => {
   assert.ok(wyodrebnijNazwyWlasne('Artur opuścił miasto.').includes('artur'));
   assert.ok(wyodrebnijNazwyWlasne('Arthur opuścił miasto.').includes('arthur'));
