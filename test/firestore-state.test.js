@@ -70,16 +70,44 @@ test('Firestore token wins on mismatch while local backup is preserved', async (
   }
 });
 
-test('missing encryption key preserves legacy token file', async () => {
-  const db = createMockFirestore();
+test('Firestore write failure preserves legacy token file', async () => {
+  const db = {
+    collection() {
+      return {
+        doc() {
+          return {
+            async get() { return { exists: false, data: () => undefined }; },
+            async set() { throw new Error('Firestore unavailable'); },
+          };
+        },
+      };
+    },
+  };
   const state = createFirestoreState(db, { encryptionKey: TEST_KEY, logger: { info() {}, warn() {} } });
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'czituch-token-'));
   const file = path.join(dir, 'token.json');
   const legacy = { access_token: 'legacy', refresh_token: 'legacy-refresh' };
   await fs.writeFile(file, JSON.stringify(legacy), 'utf8');
   try {
-    assert.deepEqual(await state.migrateTokenFile('youtube', file), legacy);
+    await assert.rejects(state.migrateTokenFile('youtube', file), /Firestore unavailable/);
     assert.deepEqual(JSON.parse(await fs.readFile(file, 'utf8')), legacy);
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('empty Firestore placeholder does not discard legacy cache entries', async () => {
+  const db = createMockFirestore();
+  await db.collection('bot_runtime_state').doc('cache__daily_cache').set({ value: {}, updatedAt: 'test', schemaVersion: 1 });
+  const state = createFirestoreState(db, { encryptionKey: TEST_KEY, logger: { info() {}, warn() {} } });
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'czituch-state-'));
+  const file = path.join(dir, 'daily-cache.json');
+  const cache = { 'youtube:channel:user_2026-10-18': { value: 'assigned' } };
+  await fs.writeFile(file, JSON.stringify(cache), 'utf8');
+  try {
+    assert.deepEqual(await state.loadCache('daily_cache', file), cache);
+    assert.deepEqual((await db.collection('bot_runtime_state').doc('cache__daily_cache').get()).data().value, cache);
+    await assert.rejects(fs.access(file));
   } finally {
     await fs.rm(dir, { recursive: true, force: true });
   }
