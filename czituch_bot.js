@@ -7381,6 +7381,9 @@ const startBot = async () => {
   console.log('🚀 Uruchamiam CzituchBota (YouTube + Twitch)...\n');
   console.log('[Wersja] v24.5 AI hardened — GameLore lore + GameFAQs gameplay RAG + unique Tavily source IDs + claim validator | Twitch przez Helix\n');
 
+  // ---- Migracja tokenu Kick (kanały Kick są obecnie wyłączone, ale stan pozostaje uporządkowany) ----
+  await wczytajTokenKick();
+
   // ---- YouTube – autoryzacja ----
   const maszTokenYT = await wczytajTokenYT();
   if (!maszTokenYT) {
