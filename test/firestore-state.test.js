@@ -115,7 +115,7 @@ test('empty Firestore placeholder does not discard legacy cache entries', async 
 
 test('legacy cache is migrated and deleted only after Firestore verification', async () => {
   const db = createMockFirestore();
-  const state = createFirestoreState(db, { encryptionKey: 'test-encryption-key-not-for-production', logger: { info() {}, warn() {} } });
+  const state = createFirestoreState(db, { encryptionKey: TEST_KEY, logger: { info() {}, warn() {} } });
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'czituch-state-'));
   const file = path.join(dir, 'daily-cache.json');
   const cache = { 'youtube:channel:user_2026-10-18': { value: 'assigned' } };
