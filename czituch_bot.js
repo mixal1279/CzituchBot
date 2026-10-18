@@ -5741,21 +5741,26 @@ function generujPKCE() {
   return { verifier, challenge };
 }
 
-function zapiszTokenKick(data) {
-  fs.writeFileSync(KONFIGURACJA.kickTokenFile, JSON.stringify(data, null, 2), { mode: 0o600 });
-  console.log('[Kick Auth] ✅ Token zapisany do kick_token.json');
+async function zapiszTokenKick(data) {
+  await FIRESTORE_STATE.writeToken('kick', data);
+  const verified = await FIRESTORE_STATE.readToken('kick');
+  if (JSON.stringify(verified) !== JSON.stringify(data)) throw new Error('Weryfikacja tokenu Kick nie powiodła się.');
+  try { await fs.promises.unlink(KONFIGURACJA.kickTokenFile); } catch (err) { if (err.code !== 'ENOENT') console.warn('[Kick Auth] Nie usunięto starego pliku tokenu:', err.message); }
+  console.log('[Kick Auth] ✅ Zaszyfrowany token zapisany do Firestore');
 }
 
-function wczytajTokenKick() {
+async function wczytajTokenKick() {
   try {
-    if (fs.existsSync(KONFIGURACJA.kickTokenFile)) {
-      const data       = JSON.parse(fs.readFileSync(KONFIGURACJA.kickTokenFile, 'utf8'));
-      kickAccessToken  = data.access_token;
+    const data = await FIRESTORE_STATE.migrateTokenFile('kick', KONFIGURACJA.kickTokenFile);
+    if (data) {
+      kickAccessToken = data.access_token;
       kickRefreshToken = data.refresh_token;
-      console.log('[Kick Auth] ✅ Wczytano token z pliku');
+      console.log('[Kick Auth] ✅ Wczytano token z Firestore');
       return true;
     }
-  } catch (err) { console.error('[Kick Auth] Błąd wczytywania:', err.message); }
+  } catch (err) {
+    console.error('[Kick Auth] Błąd wczytywania tokenu (plik legacy pozostaje bez zmian):', err.message);
+  }
   return false;
 }
 
@@ -5792,7 +5797,7 @@ async function zalogujKick() {
   const data   = await res.json();
   kickAccessToken  = data.access_token;
   kickRefreshToken = data.refresh_token;
-  zapiszTokenKick(data);
+  await zapiszTokenKick(data);
   console.log('[Kick Auth] ✅ Zalogowano pomyślnie!');
 }
 
@@ -6001,7 +6006,7 @@ function rozpocznijOdzyskiwanieKickPrzezWorker() {
 
       kickAccessToken  = token.access_token;
       kickRefreshToken = token.refresh_token;
-      zapiszTokenKick({ access_token: token.access_token, refresh_token: token.refresh_token, expires_in: token.expires_in });
+      await zapiszTokenKick({ access_token: token.access_token, refresh_token: token.refresh_token, expires_in: token.expires_in });
       kickTokenDead = false;
 
       clearInterval(kickOdzyskiwaniePollTimer);
@@ -6051,7 +6056,7 @@ async function odswiezTokenKick() {
       const data = await res.json();
       kickAccessToken  = data.access_token;
       if (data.refresh_token) kickRefreshToken = data.refresh_token;
-      zapiszTokenKick(data);
+      await zapiszTokenKick(data);
       kickTokenDead = false;
       const refreshTime = (data.expires_in - 60) * 1000;
       console.log(`[Kick Auth] ✅ Token odświeżony! Następne za ${Math.round(refreshTime / 60000)} min`);      setTimeout(odswiezTokenKick, refreshTime);
