@@ -4520,6 +4520,14 @@ const horoskopDzienneCache = wczytajCacheHoroskopow();
 async function pobierzPrawdziwyHoroskop(znakEn, znakPl) {
   const dzisiaj = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
   const cacheKey = `${znakEn}_${dzisiaj}`;
+  let cachePruned = false;
+  for (const key of Object.keys(horoskopDzienneCache)) {
+    if (!key.endsWith(`_${dzisiaj}`)) {
+      delete horoskopDzienneCache[key];
+      cachePruned = true;
+    }
+  }
+  if (cachePruned) await zapiszCacheHoroskopow(horoskopDzienneCache);
 
   if (horoskopDzienneCache[cacheKey]) return horoskopDzienneCache[cacheKey];
 
