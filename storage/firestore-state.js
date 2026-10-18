@@ -2,7 +2,6 @@
 
 const fs = require('fs');
 const crypto = require('crypto');
-const path = require('path');
 
 const DEFAULT_COLLECTION = 'bot_runtime_state';
 
@@ -138,23 +137,35 @@ function createFirestoreState(db, options = {}) {
 
   async function migrateTokenFile(provider, file) {
     const stored = await readToken(provider);
+    let legacy = null;
+    try {
+      legacy = JSON.parse(await fs.promises.readFile(file, 'utf8'));
+    } catch (error) {
+      if (error.code !== 'ENOENT') throw error;
+    }
+
+    // If the local token differs, treat it as the latest state and migrate it
+    // before deleting anything. This avoids silently discarding a rotated refresh token.
+    if (legacy && JSON.stringify(legacy) !== JSON.stringify(stored)) {
+      await writeToken(provider, legacy);
+      const verified = await readToken(provider);
+      if (JSON.stringify(verified) !== JSON.stringify(legacy)) {
+        throw new Error('Weryfikacja migracji tokenu OAuth nie powiodła się.');
+      }
+      await fs.promises.unlink(file);
+      logger.info?.('[Firestore state] Token OAuth przeniesiony do Firestore:', provider);
+      return verified;
+    }
+
     if (stored) {
-      try { await fs.promises.unlink(file); } catch (error) { if (error.code !== 'ENOENT') logger.warn?.('[Firestore state] Nie usunięto starego pliku tokenu:', error.message); }
+      if (legacy) {
+        try { await fs.promises.unlink(file); } catch (error) {
+          if (error.code !== 'ENOENT') logger.warn?.('[Firestore state] Nie usunięto starego pliku tokenu:', error.message);
+        }
+      }
       return stored;
     }
-    let token;
-    try {
-      token = JSON.parse(await fs.promises.readFile(file, 'utf8'));
-    } catch (error) {
-      if (error.code === 'ENOENT') return null;
-      throw error;
-    }
-    await writeToken(provider, token);
-    const verified = await readToken(provider);
-    if (JSON.stringify(verified) !== JSON.stringify(token)) throw new Error('Weryfikacja migracji tokenu OAuth nie powiodła się.');
-    await fs.promises.unlink(file);
-    logger.info?.('[Firestore state] Token OAuth przeniesiony do Firestore:', provider);
-    return verified;
+    return null;
   }
 
   return {
