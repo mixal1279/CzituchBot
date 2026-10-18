@@ -376,7 +376,17 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
   const evidenceEvaluations = claims.map((c, index) =>
     czyDowodPotwierdzaClaim(dane, effectiveClaimSourceIds[index], c.evidence_quote, c.claim, { claimEn: c.claim_en })
   );
-  const evidenceQuoteVerified = evidenceEvaluations.map(result => result.ok);
+  // Rozdzielamy dwie rzeczy, które wcześniej były jedną zmienną: (1) czy cytat w ogóle występuje
+  // dosłownie we wskazanym źródle, (2) czy cały dowód przeszedł lokalne bramki (negacja, nazwy, liczby...).
+  // Dzięki temu `evidence_quote_not_exact` w diagnostyce znaczy dokładnie to, co mówi.
+  // Kontrakt się nie zmienia: pełne wsparcie implikuje istnienie cytatu, więc zbiór (2) zawiera zbiór (1).
+  const blockBySourceId = new Map(parsedEvidenceBlocks.map(block => [block.sourceId, block]));
+  const evidenceQuoteVerified = claims.map((c, index) =>
+    Boolean(c.evidence_quote) && effectiveClaimSourceIds[index].some(id => {
+      const block = blockBySourceId.get(id);
+      return block ? quoteExists(block.content, c.evidence_quote) : false;
+    })
+  );
   const claimSourceVerified = evidenceEvaluations.map(result => result.ok);
   const unsupportedEvidenceClaimIndexes = claims
     .map((c, index) => c.supported && !claimSourceVerified[index] ? index : -1)
@@ -576,6 +586,10 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
         claims: claims.map((claim, index) => ({
           claimIndex: index,
           claim: String(claim.claim || '').slice(0, 500),
+          // claim_en i wynik mechanicznej kontroli spójności: widać, czy model w ogóle zwraca tłumaczenie
+          // i czy odpada ono na liczbach/negacji/nazwach, zanim trafi do twardych bramek.
+          claimEn: String(claim.claim_en || '').slice(0, 600),
+          claimEnConsistency: claim.claim_en ? spojnoscTlumaczeniaClaimu(claim.claim, claim.claim_en) : null,
           supported: claim.supported === true,
           sourceIds: Array.isArray(claim.source_ids) ? claim.source_ids : [],
           evidenceQuote: String(claim.evidence_quote || '').slice(0, 500),
