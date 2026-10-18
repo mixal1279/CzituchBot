@@ -59,6 +59,7 @@ process.on('uncaughtException', (err) => {
 const fs = require('fs');
 const path = require('path');
 const BILLY_BAKERY = require('./billy-bakery');
+const { createFirestoreState } = require('./storage/firestore-state');
 const AI_POLICY = require('./ai/policy');
 const AI_VALIDATOR = require('./ai/validator');
 const { createTavilySearch } = require('./ai/tavily');
