@@ -7,11 +7,13 @@ const DEFAULT_COLLECTION = 'bot_runtime_state';
 
 function encryptionKeyFromEnv(value = process.env.OAUTH_TOKEN_ENCRYPTION_KEY) {
   if (!value) return null;
-  // Accept a 32-byte hex/base64 key, otherwise derive a stable 32-byte key.
   if (/^[a-f0-9]{64}$/i.test(value)) return Buffer.from(value, 'hex');
-  const decoded = Buffer.from(value, 'base64');
-  if (decoded.length === 32) return decoded;
-  return crypto.createHash('sha256').update(value, 'utf8').digest();
+  // openssl rand -base64 32 emits a 32-byte key in canonical 44-char Base64.
+  if (/^[A-Za-z0-9+/]{43}=$/.test(value)) {
+    const decoded = Buffer.from(value, 'base64');
+    if (decoded.length === 32 && decoded.toString('base64') === value) return decoded;
+  }
+  throw new Error('OAUTH_TOKEN_ENCRYPTION_KEY musi być kluczem 32-bajtowym Base64 lub 64 znaków hex.');
 }
 
 function encryptSecret(value, key) {
