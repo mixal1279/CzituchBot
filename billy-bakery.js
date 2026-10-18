@@ -1,6 +1,7 @@
 'use strict';
 
 const fs = require('fs');
+const crypto = require('crypto');
 
 const PIEKARZ_CACHE_FILE = './piekarz_stream_cache.json';
 const KAJZERKA_CACHE_FILE = './kajzerka_billy_cache.json';
@@ -394,7 +395,57 @@ function getBillyBulkaForDay(dateKey, options = {}) {
   return { variant, alreadyAssigned: false };
 }
 
-function handleCommand({ message, nick, login, streamId }, options = {}) {
+function cacheDocId(prefix, value) {
+  return prefix + '_' + crypto.createHash('sha256').update(String(value)).digest('hex');
+}
+
+async function getPiekarzForStreamFirestore(targetKey, streamId, db, options = {}) {
+  const stableStreamId = String(streamId || ('offline-' + new Date().toISOString().slice(0, 10)));
+  const normalizedTarget = String(targetKey || '').toLowerCase();
+  const ref = db.collection('twitch_command_cache').doc(
+    cacheDocId('billy_piekarz', stableStreamId + ':' + normalizedTarget)
+  );
+
+  return db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(ref);
+    if (snapshot.exists && snapshot.data()?.title) {
+      return { title: snapshot.data().title, alreadyAssigned: true };
+    }
+
+    const title = rollPiekarz(options.rng || Math.random);
+    transaction.set(ref, {
+      type: 'billy_piekarz_stream',
+      streamId: stableStreamId,
+      targetKey: normalizedTarget,
+      title,
+      createdAt: new Date().toISOString(),
+    });
+    return { title, alreadyAssigned: false };
+  });
+}
+
+async function getBillyBulkaForDayFirestore(dateKey, db, options = {}) {
+  const normalizedDate = String(dateKey);
+  const ref = db.collection('twitch_command_cache').doc('billy_kajzerka_' + normalizedDate);
+
+  return db.runTransaction(async (transaction) => {
+    const snapshot = await transaction.get(ref);
+    if (snapshot.exists && snapshot.data()?.variant) {
+      return { variant: snapshot.data().variant, alreadyAssigned: true };
+    }
+
+    const variant = rollBillyBulkaVariant(options.rng || Math.random);
+    transaction.set(ref, {
+      type: 'billy_kajzerka_daily',
+      dateKey: normalizedDate,
+      variant,
+      createdAt: new Date().toISOString(),
+    });
+    return { variant, alreadyAssigned: false };
+  });
+}
+
+async function handleCommand({ message, nick, login, streamId }, options = {}) {
   const rng = options.rng || Math.random;
   if (!message || !nick) return null;
   const text = String(message).trim();
@@ -428,7 +479,9 @@ function handleCommand({ message, nick, login, streamId }, options = {}) {
       return '🎯 Wyzwanie dla @' + target + ': ' + result.text;
     }
     if (command === 'piekarz') {
-      const result = getPiekarzForStream(targetKey, streamId, options);
+      const result = options.db
+        ? await getPiekarzForStreamFirestore(targetKey, streamId, options.db, options)
+        : getPiekarzForStream(targetKey, streamId, options);
       const title = result.title;
       if (result.alreadyAssigned) {
         return '🍞 @' + target + ', masz już tytuł na ten stream: ' + title.name + '! ' + title.description;
@@ -445,7 +498,9 @@ function handleCommand({ message, nick, login, streamId }, options = {}) {
     const isBillySender = !targetLogin && senderLogin === 'billybulka';
     if (isBillyTarget || isBillySender) {
       const dateKey = new Date().toISOString().slice(0, 10);
-      const result = getBillyBulkaForDay(dateKey, options);
+      const result = options.db
+        ? await getBillyBulkaForDayFirestore(dateKey, options.db, options)
+        : getBillyBulkaForDay(dateKey, options);
       return '🥖 @BillyBulka otrzymuje ' + result.variant.name + '! ' + result.variant.description
         + (result.variant.rarity === 'tajna' ? ' ✨ TAJNY WYPIEK!' : '');
     }
@@ -475,5 +530,7 @@ module.exports = {
   getPiekarzForStream,
   rollBillyBulkaVariant,
   getBillyBulkaForDay,
+  getPiekarzForStreamFirestore,
+  getBillyBulkaForDayFirestore,
   handleCommand,
 };
