@@ -4,6 +4,15 @@ const fs = require('fs');
 const crypto = require('crypto');
 
 const DEFAULT_COLLECTION = 'bot_runtime_state';
+const LEGACY_CACHE_FILES = {
+  horoscopes: './horoskopy_cache.json',
+  daily_bulka: './bulka_cache.json',
+  daily_arbuz: './arbuz_cache.json',
+  daily_ciastko: './ciastko_cache.json',
+  stream_cm: './cm_stream_cache.json',
+  tiktok_tracking: './tiktok_state.json',
+  tavily_search: './tavily_cache.json',
+};
 
 function encryptionKeyFromEnv(value = process.env.OAUTH_TOKEN_ENCRYPTION_KEY) {
   if (!value) return null;
@@ -61,13 +70,19 @@ function createFirestoreState(db, options = {}) {
       async write() { throw new Error('Firestore jest wyłączony.'); },
       async readToken() { return null; },
       async writeToken() { throw new Error('Firestore jest wyłączony.'); },
-      async loadCache(_cacheName, legacyFile = null) {
+      async loadCache(cacheName, legacyFile = null) {
+        const file = legacyFile || LEGACY_CACHE_FILES[cacheName];
+        if (!file) return {};
         try {
-          const parsed = JSON.parse(await fs.promises.readFile(legacyFile, 'utf8'));
+          const parsed = JSON.parse(await fs.promises.readFile(file, 'utf8'));
           return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
         } catch (_) { return {}; }
       },
-      async saveCache() { throw new Error('Firestore jest wyłączony; nie można zapisać cache do trwałego magazynu.'); },
+      async saveCache(cacheName, value) {
+        const file = LEGACY_CACHE_FILES[cacheName];
+        if (!file) throw new Error('Firestore jest wyłączony i brak lokalnej ścieżki cache dla: ' + cacheName);
+        await fs.promises.writeFile(file, JSON.stringify(value, null, 2), { mode: 0o600 });
+      },
     };
   }
 
