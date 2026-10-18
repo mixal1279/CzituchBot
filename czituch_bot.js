@@ -4509,6 +4509,7 @@ function wczytajCacheHoroskopow() {
 }
 
 async function zapiszCacheHoroskopow(cache) {
+  if (!await ensurePersistentCachesReady()) return;
   await FIRESTORE_STATE.saveCache('horoscopes', cache).catch(err => console.error('[Firestore cache/horoskopy] Zapis nieudany:', err.message));
 }
 
@@ -4650,6 +4651,7 @@ function wczytajCacheBulek() {
 }
 
 async function zapiszCacheBulek(cache) {
+  if (!await ensurePersistentCachesReady()) return;
   await FIRESTORE_STATE.saveCache('daily_bulka', cache).catch(err => console.error('[Firestore cache/bułka] Zapis nieudany:', err.message));
 }
 
@@ -4724,6 +4726,7 @@ function wczytajCacheArbuzow() {
 }
 
 async function zapiszCacheArbuzow(cache) {
+  if (!await ensurePersistentCachesReady()) return;
   await FIRESTORE_STATE.saveCache('daily_arbuz', cache).catch(err => console.error('[Firestore cache/arbuz] Zapis nieudany:', err.message));
 }
 
@@ -4783,6 +4786,7 @@ function wczytajCacheCiastek() {
 }
 
 async function zapiszCacheCiastek(cache) {
+  if (!await ensurePersistentCachesReady()) return;
   await FIRESTORE_STATE.saveCache('daily_ciastko', cache).catch(err => console.error('[Firestore cache/ciastko] Zapis nieudany:', err.message));
 }
 
@@ -4803,6 +4807,7 @@ function wczytajCacheCm() {
 }
 
 async function zapiszCacheCm(cache) {
+  if (!await ensurePersistentCachesReady()) return;
   await FIRESTORE_STATE.saveCache('stream_cm', cache).catch(err => console.error('[Firestore cache/!cm] Zapis nieudany:', err.message));
 }
 
@@ -4810,13 +4815,17 @@ async function zapiszCacheCm(cache) {
 const cmStreamCache = wczytajCacheCm();
 
 let persistentCachesReady = null;
-function replaceObjectContents(target, source) {
-  for (const key of Object.keys(target)) delete target[key];
+let persistentCachesRetryAfter = 0;
+function mergeObjectContents(target, source) {
+  const current = { ...target };
   Object.assign(target, source && typeof source === 'object' ? source : {});
+  // Keep entries added in memory while Firestore was unavailable.
+  Object.assign(target, current);
 }
 
 async function persistMapCache(name, map) {
   try {
+    if (!await ensurePersistentCachesReady()) return;
     await FIRESTORE_STATE.saveCache(name, Object.fromEntries(map));
   } catch (err) {
     console.error('[Firestore cache/' + name + '] Zapis nieudany; wynik pozostaje w pamięci:', err.message);
@@ -4825,6 +4834,7 @@ async function persistMapCache(name, map) {
 
 async function ensurePersistentCachesReady() {
   if (persistentCachesReady) return persistentCachesReady;
+  if (Date.now() < persistentCachesRetryAfter) return false;
   persistentCachesReady = (async () => {
     const caches = await Promise.all([
       FIRESTORE_STATE.loadCache('horoscopes', HOROSKOP_CACHE_PLIK),
@@ -4836,17 +4846,20 @@ async function ensurePersistentCachesReady() {
       FIRESTORE_STATE.loadCache('hltb_results', null),
       FIRESTORE_STATE.loadCache('weather_geocoding', null),
     ]);
-    replaceObjectContents(horoskopDzienneCache, caches[0]);
-    replaceObjectContents(bulkaDzienneCache, caches[1]);
-    replaceObjectContents(arbuzDzienneCache, caches[2]);
-    replaceObjectContents(ciastkoDzienneCache, caches[3]);
-    replaceObjectContents(cmStreamCache, caches[4]);
-    replaceObjectContents(tiktokTrackingState, caches[5]);
-    hltbCache.clear(); for (const [key, value] of Object.entries(caches[6])) hltbCache.set(key, value);
-    geokodowanieCache.clear(); for (const [key, value] of Object.entries(caches[7])) geokodowanieCache.set(key, value);
+    mergeObjectContents(horoskopDzienneCache, caches[0]);
+    mergeObjectContents(bulkaDzienneCache, caches[1]);
+    mergeObjectContents(arbuzDzienneCache, caches[2]);
+    mergeObjectContents(ciastkoDzienneCache, caches[3]);
+    mergeObjectContents(cmStreamCache, caches[4]);
+    mergeObjectContents(tiktokTrackingState, caches[5]);
+    for (const [key, value] of Object.entries(caches[6])) if (!hltbCache.has(key)) hltbCache.set(key, value);
+    for (const [key, value] of Object.entries(caches[7])) if (!geokodowanieCache.has(key)) geokodowanieCache.set(key, value);
+    return true;
   })().catch(error => {
     persistentCachesReady = null;
-    console.error('[Firestore state] Nie udało się wczytać cache — zachowuję stan lokalny:', error.message);
+    persistentCachesRetryAfter = Date.now() + 60_000;
+    console.error('[Firestore state] Nie udało się wczytać cache — ponowię próbę za 60 s; nie zapisuję niepełnego stanu:', error.message);
+    return false;
   });
   return persistentCachesReady;
 }
@@ -4998,10 +5011,16 @@ async function obslugaWiadomosci(nick, message, platforma, wyslijFn, kanal = nul
     }
 
     const userKey = cel.toLocaleLowerCase('pl-PL');
-    const cacheKey = `${platforma}:${kanalNorm}:${streamId}:${userKey}`;
+    const streamPrefix = `${platforma}:${kanalNorm}:`;
+    const currentStreamPrefix = `${streamPrefix}${streamId}:`;
+    const cacheKey = `${currentStreamPrefix}${userKey}`;
     let wynik = cmStreamCache[cacheKey];
 
     if (!Number.isInteger(wynik) || wynik < 1 || wynik > 30) {
+      // Keep only the current stream's assignments for this platform/channel.
+      for (const key of Object.keys(cmStreamCache)) {
+        if (key.startsWith(streamPrefix) && !key.startsWith(currentStreamPrefix)) delete cmStreamCache[key];
+      }
       wynik = Math.floor(Math.random() * 30) + 1;
       cmStreamCache[cacheKey] = wynik;
       await zapiszCacheCm(cmStreamCache);
