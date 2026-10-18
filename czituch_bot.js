@@ -1,5 +1,5 @@
 /**
- * CzituchBot – YouTube + Kick.com + Twitch (UNIFIED)
+ * CzituchBot – YouTube + Twitch (UNIFIED)
  * npm install groq-sdk @googleapis/youtube google-auth-library @google-cloud/firestore tmi.js dotenv ws
  *
  * === WERSJA: v24.1 — AI security/code-review hardening
@@ -7284,13 +7284,6 @@ const startBot = async () => {
       console.error('[YT Auth] ❌ Nie udało się odświeżyć tokenu przed startem:', err.message);
     }
   }
-
-  // ---- Kick – autoryzacja ----
-  const maszTokenKick = wczytajTokenKick();
-  if (!maszTokenKick) {
-    await zalogujKick();
-  }
-  setTimeout(odswiezTokenKick, 55 * 60 * 1000);
 
   // ---- Billy broadcaster token – autoryzacja / auto-refresh ----
   const maszTokenBilly = wczytajTokenBilly();
