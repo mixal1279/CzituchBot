@@ -334,7 +334,7 @@ function czyZablokowanyHostTavily(url) {
   catch (_) { return true; }
 }
 
-function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logger = console, onStatus = () => {}, cacheFile = './tavily_cache.json', geminiKey = process.env.GEMINI_API_KEY, exaKey = process.env.EXA_API_KEY }) {
+function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logger = console, onStatus = () => {}, cacheFile = './tavily_cache.json', stateStore = null, geminiKey = process.env.GEMINI_API_KEY, exaKey = process.env.EXA_API_KEY }) {
   const cache = new Map();
   const inFlight = new Map();
   let persistQueue = Promise.resolve();
@@ -355,6 +355,27 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
     }
   } catch (_) {}
   ograniczCacheTavily(cache);
+  let cacheReadyPromise = null;
+  async function ensureCacheReady() {
+    if (!stateStore?.enabled) return;
+    if (cacheReadyPromise) return cacheReadyPromise;
+    cacheReadyPromise = (async () => {
+      const saved = await stateStore.loadCache('tavily_search', cacheFile);
+      const entries = saved?.version === TAVILY_CACHE_VERSION ? saved.entries : saved;
+      if (!entries || typeof entries !== 'object' || Array.isArray(entries)) return;
+      cache.clear();
+      for (const [key, value] of Object.entries(entries)) {
+        if (typeof key !== 'string' || key.length > 2048) continue;
+        if (!value || typeof value.wynik !== 'string' || value.wynik.length > 12000) continue;
+        if (value.czas && Date.now() - value.czas < (value.ttl || TAVILY_CACHE_TTL_MS)) cache.set(key, value);
+      }
+      ograniczCacheTavily(cache);
+    })().catch(error => {
+      cacheReadyPromise = null;
+      logger.warn?.('[Tavily] Nie udało się wczytać cache z Firestore:', error.message);
+    });
+    return cacheReadyPromise;
+  }
   // Zapis odroczony: wiele wyników w krótkim czasie = jeden zapis pliku (snapshot z chwili zapisu).
   let persistTimer = null;
   const persistCache = () => {
@@ -366,6 +387,10 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
       persistQueue = persistQueue
         .catch(err => logger.warn?.('[Tavily] poprzedni zapis cache nieudany:', err.message))
         .then(async () => {
+          if (stateStore?.enabled) {
+            await stateStore.saveCache('tavily_search', JSON.parse(snapshot));
+            return;
+          }
           await fs.promises.writeFile(tempFile, snapshot, 'utf8', { mode: 0o600 });
           await fs.promises.rename(tempFile, cacheFile);
         })
@@ -402,6 +427,7 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
   const cacheKey = (query, domains, timeRange, sourceQuestion = '') => `${query.toLowerCase().trim()}|${(domains || []).slice().sort().join(',')}|${timeRange || ''}|${slowaKluczoweTavily(sourceQuestion).join(',')}`;
 
   return async function szukajTavily(pytanie, options = {}) {
+    await ensureCacheReady();
     const original = String(pytanie || '').trim();
     const { domains, time_range, _skipRewrite = false, returnMeta = false, sourceStartIndex = 0, sourceQuestion = original, remainingMs = 15000, requestState = null } = options;
     try {
