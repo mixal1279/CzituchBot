@@ -43,6 +43,14 @@ function snapshotCacheTavily(cache, maxBytes = TAVILY_CACHE_MAX_BYTES) {
   return serialized;
 }
 
+function ograniczCacheRewrite(cache, maxBytes = TAVILY_CACHE_MAX_BYTES) {
+  const serializedSize = () => Buffer.byteLength(JSON.stringify(Object.fromEntries(cache)), 'utf8');
+  while (cache.size && serializedSize() > maxBytes) {
+    cache.delete(cache.keys().next().value);
+  }
+  return Object.fromEntries(cache);
+}
+
 function ttlDlaZakresu(timeRange) {
   const r = String(timeRange || '').replace(/^past_/, '').toLowerCase();
   if (!r) return 6 * 60 * 60 * 1000;
@@ -395,8 +403,9 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
       }
       ograniczCacheTavily(cache);
       while (rewriteCache.size > TAVILY_REWRITE_MAX_ENTRIES) rewriteCache.delete(rewriteCache.keys().next().value);
+      ograniczCacheRewrite(rewriteCache);
       await stateStore.saveCache('tavily_search', JSON.parse(snapshotCacheTavily(cache)));
-      await stateStore.saveCache('tavily_rewrite', Object.fromEntries(rewriteCache));
+      await stateStore.saveCache('tavily_rewrite', ograniczCacheRewrite(rewriteCache));
       cacheReady = true;
       return true;
     })().catch(error => {
@@ -499,7 +508,7 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
           rewriteCache.set(rewriteKey, { query: searchQuery, czas: Date.now() });
           if (rewriteCache.size > TAVILY_REWRITE_MAX_ENTRIES) rewriteCache.delete(rewriteCache.keys().next().value);
           if (stateStore?.enabled) {
-            stateStore.saveCache('tavily_rewrite', Object.fromEntries(rewriteCache))
+            stateStore.saveCache('tavily_rewrite', ograniczCacheRewrite(rewriteCache))
               .catch(err => logger.warn?.('[Tavily] Zapis cache przepisywania do Firestore nieudany:', err.message));
           }
         }
