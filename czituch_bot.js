@@ -4323,7 +4323,8 @@ async function zapiszStanTikTok(stan) {
   const snapshot = stan && typeof stan === 'object' ? { ...stan } : {};
   for (const key of Object.keys(tiktokTrackingState)) delete tiktokTrackingState[key];
   Object.assign(tiktokTrackingState, snapshot);
-  await FIRESTORE_STATE.saveCache('tiktok_tracking', tiktokTrackingState);
+  await FIRESTORE_STATE.saveCache('tiktok_tracking', tiktokTrackingState)
+    .catch(err => console.error('[Firestore state/TikTok] Zapis nieudany; stan pozostaje w pamięci:', err.message));
 }
 
 async function pobierzWszystkieTikToki(username) {
@@ -4815,7 +4816,11 @@ function replaceObjectContents(target, source) {
 }
 
 async function persistMapCache(name, map) {
-  await FIRESTORE_STATE.saveCache(name, Object.fromEntries(map));
+  try {
+    await FIRESTORE_STATE.saveCache(name, Object.fromEntries(map));
+  } catch (err) {
+    console.error('[Firestore cache/' + name + '] Zapis nieudany; wynik pozostaje w pamięci:', err.message);
+  }
 }
 
 async function ensurePersistentCachesReady() {
