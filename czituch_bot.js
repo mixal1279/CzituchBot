@@ -1246,7 +1246,7 @@ async function pobierzCzasHLTB(nazwaGry) {
             const wynikSteam = zbudujWynikHLTBZCodepotatoes(graSteam, steamGra.nazwa || nazwaGry);
             hltbCache.set(cacheKey, wynikSteam);
             if (hltbCache.size > 200) hltbCache.delete(hltbCache.keys().next().value);
-            persistMapCache('hltb_results', hltbCache);
+            await persistMapCache('hltb_results', hltbCache);
             console.log(`[HLTB] Znaleziono przez Steam AppID: ${steamGra.appId}`);
             return wynikSteam;
           }
@@ -1289,7 +1289,7 @@ async function pobierzCzasHLTB(nazwaGry) {
         };
         hltbCache.set(cacheKey, wynik);
         if (hltbCache.size > 200) hltbCache.delete(hltbCache.keys().next().value);
-        persistMapCache('hltb_results', hltbCache);
+        await persistMapCache('hltb_results', hltbCache);
         return wynik;
       }
     }
@@ -4317,11 +4317,10 @@ function wczytajStanTikTok() {
   return tiktokTrackingState;
 }
 
-function zapiszStanTikTok(stan) {
+async function zapiszStanTikTok(stan) {
   for (const key of Object.keys(tiktokTrackingState)) delete tiktokTrackingState[key];
   Object.assign(tiktokTrackingState, stan && typeof stan === 'object' ? stan : {});
-  FIRESTORE_STATE.saveCache('tiktok_tracking', tiktokTrackingState)
-    .catch(err => console.error('[Firestore state/TikTok] Zapis nieudany:', err.message));
+  await FIRESTORE_STATE.saveCache('tiktok_tracking', tiktokTrackingState);
 }
 
 async function pobierzWszystkieTikToki(username) {
@@ -4369,7 +4368,7 @@ function uruchomSledzenieTikTok(username, wyslijFn, interwalMs = 15 * 60 * 1000)
       if (!stan[username]) {
         const najnowszy = wpisy[wpisy.length - 1];
         stan[username] = { link: najnowszy.link, czas: najnowszy.czas };
-        zapiszStanTikTok(stan);
+        await zapiszStanTikTok(stan);
       }
       return;
     }
@@ -4380,7 +4379,7 @@ function uruchomSledzenieTikTok(username, wyslijFn, interwalMs = 15 * 60 * 1000)
 
     const najnowszy = nowe[nowe.length - 1];
     stan[username] = { link: najnowszy.link, czas: najnowszy.czas };
-    zapiszStanTikTok(stan);
+    await zapiszStanTikTok(stan);
   }, interwalMs);
   console.log(`[TikTok] ✅ Śledzenie @${username} uruchomione (co ${interwalMs / 60000} min, nadrabianie do ${TIKTOK_OKNO_NADRABIANIA_MS / 3600000}h wstecz)`);
 }
@@ -4423,7 +4422,7 @@ async function geokodujMiasto(miasto) {
     if (geokodowanieCache.size > 300) {
       geokodowanieCache.delete(geokodowanieCache.keys().next().value);
     }
-    persistMapCache('weather_geocoding', geokodowanieCache);
+    await persistMapCache('weather_geocoding', geokodowanieCache);
   }
   return miejsce;
 }
@@ -4505,7 +4504,7 @@ function wczytajCacheHoroskopow() {
   return {};
 }
 
-function zapiszCacheHoroskopow(cache) {
+async function zapiszCacheHoroskopow(cache) {
   FIRESTORE_STATE.saveCache('horoscopes', cache).catch(err => console.error('[Firestore cache/horoskopy] Zapis nieudany:', err.message));
 }
 
@@ -4573,7 +4572,7 @@ async function pobierzPrawdziwyHoroskop(znakEn, znakPl) {
     }
 
     horoskopDzienneCache[cacheKey] = tekstPl;
-    zapiszCacheHoroskopow(horoskopDzienneCache);
+    await zapiszCacheHoroskopow(horoskopDzienneCache);
     return tekstPl;
   } catch (err) {
     console.error(`[Horoskop] ❌ Nie udało się pobrać/przetłumaczyć horoskopu dla ${znakEn}:`, err.message);
@@ -4646,7 +4645,7 @@ function wczytajCacheBulek() {
   return {};
 }
 
-function zapiszCacheBulek(cache) {
+async function zapiszCacheBulek(cache) {
   FIRESTORE_STATE.saveCache('daily_bulka', cache).catch(err => console.error('[Firestore cache/bułka] Zapis nieudany:', err.message));
 }
 
@@ -4720,7 +4719,7 @@ function wczytajCacheArbuzow() {
   return {};
 }
 
-function zapiszCacheArbuzow(cache) {
+async function zapiszCacheArbuzow(cache) {
   FIRESTORE_STATE.saveCache('daily_arbuz', cache).catch(err => console.error('[Firestore cache/arbuz] Zapis nieudany:', err.message));
 }
 
@@ -4779,7 +4778,7 @@ function wczytajCacheCiastek() {
   return {};
 }
 
-function zapiszCacheCiastek(cache) {
+async function zapiszCacheCiastek(cache) {
   FIRESTORE_STATE.saveCache('daily_ciastko', cache).catch(err => console.error('[Firestore cache/ciastko] Zapis nieudany:', err.message));
 }
 
@@ -4799,7 +4798,7 @@ function wczytajCacheCm() {
   return {};
 }
 
-function zapiszCacheCm(cache) {
+async function zapiszCacheCm(cache) {
   FIRESTORE_STATE.saveCache('stream_cm', cache).catch(err => console.error('[Firestore cache/!cm] Zapis nieudany:', err.message));
 }
 
@@ -4812,9 +4811,8 @@ function replaceObjectContents(target, source) {
   Object.assign(target, source && typeof source === 'object' ? source : {});
 }
 
-function persistMapCache(name, map) {
-  FIRESTORE_STATE.saveCache(name, Object.fromEntries(map))
-    .catch(err => console.error('[Firestore cache/' + name + '] Zapis nieudany:', err.message));
+async function persistMapCache(name, map) {
+  await FIRESTORE_STATE.saveCache(name, Object.fromEntries(map));
 }
 
 async function ensurePersistentCachesReady() {
@@ -4970,7 +4968,7 @@ async function obslugaWiadomosci(nick, message, platforma, wyslijFn, kanal = nul
       }
       arbuz = ARBUZY[Math.floor(Math.random() * ARBUZY.length)];
       arbuzDzienneCache[cacheKey] = arbuz;
-      zapiszCacheArbuzow(arbuzDzienneCache);
+      await zapiszCacheArbuzow(arbuzDzienneCache);
     }
 
     return await wyslijFn(`🍉 @${nick} dziś jesteś jak ${arbuz.nazwa}!`);
@@ -4998,7 +4996,7 @@ async function obslugaWiadomosci(nick, message, platforma, wyslijFn, kanal = nul
     if (!Number.isInteger(wynik) || wynik < 1 || wynik > 30) {
       wynik = Math.floor(Math.random() * 30) + 1;
       cmStreamCache[cacheKey] = wynik;
-      zapiszCacheCm(cmStreamCache);
+      await zapiszCacheCm(cmStreamCache);
     }
 
     return await wyslijFn(`@${cel} ma ${wynik} cm.`);
@@ -5018,7 +5016,7 @@ async function obslugaWiadomosci(nick, message, platforma, wyslijFn, kanal = nul
       }
       ciastko = CIASTKA[Math.floor(Math.random() * CIASTKA.length)];
       ciastkoDzienneCache[cacheKey] = ciastko;
-      zapiszCacheCiastek(ciastkoDzienneCache);
+      await zapiszCacheCiastek(ciastkoDzienneCache);
     }
 
     return await wyslijFn(`🍪 @${nick} dziś jesteś jak ${ciastko.nazwa}!`);
@@ -6581,7 +6579,7 @@ async function obslugaTwitch(nick, message, wyslijFn, config = TWITCH_CONFIG_BIL
         }
         bulka = BULKI[Math.floor(Math.random() * BULKI.length)];
         bulkaDzienneCache[cacheKey] = bulka;
-        zapiszCacheBulek(bulkaDzienneCache);
+        await zapiszCacheBulek(bulkaDzienneCache);
       }
 
       return await wyslijFn(`🍞 @${nick} dziś jesteś jak ${bulka.nazwa}!`);
