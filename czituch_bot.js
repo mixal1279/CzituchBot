@@ -58,6 +58,7 @@ process.on('uncaughtException', (err) => {
 
 const fs = require('fs');
 const path = require('path');
+const BILLY_BAKERY = require('./billy-bakery');
 const AI_POLICY = require('./ai/policy');
 const AI_VALIDATOR = require('./ai/validator');
 const { createTavilySearch } = require('./ai/tavily');
@@ -6407,6 +6408,17 @@ async function obslugaTwitch(nick, message, wyslijFn, config = TWITCH_CONFIG_BIL
 
   // Komendy specyficzne dla Billy
   if (kanal === 'billybulka') {
+    const bakeryResponse = BILLY_BAKERY.handleCommand({
+      message,
+      nick,
+      login: tags?.username || nick,
+      streamId: streamStart.twitch.billybulka || null,
+    });
+    if (bakeryResponse) {
+      ostatnieUzycie[cooldownKey] = teraz;
+      return await wyslijFn(bakeryResponse);
+    }
+
     // !ai korzysta z TEGO SAMEGO pipeline'u AI co pozostałe kanały:
     // GameLore/GameFAQs, Tavily, conversation routing, claim validator, fallbacki modeli itd.
     // Jedyna różnica dla Billy to persona + dedykowane domeny Tavily.
@@ -6493,7 +6505,7 @@ async function obslugaTwitch(nick, message, wyslijFn, config = TWITCH_CONFIG_BIL
 
     if (msgLower === '!komendy') {
       ostatnieUzycie[cooldownKey] = teraz;
-      return await wyslijFn(`Dostępne komendy: !watchtime, !followage, !dc, !tiktok, !ig, !yt, !lurk, !ai, !horoskop, !bułka`);
+      return await wyslijFn(`Dostępne komendy: !watchtime, !followage, !dc, !tiktok, !ig, !yt, !lurk, !ai, !horoskop, !bułka, !zakwas, !wyzwanie, !piekarz, !swiezy, !smak, !okruszek, !przypalony`);
     }
     if (msgLower === '!yt') {
       ostatnieUzycie[cooldownKey] = teraz;
