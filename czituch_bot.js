@@ -6408,12 +6408,12 @@ async function obslugaTwitch(nick, message, wyslijFn, config = TWITCH_CONFIG_BIL
 
   // Komendy specyficzne dla Billy
   if (kanal === 'billybulka') {
-    const bakeryResponse = BILLY_BAKERY.handleCommand({
+    const bakeryResponse = await BILLY_BAKERY.handleCommand({
       message,
       nick,
       login: tags?.username || nick,
       streamId: streamStart.twitch.billybulka || null,
-    });
+    }, { db });
     if (bakeryResponse) {
       ostatnieUzycie[cooldownKey] = teraz;
       return await wyslijFn(bakeryResponse);
