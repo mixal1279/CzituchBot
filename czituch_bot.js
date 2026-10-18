@@ -5280,6 +5280,7 @@ async function zapiszTokenYT(tokens) {
   await FIRESTORE_STATE.writeToken('youtube', tokens);
   const verified = await FIRESTORE_STATE.readToken('youtube');
   if (JSON.stringify(verified) !== JSON.stringify(tokens)) throw new Error('Weryfikacja zapisu tokenu YouTube nie powiodła się.');
+  try { await fs.promises.unlink(KONFIGURACJA.ytTokenFile); } catch (err) { if (err.code !== 'ENOENT') console.warn('[YT Auth] Nie usunięto starego pliku tokenu:', err.message); }
   console.log('[YT Auth] ✅ Zaszyfrowany token zapisany do Firestore');
 }
 
@@ -5296,6 +5297,13 @@ async function wczytajTokenYT() {
           console.log('[YT Auth] ✅ Stary token przeniesiony do szyfrowanego magazynu');
         } catch (migrationError) {
           console.warn('[YT Auth] Migracja do szyfrowanego magazynu nieudana; zachowuję istniejący token:', migrationError.message);
+        }
+      } else {
+        try { credentials = await FIRESTORE_STATE.migrateTokenFile('youtube', KONFIGURACJA.ytTokenFile); }
+        catch (migrationError) {
+          console.warn('[YT Auth] Migracja tokenu z pliku nieudana; plik pozostaje bez zmian:', migrationError.message);
+          try { credentials = JSON.parse(await fs.promises.readFile(KONFIGURACJA.ytTokenFile, 'utf8')); }
+          catch (readError) { if (readError.code !== 'ENOENT') console.error('[YT Auth] Błąd odczytu pliku tokenu:', readError.message); }
         }
       }
     }
