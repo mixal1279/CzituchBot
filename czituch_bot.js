@@ -5277,16 +5277,31 @@ let liveChatId    = null;
 let nextPageToken = null;
 
 async function zapiszTokenYT(tokens) {
-  await db.collection('config').doc('youtube_token').set(tokens);
-  console.log('[YT Auth] ✅ Token zapisany do Firestore');
+  await FIRESTORE_STATE.writeToken('youtube', tokens);
+  const verified = await FIRESTORE_STATE.readToken('youtube');
+  if (JSON.stringify(verified) !== JSON.stringify(tokens)) throw new Error('Weryfikacja zapisu tokenu YouTube nie powiodła się.');
+  console.log('[YT Auth] ✅ Zaszyfrowany token zapisany do Firestore');
 }
 
 async function wczytajTokenYT() {
   try {
-    const doc = await db.collection('config').doc('youtube_token').get();
-    if (doc.exists) {
-      oauth2Client.setCredentials(doc.data());
-      console.log('[YT Auth] ✅ Wczytano token z Firestore');
+    let credentials = await FIRESTORE_STATE.readToken('youtube');
+    if (!credentials) {
+      const legacyDoc = await db.collection('config').doc('youtube_token').get();
+      if (legacyDoc.exists) {
+        credentials = legacyDoc.data();
+        try {
+          await zapiszTokenYT(credentials);
+          await db.collection('config').doc('youtube_token').delete();
+          console.log('[YT Auth] ✅ Stary token przeniesiony do szyfrowanego magazynu');
+        } catch (migrationError) {
+          console.warn('[YT Auth] Migracja do szyfrowanego magazynu nieudana; zachowuję istniejący token:', migrationError.message);
+        }
+      }
+    }
+    if (credentials) {
+      oauth2Client.setCredentials(credentials);
+      console.log('[YT Auth] ✅ Wczytano token YouTube');
       return true;
     }
   } catch (err) { console.error('[YT Auth] Błąd wczytywania:', err.message); }
@@ -7362,8 +7377,7 @@ const startBot = async () => {
   } else {
     await wyswietlKontoYoutube();
     oauth2Client.on('tokens', async (newTokens) => {
-      const doc = await db.collection('config').doc('youtube_token').get();
-      const current = doc.exists ? doc.data() : {};
+      const current = await FIRESTORE_STATE.readToken('youtube') || oauth2Client.credentials || {};
       await zapiszTokenYT({ ...current, ...newTokens });
       console.log('[YT Auth] 🔄 Token automatycznie odświeżony');
     });
