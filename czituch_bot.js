@@ -4492,7 +4492,7 @@ function wczytajCacheHoroskopow() {
 }
 
 function zapiszCacheHoroskopow(cache) {
-  try { fs.writeFileSync(HOROSKOP_CACHE_PLIK, JSON.stringify(cache, null, 2)); } catch (_) {}
+  FIRESTORE_STATE.saveCache('horoscopes', cache).catch(err => console.error('[Firestore cache/horoskopy] Zapis nieudany:', err.message));
 }
 
 const horoskopDzienneCache = wczytajCacheHoroskopow();
@@ -4633,7 +4633,7 @@ function wczytajCacheBulek() {
 }
 
 function zapiszCacheBulek(cache) {
-  try { fs.writeFileSync(BULKA_CACHE_PLIK, JSON.stringify(cache, null, 2)); } catch (_) {}
+  FIRESTORE_STATE.saveCache('daily_bulka', cache).catch(err => console.error('[Firestore cache/bułka] Zapis nieudany:', err.message));
 }
 
 const bulkaDzienneCache = wczytajCacheBulek();
@@ -4707,7 +4707,7 @@ function wczytajCacheArbuzow() {
 }
 
 function zapiszCacheArbuzow(cache) {
-  try { fs.writeFileSync(ARBUZ_CACHE_PLIK, JSON.stringify(cache, null, 2)); } catch (_) {}
+  FIRESTORE_STATE.saveCache('daily_arbuz', cache).catch(err => console.error('[Firestore cache/arbuz] Zapis nieudany:', err.message));
 }
 
 const arbuzDzienneCache = wczytajCacheArbuzow();
@@ -4766,7 +4766,7 @@ function wczytajCacheCiastek() {
 }
 
 function zapiszCacheCiastek(cache) {
-  try { fs.writeFileSync(CIASTKO_CACHE_PLIK, JSON.stringify(cache, null, 2)); } catch (_) {}
+  FIRESTORE_STATE.saveCache('daily_ciastko', cache).catch(err => console.error('[Firestore cache/ciastko] Zapis nieudany:', err.message));
 }
 
 const ciastkoDzienneCache = wczytajCacheCiastek();
@@ -4786,11 +4786,7 @@ function wczytajCacheCm() {
 }
 
 function zapiszCacheCm(cache) {
-  try {
-    fs.writeFileSync(CM_CACHE_PLIK, JSON.stringify(cache, null, 2));
-  } catch (err) {
-    console.error('[!cm] Nie udało się zapisać cache:', err.message);
-  }
+  FIRESTORE_STATE.saveCache('stream_cm', cache).catch(err => console.error('[Firestore cache/!cm] Zapis nieudany:', err.message));
 }
 
 const cmStreamCache = wczytajCacheCm();
