@@ -4767,6 +4767,30 @@ function zapiszCacheCiastek(cache) {
 
 const ciastkoDzienneCache = wczytajCacheCiastek();
 
+// Stały przydział dla !cm: jedna wartość 1–30 na użytkownika i konkretny stream.
+// Plik pozwala zachować wyniki po restarcie procesu; nowy identyfikator streamu
+// automatycznie daje użytkownikowi nowy przydział.
+const CM_CACHE_PLIK = './cm_stream_cache.json';
+
+function wczytajCacheCm() {
+  try {
+    if (fs.existsSync(CM_CACHE_PLIK)) return JSON.parse(fs.readFileSync(CM_CACHE_PLIK, 'utf8'));
+  } catch (err) {
+    console.warn('[!cm] Nie udało się odczytać cache:', err.message);
+  }
+  return {};
+}
+
+function zapiszCacheCm(cache) {
+  try {
+    fs.writeFileSync(CM_CACHE_PLIK, JSON.stringify(cache, null, 2));
+  } catch (err) {
+    console.error('[!cm] Nie udało się zapisać cache:', err.message);
+  }
+}
+
+const cmStreamCache = wczytajCacheCm();
+
 // Tabela rodzajów ciastek do komendy !ciastko (kanały Edzziego)
 const CIASTKA = [
   { nazwa: 'ciastko z kawałkami czekolady', opis: 'klasyk, na którym nikt się nie zawiedzie' },
@@ -4822,8 +4846,6 @@ async function obslugaWiadomosci(nick, message, platforma, wyslijFn, kanal = nul
 
   if (ostatnieUzycie[cooldownKey] && teraz - ostatnieUzycie[cooldownKey] < KONFIGURACJA.cooldown) return;
 
-  // ---- Bufor czatu ----
-  dodajDoBufora(nick, `${platforma}:${kanalNorm || 'brak-kanalu'}`);
 
   // ---- Kick: zmiana tytułu / kategorii streamu (tylko moderatorzy/broadcaster) ----
   if (platforma === 'kick' && (msgLower === '!tytul' || msgLower.startsWith('!tytul ') || msgLower === '!kategoria' || msgLower.startsWith('!kategoria '))) {
@@ -4862,7 +4884,7 @@ async function obslugaWiadomosci(nick, message, platforma, wyslijFn, kanal = nul
   // które nadal działają równolegle również na Kicku Edzziego.
   const youtubeEdzzi = platforma === 'youtube' && ['edzzi_minecraft', 'edzzi'].includes(kanalNorm);
   if (youtubeEdzzi && msgLower.startsWith('!')) {
-    const dozwoloneKomendyYoutubeEdzzi = ['!ai', '!mamdepresje', '!californiarz', '!ciastko'];
+    const dozwoloneKomendyYoutubeEdzzi = ['!ai', '!mamdepresje', '!californiarz', '!ciastko', '!cm'];
     const komendaYoutubeEdzzi = msgLower.split(/\s+/)[0];
     if (!dozwoloneKomendyYoutubeEdzzi.includes(komendaYoutubeEdzzi)) return;
   }
@@ -4897,6 +4919,34 @@ async function obslugaWiadomosci(nick, message, platforma, wyslijFn, kanal = nul
     }
 
     return await wyslijFn(`🍉 @${nick} dziś jesteś jak ${arbuz.nazwa}!`);
+  }
+
+  // ---- !cm: stały wynik użytkownika w obrębie jednego streamu YouTube ----
+  if (platforma === 'youtube' && EDZZI_KANALY.includes(kanalNorm) && /^!cm(?:\s|$)/i.test(message.trim())) {
+    ostatnieUzycie[cooldownKey] = teraz;
+
+    const argument = message.trim().split(/\s+/).slice(1).join(' ').trim();
+    const cel = (argument || nick).replace(/^@/, '').trim();
+    if (!cel) return await wyslijFn('Użycie: !cm [@nick]');
+
+    // ID wideo jest unikalne dla streamu i jest ponownie pobierane po restarcie bota.
+    const streamId = streamVideoId.youtube[kanalNorm]
+      || (streamStart.youtube[kanalNorm] ? String(streamStart.youtube[kanalNorm]) : null);
+    if (!streamId) {
+      return await wyslijFn('!cm jest chwilowo niedostępne — bot nie ustalił jeszcze ID aktualnego streamu.');
+    }
+
+    const userKey = cel.toLocaleLowerCase('pl-PL');
+    const cacheKey = `${kanalNorm}:${streamId}:${userKey}`;
+    let wynik = cmStreamCache[cacheKey];
+
+    if (!Number.isInteger(wynik) || wynik < 1 || wynik > 30) {
+      wynik = Math.floor(Math.random() * 30) + 1;
+      cmStreamCache[cacheKey] = wynik;
+      zapiszCacheCm(cmStreamCache);
+    }
+
+    return await wyslijFn(`@${cel} ma ${wynik} cm.`);
   }
 
   if (msgLower === '!ciastko' && EDZZI_KANALY.includes(kanalNorm)) {
