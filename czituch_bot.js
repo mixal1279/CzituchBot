@@ -1246,6 +1246,7 @@ async function pobierzCzasHLTB(nazwaGry) {
             const wynikSteam = zbudujWynikHLTBZCodepotatoes(graSteam, steamGra.nazwa || nazwaGry);
             hltbCache.set(cacheKey, wynikSteam);
             if (hltbCache.size > 200) hltbCache.delete(hltbCache.keys().next().value);
+            persistMapCache('hltb_results', hltbCache);
             console.log(`[HLTB] Znaleziono przez Steam AppID: ${steamGra.appId}`);
             return wynikSteam;
           }
@@ -1288,6 +1289,7 @@ async function pobierzCzasHLTB(nazwaGry) {
         };
         hltbCache.set(cacheKey, wynik);
         if (hltbCache.size > 200) hltbCache.delete(hltbCache.keys().next().value);
+        persistMapCache('hltb_results', hltbCache);
         return wynik;
       }
     }
@@ -4421,6 +4423,7 @@ async function geokodujMiasto(miasto) {
     if (geokodowanieCache.size > 300) {
       geokodowanieCache.delete(geokodowanieCache.keys().next().value);
     }
+    persistMapCache('weather_geocoding', geokodowanieCache);
   }
   return miejsce;
 }
@@ -4809,6 +4812,11 @@ function replaceObjectContents(target, source) {
   Object.assign(target, source && typeof source === 'object' ? source : {});
 }
 
+function persistMapCache(name, map) {
+  FIRESTORE_STATE.saveCache(name, Object.fromEntries(map))
+    .catch(err => console.error('[Firestore cache/' + name + '] Zapis nieudany:', err.message));
+}
+
 async function ensurePersistentCachesReady() {
   if (persistentCachesReady) return persistentCachesReady;
   persistentCachesReady = (async () => {
@@ -4819,6 +4827,8 @@ async function ensurePersistentCachesReady() {
       FIRESTORE_STATE.loadCache('daily_ciastko', CIASTKO_CACHE_PLIK),
       FIRESTORE_STATE.loadCache('stream_cm', CM_CACHE_PLIK),
       FIRESTORE_STATE.loadCache('tiktok_tracking', TIKTOK_STATE_PLIK),
+      FIRESTORE_STATE.loadCache('hltb_results', null),
+      FIRESTORE_STATE.loadCache('weather_geocoding', null),
     ]);
     replaceObjectContents(horoskopDzienneCache, caches[0]);
     replaceObjectContents(bulkaDzienneCache, caches[1]);
@@ -4826,6 +4836,8 @@ async function ensurePersistentCachesReady() {
     replaceObjectContents(ciastkoDzienneCache, caches[3]);
     replaceObjectContents(cmStreamCache, caches[4]);
     replaceObjectContents(tiktokTrackingState, caches[5]);
+    hltbCache.clear(); for (const [key, value] of Object.entries(caches[6])) hltbCache.set(key, value);
+    geokodowanieCache.clear(); for (const [key, value] of Object.entries(caches[7])) geokodowanieCache.set(key, value);
   })().catch(error => {
     persistentCachesReady = null;
     console.error('[Firestore state] Nie udało się wczytać cache — zachowuję stan lokalny:', error.message);
