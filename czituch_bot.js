@@ -5876,38 +5876,38 @@ function getBillyToken() {
   return token ? token.replace(/^oauth:/i, '') : null;
 }
 
-function zapiszTokenBilly(data) {
+async function zapiszTokenBilly(data) {
   const expiresInMs = (data.expires_in ?? 3600) * 1000;
   billyWygasaO = Date.now() + expiresInMs;
-
-  // Najpierw aktualizujemy stan w pamięci — to jest źródło prawdy dla bota,
-  // niezależnie od tego, czy zapis na dysk się powiedzie.
   billyAccessToken = data.access_token;
   if (data.refresh_token) billyRefreshToken = data.refresh_token;
-
-  // Zapis na dysk to tylko persystencja "na przyszły restart" — jego ewentualny
-  // błąd (I/O hiccup itp.) nie może cofnąć tego, co bot już ma w pamięci.
+  const doZapisu = { ...data, wygasa_o: billyWygasaO };
   try {
-    const doZapisu = { ...data, wygasa_o: billyWygasaO };
-    fs.writeFileSync('./billy_token.json', JSON.stringify(doZapisu, null, 2), { mode: 0o600 });
-    console.log('[Billy Auth] ✅ Token zapisany do billy_token.json');
+    await FIRESTORE_STATE.writeToken('twitch_billy', doZapisu);
+    const verified = await FIRESTORE_STATE.readToken('twitch_billy');
+    if (JSON.stringify(verified) !== JSON.stringify(doZapisu)) throw new Error('Weryfikacja tokenu Billy nie powiodła się.');
+    try { await fs.promises.unlink('./billy_token.json'); } catch (err) { if (err.code !== 'ENOENT') console.warn('[Billy Auth] Nie usunięto starego pliku tokenu:', err.message); }
+    console.log('[Billy Auth] ✅ Zaszyfrowany token zapisany do Firestore');
   } catch (err) {
-    console.error('[Billy Auth] ⚠️ Nie udało się zapisać tokenu na dysk (token w pamięci jest aktualny):', err.message);
+    console.error('[Billy Auth] ⚠️ Nie udało się utrwalić tokenu w Firestore (token w pamięci jest aktualny):', err.message);
   }
 }
 
-function wczytajTokenBilly() {
+async function wczytajTokenBilly() {
+  let data = null;
   try {
-    if (fs.existsSync('./billy_token.json')) {
-      const data = JSON.parse(fs.readFileSync('./billy_token.json', 'utf8'));
-      billyAccessToken = data.access_token;
-      billyRefreshToken = data.refresh_token;
-      billyWygasaO = typeof data.wygasa_o === 'number' ? data.wygasa_o : 0;
-      console.log('[Billy Auth] ✅ Wczytano token z pliku');
-      return true;
-    }
-  } catch (err) { console.error('[Billy Auth] Błąd wczytywania:', err.message); }
-  return false;
+    data = await FIRESTORE_STATE.migrateTokenFile('twitch_billy', './billy_token.json');
+  } catch (err) {
+    console.warn('[Billy Auth] Migracja tokenu nieudana; próbuję użyć pliku bez usuwania go:', err.message);
+    try { data = JSON.parse(await fs.promises.readFile('./billy_token.json', 'utf8')); }
+    catch (readError) { if (readError.code !== 'ENOENT') console.error('[Billy Auth] Błąd wczytywania:', readError.message); }
+  }
+  if (!data) return false;
+  billyAccessToken = data.access_token;
+  billyRefreshToken = data.refresh_token;
+  billyWygasaO = typeof data.wygasa_o === 'number' ? data.wygasa_o : 0;
+  console.log('[Billy Auth] ✅ Wczytano token');
+  return true;
 }
 
 // Liczy realny czas do odświeżenia na podstawie wygasa_o, zamiast sztywnych 55 min od restartu.
@@ -5951,7 +5951,7 @@ async function odswiezTokenBilly() {
       const data = await res.json();
       billyAccessToken = data.access_token;
       if (data.refresh_token) billyRefreshToken = data.refresh_token;
-      zapiszTokenBilly(data);
+      await zapiszTokenBilly(data);
       billyTokenDead = false;
       const refreshTime = ((data.expires_in ?? 3600) - 60) * 1000;
       console.log(`[Billy Auth] ✅ Token odświeżony! Następne za ${Math.round(refreshTime / 60000)} min`);
@@ -7399,7 +7399,7 @@ const startBot = async () => {
   }
 
   // ---- Billy broadcaster token – autoryzacja / auto-refresh ----
-  const maszTokenBilly = wczytajTokenBilly();
+  const maszTokenBilly = await wczytajTokenBilly();
   if (!maszTokenBilly && process.env.TWITCH_OAUTH_TOKEN_BROADCASTER_BILLY) {
     billyAccessToken = process.env.TWITCH_OAUTH_TOKEN_BROADCASTER_BILLY;
     console.log('[Billy Auth] ℹ️  Używam tokena z env (brak refresh – auto-refresh nieaktywny)');
