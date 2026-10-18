@@ -7176,41 +7176,39 @@ const twitchChatTokeny = {
   edlor: { access: null, refresh: null, dead: false, refreshPromise: null, plik: './twitch_chat_edlor_token.json' },
 };
 
-function wczytajTokenTwitchChat(botKey) {
+async function wczytajTokenTwitchChat(botKey) {
   const stan = twitchChatTokeny[botKey];
+  let data = null;
   try {
-    if (fs.existsSync(stan.plik)) {
-      const data = JSON.parse(fs.readFileSync(stan.plik, 'utf8'));
-      stan.access = data.access_token;
-      stan.refresh = data.refresh_token;
-      // Znacznik czasu wygaśnięcia zapisany przy poprzednim odświeżeniu (jeśli jest).
-      // Brak pola = plik zapisany starą wersją kodu -> traktujemy jako "nieznane", odśwież od razu.
-      stan.wygasaO = typeof data.wygasa_o === 'number' ? data.wygasa_o : 0;
-      console.log(`[Twitch Chat/${botKey}] ✅ Wczytano token z pliku`);
-      return true;
-    }
-  } catch (err) { console.error(`[Twitch Chat/${botKey}] Błąd wczytywania:`, err.message); }
-  return false;
+    data = await FIRESTORE_STATE.migrateTokenFile('twitch_chat_' + botKey, stan.plik);
+  } catch (err) {
+    console.warn(`[Twitch Chat/${botKey}] Migracja tokenu nieudana; próbuję użyć pliku bez usuwania go:`, err.message);
+    try { data = JSON.parse(await fs.promises.readFile(stan.plik, 'utf8')); }
+    catch (readError) { if (readError.code !== 'ENOENT') console.error(`[Twitch Chat/${botKey}] Błąd wczytywania:`, readError.message); }
+  }
+  if (!data) return false;
+  stan.access = data.access_token;
+  stan.refresh = data.refresh_token;
+  stan.wygasaO = typeof data.wygasa_o === 'number' ? data.wygasa_o : 0;
+  console.log(`[Twitch Chat/${botKey}] ✅ Wczytano token`);
+  return true;
 }
 
-function zapiszTokenTwitchChat(botKey, data) {
+async function zapiszTokenTwitchChat(botKey, data) {
   const stan = twitchChatTokeny[botKey];
   const expiresInMs = (data.expires_in ?? 3600) * 1000;
   stan.wygasaO = Date.now() + expiresInMs;
-
-  // Najpierw aktualizujemy stan w pamięci — to jest źródło prawdy dla bota,
-  // niezależnie od tego, czy zapis na dysk się powiedzie.
   stan.access = data.access_token;
   if (data.refresh_token) stan.refresh = data.refresh_token;
-
-  // Zapis na dysk to tylko persystencja "na przyszły restart" — jego ewentualny
-  // błąd (I/O hiccup itp.) nie może cofnąć tego, co bot już ma w pamięci.
   try {
     const doZapisu = { ...data, wygasa_o: stan.wygasaO };
-    fs.writeFileSync(stan.plik, JSON.stringify(doZapisu, null, 2), { mode: 0o600 });
-    console.log(`[Twitch Chat/${botKey}] ✅ Token zapisany do ${stan.plik}`);
+    await FIRESTORE_STATE.writeToken('twitch_chat_' + botKey, doZapisu);
+    const verified = await FIRESTORE_STATE.readToken('twitch_chat_' + botKey);
+    if (JSON.stringify(verified) !== JSON.stringify(doZapisu)) throw new Error('Weryfikacja tokenu czatu Twitch nie powiodła się.');
+    try { await fs.promises.unlink(stan.plik); } catch (err) { if (err.code !== 'ENOENT') console.warn(`[Twitch Chat/${botKey}] Nie usunięto starego pliku tokenu:`, err.message); }
+    console.log(`[Twitch Chat/${botKey}] ✅ Zaszyfrowany token zapisany do Firestore`);
   } catch (err) {
-    console.error(`[Twitch Chat/${botKey}] ⚠️ Nie udało się zapisać tokenu na dysk (token w pamięci jest aktualny):`, err.message);
+    console.error(`[Twitch Chat/${botKey}] ⚠️ Nie udało się utrwalić tokenu w Firestore (token w pamięci jest aktualny):`, err.message);
   }
 }
 
@@ -7272,7 +7270,7 @@ async function odswiezTokenTwitchChat(botKey) {
         throw err;
       }
       const data = await res.json();
-      zapiszTokenTwitchChat(botKey, data);
+      await zapiszTokenTwitchChat(botKey, data);
       stan.dead = false;
       const refreshTime = ((data.expires_in ?? 3600) - 60) * 1000;
       console.log(`[Twitch Chat/${botKey}] ✅ Token odświeżony! Następne za ${Math.round(refreshTime / 60000)} min`);
@@ -7407,7 +7405,7 @@ const startBot = async () => {
   zaplanujOdswiezenieBilly();
 
   // ---- Twitch Chat token czituch_industries – auto-refresh ----
-  const maszTokenEdlor = wczytajTokenTwitchChat('edlor');
+  const maszTokenEdlor = await wczytajTokenTwitchChat('edlor');
   if (!maszTokenEdlor) {
     twitchChatTokeny.edlor.access  = process.env.TWITCH_OAUTH_TOKEN_EDLOR || null;
     twitchChatTokeny.edlor.refresh = process.env.TWITCH_REFRESH_TOKEN_EDLOR || null;
