@@ -5,6 +5,8 @@ const assert = require('node:assert/strict');
 const {
   wyodrebnijNazwyWlasne,
   zgodnoscStrukturalna,
+  sprawdzSprzecznosciSemantyczne,
+  sprawdzTwardeKonflikty,
 } = require('../ai/claimValidation');
 
 test('sentence-initial generic words are not treated as proper names', () => {
@@ -80,6 +82,27 @@ test('negation mismatch remains a hard failure', () => {
     'Arthur nie zabił strażnika.',
     'Arthur zabił strażnika.',
   );
+  assert.equal(result.ok, false);
+  assert.match(result.reason, /negację/);
+});
+
+test('English damage vocabulary does not create a false semantic conflict and zero damage still supports reduction', () => {
+  const evidence = "You'll take no damage from their breath when blocking. You can kill dragons.";
+  const claim = 'Blokowanie redukuje obrażenia od ich oddechu.';
+  assert.equal(sprawdzSprzecznosciSemantyczne(evidence, claim).ok, true);
+  assert.equal(sprawdzTwardeKonflikty(evidence, claim).ok, true);
+});
+
+test('English lack of and absence of remain negations in the hard gate', () => {
+  for (const evidence of ['There is a lack of siblings.', 'There is an absence of siblings.']) {
+    const result = sprawdzTwardeKonflikty(evidence, 'He has siblings.');
+    assert.equal(result.ok, false, evidence);
+    assert.match(result.reason, /negację/);
+  }
+});
+
+test('the zero-quantifier exception does not erase an unrelated no-siblings conflict', () => {
+  const result = sprawdzTwardeKonflikty('He has no siblings.', 'Ma rodzeństwo.');
   assert.equal(result.ok, false);
   assert.match(result.reason, /negację/);
 });
