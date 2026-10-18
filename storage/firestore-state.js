@@ -50,6 +50,10 @@ function createFirestoreState(db, options = {}) {
   const key = encryptionKeyFromEnv(options.encryptionKey);
   const collection = options.collection || DEFAULT_COLLECTION;
 
+  if (db && !key) {
+    throw new Error('Brak poprawnego OAUTH_TOKEN_ENCRYPTION_KEY. Ustaw klucz przed uruchomieniem magazynu Firestore.');
+  }
+
   if (!db) {
     return {
       enabled: false,
@@ -63,7 +67,7 @@ function createFirestoreState(db, options = {}) {
           return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
         } catch (_) { return {}; }
       },
-      async saveCache() {},
+      async saveCache() { throw new Error('Firestore jest wyłączony; nie można zapisać cache do trwałego magazynu.'); },
     };
   }
 
