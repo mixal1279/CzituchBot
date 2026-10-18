@@ -97,26 +97,29 @@ function createFirestoreState(db, options = {}) {
 
   async function loadCache(cacheName, legacyFile = null) {
     const stored = await read('cache', cacheName);
-    if (stored && typeof stored === 'object' && !Array.isArray(stored)) {
-      if (legacyFile) await removeLegacyAfterVerified(legacyFile, stored, cacheName);
-      return stored;
-    }
-
     let legacy = {};
     if (legacyFile) {
       try {
-        const raw = await fs.promises.readFile(legacyFile, 'utf8');
-        const parsed = JSON.parse(raw);
+        const parsed = JSON.parse(await fs.promises.readFile(legacyFile, 'utf8'));
         if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) legacy = parsed;
       } catch (error) {
         if (error.code !== 'ENOENT') logger.warn?.('[Firestore state] Nie udało się odczytać starego cache:', error.message);
       }
     }
 
-    // Zapisujemy nawet pusty obiekt, aby po pierwszym uruchomieniu źródłem prawdy był Firestore.
-    await write('cache', cacheName, legacy);
-    if (legacyFile) await removeLegacyAfterVerified(legacyFile, legacy, cacheName);
-    return legacy;
+    const storedIsObject = stored && typeof stored === 'object' && !Array.isArray(stored);
+    // Merge legacy entries missing from Firestore; Firestore wins on duplicate keys.
+    const merged = storedIsObject ? { ...legacy, ...stored } : legacy;
+    const needsWrite = !storedIsObject || JSON.stringify(merged) !== JSON.stringify(stored);
+    if (needsWrite) {
+      await write('cache', cacheName, merged);
+      const verified = await read('cache', cacheName);
+      if (!verified || JSON.stringify(verified) !== JSON.stringify(merged)) {
+        throw new Error('Weryfikacja migracji cache nie powiodła się: ' + cacheName);
+      }
+    }
+    if (legacyFile) await removeLegacyAfterVerified(legacyFile, merged, cacheName);
+    return merged;
   }
 
   async function removeLegacyAfterVerified(file, expected, cacheName) {
