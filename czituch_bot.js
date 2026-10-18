@@ -4789,7 +4789,36 @@ function zapiszCacheCm(cache) {
   FIRESTORE_STATE.saveCache('stream_cm', cache).catch(err => console.error('[Firestore cache/!cm] Zapis nieudany:', err.message));
 }
 
+
 const cmStreamCache = wczytajCacheCm();
+
+let persistentCachesReady = null;
+function replaceObjectContents(target, source) {
+  for (const key of Object.keys(target)) delete target[key];
+  Object.assign(target, source && typeof source === 'object' ? source : {});
+}
+
+async function ensurePersistentCachesReady() {
+  if (persistentCachesReady) return persistentCachesReady;
+  persistentCachesReady = (async () => {
+    const caches = await Promise.all([
+      FIRESTORE_STATE.loadCache('horoscopes', HOROSKOP_CACHE_PLIK),
+      FIRESTORE_STATE.loadCache('daily_bulka', BULKA_CACHE_PLIK),
+      FIRESTORE_STATE.loadCache('daily_arbuz', ARBUZ_CACHE_PLIK),
+      FIRESTORE_STATE.loadCache('daily_ciastko', CIASTKO_CACHE_PLIK),
+      FIRESTORE_STATE.loadCache('stream_cm', CM_CACHE_PLIK),
+    ]);
+    replaceObjectContents(horoskopDzienneCache, caches[0]);
+    replaceObjectContents(bulkaDzienneCache, caches[1]);
+    replaceObjectContents(arbuzDzienneCache, caches[2]);
+    replaceObjectContents(ciastkoDzienneCache, caches[3]);
+    replaceObjectContents(cmStreamCache, caches[4]);
+  })().catch(error => {
+    persistentCachesReady = null;
+    console.error('[Firestore state] Nie udało się wczytać cache — zachowuję stan lokalny:', error.message);
+  });
+  return persistentCachesReady;
+}
 
 // Tabela rodzajów ciastek do komendy !ciastko (kanały Edzziego)
 const CIASTKA = [
