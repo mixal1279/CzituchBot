@@ -6571,7 +6571,7 @@ async function obslugaTwitch(nick, message, wyslijFn, config = TWITCH_CONFIG_BIL
       ostatnieUzycie[cooldownKey] = teraz;
 
       const dzisiaj  = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-      const cacheKey = `${platforma}:${kanalNorm || 'brak-kanalu'}:${nick.toLowerCase()}_${dzisiaj}`;
+      const cacheKey = `twitch:${kanalNorm || 'brak-kanalu'}:${nick.toLowerCase()}_${dzisiaj}`;
 
       let bulka = bulkaDzienneCache[cacheKey];
       if (!bulka) {
