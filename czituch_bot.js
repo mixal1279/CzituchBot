@@ -358,6 +358,8 @@ const db = process.env.CZITUCHBOT_SKIP_STARTUP_IO === '1'
       keyFilename: './czituchbot-9c561-firebase-adminsdk-fbsvc-241e465e40.json',
     });
 
+const FIRESTORE_STATE = createFirestoreState(db);
+
 const COL_GRACZE       = 'ekonomia_gracze';
 const COL_PODATKI      = 'ekonomia_podatki';
 const COL_LOKATY       = 'ekonomia_lokaty';
