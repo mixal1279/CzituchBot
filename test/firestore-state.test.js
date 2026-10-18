@@ -5,7 +5,8 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
-const { createFirestoreState, encryptSecret, decryptSecret } = require('../storage/firestore-state');
+const { createFirestoreState, encryptSecret, decryptSecret, encryptionKeyFromEnv } = require('../storage/firestore-state');
+const TEST_KEY = Buffer.alloc(32, 7).toString('base64');
 
 function createMockFirestore() {
   const docs = new Map();
@@ -28,22 +29,60 @@ function createMockFirestore() {
 }
 
 test('OAuth token payload is encrypted and round-trips with the same key', () => {
-  const key = 'test-encryption-key-not-for-production';
+  const key = Buffer.alloc(32, 7);
   const token = { access_token: 'access-secret', refresh_token: 'refresh-secret', expires_in: 3600 };
-  const encrypted = encryptSecret(token, require('node:crypto').createHash('sha256').update(key).digest());
+  const encrypted = encryptSecret(token, key);
   assert.equal(JSON.stringify(encrypted).includes('access-secret'), false);
-  assert.deepEqual(decryptSecret(encrypted, require('node:crypto').createHash('sha256').update(key).digest()), token);
+  assert.deepEqual(decryptSecret(encrypted, key), token);
   assert.throws(() => decryptSecret(encrypted, null), /OAUTH_TOKEN_ENCRYPTION_KEY/);
 });
 
 test('Firestore state stores OAuth tokens encrypted and reads them back', async () => {
   const db = createMockFirestore();
-  const state = createFirestoreState(db, { encryptionKey: 'test-encryption-key-not-for-production', logger: { info() {}, warn() {} } });
+  const state = createFirestoreState(db, { encryptionKey: TEST_KEY, logger: { info() {}, warn() {} } });
   const token = { access_token: 'access-secret', refresh_token: 'refresh-secret' };
   await state.writeToken('twitch_test', token);
   assert.deepEqual(await state.readToken('twitch_test'), token);
   const document = db.docs.get('bot_runtime_state/oauth__twitch_test');
   assert.equal(JSON.stringify(document).includes('access-secret'), false);
+});
+
+test('weak or malformed encryption keys are rejected', () => {
+  assert.equal(encryptionKeyFromEnv(TEST_KEY).length, 32);
+  assert.throws(() => encryptionKeyFromEnv('short-secret'), /musi być kluczem 32-bajtowym/);
+  assert.throws(() => createFirestoreState(createMockFirestore(), { encryptionKey: 'short-secret' }), /OAUTH_TOKEN_ENCRYPTION_KEY/);
+});
+
+test('Firestore token wins on mismatch while local backup is preserved', async () => {
+  const db = createMockFirestore();
+  const state = createFirestoreState(db, { encryptionKey: TEST_KEY, logger: { info() {}, warn() {} } });
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'czituch-token-'));
+  const file = path.join(dir, 'token.json');
+  const current = { access_token: 'current', refresh_token: 'current-refresh' };
+  const stale = { access_token: 'stale', refresh_token: 'stale-refresh' };
+  await state.writeToken('youtube', current);
+  await fs.writeFile(file, JSON.stringify(stale), 'utf8');
+  try {
+    assert.deepEqual(await state.migrateTokenFile('youtube', file), current);
+    assert.deepEqual(JSON.parse(await fs.readFile(file, 'utf8')), stale);
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('missing encryption key preserves legacy token file', async () => {
+  const db = createMockFirestore();
+  const state = createFirestoreState(db, { encryptionKey: TEST_KEY, logger: { info() {}, warn() {} } });
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'czituch-token-'));
+  const file = path.join(dir, 'token.json');
+  const legacy = { access_token: 'legacy', refresh_token: 'legacy-refresh' };
+  await fs.writeFile(file, JSON.stringify(legacy), 'utf8');
+  try {
+    assert.deepEqual(await state.migrateTokenFile('youtube', file), legacy);
+    assert.deepEqual(JSON.parse(await fs.readFile(file, 'utf8')), legacy);
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
 });
 
 test('legacy cache is migrated and deleted only after Firestore verification', async () => {
