@@ -32,6 +32,8 @@
  * Skopiuj .env.example do .env i uzupełnij klucze
  */
 
+require('dotenv').config();
+
 const { youtube: youtubeFactory } = require('@googleapis/youtube');
 const { OAuth2Client } = require('google-auth-library');
 const Groq       = require('groq-sdk');
@@ -490,7 +492,7 @@ async function ustawZweryfikowanaPamiecAI(userId, records) {
 
 const readline   = require('readline');
 const crypto     = require('crypto');
-require('dotenv').config();
+
 console.log('[DEBUG] GOOGLE_API_KEY:', process.env.GOOGLE_API_KEY ? '✅ ustawiony' : '❌ BRAK');
 console.log('[Gemini] 🔑 GEMINI_API_KEY:', process.env.GEMINI_API_KEY ? '✅ ustawiony (fallback aktywny)' : '❌ BRAK (fallback wyłączony)');
 console.log('[OpenRouter] 🔑 OPENROUTER_API_KEY:', process.env.OPENROUTER_API_KEY ? '✅ ustawiony (fallback aktywny)' : '❌ BRAK (fallback wyłączony)');
