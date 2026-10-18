@@ -67,23 +67,23 @@ test('kajzerka BillyBulki jest stała w ciągu dnia i może się zmienić nastę
   assert.equal(nextDay.alreadyAssigned, false);
 });
 
-test('komenda bułka ma specjalną pulę tylko dla BillyBulki', () => {
-  const own = bakery.handleCommand({ message: '!bułka', nick: 'BillyBulka', login: 'billybulka' }, { cache: {}, persist: false, rng: () => 0 });
+test('komenda bułka ma specjalną pulę tylko dla BillyBulki', async () => {
+  const own = await bakery.handleCommand({ message: '!bułka', nick: 'BillyBulka', login: 'billybulka' }, { cache: {}, persist: false, rng: () => 0 });
   assert.match(own, /@BillyBulka otrzymuje/);
-  const targeted = bakery.handleCommand({ message: '!bułka @BillyBulka', nick: 'viewer', login: 'viewer' }, { cache: {}, persist: false, rng: () => 0 });
+  const targeted = await bakery.handleCommand({ message: '!bułka @BillyBulka', nick: 'viewer', login: 'viewer' }, { cache: {}, persist: false, rng: () => 0 });
   assert.match(targeted, /@BillyBulka otrzymuje/);
-  assert.equal(bakery.handleCommand({ message: '!bułka', nick: 'viewer', login: 'viewer' }), null);
+  assert.equal(await bakery.handleCommand({ message: '!bułka', nick: 'viewer', login: 'viewer' }), null);
 });
 
-test('komendy obsługują cel opcjonalny i generują odpowiedź', () => {
+test('komendy obsługują cel opcjonalny i generują odpowiedź', async () => {
   for (const command of ['!zakwas', '!wyzwanie', '!piekarz', '!swiezy', '!smak', '!okruszek', '!przypalony']) {
-    const response = bakery.handleCommand({
+    const response = await bakery.handleCommand({
       message: command, nick: 'viewer', login: 'viewer', streamId: 'test-stream',
     }, { cache: {}, persist: false, rng: () => 0.2 });
     assert.equal(typeof response, 'string', command);
     assert.ok(response.includes('@viewer'), command);
   }
-  const targeted = bakery.handleCommand({
+  const targeted = await bakery.handleCommand({
     message: '!swiezy @BillyBulka', nick: 'viewer', login: 'viewer', streamId: 'test-stream',
   }, { cache: {}, persist: false, rng: () => 0.2 });
   assert.ok(targeted.includes('@BillyBulka'));
