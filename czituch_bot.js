@@ -4922,10 +4922,10 @@ async function obslugaWiadomosci(nick, message, platforma, wyslijFn, kanal = nul
   }
 
   // ---- !cm: stały wynik użytkownika w obrębie jednego streamu YouTube ----
-  if (platforma === 'youtube' && EDZZI_KANALY.includes(kanalNorm) && /^!cm(?:\\s|$)/i.test(message.trim())) {
+  if (platforma === 'youtube' && EDZZI_KANALY.includes(kanalNorm) && /^!cm(?:\s|$)/i.test(message.trim())) {
     ostatnieUzycie[cooldownKey] = teraz;
 
-    const argument = message.trim().split(/\\s+/).slice(1).join(' ').trim();
+    const argument = message.trim().split(/\s+/).slice(1).join(' ').trim();
     const cel = (argument || nick).replace(/^@/, '').trim();
     if (!cel) return await wyslijFn('Użycie: !cm [@nick]');
 
@@ -4946,7 +4946,7 @@ async function obslugaWiadomosci(nick, message, platforma, wyslijFn, kanal = nul
       zapiszCacheCm(cmStreamCache);
     }
 
-    return await wyslijFn(`@ ${cel} ma ${wynik} cm.`.replace('@ ', '@'));
+    return await wyslijFn(`@${cel} ma ${wynik} cm.`);
   }
 
   if (msgLower === '!ciastko' && EDZZI_KANALY.includes(kanalNorm)) {
