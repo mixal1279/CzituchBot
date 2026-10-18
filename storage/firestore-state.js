@@ -142,13 +142,18 @@ function createFirestoreState(db, options = {}) {
       const stat = await fs.promises.stat(file);
       if (!stat.isFile()) return;
       const parsed = JSON.parse(await fs.promises.readFile(file, 'utf8'));
-      if (JSON.stringify(parsed) !== JSON.stringify(expected)) return;
+      if (JSON.stringify(parsed) !== JSON.stringify(expected)) {
+        logger.warn?.('[Firestore state] Stary plik cache różni się od scalonych danych; zachowuję go jako kopię zapasową:', file);
+        return;
+      }
       const check = await read('cache', cacheName);
       // Cache document IDs can be logical names rather than file names. Only remove
       // when the caller has already loaded the stored value and confirmed equality.
       if (check && JSON.stringify(check) === JSON.stringify(expected)) {
         await fs.promises.unlink(file);
         logger.info?.('[Firestore state] Stary plik cache przeniesiony do Firestore:', file);
+      } else {
+        logger.warn?.('[Firestore state] Nie usuwam starego pliku cache — dane w Firestore nie przeszły weryfikacji:', file);
       }
     } catch (error) {
       if (error.code !== 'ENOENT') logger.warn?.('[Firestore state] Nie usunięto starego pliku cache:', error.message);
