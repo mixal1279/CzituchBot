@@ -33,10 +33,30 @@ function removeLeadingSourceMetadataNoise(value) {
   return lines.join('\n').trim().replace(/^TREŚĆ:\s*/i, '').trim();
 }
 
+function findEvidenceHeaderMatches(text) {
+  const matches = [];
+  let offset = 0;
+  let insideUntrustedContent = false;
+  // Source-looking lines inside a marked webpage body are untrusted content,
+  // not new top-level evidence blocks. Track the delimiters before accepting
+  // a header so an injected [SOURCE 99] cannot split or relabel the source.
+  for (const lineWithEnding of text.match(/[^\n]*(?:\n|$)/g) || []) {
+    if (!lineWithEnding) continue;
+    const line = lineWithEnding.replace(/[\r\n]+$/g, '');
+    if (!insideUntrustedContent) {
+      const match = line.match(/^\[(SOURCE \d+|REFERENCE [^\]\r\n]+)\]\s*$/i);
+      if (match) matches.push({ index: offset, 0: line, 1: match[1] });
+    }
+    if (/<<<UNTRUSTED_SOURCE_CONTENT>>>/i.test(line)) insideUntrustedContent = true;
+    if (/<<<END_UNTRUSTED_SOURCE_CONTENT>>>/i.test(line)) insideUntrustedContent = false;
+    offset += lineWithEnding.length;
+  }
+  return matches;
+}
+
 function parseEvidenceBlocks(data) {
   const text = String(data || '');
-  const re = /^\[(SOURCE \d+|REFERENCE [^\]\r\n]+)\]\s*$/gmi;
-  const matches = [...text.matchAll(re)];
+  const matches = findEvidenceHeaderMatches(text);
   return matches.map((match, index) => {
     const start = match.index + match[0].length;
     const end = index + 1 < matches.length ? matches[index + 1].index : text.length;
