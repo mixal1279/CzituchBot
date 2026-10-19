@@ -274,6 +274,39 @@ test('xKiro wysyła limit 1600 i json_object oraz honoruje własny endpoint', as
   assert.match(result.reason, /UCIĘTY JSON/);
 });
 
+test('xKiro validator preserves daily free-token exhaustion details when setting 429 cooldown', async () => {
+  hooks.KONFIGURACJA.xkiroKey = 'test-xkiro-key';
+  hooks.KONFIGURACJA.xkiroModel = 'qwen/qwen3.5-397b-a17b:free';
+  let calls = 0;
+  mockFetch(async () => {
+    calls++;
+    return jsonResponse({
+      error: {
+        message: 'Free tokens per day (TPD) exhausted',
+        type: 'rate_limit_error',
+        code: 'rate_limit_exceeded',
+      },
+    }, 429);
+  });
+
+  const originalNow = Date.now;
+  try {
+    const result = await hooks.walidujOdpowiedzXKiro('generic', QUESTION, ANSWER, EVIDENCE, 'test-xk-daily-quota');
+    assert.equal(result.status, 'unavailable');
+    assert.equal(calls, 1);
+
+    // A burst cooldown is 60 seconds by default. Moving forward two minutes
+    // proves that the daily quota response was retained as a 24-hour cooldown.
+    Date.now = () => originalNow() + 2 * 60 * 1000;
+    const skipped = await hooks.walidujOdpowiedzXKiro('generic', QUESTION, ANSWER, EVIDENCE, 'test-xk-daily-quota-cooldown');
+    assert.equal(skipped.status, 'unavailable');
+    assert.equal(skipped.skipped, true);
+    assert.equal(calls, 1, 'daily quota cooldown must prevent another request');
+  } finally {
+    Date.now = originalNow;
+  }
+});
+
 test('xKiro validator wall-clock timeout settles even if fetch ignores AbortSignal', async () => {
   hooks.KONFIGURACJA.xkiroKey = 'test-xkiro-key';
   hooks.KONFIGURACJA.xkiroModel = 'qwen/qwen3.5-397b-a17b:free';
