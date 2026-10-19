@@ -1,6 +1,6 @@
 'use strict';
 
-const { parseEvidenceBlocks } = require('./evidence');
+const { parseEvidenceBlocks, removeLeadingSourceMetadataNoise } = require('./evidence');
 
 function normalizujTokenLiczbowy(token) {
   const text = String(token || '')
@@ -122,7 +122,7 @@ function sprawdzTwardeFaktyOdpowiedzi(odpowiedz, dane, pytanie = '') {
   const parsedSources = parseEvidenceBlocks(rawEvidence);
   const referenceText = parsedSources.length
     ? parsedSources.map(source => source.content).filter(Boolean).join('\n')
-    : rawEvidence;
+    : removeLeadingSourceMetadataNoise(rawEvidence);
   const refs = referenceText.toLocaleLowerCase('pl-PL')
     .replace(/[\u00a0\u2009\u202f]/g, ' ').replace(/\s+/g, ' ').replace(/,/g, '.');
   const referenceTokens = new Set(wyodrebnijTwardeTokeny(refs));

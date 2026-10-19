@@ -70,6 +70,16 @@ test('hard-fact response guard canonicalizes equivalent decimal formatting', () 
     ].join('\n'),
   );
   assert.equal(metadataOnly.ok, false, 'dates in source titles/URLs must not count as evidence');
+
+  const unstructuredMetadataOnly = sprawdzTwardeFaktyOdpowiedzi(
+    'Wydarzenie miało miejsce w 2011 roku.',
+    [
+      'TYTUŁ: Wydarzenie 2011',
+      'URL: https://example.com/2011',
+      'Brak daty w treści źródła.',
+    ].join('\n'),
+  );
+  assert.equal(unstructuredMetadataOnly.ok, false, 'metadata must not become evidence when a legacy block has no source ID');
 });
 
 test('quality metrics expose coverage and answer-quality aggregates', () => {
