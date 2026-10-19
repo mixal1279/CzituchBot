@@ -4,7 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { normalizujWynikWalidatora } = require('../ai/validator');
 const { parseEvidenceText } = require('../ai/pipeline');
-const { parseEvidenceBlocks, quoteExists, buildEvidenceRepairContext, buildQuestionEvidenceContext, normalizeEvidenceText, classifyClaimType, evidenceRelationSignals, rankEvidenceForClaim, removeLeadingImageFilenameNoise, escapeUntrustedEvidenceContent } = require('../ai/evidence');
+const { parseEvidenceBlocks, quoteExists, ensureEvidenceSourceId, buildEvidenceCandidatesFromSources, buildEvidenceRepairContext, buildQuestionEvidenceContext, normalizeEvidenceText, classifyClaimType, evidenceRelationSignals, rankEvidenceForClaim, removeLeadingImageFilenameNoise, escapeUntrustedEvidenceContent } = require('../ai/evidence');
 
 function base(claim, sourceId, quote, answer = claim) {
   return normalizujWynikWalidatora({

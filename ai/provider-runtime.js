@@ -69,6 +69,7 @@ function awaitWithAbortTimeout(promise, timeoutMs, controller, label = 'provider
 function computeValidatorReserveMs(remainingMs, currentSlot = 1, maxValidators = 3) {
   const remaining = Number(remainingMs);
   if (!Number.isFinite(remaining) || remaining <= 0) return 0;
+
   const slot = Math.max(1, Math.floor(Number(currentSlot) || 1));
   const maxSlots = Math.max(slot, Math.floor(Number(maxValidators) || 3));
   const futureSlots = maxSlots - slot;

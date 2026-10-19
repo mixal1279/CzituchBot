@@ -15,7 +15,6 @@ on:
       - 'ai/**'
       - 'test/**'
       - 'package.json'
-      - 'czituch_bot.js'
       - '.github/workflows/ai-tests.yml'
 
 jobs:

@@ -102,11 +102,21 @@ test('pipeline input and validation decisions are deterministic', () => {
   assert.deepEqual(sanitizeQuestion('1234567890', null, 5), { ok: false, reason: 'too_long', maxLength: 5 });
   assert.deepEqual(decideValidation(STATUS.ACCEPTED), { finalStatus: STATUS.ACCEPTED, retry: false });
   assert.equal(decideValidation(STATUS.REJECTED, { allowRetry: true }).retry, true);
+  assert.deepEqual(decideValidation(STATUS.UNVERIFIED), {
+    finalStatus: STATUS.UNVERIFIED,
+    retry: false,
+    reason: 'validator_unavailable_but_deterministic_gates_passed',
+  });
   assert.equal(decideValidation('unexpected').finalStatus, STATUS.UNAVAILABLE);
 });
 
 test('pipeline finalText replaces terminal failure output and sanitizes accepted output', () => {
   assert.equal(finalText('anything', STATUS.REJECTED), 'Nie mam wystarczających danych, żeby odpowiedzieć na to pewnie.');
+  assert.equal(
+    finalText('odpowiedź robocza', STATUS.UNVERIFIED),
+    '⚠️ Odpowiedź niezweryfikowana — walidator jest niedostępny. odpowiedź robocza',
+  );
+  assert.equal(finalText('', STATUS.UNVERIFIED), 'Chwilowo nie mogę potwierdzić tej informacji, więc nie będę zgadywać.');
   assert.equal(finalText('  poprawna odpowiedź  ', STATUS.ACCEPTED, {
     sanitizeResponse: value => value.replace(/\s+/g, ' '),
   }), 'poprawna odpowiedź');

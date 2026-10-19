@@ -71,9 +71,9 @@ function classifyFailure(error = '') {
     : extractErrorCore(String(error?.message || error || ''));
   // Some providers use HTTP 429 for temporary capacity pressure, not exhausted quota.
   if (/(?:high demand|overloaded|temporarily unavailable|capacity exceeded)/i.test(text)) return 'transient';
-  // HTTP 402 is a credit/payment quota even if the provider omits words such as
-  // "credit" or "insufficient". This also lets generator fallbacks cool down.
+  // HTTP 402 is a credit/payment quota even if the provider omits quota wording.
   if (/(?:HTTP\s*402|"status"\s*:\s*402)/i.test(text)) return 'quota';
+
   for (const [type, pattern] of DETAIL_CLASSIFIERS) {
     if (pattern.test(text)) return type;
   }
@@ -236,8 +236,8 @@ function normalizeProviderEndpoint(provider) {
     model = process.env.OPENROUTER_GENERATOR_MODEL || process.env.AI_GENERATOR_MODEL || 'openai/gpt-oss-120b';
   }
   return `${providerName}:${model}`;
-}
 
+}
 function markProviderQuota(provider, cooldownMs = Number(process.env.AI_PROVIDER_QUOTA_COOLDOWN_MS) || 60_000) {
   const endpoint = normalizeProviderEndpoint(provider);
   if (!endpoint) return [];
@@ -314,7 +314,7 @@ function repairBudgetBlockReason({
   if (Number.isFinite(Number(repairGenerations)) && Number.isFinite(Number(maxRepairGenerations)) && Number(repairGenerations) >= Number(maxRepairGenerations)) {
     return 'repair_generation_budget_exhausted';
   }
-  // Repair timeout requires >=3s to generate plus 10.5s reserved for validation/fallback.
+  // Repair requires 3s generation plus the 10.5s validation/fallback reserve.
   if (Number.isFinite(Number(remainingMs)) && Number(remainingMs) < 13500) {
     return 'insufficient_time_for_fallback';
   }

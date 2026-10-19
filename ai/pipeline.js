@@ -15,6 +15,7 @@ const STATUS = Object.freeze({
   SOFT_ACCEPTED: 'soft_accepted',
   INCONCLUSIVE: 'inconclusive',
   UNAVAILABLE: 'unavailable',
+  UNVERIFIED: 'unverified',
 });
 
 function createRequestId(randomUUID = null) {
@@ -84,6 +85,7 @@ function classifyPipelineFailure(status, options = {}) {
   if (s === 'rejected') return 'validator_reject';
   if (s === 'inconclusive') return 'validator_inconclusive';
   if (s === 'unavailable') return options.reason || 'provider_unavailable';
+  if (s === 'unverified') return 'validator_unverified';
   return 'unknown';
 }
 
@@ -111,6 +113,9 @@ function decideValidation(status, options = {}) {
       reason: 'validator_could_not_reach_a_reliable_decision',
     };
   }
+  if (s === STATUS.UNVERIFIED) {
+    return { finalStatus: STATUS.UNVERIFIED, retry: false, reason: 'validator_unavailable_but_deterministic_gates_passed' };
+  }
   return { finalStatus: STATUS.UNAVAILABLE, retry: false, reason: 'validator_unavailable' };
 }
 
@@ -119,6 +124,15 @@ function finalText(text, status, helpers = {}) {
   if (status === STATUS.SOFT_ACCEPTED) return helpers.rejectedMessage || 'Nie mam wystarczających danych, żeby odpowiedzieć na to pewnie.';
   if (status === STATUS.INCONCLUSIVE) return helpers.inconclusiveMessage || 'Chwilowo nie mogę wiarygodnie potwierdzić tej informacji, więc nie będę zgadywać.';
   if (status === STATUS.UNAVAILABLE) return helpers.unavailableMessage || 'Chwilowo nie mogę potwierdzić tej informacji, więc nie będę zgadywać.';
+  if (status === STATUS.UNVERIFIED) {
+    let value = String(text || '');
+    if (typeof helpers.sanitizeResponse === 'function') value = helpers.sanitizeResponse(value);
+    value = value.trim();
+    const warning = '⚠️ Odpowiedź niezweryfikowana — walidator jest niedostępny. ';
+    return value
+      ? (value.startsWith(warning) ? value : warning + value)
+      : (helpers.unavailableMessage || 'Chwilowo nie mogę potwierdzić tej informacji, więc nie będę zgadywać.');
+  }
 
   let value = String(text || '');
   if (typeof helpers.sanitizeResponse === 'function') value = helpers.sanitizeResponse(value);

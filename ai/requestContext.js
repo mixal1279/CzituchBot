@@ -89,6 +89,7 @@ function createAIRequestContext(options = {}) {
   ctx.canReserveGeneration = (phase = 'initial') => {
     if (ctx.isExpired() || ctx.generacje >= ctx.maxGeneracji || ctx.modelCalls >= ctx.maxModelCalls) return false;
     const isRepair = phase === 'repair';
+
     if (isRepair && ctx.remainingMs() < 8500) return false;
     if (isRepair && ctx.repairGeneracje >= ctx.maxRepairGeneracji) return false;
     if (!isRepair && ctx.initialGeneracje >= ctx.maxInitialGeneracji) return false;
@@ -107,6 +108,7 @@ function createAIRequestContext(options = {}) {
 
   ctx.reserveValidator = (purpose = 'validator') =>
     ctx.reserve('validatory', ctx.maxValidatorow, purpose);
+
 
   ctx.reserveValidatorModel = (purpose = 'validator') => {
     if (ctx.isExpired()

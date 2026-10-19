@@ -297,7 +297,9 @@ function rankEvidenceForClaim(claim, blocks, allowedSourceIds = null, limit = 3)
 
 /**
  * Normalize a source identifier only when it matches an ID already used by the
- * evidence payload. Arbitrary provider IDs and URLs are never converted.
+ * evidence payload. Arbitrary provider IDs and URLs are never converted; IDs must
+ * bind to parsed [SOURCE n] or [REFERENCE ...] blocks already present in payload.
+
  */
 function ensureEvidenceSourceId(candidate) {
   const raw = String(candidate?.sourceId ?? candidate?.source_id ?? candidate?.id ?? '').trim();
@@ -309,8 +311,10 @@ function ensureEvidenceSourceId(candidate) {
 }
 
 /**
- * Build verbatim candidates from parsed, authorized source blocks. Quotes are
- * copied from source content and checked again before they are returned.
+ * Build and rank verbatim candidates from parsed, authorized source blocks.
+ * Quotes are copied from source content and checked again before being returned;
+ * they are never generated or paraphrased.
+
  */
 function buildEvidenceCandidatesFromSources(sources, question = '', options = {}) {
   if (!Array.isArray(sources) || !String(question || '').trim()) return [];
@@ -341,6 +345,7 @@ function buildEvidenceCandidatesFromSources(sources, question = '', options = {}
       claimType: candidate.claimType,
       relationMatch: candidate.relationMatch,
       semanticMatches: candidate.semanticMatches || 0,
+
     }));
 }
 
@@ -363,6 +368,7 @@ function buildEvidenceRepairContext(claims, blocks, allowedSourceIds = null, max
       .filter(candidate => !claimIsCausal
         || (candidate.relationMatch && evidenceRelationSignals(candidate.evidence_quote).causal)
         || Number(candidate.semanticMatches) >= 1)
+
       .filter(candidate => !claimIsSourceMeta)
       .slice(0, 2);
     if (!candidates.length) continue;

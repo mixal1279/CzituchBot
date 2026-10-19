@@ -235,7 +235,7 @@ test('repair after validator rejection selects only configured healthy providers
   }), []);
 });
 
-test('repair checks shared model-call and generation limits before selecting a provider', () => {
+test('repair checks shared model-call, generation and time limits before selecting a provider', () => {
   const budget = {
     // Naprawa wymaga co najmniej 13,5 s (3 s generowania + 10,5 s rezerwy).
     remainingMs: 20000,
@@ -248,6 +248,7 @@ test('repair checks shared model-call and generation limits before selecting a p
   };
   assert.equal(repairBudgetBlockReason(budget), 'model_calls_exhausted');
   assert.equal(repairBudgetBlockReason({ ...budget, modelCalls: 7 }), null);
+  assert.equal(repairBudgetBlockReason({ ...budget, modelCalls: 7, remainingMs: 8499 }), 'insufficient_time_for_fallback');
   assert.equal(repairBudgetBlockReason({ ...budget, modelCalls: 7, remainingMs: 0 }), 'request_deadline_exhausted');
 });
 
