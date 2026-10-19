@@ -34,14 +34,26 @@ function ograniczCacheTavily(cache, maxEntries = TAVILY_CACHE_MAX_ENTRIES) {
 
 function snapshotCacheTavily(cache, maxBytes = TAVILY_CACHE_MAX_BYTES) {
   const entries = [...cache.entries()];
-  let snapshot = { version: TAVILY_CACHE_VERSION, entries: Object.fromEntries(entries) };
-  let serialized = JSON.stringify(snapshot);
-  while (Buffer.byteLength(serialized, 'utf8') > maxBytes && entries.length) {
-    entries.shift();
-    snapshot = { version: TAVILY_CACHE_VERSION, entries: Object.fromEntries(entries) };
-    serialized = JSON.stringify(snapshot);
+  const selectedNewestFirst = [];
+  let serializedBytes = Buffer.byteLength(JSON.stringify({
+    version: TAVILY_CACHE_VERSION,
+    entries: {},
+  }), 'utf8');
+
+  for (let i = entries.length - 1; i >= 0; i--) {
+    const [key, value] = entries[i];
+    const propertyBytes = serializedCacheEntryBytes(key, value);
+    const addedBytes = propertyBytes + (selectedNewestFirst.length ? 1 : 0);
+    if (serializedBytes + addedBytes > maxBytes) continue;
+    selectedNewestFirst.push([key, value]);
+    serializedBytes += addedBytes;
   }
-  return serialized;
+
+  selectedNewestFirst.reverse();
+  return JSON.stringify({
+    version: TAVILY_CACHE_VERSION,
+    entries: Object.fromEntries(selectedNewestFirst),
+  });
 }
 
 function serializedCacheEntryBytes(key, value) {
