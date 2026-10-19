@@ -1,6 +1,7 @@
 name: AI regression tests
 
 on:
+  workflow_dispatch:
   push:
     paths:
       - 'ai/**'
@@ -14,7 +15,6 @@ on:
       - 'ai/**'
       - 'test/**'
       - 'package.json'
-      - 'czituch_bot.js'
       - '.github/workflows/ai-tests.yml'
 
 jobs:
