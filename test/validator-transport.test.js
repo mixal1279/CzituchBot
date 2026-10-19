@@ -258,6 +258,41 @@ test('odrzucenie dotyczące cytatu uruchamia drugą opinię, ale lokalna weryfik
   assert.ok(requestState.timingTrace.some(row => row.stage === 'validator_second_opinion'));
 });
 
+test('po rzeczywistym odrzuceniu Groq pipeline nie zużywa budżetu na wolne trzecie opinie', async () => {
+  hooks.KONFIGURACJA.geminiKey = 'test-gemini-key';
+  hooks.KONFIGURACJA.xkiroKey = 'test-xkiro-key';
+  hooks.KONFIGURACJA.xkiroModel = 'qwen/qwen3.5-397b-a17b:free';
+  hooks.KONFIGURACJA.openrouterKey = 'test-openrouter-key';
+  const order = [];
+  const badQuoteVerdict = {
+    ...VALID_VERDICT,
+    claims: [{
+      ...VALID_VERDICT.claims[0],
+      evidence_quote: 'Portal 2 was released on 19 April 2011 [...]',
+      reason: 'Quote is not an exact continuous source span.',
+    }],
+  };
+  mockFetch(async url => {
+    if (url.includes('generativelanguage.googleapis.com')) {
+      order.push('gemini');
+      return jsonResponse({ candidates: [{ content: { parts: [{ text: JSON.stringify(badQuoteVerdict) }] } }] });
+    }
+    order.push(url.includes('xkiro') ? 'xkiro' : 'openrouter');
+    throw new Error('slow third opinion should not be called after Groq rejection');
+  });
+  mockGroq(() => {
+    order.push('groq');
+    return openAIResponse(badQuoteVerdict);
+  });
+  const requestState = createAIRequestContext({ maxCzasMs: 40000, maxValidators: 4, maxModelCalls: 12 });
+  const result = await hooks.walidujOdpowiedzAIBezCache(
+    'generic', QUESTION, ANSWER, EVIDENCE, [], 'test-stop-after-groq-rejection', requestState, { entity: 'Portal 2' },
+  );
+  assert.equal(result.status, 'rejected');
+  assert.deepEqual(order, ['gemini', 'groq']);
+  assert.deepEqual(requestState.validatorResults.map(row => row.provider), ['gemini', 'groq']);
+});
+
 test('circuit breaker dla Groq, xKiro i OpenRouter otwiera się po dwóch timeoutach i resetuje po sukcesie', () => {
   for (const provider of ['groq', 'xkiro', 'openrouter']) {
     hooks.resetValidatorBreakers();
