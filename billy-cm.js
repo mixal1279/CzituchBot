@@ -4,9 +4,9 @@ const BILLY_CM_PREFIX = 'twitch:billybulka:';
 
 function buildBillyCmResponse({ cache, streamKey, nick, message, rng = Math.random, legacyCache = null }) {
   if (!cache || typeof cache !== 'object') throw new TypeError('cache must be an object');
-  if (typeof message !== 'string' || !/^!cm(?:\\s+@?[a-zA-Z0-9_]+)?\\s*$/i.test(message.trim())) return null;
+  if (typeof message !== 'string' || !/^!cm(?:\s+@?[a-zA-Z0-9_]+)?\s*$/i.test(message.trim())) return null;
 
-  const parts = message.trim().split(/\\s+/);
+  const parts = message.trim().split(/\s+/);
   const targetDisplay = (parts[1] || nick || '').replace(/^@/, '').trim();
   const targetKey = targetDisplay.toLocaleLowerCase('pl-PL');
   if (!targetDisplay || !targetKey) {
