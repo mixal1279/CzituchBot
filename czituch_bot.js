@@ -1773,9 +1773,17 @@ async function walidujOdpowiedzGeminiModel(model, persona, pytanie, odpowiedz, d
       console.warn(`[AI][${requestId}] quota circuit opened for ${endpoint} for ${cooldownMs}ms`);
       // The shared gate must not outlive a valid Retry-After on 429, and
       // must also prevent another Gemini model bypassing account-wide 402.
-      geminiValidatorCooldownUntil = Math.max(geminiValidatorCooldownUntil, Date.now() + cooldownMs);
+      if (status === 402) {
+        // Prepay depletion is account/project-wide: unlike 429, it must block
+        // alternate Gemini models until the billing issue is resolved.
+        geminiAccountQuotaCooldownUntil = Math.max(geminiAccountQuotaCooldownUntil, Date.now() + cooldownMs);
+      } else {
+        // A valid 429 Retry-After must not inherit an older generic 60s
+        // transport cooldown. The model-specific quota map handles this 429.
+        geminiValidatorCooldownUntil = 0;
+      }
     } else if (transient) {
-      geminiValidatorCooldownUntil = Math.max(geminiValidatorCooldownUntil, Date.now() + 60_000);
+      geminiValidatorCooldownUntil = Date.now() + 60_000;
     }
     return {
       status: 'unavailable',
@@ -1794,6 +1802,7 @@ async function walidujOdpowiedzGeminiModel(model, persona, pytanie, odpowiedz, d
 }
 
 let geminiValidatorCooldownUntil = 0;
+let geminiAccountQuotaCooldownUntil = 0;
 
 let groqValidatorClientOverride = null;
 const AI_VALIDATOR_BREAKER_MS = dodatniaLiczbaEnv('AI_VALIDATOR_BREAKER_MS', 300000);
@@ -2252,6 +2261,7 @@ async function walidujOdpowiedzAIBezCache(persona, pytanie, odpowiedz, dane, his
   // zużywa potrójnie darmowego limitu Gemini przy każdym pytaniu.
   const models = KONFIGURACJA.geminiKey
     && Date.now() >= geminiValidatorCooldownUntil
+    && Date.now() >= geminiAccountQuotaCooldownUntil
     && !isProviderQuotaBlocked(`gemini:${AI_GEMINI_VALIDATOR_MODEL}`)
     ? [AI_GEMINI_VALIDATOR_MODEL]
     : [];
@@ -8239,7 +8249,8 @@ if (process.env.NODE_ENV === 'test') {
     recordValidatorTransportResult,
     isProviderQuotaBlocked,
     validatorBreakerIsOpen,
-    resetValidatorBreakers() { validatorTransportBreakers.clear(); },
+    resetValidatorBreakers() { validatorTransportBreakers.clear(); geminiValidatorCooldownUntil = 0; geminiAccountQuotaCooldownUntil = 0; },
+    isGeminiValidatorCoolingDown(now = Date.now()) { return geminiValidatorCooldownUntil > now || geminiAccountQuotaCooldownUntil > now; }
     setGroqClient(client) { groqValidatorClientOverride = client; },
     getGroqClient() { return groqValidatorClientOverride || groq; },
     getValidatorConstants() {
