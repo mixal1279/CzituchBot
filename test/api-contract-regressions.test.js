@@ -58,6 +58,9 @@ test('YouTube chat polling respects the interval returned by the API', () => {
   assert.match(source, /let nextPollDelay = 0;[\s\S]{0,180}if \(nextPollDelay > 0\) await czekaj\(nextPollDelay\)/);
   assert.doesNotMatch(source, /Math\.max\([^\n]*pollingIntervalMillis[^\n]*10000/);
   assert.doesNotMatch(source, /Math\.max\([^\n]*initialPollDelay[^\n]*10000/);
+  assert.doesNotMatch(source, /reason === 'forbidden'\s*\|\|\s*reason === 'liveChatEnded'/,
+    'generic forbidden means missing permission, not necessarily an ended stream');
+  assert.match(source, /reason === 'liveChatEnded' \|\| reason === 'liveChatNotFound' \|\| reason === 'liveChatDisabled'/);
 });
 
 test('primary generation honors AI_GENERATOR_MODEL and checks quota cooldown before calling Groq', () => {
