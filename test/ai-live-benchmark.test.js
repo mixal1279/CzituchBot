@@ -91,7 +91,7 @@ test('live diagnostics distinguish validator failures from generation failures a
   assert.equal(diagnostics.avgTavilyHttpMs, 1200);
   assert.equal(diagnostics.avgElapsedToGenerationCycleMs, 24200);
   assert.equal(diagnostics.independentGoldCasesInSample.length, 1);
-  assert.equal(diagnostics.goldCoverageByCategory.how.independentGold, 0);
+  assert.equal(diagnostics.goldCoverageByCategory.how.independentGold, 1);
 });
 
 test('benchmark report is written atomically as valid JSON at the configured path', () => {
