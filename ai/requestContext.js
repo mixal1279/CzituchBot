@@ -86,12 +86,17 @@ function createAIRequestContext(options = {}) {
   ctx.reserveModel = (purpose = 'model') =>
     ctx.reserve('modelCalls', ctx.maxModelCalls, purpose);
 
-  ctx.reserveGeneration = (provider, model, phase = 'initial') => {
-    if (ctx.isExpired() || ctx.generacje >= ctx.maxGeneracji) return false;
+  ctx.canReserveGeneration = (phase = 'initial') => {
+    if (ctx.isExpired() || ctx.generacje >= ctx.maxGeneracji || ctx.modelCalls >= ctx.maxModelCalls) return false;
     const isRepair = phase === 'repair';
     if (isRepair && ctx.remainingMs() < 8500) return false;
     if (isRepair && ctx.repairGeneracje >= ctx.maxRepairGeneracji) return false;
     if (!isRepair && ctx.initialGeneracje >= ctx.maxInitialGeneracji) return false;
+    return true;
+  };
+
+  ctx.reserveGeneration = (provider, model, phase = 'initial') => {
+    if (!ctx.canReserveGeneration(phase)) return false;
     if (!ctx.reserveModel(`generation:${phase}:${provider}/${model}`)) return false;
     ctx.generacje++;
     if (isRepair) ctx.repairGeneracje++;

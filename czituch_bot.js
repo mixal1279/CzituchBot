@@ -3314,6 +3314,11 @@ Pytanie użytkownika: ${pytanie}`;
       if (liczbaProb120b >= 2 || budzetPrzekroczony() || aiState.generacje >= aiState.maxGeneracji) {
         return wynikPusty('groq', model, '120B request cap/budget');
       }
+      // Do not spend the process-wide 120B quota when this request cannot
+      // reserve its own model-call/generation slot.
+      if (!aiState.canReserveGeneration(aiState.generationPhase || 'initial')) {
+        return wynikPusty('groq', model, 'AI request budget exhausted before 120B reservation');
+      }
       if (!zarezerwujRequest120B(requestId)) {
         return wynikPusty('groq', model, '120B global circuit breaker/request quota');
       }

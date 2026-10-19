@@ -38,6 +38,17 @@ test('request context enforces shared model, generation, validator and Tavily bu
   assert.equal(ctx.reserveTavily('retrieval-again'), false);
 });
 
+test('generation budget preflight is non-mutating and accounts for model-call capacity', () => {
+  const ctx = createAIRequestContext({ maxGeneracji: 2, maxModelCalls: 1 });
+  assert.equal(ctx.canReserveGeneration('initial'), true);
+  assert.equal(ctx.generacje, 0);
+  assert.equal(ctx.modelCalls, 0);
+  assert.equal(ctx.reserveGeneration('groq', 'model'), true);
+  assert.equal(ctx.canReserveGeneration('initial'), false);
+  assert.equal(ctx.generacje, 1);
+  assert.equal(ctx.modelCalls, 1);
+});
+
 test('request context clamps remaining time to zero instead of extending the deadline', () => {
   const ctx = createAIRequestContext({ startedAt: Date.now() - 1000, maxCzasMs: 100 });
   assert.equal(ctx.isExpired(), true);
