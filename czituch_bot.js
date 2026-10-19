@@ -8207,6 +8207,7 @@ if (process.env.NODE_ENV === 'test') {
     walidujOdpowiedzGroq,
     walidujOdpowiedzAIBezCache,
     recordValidatorTransportResult,
+    isProviderQuotaBlocked,
     validatorBreakerIsOpen,
     resetValidatorBreakers() { validatorTransportBreakers.clear(); },
     setGroqClient(client) { groqValidatorClientOverride = client; },
