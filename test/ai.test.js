@@ -503,7 +503,7 @@ console.log('AI regression tests: OK');
   });
   assert.deepEqual(
     VALIDATOR_JSON_SCHEMA.required,
-    ['valid', 'reason', 'confidence', 'unsupported_claims', 'claims', 'supported', 'relevant', 'complete', 'hallucination']
+    ['valid', 'reason', 'confidence', 'unsupported_claims', 'claims']
   );
   assert.equal(VALIDATOR_JSON_SCHEMA.additionalProperties, false);
   assert.deepEqual(GEMINI_VALIDATOR_JSON_SCHEMA.properties.confidence, {
