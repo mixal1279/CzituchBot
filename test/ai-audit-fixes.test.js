@@ -45,6 +45,33 @@ test('liczby w komunikacie błędu nie są mylone z kodami HTTP', () => {
   assert.equal(fallback.classifyFailure('HTTP 400 bad request'), 'invalid_request');
 });
 
+test('xKiro: statusy HTTP są klasyfikowane według kontraktu API', () => {
+  assert.equal(fallback.classifyFailure(JSON.stringify({ status: 402, message: 'payment required' })), 'quota');
+  assert.equal(fallback.classifyFailure(JSON.stringify({ status: 429, type: 'rate_limit_error', code: 'rate_limit_exceeded' })), 'quota');
+  assert.equal(fallback.classifyFailure(JSON.stringify({ status: 422, type: 'invalid_request_error', code: 'invalid_request' })), 'invalid_request');
+  assert.equal(fallback.classifyFailure(JSON.stringify({ status: 401, type: 'authentication_error' })), 'auth');
+  assert.equal(fallback.classifyFailure(JSON.stringify({ status: 404, type: 'not_found_error' })), 'invalid_request');
+  assert.equal(fallback.classifyFailure(JSON.stringify({ status: 529, type: 'server_error', code: 'overloaded' })), 'transient');
+  assert.equal(fallback.classifyFailure(JSON.stringify({ status: 503, type: 'server_error', code: 'service_unavailable' })), 'transient');
+});
+
+test('xKiro: dzienny limit darmowych tokenów otwiera dłuższy cooldown, jeśli brak Retry-After', () => {
+  const cooldown = fallback.quotaCooldownMsFromError({
+    status: 429,
+    message: 'Rate limit exceeded: free tokens per day (TPD) exhausted',
+  });
+  assert.equal(cooldown, 24 * 60 * 60 * 1000);
+});
+
+test('xKiro: Retry-After z odpowiedzi jest ważniejszy od domyślnego cooldownu', () => {
+  const cooldown = fallback.quotaCooldownMsFromError({
+    status: 429,
+    message: 'rate limit exceeded',
+    headers: { 'retry-after': '12' },
+  });
+  assert.equal(cooldown, 12000);
+});
+
 test('cooldown parsuje czas z komunikatu Groq', () => {
   assert.ok(fallback.quotaCooldownMsFromError('Please try again in 24m55s.') >= 1400000);
   assert.ok(fallback.quotaCooldownMsFromError('try again in 7m12.5s') >= 430000);
