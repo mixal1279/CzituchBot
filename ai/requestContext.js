@@ -97,6 +97,7 @@ function createAIRequestContext(options = {}) {
 
   ctx.reserveGeneration = (provider, model, phase = 'initial') => {
     if (!ctx.canReserveGeneration(phase)) return false;
+    const isRepair = phase === 'repair';
     if (!ctx.reserveModel(`generation:${phase}:${provider}/${model}`)) return false;
     ctx.generacje++;
     if (isRepair) ctx.repairGeneracje++;
