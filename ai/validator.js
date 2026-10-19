@@ -72,7 +72,7 @@ function buildGroqValidatorResponseFormat(model) {
   // Groq documents strict Structured Outputs only for these model IDs.
   // Unsupported models must use JSON Object Mode rather than receive a schema
   // request that is guaranteed to fail with HTTP 400.
-  if (modelId === 'openai/gpt-oss-20b' || modelId === 'openai/gpt-oss-120b' || modelId === 'qwen/qwen3.8-27b') {
+  if (['openai/gpt-oss-20b', 'openai/gpt-oss-120b', 'qwen/qwen3.8-27b', 'meta-models/muse-spark-open'].includes(modelId)) {
     return {
       type: 'json_schema',
       json_schema: {

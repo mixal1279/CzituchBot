@@ -37,7 +37,7 @@ test('Groq strict schema preserves fields consumed by the shared local verifier'
 });
 
 test('Groq strict mode is enabled only for documented model IDs', () => {
-  for (const model of ['openai/gpt-oss-20b', 'openai/gpt-oss-120b', 'qwen/qwen3.8-27b']) {
+  for (const model of ['openai/gpt-oss-20b', 'openai/gpt-oss-120b', 'qwen/qwen3.8-27b', 'meta-models/muse-spark-open']) {
     const format = buildGroqValidatorResponseFormat(model);
     assert.equal(format.type, 'json_schema');
     assert.equal(format.json_schema.strict, true);
