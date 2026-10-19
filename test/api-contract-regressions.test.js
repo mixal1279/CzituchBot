@@ -44,3 +44,12 @@ test('live benchmark is manual-only so pushes do not spend API quota', () => {
   assert.match(workflow, /workflow_dispatch:/);
   assert.doesNotMatch(workflow, /^  push:/m);
 });
+
+test('Twitch chat auth errors explain required scopes and try user-token fallback', () => {
+  const source = read('czituch_bot.js');
+  assert.match(source, /Wymagana wcześniejsza autoryzacja/);
+  assert.match(source, /user:write:chat \+ user:bot/);
+  assert.match(source, /channel:bot/);
+  assert.match(source, /próbuję tokena użytkownika/);
+  assert.match(source, /Sprawdź scope user:write:chat/);
+});
