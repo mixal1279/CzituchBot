@@ -1983,11 +1983,11 @@ async function walidujOdpowiedzXKiro(persona, pytanie, odpowiedz, dane, requestI
   // does not mean xKiro is the last provider in the fallback chain.
   const timeoutMs = requestState
     ? computeValidatorTimeout(remainingMs, {
-        maxTimeoutMs: 9000,
+        maxTimeoutMs: Number(process.env.AI_XKIRO_VALIDATOR_TIMEOUT_MS) || 3000,
         reserveMs: computeValidatorReserveMs(remainingMs, requestState.validatory + 1, requestState.maxValidatorow),
-        minTimeoutMs: 4000,
+        minTimeoutMs: 1200,
       })
-    : 9000;
+    : (Number(process.env.AI_XKIRO_VALIDATOR_TIMEOUT_MS) || 3000);
   if (requestState && timeoutMs === null) {
     return { status: 'unavailable', ok: false, technicalError: true, transient: true, skipped: true, provider: 'xkiro', model, unsupported_claims: [], reason: 'xKiro validator pominięty: zbyt mały pozostały budżet czasu' };
   }
@@ -2076,7 +2076,16 @@ async function walidujOdpowiedzXKiro(persona, pytanie, odpowiedz, dane, requestI
 // porównać modele na benchmarku bez zmiany kodu: AI_GEMINI_VALIDATOR_MODEL=gemini-3.8-flash.
 const AI_GEMINI_VALIDATOR_MODEL = process.env.AI_GEMINI_VALIDATOR_MODEL || 'gemini-3.5-flash-lite';
 
+function usunEtykietyEvidenceCandidate(tekst) {
+  return String(tekst || '')
+    .replace(/\s*\(?\s*EVIDENCE CANDIDATES?\s*\d+(?:\s*[,;]\s*\d+)*\s*\)?/gi, '')
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 async function walidujOdpowiedzAI(persona, pytanie, odpowiedz, dane, historiaRozmowy = [], requestId = '-', requestState = null, requestMeta = null) {
+  odpowiedz = usunEtykietyEvidenceCandidate(odpowiedz);
   const cacheKey = dane ? verdictCache.key({ question: pytanie, answer: odpowiedz, evidence: dane, model: AI_GEMINI_VALIDATOR_MODEL }) : null;
   const cached = cacheKey ? verdictCache.get(cacheKey) : null;
   if (cached) {
@@ -2230,9 +2239,9 @@ async function walidujOdpowiedzAIBezCache(persona, pytanie, odpowiedz, dane, his
       ? (typeof requestState.remainingMs === 'function' ? requestState.remainingMs() : requestState.maxCzasMs - (Date.now() - requestState.startedAt))
       : 6000;
     const xkiroTimeoutMs = computeValidatorTimeout(xkiroRemainingMs, {
-      maxTimeoutMs: 9000,
+      maxTimeoutMs: Number(process.env.AI_XKIRO_VALIDATOR_TIMEOUT_MS) || 3000,
       reserveMs: computeValidatorReserveMs(xkiroRemainingMs, requestState?.validatory + 1, requestState?.maxValidatorow),
-      minTimeoutMs: 4000,
+      minTimeoutMs: 1200,
     });
     if (xkiroTimeoutMs === null) {
       console.warn(`[AI][${requestId}] xKiro validator pominięty: zbyt mały remaining budget=${xkiroRemainingMs}ms; przechodzę do następnego validatora`);
@@ -2612,7 +2621,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
   const plannedRetrievalQueries = buildRetrievalQueries(pytanie, routingAI, { maxQueries: 3 });
   const responseCfg = RESPONSE_PROFILES[aiPlan.responseProfile] || RESPONSE_PROFILES.simple;
   max_tokens = Math.max(Number(max_tokens) || 200, responseCfg.maxTokens);
-  systemPrompt = `${systemPrompt}\n\n${responseContract(aiPlan.responseProfile)}\n\n[ANSWER PLAN]\n${answerPlan.instruction}\n\n[EVIDENCE-FIRST GENERATION]\nDla każdej informacji faktograficznej najpierw wybierz konkretny EVIDENCE CANDIDATE, a dopiero potem napisz zdanie. Jedno zdanie ma zawierać tylko jeden materialny claim albo bardzo ścisłe parafrazowanie jednego fragmentu dowodu. Nie łącz kilku wydarzeń w jeden claim, jeśli wymagają różnych dowodów. Nie wyciągaj przyczynowości z samej kolejności wydarzeń: użyj relacji przyczynowej tylko wtedy, gdy pojedynczy dowód wyraźnie ją stwierdza. Nie wymyślaj cytatów, source_id, nazw własnych, dat, liczb ani szczegółów. Jeśli EVIDENCE CANDIDATES nie potwierdzają części pytania, pomiń tę część albo jasno powiedz, że brak wystarczających danych. Przed wysłaniem odpowiedzi sprawdź mentalnie każde zdanie: „który dokładnie candidate je potwierdza?”. Jeśli pytanie zaczyna się od „W grze <tytuł>:”, potraktuj tytuł jako kontekst retrieval, nie powtarzaj go w claimach bez dowodu z treści źródła.`;
+  systemPrompt = `${systemPrompt}\n\n${responseContract(aiPlan.responseProfile)}\n\n[ANSWER PLAN]\n${answerPlan.instruction}\n\n[EVIDENCE-FIRST GENERATION]\nDla każdej informacji faktograficznej najpierw wybierz konkretny EVIDENCE CANDIDATE, a dopiero potem napisz zdanie. Jedno zdanie ma zawierać tylko jeden materialny claim albo bardzo ścisłe parafrazowanie jednego fragmentu dowodu. Nie łącz kilku wydarzeń w jeden claim, jeśli wymagają różnych dowodów. Nie wyciągaj przyczynowości z samej kolejności wydarzeń: użyj relacji przyczynowej tylko wtedy, gdy pojedynczy dowód wyraźnie ją stwierdza. Nie wymyślaj cytatów, source_id, nazw własnych, dat, liczb ani szczegółów. Jeśli EVIDENCE CANDIDATES nie potwierdzają części pytania, pomiń tę część albo jasno powiedz, że brak wystarczających danych. Przed wysłaniem odpowiedzi sprawdź mentalnie każde zdanie: „który dokładnie candidate je potwierdza?”. Nigdy nie wypisuj etykiet technicznych „EVIDENCE CANDIDATE” ani numerów candidate w odpowiedzi dla użytkownika. Jeśli pytanie zaczyna się od „W grze <tytuł>:”, potraktuj tytuł jako kontekst retrieval, nie powtarzaj go w claimach bez dowodu z treści źródła.`;
   const kategoriaAI = routingAI.intent;
   console.log(`[AI][${requestId}] routing=${JSON.stringify({ intent: routingAI.intent, entity: routingAI.entity, game: routingAI.game, entity_type: routingAI.entity_type, needs_web: routingAI.needs_web, freshness: routingAI.freshness, source_type: routingAI.source_type, response_profile: aiPlan.responseProfile, confidence: routingAI.confidence })}`);
   console.log(`[AI] kategoria=${kategoriaAI} nick=${nick}`);
@@ -3711,7 +3720,7 @@ function oczyscOdpowiedzPrzedWalidacja(tekst) {
     unavailableMessage: 'Chwilowo nie mogę potwierdzić tej informacji, więc nie będę zgadywać.',
     sanitizeResponse: value => {
       let finalText = ograniczDoPelnychZdanAI(
-        usunMarkeryWewnetrzneAI(filtrBezpieczenstwa(value)),
+        usunEtykietyEvidenceCandidate(usunMarkeryWewnetrzneAI(filtrBezpieczenstwa(value))),
         responseCfg.maxSentences,
         1800,
         responseCfg.maxWords,
