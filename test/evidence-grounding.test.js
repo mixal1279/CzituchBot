@@ -395,7 +395,7 @@ test('delimiter parsing uses backslash parity consistently in scanner and extrac
     'TREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>',
     'Second source content.',
     '<<<END_UNTRUSTED_SOURCE_CONTENT>>>',
-  ].join('\\n');
+  ].join(String.fromCharCode(10));
 
   const blocks = parseEvidenceBlocks(data);
   assert.equal(blocks.length, 2);
@@ -413,7 +413,7 @@ test('delimiter parsing uses backslash parity consistently in scanner and extrac
     'TREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>',
     'Second source body.',
     '<<<END_UNTRUSTED_SOURCE_CONTENT>>>',
-  ].join('\\n');
+  ].join(String.fromCharCode(10));
   const evenBlocks = parseEvidenceBlocks(evenSlashTerminator);
   assert.equal(evenBlocks.length, 2);
   assert.equal(evenBlocks[1].sourceId, 'SOURCE 2');
