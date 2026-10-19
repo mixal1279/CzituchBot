@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { parseGeminiGenerationResponse } = require('../ai/gemini-response');
+const { parseGeminiGenerationResponse, buildGeminiGenerateContentUrl } = require('../ai/gemini-response');
 
 test('Gemini generation: brak kandydatów zachowuje promptFeedback i safetyRatings', () => {
   const result = parseGeminiGenerationResponse({
@@ -94,4 +94,17 @@ test('Gemini generation: STOP zwraca kompletną odpowiedź tekstową', () => {
   assert.equal(result.text, 'complete answer');
   assert.equal(result.truncated, false);
   assert.equal(result.finishReason, 'STOP');
+});
+
+test('Gemini generateContent URL follows the configured model ID', () => {
+  assert.equal(
+    buildGeminiGenerateContentUrl('gemini-3.8-flash'),
+    'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent',
+  );
+  assert.equal(
+    buildGeminiGenerateContentUrl('gemini-custom-test'),
+    'https://generativelanguage.googleapis.com/v1beta/models/gemini-custom-test:generateContent',
+  );
+  assert.throws(() => buildGeminiGenerateContentUrl(''), /Invalid Gemini model ID/);
+  assert.throws(() => buildGeminiGenerateContentUrl('models/gemini-3.8-flash'), /Invalid Gemini model ID/);
 });
