@@ -25,3 +25,17 @@ test('forbidden golden fact is detected after Polish normalization', () => {
   assert.equal(result.passed, false);
   assert.deepEqual(result.forbidden, ['GLaDOS nie została wyłączona']);
 });
+
+
+test('repeated benchmark median handles odd and even samples', () => {
+  const { median } = require('../scripts/ai-live-benchmark');
+  assert.equal(median([0.4, 0.6, 0.5]), 0.5);
+  assert.equal(median([0.4, 0.6]), 0.5);
+});
+
+test('repeated benchmark quantiles report interquartile spread', () => {
+  const { quantile } = require('../scripts/ai-live-benchmark');
+  assert.ok(Math.abs(quantile([0.4, 0.5, 0.6, 0.7], 0.25) - 0.475) < 1e-12);
+  assert.ok(Math.abs(quantile([0.4, 0.5, 0.6, 0.7], 0.75) - 0.625) < 1e-12);
+  assert.equal(quantile([], 0.5), null);
+});

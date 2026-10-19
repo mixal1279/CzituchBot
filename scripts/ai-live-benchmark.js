@@ -2,6 +2,7 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
+const { spawnSync } = require('node:child_process');
 const { buildAnswerPlan } = require('../ai/answer-plan');
 const { judgeAnswer } = require('../ai/answer-judge');
 const { normalizeFactText, scoreGoldenFacts } = require('../ai/benchmark-scorer');
@@ -47,11 +48,46 @@ async function sleep(ms) {
   if (ms > 0) await new Promise(resolve => setTimeout(resolve, ms));
 }
 
-async function run() {
-  const { zapytajAI } = require('../czituch_bot');
+function aggregateValidatorMetrics(metrics = []) {
+  const byValidator = {};
+  for (const metric of metrics) {
+    const key = metric.validator || 'unknown';
+    const row = byValidator[key] ||= {
+      attempted: 0, skippedBudget: 0, skippedSlot: 0, avgMs: null,
+      timeouts: 0, httpErrors: 0, emptyResponses: 0, invalidJson: 0,
+      unavailable: 0, accepted: 0, softAccepted: 0, rejected: 0,
+    };
+    if (metric.outcome === 'attempted') row.attempted++;
+    if (metric.outcome === 'skipped_budget') row.skippedBudget++;
+    if (metric.outcome === 'skipped_slot') row.skippedSlot++;
+    if (metric.failureReason === 'timeout') row.timeouts++;
+    if (metric.failureReason === 'http_error') row.httpErrors++;
+    if (metric.failureReason === 'empty_response') row.emptyResponses++;
+    if (metric.failureReason === 'invalid_json') row.invalidJson++;
+    if (metric.status === 'unavailable') row.unavailable++;
+    if (metric.status === 'accepted') row.accepted++;
+    if (metric.status === 'soft_accepted') row.softAccepted++;
+    if (metric.status === 'rejected') row.rejected++;
+    if (Number.isFinite(metric.actualMs) && metric.outcome === 'attempted') {
+      row._totalMs = (row._totalMs || 0) + metric.actualMs;
+      row._timedCalls = (row._timedCalls || 0) + 1;
+    }
+  }
+  for (const row of Object.values(byValidator)) {
+    row.avgMs = row._timedCalls ? Math.round(row._totalMs / row._timedCalls) : null;
+    delete row._totalMs;
+    delete row._timedCalls;
+  }
+  return byValidator;
+}
+
+async function runOnce(runNumber = 1) {
+  const { zapytajAI, resetGeminiValidatorCooldownForBenchmark } = require('../czituch_bot');
   resetProviderQuotaCooldowns();
+  resetGeminiValidatorCooldownForBenchmark();
   const started = Date.now();
   const results = [];
+  const validatorMetricsRaw = [];
   for (let i = 0; i < cases.length; i++) {
     const item = cases[i];
     let answer = '';
@@ -101,6 +137,8 @@ async function run() {
         generationAttempts: summary?.generationAttempts || [],
         generationBudget: summary?.generationBudget || null,
         validatorResults: summary?.validatorResults || [],
+        validatorMetrics: summary?.validatorMetrics || {},
+        validatorMetricsRaw: summary?.validatorMetricsRaw || [],
         fallbackReasons: summary?.fallbackReasons || [],
         tavilySearches: summary?.tavilySearches ?? null,
         sourceCount: summary?.sourceCount ?? null,
@@ -124,12 +162,15 @@ async function run() {
         generationAttempts: summary?.generationAttempts || [],
         generationBudget: summary?.generationBudget || null,
         validatorResults: summary?.validatorResults || [],
+        validatorMetrics: summary?.validatorMetrics || {},
         fallbackReasons: summary?.fallbackReasons || [],
         tavilySearches: summary?.tavilySearches ?? null,
         sourceCount: summary?.sourceCount ?? null,
         error: String(error?.message || error),
       });
     }
+
+    validatorMetricsRaw.push(...(summary?.validatorMetricsRaw || []));
 
     if ((i + 1) % 10 === 0 || i + 1 === cases.length) {
       const answered = results.filter(x => x.answered).length / results.length;
@@ -158,6 +199,7 @@ async function run() {
   const report = {
     benchmark: benchmark.name,
     mode: 'live',
+    run: runNumber,
     total: results.length,
     answeredAccuracy: Number((answered / results.length).toFixed(4)),
     completenessAccuracy: Number((complete / results.length).toFixed(4)),
@@ -167,10 +209,18 @@ async function run() {
     durationMs: Date.now() - started,
     note: 'Ten testuje produkcyjny pipeline i kompletność odpowiedzi. Nie jest niezależnym pomiarem factual accuracy; do tego potrzebny jest ręcznie zweryfikowany gold answer/fact set.',
     categories: [...new Set(results.map(x => x.category))].sort(),
+    validatorMetrics: aggregateValidatorMetrics(validatorMetricsRaw),
+    validatorMetricsRaw,
     diagnostics: diagnostic,
+    results,
     failures: results.filter(x => !x.answered || x.judgeStatus !== 'accepted' || x.factualPassed === false).slice(0, 100),
   };
+  const outputDir = process.env.AI_BENCHMARK_OUTPUT_DIR || path.join(process.cwd(), 'benchmark-results');
+  fs.mkdirSync(outputDir, { recursive: true });
+  fs.writeFileSync(path.join(outputDir, `run-${runNumber}.json`), JSON.stringify(report, null, 2));
   console.log(JSON.stringify(report, null, 2));
+  console.log('\n=== VALIDATOR_METRICS_RAW ===');
+  console.log(JSON.stringify(validatorMetricsRaw, null, 2));
   if (process.env.AI_BENCHMARK_REQUIRE_PERFECT === '1') {
     const factualOk = factualCases.length > 0 && factualPassed === factualCases.length;
     if (answered !== results.length || complete !== results.length || !factualOk) {
@@ -178,12 +228,115 @@ async function run() {
       process.exitCode = 1;
     }
   }
+  return report;
 }
 
-module.exports = { normalizeFactText, scoreGoldenFacts, stratifiedCases, run };
+function median(values) {
+  const sorted = values.filter(Number.isFinite).sort((a, b) => a - b);
+  if (!sorted.length) return null;
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
+function quantile(values, q) {
+  const sorted = values.filter(Number.isFinite).sort((a, b) => a - b);
+  if (!sorted.length) return null;
+  const position = (sorted.length - 1) * q;
+  const lower = Math.floor(position);
+  const upper = Math.ceil(position);
+  return sorted[lower] + (sorted[upper] - sorted[lower]) * (position - lower);
+}
+
+async function run() {
+  const requestedRepeat = Number(process.env.AI_BENCHMARK_REPEAT);
+  const repeat = Math.max(1, Math.min(20, Number.isFinite(requestedRepeat) && requestedRepeat > 0 ? Math.floor(requestedRepeat) : 1));
+  const outputDir = process.env.AI_BENCHMARK_OUTPUT_DIR || path.join(process.cwd(), 'benchmark-results');
+  fs.mkdirSync(outputDir, { recursive: true });
+  const reports = [];
+  for (let runNumber = 1; runNumber <= repeat; runNumber++) {
+    console.log(`\\n[LIVE BENCHMARK] repeat ${runNumber}/${repeat}`);
+    // Each repeat gets a fresh Node process so module-level cooldowns/circuit breakers cannot leak between runs.
+    const child = spawnSync(process.execPath, [__filename], {
+      stdio: 'inherit',
+      env: {
+        ...process.env,
+        AI_BENCHMARK_REPEAT: '1',
+        AI_BENCHMARK_CHILD: '1',
+        AI_BENCHMARK_RUN_NUMBER: String(runNumber),
+        AI_BENCHMARK_OUTPUT_DIR: outputDir,
+      },
+    });
+    if (child.error) throw child.error;
+    if (child.status !== 0) throw new Error(`Benchmark run ${runNumber} zakończył się kodem ${child.status}`);
+    reports.push(JSON.parse(fs.readFileSync(path.join(outputDir, `run-${runNumber}.json`), 'utf8')));
+  }
+  const perRun = reports.map(report => ({
+    run: report.run,
+    answered: report.answeredAccuracy,
+    completeness: report.completenessAccuracy,
+    factualAccuracy: report.factualAccuracy,
+    factualAverageScore: report.factualAverageScore,
+    validatorMetrics: report.validatorMetrics,
+    diagnostics: report.diagnostics,
+    durationMs: report.durationMs,
+  }));
+  const ids = [...new Set(reports.flatMap(report => (report.results || []).map(result => result.id)))];
+  const perQuestion = ids.map(id => {
+    const runs = reports.map(report => {
+      const result = (report.results || []).find(item => item.id === id);
+      return result ? {
+        run: report.run,
+        answered: result.answered,
+        completeness: result.completeness,
+        judgeStatus: result.judgeStatus,
+        factualScore: result.factualScore,
+        factualPassed: result.factualPassed,
+        finalStatus: result.finalStatus,
+        validatorMetrics: result.validatorMetricsRaw || [],
+      } : { run: report.run, missing: true };
+    });
+    const completeness = runs.map(item => item.completeness).filter(Number.isFinite);
+    const factualScores = runs.map(item => item.factualScore).filter(Number.isFinite);
+    return {
+      id,
+      runs,
+      medianCompleteness: median(completeness),
+      rangeCompleteness: completeness.length ? Math.max(...completeness) - Math.min(...completeness) : null,
+      medianFactualScore: median(factualScores),
+      rangeFactualScore: factualScores.length ? Math.max(...factualScores) - Math.min(...factualScores) : null,
+    };
+  });
+  const answeredRates = perRun.map(item => item.answered);
+  const completenessRates = perRun.map(item => item.completeness);
+  const summary = {
+    benchmark: benchmark.name,
+    mode: 'live-repeated',
+    repeat,
+    totalCasesPerRun: cases.length,
+    uniqueQuestions: ids.length,
+    note: 'Repeated measures: run-level rates describe pipeline variability; perQuestion separates within-question variability from differences in question difficulty. factualAccuracy is raw against the current gold set, not a validated quality estimate.',
+    perRun,
+    perQuestion,
+    global: {
+      medianAnswered: median(answeredRates),
+      iqrAnswered: answeredRates.length ? quantile(answeredRates, 0.75) - quantile(answeredRates, 0.25) : null,
+      medianCompleteness: median(completenessRates),
+      iqrCompleteness: completenessRates.length ? quantile(completenessRates, 0.75) - quantile(completenessRates, 0.25) : null,
+    },
+  };
+  fs.writeFileSync(path.join(outputDir, 'summary.json'), JSON.stringify(summary, null, 2));
+  console.log('\\n=== REPEATED_BENCHMARK_SUMMARY ===');
+  console.log(JSON.stringify(summary, null, 2));
+  return summary;
+}
+
+module.exports = { normalizeFactText, scoreGoldenFacts, stratifiedCases, run, runOnce, median, quantile };
 
 if (require.main === module) {
-  run().catch(error => {
+  const execute = process.env.AI_BENCHMARK_CHILD === '1'
+    ? runOnce(Math.max(1, Number(process.env.AI_BENCHMARK_RUN_NUMBER) || 1))
+    : run();
+  execute.catch(error => {
     console.error(error?.stack || error);
     process.exitCode = 1;
   });
