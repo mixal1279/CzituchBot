@@ -3760,19 +3760,21 @@ function oczyscOdpowiedzPrzedWalidacja(tekst) {
         const verifiedEvidenceContext = (walidacja.claims || [])
           .filter(claim => claim?.supported && claim?.source_ids?.length && claim?.evidence_quote)
           .slice(0, 6)
-          .map((claim, index) => 'VERIFIED CLAIM ' + (index + 1) + ': ' + claim.claim + '\\nSOURCE: ' + claim.source_ids.join(', ') + '\\nEVIDENCE: ' + claim.evidence_quote)
-          .join('\\n\\n');
+          .map((claim, index) => 'VERIFIED CLAIM ' + (index + 1) + ': ' + claim.claim + '\nSOURCE: ' + claim.source_ids.join(', ') + '\nEVIDENCE: ' + claim.evidence_quote)
+          .join('\n\n');
         const judgeFeedback = [
           'Odpowiedź przeszła fact-checking, ale nie odpowiedziała na wszystkie wymagane elementy pytania.',
           `Brakujące elementy: ${answerJudge.missing.join(', ')}`,
-          verifiedEvidenceContext ? '[VERIFIED EVIDENCE MAP]\\n' + verifiedEvidenceContext : '[VERIFIED EVIDENCE MAP] brak',
-          'Uzupełnij wyłącznie na podstawie zweryfikowanego evidence oraz DANYCH REFERENCYJNYCH. Nie dodawaj niepotwierdzonych faktów.',
-          'Dodawaj tylko brakujące, atomowe zdania. Każde zdanie musi być bezpośrednio wspierane przez jeden zweryfikowany claim/evidence. Nie twórz nowych relacji przyczynowych przez łączenie osobnych faktów.',
+          `POPRZEDNIA ODPOWIEDŹ DO UZUPEŁNIENIA:\n${String(odp || '').slice(0, 4000)}`,
+          verifiedEvidenceContext ? '[VERIFIED EVIDENCE MAP]\n' + verifiedEvidenceContext : '[VERIFIED EVIDENCE MAP] brak',
+          'Zwróć CAŁĄ poprawioną odpowiedź od początku do końca, a nie tylko dopisane zdania. Zachowaj poprzednie twierdzenia, które są już zweryfikowane, i uzupełnij wyłącznie brakujące elementy.',
+          'Uzupełniaj wyłącznie na podstawie zweryfikowanego evidence oraz DANYCH REFERENCYJNYCH. Nie dodawaj niepotwierdzonych faktów.',
+          'Każde zdanie musi być bezpośrednio wspierane przez jeden zweryfikowany claim/evidence. Nie twórz nowych relacji przyczynowych przez łączenie osobnych faktów.',
           answerPlan.instruction,
-        ].join('\\n');
+        ].join('\n');
         const repairResult = await generujOdpowiedz(
           max_tokens,
-          `${systemPrompt}\\n\\n[ANSWER COMPLETENESS REPAIR]\\n${judgeFeedback}`,
+          `${systemPrompt}\n\n[ANSWER COMPLETENESS REPAIR]\n${judgeFeedback}`,
           'answer completeness repair',
           false,
         );

@@ -35,6 +35,17 @@ test('Gemini validator uses current GenerateContent responseFormat schema and co
   assert.match(source, /model === 'gemini-3\.5-flash-lite'[\s\S]{0,120}\{ thinkingLevel: 'minimal' \}/);
 });
 
+test('answer-completeness repair includes the prior answer and uses real line separators', () => {
+  const source = read('czituch_bot.js');
+  const start = source.indexOf('const verifiedEvidenceContext = (walidacja.claims || [])');
+  const end = source.indexOf("'answer completeness repair'", start);
+  assert.ok(start >= 0 && end > start, 'answer-completeness repair branch should exist');
+  const branch = source.slice(start, end);
+  assert.match(branch, /POPRZEDNIA ODPOWIEDŹ DO UZUPEŁNIENIA/);
+  assert.match(branch, /Zwróć CAŁĄ poprawioną odpowiedź od początku do końca/);
+  assert.doesNotMatch(branch, /\\\\n/, 'prompt fragments must use actual newline escapes, not literal backslash-n text');
+});
+
 test('YouTube chat polling respects the interval returned by the API', () => {
   const source = read('czituch_bot.js');
   assert.match(source, /const serverPollDelay = Number\(pollingIntervalMillis\)/);
