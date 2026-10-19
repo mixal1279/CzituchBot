@@ -1773,11 +1773,59 @@ async function walidujOdpowiedzGeminiModel(model, persona, pytanie, odpowiedz, d
           ...(safetyRatings.length ? { safetyRatings } : {}),
         };
       }
-      const content = (candidates[0]?.content?.parts || []).map(part => part?.text || '').join('').trim();
+      const candidate = candidates[0] || {};
+      const finishReason = typeof candidate.finishReason === 'string' ? candidate.finishReason.trim() : '';
+      const finishMessage = typeof candidate.finishMessage === 'string' ? candidate.finishMessage.trim() : '';
+      const safetyRatings = Array.isArray(candidate.safetyRatings)
+        ? candidate.safetyRatings
+            .filter(rating => rating && typeof rating === 'object')
+            .map(rating => ({
+              category: typeof rating.category === 'string' ? rating.category : '',
+              blocked: rating.blocked === true,
+              probability: typeof rating.probability === 'string' ? rating.probability : '',
+            }))
+            .filter(rating => rating.category || rating.blocked || rating.probability)
+        : [];
+      const safetySummary = safetyRatings
+        .filter(rating => rating.blocked || rating.category)
+        .map(rating => rating.category + (rating.blocked ? ' (blocked)' : '') + (rating.probability ? ` probability=${rating.probability}` : ''))
+        .join(', ');
+      const content = (candidate.content?.parts || []).map(part => part?.text || '').join('').trim();
+      const blockedFinishReasons = new Set(['SAFETY', 'RECITATION', 'LANGUAGE', 'BLOCKLIST', 'PROHIBITED_CONTENT', 'SPII', 'IMAGE_SAFETY']);
+      if (!content || blockedFinishReasons.has(finishReason)) {
+        const reason = [
+          !content ? 'Gemini zwrócił kandydata bez użytecznej treści tekstowej' : '',
+          finishReason ? `finishReason=${finishReason}` : '',
+          finishMessage ? `finishMessage=${finishMessage}` : '',
+          safetySummary ? `safetyRatings: ${safetySummary}` : '',
+        ].filter(Boolean).join('; ');
+        console.warn(`[AI][${requestId}] ${model}: ${reason}`);
+        return {
+          status: 'unavailable',
+          ok: false,
+          technicalError: true,
+          transient: false,
+          provider: 'gemini',
+          model,
+          unsupported_claims: [],
+          reason: reason || 'Gemini zwrócił kandydata bez użytecznej treści',
+          ...(finishReason ? { finishReason } : {}),
+          ...(finishMessage ? { finishMessage } : {}),
+          ...(safetyRatings.length ? { safetyRatings } : {}),
+        };
+      }
       const parsed = wytnijJsonWalidatora(content);
       if (!parsed) {
-        console.warn(`[AI][${requestId}] ${model}: niepoprawny JSON validatora (raw=${content.slice(0, 300)})`);
-        return { status: 'unavailable', ok: false, technicalError: true, provider: 'gemini', model, unsupported_claims: [], reason: `${model}: niepoprawny JSON validatora` };
+        const reason = `${model}: niepoprawny JSON validatora${finishReason ? ` (finishReason=${finishReason})` : ''}`;
+        console.warn(`[AI][${requestId}] ${reason} (raw=${content.slice(0, 300)})`);
+        return {
+          status: 'unavailable', ok: false, technicalError: true, provider: 'gemini', model,
+          unsupported_claims: [], reason,
+          ...(finishReason ? { finishReason } : {}),
+          ...(finishMessage ? { finishMessage } : {}),
+          ...(safetyRatings.length ? { safetyRatings } : {}),
+          ...(finishReason === 'MAX_TOKENS' ? { truncatedJson: true } : {}),
+        };
       }
       const normalized = normalizujWynikWalidatora(parsed, model, 'gemini', wyodrebnijIdentyfikatoryZrodel(dane), dane, odpowiedz);
       if (!normalized) {
