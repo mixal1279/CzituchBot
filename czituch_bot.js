@@ -61,6 +61,7 @@ process.on('uncaughtException', (err) => {
 const fs = require('fs');
 const path = require('path');
 const BILLY_BAKERY = require('./billy-bakery');
+const BILLY_CM = require('./billy-cm');
 const { createFirestoreState, encryptSecret, encryptionKeyFromEnv } = require('./storage/firestore-state');
 const AI_POLICY = require('./ai/policy');
 const AI_VALIDATOR = require('./ai/validator');
@@ -592,6 +593,7 @@ const KONFIGURACJA = {
   kickChatroomId2:   89555075,
   kickTokenFile:    './kick_token.json',
   billyTokenFile:   './billy_token.json',
+  billyCmLegacyCacheFile: './billy_cm_stream_cache.json',
   cytatyFile:       './cytaty.json',
 
   // ---- Alerty przez bota PolishSteamDB (Discord REST, bez gatewaya) ----
@@ -4836,6 +4838,18 @@ async function zapiszCacheCm(cache) {
 
 const cmStreamCache = wczytajCacheCm();
 
+// Wczytujemy dawny cache Billy !cm tylko raz przy starcie, nie blokujemy czatu
+// przez synchroniczny odczyt pliku przy każdej komendzie.
+const BILLY_CM_LEGACY_CACHE = (() => {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(KONFIGURACJA.billyCmLegacyCacheFile, 'utf8'));
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch (err) {
+    if (err.code !== 'ENOENT') console.warn('[Billy !cm] Nie udało się odczytać starego cache:', err.message);
+    return null;
+  }
+})();
+
 const PERSISTENT_CACHE_FILES = {
   horoscopes: HOROSKOP_CACHE_PLIK,
   daily_bulka: BULKA_CACHE_PLIK,
@@ -6657,6 +6671,24 @@ async function obslugaTwitch(nick, message, wyslijFn, config = TWITCH_CONFIG_BIL
       return await wyslijFn(bakeryResponse);
     }
 
+    // !cm: stała liczba 1–30 dla użytkownika przez cały stream BillyBulki.
+    // Używamy czasu startu zwróconego przez Twitch API/EventSub, żeby restart
+    // procesu nie tworzył nowej puli w trakcie tego samego streamu.
+    if (/^!cm(?:\s|$)/i.test(message.trim())) {
+      ostatnieUzycie[cooldownKey] = teraz;
+      const result = BILLY_CM.buildBillyCmResponse({
+        cache: cmStreamCache,
+        streamKey: streamStart.twitch.billybulka || null,
+        nick,
+        message,
+        legacyCache: BILLY_CM_LEGACY_CACHE,
+      });
+      if (result) {
+        if (result.changed) await zapiszCacheCm(cmStreamCache);
+        return await wyslijFn(result.response);
+      }
+    }
+
     // !ai korzysta z TEGO SAMEGO pipeline'u AI co pozostałe kanały:
     // GameLore/GameFAQs, Tavily, conversation routing, claim validator, fallbacki modeli itd.
     // Jedyna różnica dla Billy to persona + dedykowane domeny Tavily.
@@ -6721,15 +6753,16 @@ async function obslugaTwitch(nick, message, wyslijFn, config = TWITCH_CONFIG_BIL
       return await wyslijFn(`🔮 ${znak.pl} @${nick}: ${horoskop}`);
     }
 
-    if (msgLower === '!bułka' || msgLower === '!bulka') {
+    const dailyBulkaCommand = BILLY_BAKERY.parseDailyBulkaCommand(message, nick, tags?.username || nick);
+    if (dailyBulkaCommand) {
       ostatnieUzycie[cooldownKey] = teraz;
 
-      const dzisiaj  = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-      const cacheKey = `twitch:${kanalNorm || 'brak-kanalu'}:${nick.toLowerCase()}_${dzisiaj}`;
+      const dzisiaj = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+      const cacheKey = `twitch:${kanalNorm || 'brak-kanalu'}:${dailyBulkaCommand.targetLogin}_${dzisiaj}`;
 
       let bulka = bulkaDzienneCache[cacheKey];
       if (!bulka) {
-        // Czyścimy wpisy sprzed dzisiaj, żeby plik nie rósł w nieskończoność
+        // Czyścimy wpisy sprzed dzisiaj, żeby plik nie rósł w nieskończoność.
         for (const klucz of Object.keys(bulkaDzienneCache)) {
           if (!klucz.endsWith(`_${dzisiaj}`)) delete bulkaDzienneCache[klucz];
         }
@@ -6738,12 +6771,12 @@ async function obslugaTwitch(nick, message, wyslijFn, config = TWITCH_CONFIG_BIL
         await zapiszCacheBulek(bulkaDzienneCache);
       }
 
-      return await wyslijFn(`🍞 @${nick} dziś jesteś jak ${bulka.nazwa}!`);
+      return await wyslijFn(`🍞 @${dailyBulkaCommand.targetDisplay} dziś jesteś jak ${bulka.nazwa}!`);
     }
 
     if (msgLower === '!komendy') {
       ostatnieUzycie[cooldownKey] = teraz;
-      return await wyslijFn(`Dostępne komendy: !watchtime, !followage, !dc, !tiktok, !ig, !yt, !lurk, !ai, !horoskop, !bułka, !zakwas, !wyzwanie, !piekarz, !swiezy, !smak, !okruszek, !przypalony`);
+      return await wyslijFn(`Dostępne komendy: !watchtime, !followage, !dc, !tiktok, !ig, !yt, !lurk, !ai, !cm [@nick], !horoskop, !bułka, !zakwas, !wyzwanie, !piekarz, !swiezy, !smak, !okruszek, !przypalony`);
     }
     if (msgLower === '!yt') {
       ostatnieUzycie[cooldownKey] = teraz;
@@ -7067,10 +7100,10 @@ function podepnijHandleryEventSub(ws, twitchClient, config) {
           } else {
             console.log(`[EventSub] 🟢 ${login} wchodzi live – już jestem na kanale`);
           }
-          streamStart.twitch[login.toLowerCase()] = Date.now();
-          if (login.toLowerCase() === 'billybulka') {
-            ustawBillyCmStream(streamStart.twitch.billybulka);
-          }
+          const streamStartedAt = msg.payload.event?.started_at
+            ? new Date(msg.payload.event.started_at).getTime()
+            : Date.now();
+          streamStart.twitch[login.toLowerCase()] = Number.isFinite(streamStartedAt) ? streamStartedAt : Date.now();
 
           // Start interwału dla Billy dopiero gdy stream jest online
           if (config.kanal === 'billybulka') {
