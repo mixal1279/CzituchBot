@@ -254,6 +254,7 @@ test('REFERENCE IDs resolve case-insensitively through local quote verification'
     claims: [{ claim: 'Portal 2 was released in 2011.', supported: true, source_ids: ['REFERENCE STEAM DB'], evidence_quote: 'Portal 2 was released in 2011.' }],
   }, 'test-model', 'test', new Set(['REFERENCE STEAM DB']), data, 'Portal 2 was released in 2011.');
   assert.equal(result.status, 'accepted', JSON.stringify(result.diagnostics));
+  assert.equal(result.diagnostics.evidenceBindings[0].quoteVerified, true);
 });
 
 test('question evidence context preserves REFERENCE identifiers', () => {

@@ -406,14 +406,14 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
   const parsedEvidenceBlocks = parseEvidenceBlocks(dane);
   const nameOracle = zbudujWyroczniaNazw(parsedEvidenceBlocks);
   const allowedBlocks = allowed
-    ? parsedEvidenceBlocks.filter(block => allowed.has(block.sourceId))
+    ? parsedEvidenceBlocks.filter(block => allowed.has(normalizujIdZrodla(block.sourceId)))
     : parsedEvidenceBlocks;
   for (const claim of claims) {
     if (!claim.supported || !claim.evidence_quote || !claim.source_ids.length) continue;
     const citedIds = new Set(claim.source_ids.filter(id => !allowed || allowed.has(id)));
-    const exactMatches = allowedBlocks.filter(block => citedIds.has(block.sourceId) && quoteExists(block.content, claim.evidence_quote));
+    const exactMatches = allowedBlocks.filter(block => citedIds.has(normalizujIdZrodla(block.sourceId)) && quoteExists(block.content, claim.evidence_quote));
     if (exactMatches.length === 1) {
-      claim.source_ids = [exactMatches[0].sourceId];
+      claim.source_ids = [normalizujIdZrodla(exactMatches[0].sourceId)];
       continue;
     }
     // If the model chose the wrong ID, a unique exact quote match among the
@@ -421,12 +421,12 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
     // subjected to local semantic, numeric, temporal, negation and causal checks.
     if (exactMatches.length === 0) {
       const authorizedExactMatches = allowedBlocks.filter(block => quoteExists(block.content, claim.evidence_quote));
-      if (authorizedExactMatches.length === 1) claim.source_ids = [authorizedExactMatches[0].sourceId];
+      if (authorizedExactMatches.length === 1) claim.source_ids = [normalizujIdZrodla(authorizedExactMatches[0].sourceId)];
     }
   }
-  const unknownSourceClaimIndexes = claims.map((c, index) => c.supported && (!c.source_ids.length || (allowed && c.source_ids.some(id => !allowed.has(id)))) ? index : -1).filter(index => index >= 0);
+  const unknownSourceClaimIndexes = claims.map((c, index) => c.supported && (!c.source_ids.length || (allowed && c.source_ids.some(id => !allowed.has(normalizujIdZrodla(id))))) ? index : -1).filter(index => index >= 0);
   const effectiveClaimSourceIds = claims.map(c =>
-    Array.isArray(c.source_ids) ? c.source_ids : []
+    Array.isArray(c.source_ids) ? c.source_ids.map(normalizujIdZrodla) : []
   );
 
   const evidenceEvaluations = claims.map((c, index) =>
@@ -436,7 +436,7 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
   // dosłownie we wskazanym źródle, (2) czy cały dowód przeszedł lokalne bramki (negacja, nazwy, liczby...).
   // Dzięki temu `evidence_quote_not_exact` w diagnostyce znaczy dokładnie to, co mówi.
   // Kontrakt się nie zmienia: pełne wsparcie implikuje istnienie cytatu, więc zbiór (2) zawiera zbiór (1).
-  const blockBySourceId = new Map(parsedEvidenceBlocks.map(block => [block.sourceId, block]));
+  const blockBySourceId = new Map(parsedEvidenceBlocks.map(block => [normalizujIdZrodla(block.sourceId), block]));
   const evidenceQuoteVerified = claims.map((c, index) =>
     Boolean(c.evidence_quote) && effectiveClaimSourceIds[index].some(id => {
       const block = blockBySourceId.get(id);
