@@ -16,13 +16,18 @@ function clampLimit(value, fallback) {
 
 function createAIRequestContext(options = {}) {
   const maxGeneracji = clampLimit(options.maxGeneracji, DEFAULTS.maxGenerations);
+  // An explicit total override retains the historical behavior of allowing all
+  // of that total for initial generations unless the caller sets a phase cap.
+  const defaultInitialGeneracji = options.maxGeneracji === undefined
+    ? DEFAULTS.maxInitialGenerations
+    : maxGeneracji;
   const ctx = {
     requestId: String(options.requestId || '-'),
     startedAt: Number.isFinite(options.startedAt) ? options.startedAt : Date.now(),
     maxCzasMs: clampLimit(options.maxCzasMs, DEFAULTS.requestTimeoutMs),
     maxGeneracji,
     maxInitialGeneracji: Math.min(
-      clampLimit(options.maxInitialGeneracji, DEFAULTS.maxInitialGenerations),
+      clampLimit(options.maxInitialGeneracji, defaultInitialGeneracji),
       maxGeneracji,
     ),
     maxRepairGeneracji: Math.min(
