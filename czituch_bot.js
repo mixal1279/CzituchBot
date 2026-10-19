@@ -103,8 +103,8 @@ function buildBoundedValidatorEvidence(question, answer, data, maxChars = 10500)
     'the','and','for','are','was','were','has','had','its','you','your','but','not','who','why','how',
   ]);
   const tokens = value => String(value || '').toLocaleLowerCase('pl-PL')
-    .normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').replace(/ł/g, 'l')
-    .match(/[\\p{L}\\p{N}]{3,}/gu)?.filter(token => !stop.has(token)) || [];
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/ł/g, 'l')
+    .match(/[\p{L}\p{N}]{3,}/gu)?.filter(token => !stop.has(token)) || [];
   const queryTokens = new Set(tokens(String(question || '') + ' ' + String(answer || '')));
   const scoreText = value => {
     const words = tokens(value);
@@ -117,8 +117,8 @@ function buildBoundedValidatorEvidence(question, answer, data, maxChars = 10500)
 
   const candidates = [];
   for (const block of blocks) {
-    const sentences = String(block.content || '').replace(/\\s+/g, ' ')
-      .split(/(?<=[.!?])\\s+(?=[\\p{Lu}\\d"'“‘(\\[])/u)
+    const sentences = String(block.content || '').replace(/\s+/g, ' ')
+      .split(/(?<=[.!?])\s+(?=[\p{Lu}\d"'“‘(\[])/u)
       .map(sentence => sentence.trim()).filter(sentence => sentence.length >= 35);
     const ranked = sentences.map((sentence, index) => ({ sentence, index, score: scoreText(sentence) }))
       .filter(item => item.score > 0)
@@ -126,7 +126,7 @@ function buildBoundedValidatorEvidence(question, answer, data, maxChars = 10500)
       .slice(0, 3)
       .sort((a, b) => a.index - b.index);
     const picked = ranked.map(item => item.sentence);
-    if (!picked.length && block.content) picked.push(String(block.content).replace(/\\s+/g, ' ').trim().slice(0, 500));
+    if (!picked.length && block.content) picked.push(String(block.content).replace(/\s+/g, ' ').trim().slice(0, 500));
     candidates.push({
       sourceId: block.sourceId, title: block.title, url: block.url,
       provider: block.provider || '', picked,
@@ -138,8 +138,8 @@ function buildBoundedValidatorEvidence(question, answer, data, maxChars = 10500)
   let used = 0;
   for (const block of candidates) {
     if (!block.picked.length) continue;
-    const header = `[${block.sourceId}]\\nTYTUŁ: ${block.title}\\nURL: ${block.url}\\nTREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>\\n`;
-    const footer = '\\n<<<END_UNTRUSTED_SOURCE_CONTENT>>>\\n';
+    const header = `[${block.sourceId}]\nTYTUŁ: ${block.title}\nURL: ${block.url}\nTREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>\n`;
+    const footer = '\n<<<END_UNTRUSTED_SOURCE_CONTENT>>>\n';
     const body = block.picked.join(' ');
     const row = header + body + footer;
     if (used + row.length > maxChars) {
@@ -154,7 +154,7 @@ function buildBoundedValidatorEvidence(question, answer, data, maxChars = 10500)
     used += row.length;
   }
   // Prompt zostaje mały, ale lokalna walidacja nadal otrzymuje pełne dane źródłowe.
-  return rows.length ? rows.join('\\n') : raw.slice(0, maxChars);
+  return rows.length ? rows.join('\n') : raw.slice(0, maxChars);
 }
 
 function buildValidatorEvidenceHints(question, answer, data) {
