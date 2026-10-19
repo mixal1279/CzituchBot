@@ -37,12 +37,12 @@ test('Groq strict schema preserves fields consumed by the shared local verifier'
 });
 
 test('Groq strict mode is enabled only for documented model IDs', () => {
-  for (const model of ['openai/gpt-oss-20b', 'openai/gpt-oss-120b']) {
+  for (const model of ['openai/gpt-oss-20b', 'openai/gpt-oss-120b', 'qwen/qwen3.8-27b']) {
     const format = buildGroqValidatorResponseFormat(model);
     assert.equal(format.type, 'json_schema');
     assert.equal(format.json_schema.strict, true);
   }
-  for (const model of ['llama-3.3-70b-versatile', 'qwen/qwen3.8-27b', '']) {
+  for (const model of ['llama-3.3-70b-versatile', 'qwen/qwen3.5-397b-a17b:free', '']) {
     assert.deepEqual(buildGroqValidatorResponseFormat(model), { type: 'json_object' });
   }
 });
