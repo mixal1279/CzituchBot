@@ -591,6 +591,7 @@ const KONFIGURACJA = {
   kickBroadcasterId2: 91048662,
   kickChatroomId2:   89555075,
   kickTokenFile:    './kick_token.json',
+  billyTokenFile:   './billy_token.json',
   cytatyFile:       './cytaty.json',
 
   // ---- Alerty przez bota PolishSteamDB (Discord REST, bez gatewaya) ----
@@ -6070,10 +6071,10 @@ async function zapiszTokenBilly(data) {
     await FIRESTORE_STATE.writeToken('twitch_billy', doZapisu);
     const verified = await FIRESTORE_STATE.readToken('twitch_billy');
     if (JSON.stringify(verified) !== JSON.stringify(doZapisu)) throw new Error('Weryfikacja tokenu Billy nie powiodła się.');
-    try { await fs.promises.unlink('./billy_token.json'); } catch (err) { if (err.code !== 'ENOENT') console.warn('[Billy Auth] Nie usunięto starego pliku tokenu:', err.message); }
+    try { await fs.promises.unlink(KONFIGURACJA.billyTokenFile); } catch (err) { if (err.code !== 'ENOENT') console.warn('[Billy Auth] Nie usunięto starego pliku tokenu:', err.message); }
     console.log('[Billy Auth] ✅ Zaszyfrowany token zapisany do Firestore');
   } catch (err) {
-    const fallbackSaved = await zapiszLokalnaKopieTokenu('./billy_token.json', doZapisu, '[Billy Auth]');
+    const fallbackSaved = await zapiszLokalnaKopieTokenu(KONFIGURACJA.billyTokenFile, doZapisu, '[Billy Auth]');
     console.error('[Billy Auth] ⚠️ Nie udało się utrwalić tokenu w Firestore' + (fallbackSaved ? '; zachowano lokalną kopię' : '; brak trwałej kopii awaryjnej') + ':', err.message);
   }
 }
@@ -6081,10 +6082,10 @@ async function zapiszTokenBilly(data) {
 async function wczytajTokenBilly() {
   let data = null;
   try {
-    data = await FIRESTORE_STATE.migrateTokenFile('twitch_billy', './billy_token.json');
+    data = await FIRESTORE_STATE.migrateTokenFile('twitch_billy', KONFIGURACJA.billyTokenFile);
   } catch (err) {
     console.warn('[Billy Auth] Migracja tokenu nieudana; próbuję użyć pliku bez usuwania go:', err.message);
-    try { data = FIRESTORE_STATE.parseTokenFile(await fs.promises.readFile('./billy_token.json', 'utf8')); }
+    try { data = FIRESTORE_STATE.parseTokenFile(await fs.promises.readFile(KONFIGURACJA.billyTokenFile, 'utf8')); }
     catch (readError) { if (readError.code !== 'ENOENT') console.error('[Billy Auth] Błąd wczytywania:', readError.message); }
   }
   if (!data) return false;
