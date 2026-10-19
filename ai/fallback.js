@@ -55,7 +55,7 @@ function classifyFailure(error = '') {
     ? Number(error.httpStatus ?? error.statusCode ?? (typeof error.status === 'number' ? error.status : 0))
     : 0;
   const rawError = typeof error === 'string' ? error : '';
-  const diagnosticStatus = rawError.match(/"status"\\s*:\\s*(\\d{3})(?!\\d)/);
+  const diagnosticStatus = rawError.match(/"status"\s*:\s*(\d{3})(?!\d)/);
   const httpStatus = structuredStatus || (diagnosticStatus ? Number(diagnosticStatus[1]) : 0);
   if ([402, 429].includes(httpStatus)) return 'quota';
   if ([400, 422, 404].includes(httpStatus)) return 'invalid_request';
@@ -171,7 +171,7 @@ function quotaCooldownMsFromError(error) {
   // exhausted. If the response did not provide an authoritative Retry-After,
   // suppress repeated calls instead of probing the same exhausted allowance
   // every minute. Burst/rate-limit 429s retain the short configurable cooldown.
-  const dailyQuota = /(?:tokens?\\s*(?:per|\\/)\\s*day|\\bTPD\\b|daily (?:token|usage|request) (?:allowance|quota|limit)|daily allowance exhausted)/i.test(message)
+  const dailyQuota = /(?:tokens?\s*(?:per|\/)\s*day|\bTPD\b|daily (?:token|usage|request) (?:allowance|quota|limit)|daily allowance exhausted)/i.test(message)
     || /(?:quota_exceeded|daily_quota_exceeded|free_tokens_exhausted)/i.test(String(error?.code || error?.type || ''));
   if (dailyQuota && retryAfterMs === null) return 24 * 60 * 60 * 1000;
   if (retryAfterMs !== null) {
