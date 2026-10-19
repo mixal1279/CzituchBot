@@ -4,12 +4,15 @@
 // finish_reason oraz to, czy odpowiedź jest kompletnym JSON-em. Nigdy nie wywala kroku CI
 // (exit 0), chyba że PREFLIGHT_STRICT=1. Klucze nie są wypisywane.
 //
-// Limit produkcyjny walidatora to 9000 ms (computeValidatorTimeout.maxTimeoutMs), a tu
-// czekamy do 20 s, żeby zobaczyć prawdziwy czas, a nie tylko "abort".
+// Limity produkcyjne są per provider; preflight czeka dłużej, by zmierzyć pełną latencję.
 
 const fs = require('fs');
 
-const PROD_TIMEOUT_MS = 9000;
+const PROD_TIMEOUT_BY_PROVIDER = Object.freeze({
+  xKiro: Number(process.env.AI_XKIRO_VALIDATOR_TIMEOUT_MS) || 3000,
+  OpenRouter: 3000,
+  Groq: 3000,
+});
 const PROBE_TIMEOUT_MS = Number(process.env.PREFLIGHT_TIMEOUT_MS) || 20000;
 
 const XKIRO_KEY = String(process.env.XKIRO_API_KEY || '').replace(/[\r\n]/g, '').trim();
@@ -145,7 +148,9 @@ async function run(probe) {
     const claims = Array.isArray(parsed.claims) ? parsed.claims : [];
     result.claims = claims.length;
     result.claimEn = claims.filter(c => typeof c?.claim_en === 'string' && c.claim_en.trim()).length;
-    result.verdict = result.ms > PROD_TIMEOUT_MS ? `ZA WOLNY dla produkcji (>${PROD_TIMEOUT_MS} ms)` : 'OK';
+    const productionTimeoutMs = PROD_TIMEOUT_BY_PROVIDER[probe.provider] || 3000;
+    result.productionTimeoutMs = productionTimeoutMs;
+    result.verdict = result.ms > productionTimeoutMs ? `ZA WOLNY dla produkcji (>${productionTimeoutMs} ms)` : 'OK';
     return result;
   } catch (err) {
     result.ms = Date.now() - started;
@@ -165,8 +170,8 @@ async function run(probe) {
   }
 
   if (process.env.GITHUB_STEP_SUMMARY && results.length) {
-    const lines = ['## Preflight walidatorów', '', `Limit produkcyjny walidatora: ${PROD_TIMEOUT_MS} ms (tu czekamy do ${PROBE_TIMEOUT_MS} ms).`, '', '| provider | model | wariant | wynik | czas | tokeny | claimy / claim_en |', '|---|---|---|---|---|---|---|'];
-    for (const r of results) lines.push(`| ${r.provider} | ${r.model} | ${r.variant} | ${r.verdict} | ${r.ms} ms | ${r.completionTokens ?? '–'} | ${r.claims != null ? `${r.claims} / ${r.claimEn}` : '–'} |`);
+    const lines = ['## Preflight walidatorów', '', `Limity produkcyjne: xKiro ${PROD_TIMEOUT_BY_PROVIDER.xKiro} ms, OpenRouter ${PROD_TIMEOUT_BY_PROVIDER.OpenRouter} ms, Groq ${PROD_TIMEOUT_BY_PROVIDER.Groq} ms (tu czekamy do ${PROBE_TIMEOUT_MS} ms).`, '', '| provider | model | wariant | wynik | czas | limit prod. | tokeny | claimy / claim_en |', '|---|---|---|---|---|---:|---:|---|'];
+    for (const r of results) lines.push(`| ${r.provider} | ${r.model} | ${r.variant} | ${r.verdict} | ${r.ms} ms | ${r.productionTimeoutMs ?? PROD_TIMEOUT_BY_PROVIDER[r.provider] ?? 3000} ms | ${r.completionTokens ?? '–'} | ${r.claims != null ? `${r.claims} / ${r.claimEn}` : '–'} |`);
     try { fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, lines.join('\n') + '\n'); } catch (_) { /* podsumowanie jest opcjonalne */ }
   }
 
