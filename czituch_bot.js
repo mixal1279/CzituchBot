@@ -73,7 +73,7 @@ const { resolveGameEntity, scoreExternalGameCandidate, externalGameCandidateMatc
 const { extractExplicitUserMemories, mergeMemoryRecords, buildVerifiedMemoryContext, pruneExpiredMemories } = require('./ai/memory');
 const { parseMemoryCommand, forgetMemories, describeMemories } = require('./ai/memory_manager');
 const { decomposeQuestion, isMultiPartQuestion, buildAdvancedRetrievalPlan, buildSupplementalRetrievalQuery, selectRetrievalQueries } = require('./ai/retrieval');
-const { classifyFailure, nextFallbacks, selectRepairFallbacks, filterAvailableFallbacks, repairBudgetBlockReason, GENERATION_FALLBACK_CHAIN, configuredMaxFallbackSteps, markProviderQuota, isProviderQuotaBlocked, quotaCooldownMsFromError, retryAfterHint, shouldOpenQuotaCircuit } = require('./ai/fallback');
+const { classifyFailure, nextFallbacks, selectRepairFallbacks, filterAvailableFallbacks, repairBudgetBlockReason, GENERATION_FALLBACK_CHAIN, configuredMaxFallbackSteps, markProviderQuota, isProviderQuotaBlocked, quotaCooldownMsFromError, geminiGenerationCooldownMsFromError, retryAfterHint, shouldOpenQuotaCircuit } = require('./ai/fallback');
 const { createGroqCompletion, awaitWithAbortTimeout, computeValidatorTimeout, computeValidatorReserveMs, computeGenerationTimeout } = require('./ai/provider-runtime');
 const { createAIMetrics, recordAIMetric, snapshotAIMetrics } = require('./ai/metrics');
 const { DEFAULTS, sanitizeRequestText } = require('./ai/limits');
@@ -3344,8 +3344,8 @@ Pytanie użytkownika: ${pytanie}`;
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
         const retryAfter = retryAfterHint(response);
-        const message = data?.error?.message || `HTTP ${response.status}`;
-        throw new Error(`${message}${retryAfter ? ` (${retryAfter})` : ''}`);
+        const message = data?.error?.message || 'provider returned an error';
+        throw new Error(`HTTP ${response.status}: ${message}${retryAfter ? ` (${retryAfter})` : ''}`);
       }
       const parsed = parseGeminiGenerationResponse(data, 'Gemini');
       if (!parsed.ok) throw new Error(parsed.reason);
@@ -3360,7 +3360,8 @@ Pytanie użytkownika: ${pytanie}`;
       };
     } catch (err) {
       console.error(`[Gemini] Fallback nieudany (${powod}):`, err.message);
-      if (/quota|rate.?limit|resource.?exhausted|429|limit:/i.test(err.message || '')) ustawGeminiGenerationCooldown('gemini-3.8-flash', 90_000);
+      const cooldownMs = geminiGenerationCooldownMsFromError(err);
+      if (cooldownMs > 0) ustawGeminiGenerationCooldown('gemini-3.8-flash', cooldownMs);
       return wynikPusty('gemini', 'gemini-3.8-flash', err.message);
     } finally { clearTimeout(timer); }
   }
@@ -3405,7 +3406,8 @@ Pytanie użytkownika: ${pytanie}`;
       };
     } catch (err) {
       console.error(`[Gemini Lite] Fallback nieudany (${powod}):`, err.message);
-      if (/quota|rate.?limit|resource.?exhausted|429|limit:/i.test(err.message || '')) ustawGeminiGenerationCooldown('gemini-3.5-flash-lite', 90_000);
+      const cooldownMs = geminiGenerationCooldownMsFromError(err);
+      if (cooldownMs > 0) ustawGeminiGenerationCooldown('gemini-3.5-flash-lite', cooldownMs);
       return wynikPusty('gemini', 'gemini-3.5-flash-lite', err.message);
     } finally { clearTimeout(timer); }
   }
