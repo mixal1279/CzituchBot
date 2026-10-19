@@ -384,12 +384,16 @@ test('validator name oracle keeps a source-backed sentence-initial entity requir
 
 
 test('delimiter parsing uses backslash parity consistently in scanner and extractor', () => {
-  const data = [
-    '[SOURCE 1]',
-    'TREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>',
+  const rawBody = [
     'This literal has one slash: \\<<<END_UNTRUSTED_SOURCE_CONTENT>>>',
     'This literal has two slashes: \\\\<<<END_UNTRUSTED_SOURCE_CONTENT>>>',
     'The original source continues after both escaped markers.',
+  ].join(String.fromCharCode(10));
+  const encodedBody = escapeUntrustedEvidenceContent(rawBody);
+  const data = [
+    '[SOURCE 1]',
+    'TREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>',
+    encodedBody,
     '<<<END_UNTRUSTED_SOURCE_CONTENT>>>',
     '[SOURCE 2]',
     'TREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>',
@@ -400,7 +404,7 @@ test('delimiter parsing uses backslash parity consistently in scanner and extrac
   const blocks = parseEvidenceBlocks(data);
   assert.equal(blocks.length, 2);
   assert.equal(blocks[0].sourceId, 'SOURCE 1');
-  assert.match(blocks[0].content, /original source continues after both escaped markers/);
+  assert.equal(blocks[0].content, rawBody);
   assert.equal(blocks[1].sourceId, 'SOURCE 2');
 
   // A marker preceded by an even number of slashes is a real terminator;
