@@ -101,6 +101,17 @@ test('TikTok RSS Bridge HTTP errors and non-Atom responses are not mistaken for 
   assert.match(fetcher, /non-Atom response/);
 });
 
+test('Kick REST helper does not parse JSON error bodies as successful API responses', () => {
+  const source = read('czituch_bot.js');
+  const start = source.indexOf('async function kickApi(');
+  const end = source.indexOf('// Szuka kategorii (gry)', start);
+  assert.ok(start >= 0 && end > start, 'Kick REST helper should exist');
+  const helper = source.slice(start, end);
+  assert.match(helper, /if \(!res\.ok\)/);
+  assert.match(helper, /Kick API HTTP/);
+  assert.match(helper, /throw new Error/);
+});
+
 test('Twitch chat auth errors explain required scopes and try user-token fallback', () => {
   const source = read('czituch_bot.js');
   assert.match(source, /Wymagana wcześniejsza autoryzacja/);
