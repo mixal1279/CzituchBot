@@ -135,10 +135,11 @@ test('Gemini GenerateContent uses the documented systemInstruction and responseS
   assert.match(call.url, /:generateContent$/);
   assert.ok(call.body.systemInstruction?.parts?.[0]?.text);
   assert.equal(Object.hasOwn(call.body, 'system_instruction'), false);
-  assert.equal(call.body.generationConfig.responseMimeType, 'application/json');
-  assert.equal(call.body.generationConfig.responseSchema.type, 'object');
-  assert.ok(call.body.generationConfig.responseSchema.properties.claims.items.properties.claim_en);
-  assert.equal(Object.hasOwn(call.body.generationConfig, 'responseFormat'), false);
+  assert.equal(call.body.generationConfig.responseFormat.text.mimeType, 'application/json');
+  assert.equal(call.body.generationConfig.responseFormat.text.schema.type, 'object');
+  assert.ok(call.body.generationConfig.responseFormat.text.schema.properties.claims.items.properties.claim_en);
+  assert.equal(Object.hasOwn(call.body.generationConfig, 'responseSchema'), false);
+  assert.equal(Object.hasOwn(call.body.generationConfig, 'responseMimeType'), false);
 });
 
 test('OpenRouter wysyła json_object, reasoning low i domyślny limit 1400; length oznacza ucięty JSON', async () => {

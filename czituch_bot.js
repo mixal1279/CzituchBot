@@ -1712,8 +1712,7 @@ async function walidujOdpowiedzGeminiModel(model, persona, pytanie, odpowiedz, d
           generationConfig: {
             temperature: 0,
             maxOutputTokens: 1400,
-            responseMimeType: 'application/json',
-            responseSchema: GEMINI_VALIDATOR_JSON_SCHEMA,
+            responseFormat: { text: { mimeType: 'application/json', schema: GEMINI_VALIDATOR_JSON_SCHEMA } },
             ...(model === 'gemini-3.8-flash'
               ? { thinkingConfig: { thinkingLevel: 'low' } }
               : model === 'gemini-3.5-flash-lite'
