@@ -183,6 +183,52 @@ test('Gemini raportuje brak kandydatów bez promptFeedback jako osobny błąd od
   assert.equal(result.transient, false);
 });
 
+test('Gemini zachowuje finishReason i safetyRatings, gdy kandydat nie zawiera tekstu', async () => {
+  hooks.KONFIGURACJA.geminiKey = 'test-gemini-key';
+  mockFetch(async () => jsonResponse({
+    candidates: [{
+      finishReason: 'SAFETY',
+      finishMessage: 'Candidate blocked by safety filters',
+      content: { parts: [] },
+      safetyRatings: [
+        { category: 'HARM_CATEGORY_HARASSMENT', blocked: true, probability: 'HIGH' },
+      ],
+    }],
+  }));
+
+  const result = await hooks.walidujOdpowiedzGeminiModel(
+    'gemini-3.5-flash-lite', 'generic', QUESTION, ANSWER, EVIDENCE, [], 'test-gemini-candidate-safety',
+  );
+
+  assert.equal(result.status, 'unavailable');
+  assert.equal(result.finishReason, 'SAFETY');
+  assert.equal(result.finishMessage, 'Candidate blocked by safety filters');
+  assert.match(result.reason, /finishReason=SAFETY/);
+  assert.match(result.reason, /HARM_CATEGORY_HARASSMENT/);
+  assert.equal(result.safetyRatings[0].blocked, true);
+  assert.equal(result.transient, false);
+});
+
+test('Gemini oznacza niekompletny JSON jako ucięty, gdy finishReason to MAX_TOKENS', async () => {
+  hooks.KONFIGURACJA.geminiKey = 'test-gemini-key';
+  mockFetch(async () => jsonResponse({
+    candidates: [{
+      finishReason: 'MAX_TOKENS',
+      content: { parts: [{ text: '{"status":"accepted",' }] },
+      safetyRatings: [{ category: 'HARM_CATEGORY_DANGEROUS_CONTENT', blocked: false, probability: 'NEGLIGIBLE' }],
+    }],
+  }));
+
+  const result = await hooks.walidujOdpowiedzGeminiModel(
+    'gemini-3.5-flash-lite', 'generic', QUESTION, ANSWER, EVIDENCE, [], 'test-gemini-max-tokens',
+  );
+
+  assert.equal(result.status, 'unavailable');
+  assert.equal(result.finishReason, 'MAX_TOKENS');
+  assert.equal(result.truncatedJson, true);
+  assert.match(result.reason, /finishReason=MAX_TOKENS/);
+});
+
 test('OpenRouter wysyła json_object, reasoning low i honoruje własny endpoint', async () => {
   hooks.KONFIGURACJA.openrouterKey = 'test-openrouter-key';
   hooks.KONFIGURACJA.openrouterBaseUrl = 'https://openrouter.example/custom/v1';
