@@ -1164,6 +1164,11 @@ async function znajdzGreIGDB(pytanie, requestState = null) {
     );
     const nazwaGry = (rewrite.choices[0].message.content || '').trim();
     if (!nazwaGry || nazwaGry.toUpperCase() === 'NONE') return null;
+    // Model output is untrusted input to the Apicalypse query language.
+    // Remove query delimiters and bound the search term so a title cannot
+    // append extra IGDB clauses such as another limit/where statement.
+    const igdbSearchTerm = nazwaGry.replace(/[";\\\\\\r\\n]/g, ' ').replace(/\\s+/g, ' ').trim().slice(0, 120);
+    if (!igdbSearchTerm) return null;
 
     const token = await pobierzTokenIGDB();
     const res = await fetchZTimeout('https://api.igdb.com/v4/games', {
@@ -1176,14 +1181,14 @@ async function znajdzGreIGDB(pytanie, requestState = null) {
       // IGDB zwraca wyniki uporządkowane wg podobieństwa, ale pierwszy rekord
       // może być edycją/spinoffem. Pobieramy kilka kandydatów i weryfikujemy
       // nazwę lokalnie przed użyciem encji w routingu.
-      body: `search "${nazwaGry}"; fields name,genres.name; limit 5;`,
+      body: `search "${igdbSearchTerm}"; fields name,genres.name; limit 5;`,
     }, 6000);
     if (!res.ok) return null;
     const data = await res.json();
     if (!Array.isArray(data) || !data.length) return null;
 
     const kandydaci = data
-      .map(gra => ({ gra, score: scoreExternalGameCandidate(nazwaGry, gra?.name) }))
+      .map(gra => ({ gra, score: scoreExternalGameCandidate(igdbSearchTerm, gra?.name) }))
       .sort((a, b) => b.score - a.score);
     const najlepszy = kandydaci[0];
     if (!najlepszy || najlepszy.score < 0.72) {
