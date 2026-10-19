@@ -2284,7 +2284,7 @@ async function walidujOdpowiedzAIBezCache(persona, pytanie, odpowiedz, dane, his
     if (!zarezerwujSlotWalidatora(requestState, 'validator:openrouter')) {
       return { ...(last || {}), status: 'unavailable', ok: false, technicalError: true, provider: 'openrouter', model: KONFIGURACJA.openrouterValidatorModel, unsupported_claims: [], reason: 'budżet validatora/modeli wyczerpany' };
     }
-    requestState.validatorResults.push({ model: KONFIGURACJA.openrouterValidatorModel, status: 'fallback', complete: false, confidence: null, claimCoverage: null });
+    requestState.validatorResults.push({ provider: 'openrouter', model: KONFIGURACJA.openrouterValidatorModel, status: 'fallback', complete: false, confidence: null, claimCoverage: null });
   }
   // Brak Gemini nie jest błędem logicznym: OpenRouter jest pełnoprawnym
   // fallbackiem validatora, a nie tylko ratunkiem po błędzie sieciowym Gemini.
