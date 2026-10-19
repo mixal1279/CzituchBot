@@ -1695,6 +1695,7 @@ async function walidujOdpowiedzGeminiModel(model, persona, pytanie, odpowiedz, d
 }
 
 let geminiValidatorCooldownUntil = 0;
+let groqValidatorClientOverride = null;
 let geminiGenerationCooldowns = Object.create(null);
 let groqHistoryCooldownUntil = 0;
 
@@ -1801,6 +1802,124 @@ async function walidujOdpowiedzOpenRouter(persona, pytanie, odpowiedz, dane, req
     console.error(`[AI][${requestId}] OpenRouter validator TRANSPORT_ERROR: ${diagnostic}`);
     return { status: 'unavailable', ok: false, technicalError: true, provider: 'openrouter', model: KONFIGURACJA.openrouterValidatorModel, unsupported_claims: [], reason: 'fallback validator niedostępny', error: diagnostic, diagnostic };
   } finally { clearTimeout(timer); }
+}
+
+
+async function walidujOdpowiedzGroq(persona, pytanie, odpowiedz, dane, requestId = '-', requestState = null, requestMeta = null) {
+  const model = AI_MODELS.validator;
+  const providerKey = `groq:${model}`;
+  const groqClient = groqValidatorClientOverride || groq;
+  if (!groqClient || !dane) {
+    return { status: 'unavailable', ok: false, technicalError: true, provider: 'groq', model, unsupported_claims: [], reason: !groqClient ? 'brak GROQ_API_KEY / klienta Groq' : 'brak danych referencyjnych' };
+  }
+  if (isProviderQuotaBlocked(providerKey)) {
+    return { status: 'unavailable', ok: false, technicalError: true, transient: true, skipped: true, provider: 'groq', model, unsupported_claims: [], reason: 'Groq validator pominięty: aktywny cooldown limitu dostawcy' };
+  }
+
+  const remainingMs = requestState
+    ? (typeof requestState.remainingMs === 'function' ? requestState.remainingMs() : requestState.maxCzasMs - (Date.now() - requestState.startedAt))
+    : 9000;
+  const timeoutMs = requestState
+    ? computeValidatorTimeout(remainingMs, {
+        maxTimeoutMs: 9000,
+        reserveMs: computeValidatorReserveMs(remainingMs, requestState?.validatory + 1, requestState?.maxValidatorow),
+        minTimeoutMs: 4000,
+      })
+    : 9000;
+  if (requestState && timeoutMs === null) {
+    return { status: 'unavailable', ok: false, technicalError: true, transient: true, skipped: true, provider: 'groq', model, unsupported_claims: [], reason: 'Groq validator pominięty: zbyt mały pozostały budżet czasu' };
+  }
+
+  const { system, user } = zbudujPromptWalidatora(pytanie, odpowiedz, dane, requestMeta);
+  const controller = new AbortController();
+  try {
+    // createGroqCompletion dodaje 800 tokenów rezerwy na reasoning dla gpt-oss-20b:
+    // 1400 + 800 = 2200 max_completion_tokens w faktycznym żądaniu.
+    const data = await awaitWithAbortTimeout(
+      createGroqCompletion(groqClient, {
+        model,
+        messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
+        temperature: 0,
+        max_completion_tokens: 1400,
+        reasoning_effort: 'low',
+        response_format: { type: 'json_object' },
+      }, { signal: controller.signal }),
+      timeoutMs,
+      controller,
+      'Groq validator',
+    );
+    const choice = data?.choices?.[0] || {};
+    const message = choice?.message || {};
+    const rawContent = message?.content;
+    const content = Array.isArray(rawContent)
+      ? rawContent.map(part => typeof part === 'string' ? part : (part?.text || '')).join('').trim()
+      : (typeof rawContent === 'string' ? rawContent.trim() : '');
+    if (!content) {
+      const truncatedJson = choice?.finish_reason === 'length';
+      const diagnostic = formatProviderError('groq', data?.model || model, null, {
+        finish_reason: choice?.finish_reason || null,
+        content_empty: true,
+        usage: data?.usage || null,
+      });
+      console.warn(`[AI][${requestId}] Groq validator ${truncatedJson ? 'UCIĘTY_JSON' : 'EMPTY_CONTENT'}: ${diagnostic}`);
+      return { status: 'unavailable', ok: false, technicalError: true, provider: 'groq', model: data?.model || model, unsupported_claims: [], reason: truncatedJson ? 'Groq validator zwrócił UCIĘTY JSON (finish_reason=length)' : 'Groq validator zwrócił pusty content', truncatedJson, error: diagnostic, diagnostic };
+    }
+    const parsed = wytnijJsonWalidatora(content);
+    if (!parsed) {
+      const truncatedJson = choice?.finish_reason === 'length';
+      const diagnostic = formatProviderError('groq', data?.model || model, null, {
+        finish_reason: choice?.finish_reason || null,
+        content_preview: content.slice(0, 700),
+        usage: data?.usage || null,
+      });
+      console.warn(`[AI][${requestId}] Groq validator ${truncatedJson ? 'UCIĘTY_JSON' : 'INVALID_JSON'}: ${diagnostic}`);
+      return { status: 'unavailable', ok: false, technicalError: true, provider: 'groq', model: data?.model || model, unsupported_claims: [], reason: truncatedJson ? 'Groq validator zwrócił UCIĘTY JSON (finish_reason=length)' : 'Groq validator zwrócił niepoprawny JSON', truncatedJson, error: diagnostic, diagnostic };
+    }
+    const normalized = normalizujWynikWalidatora(parsed, data?.model || model, 'groq', wyodrebnijIdentyfikatoryZrodel(dane), dane, odpowiedz);
+    if (!normalized) {
+      const diagnostic = formatProviderError('groq', data?.model || model, null, {
+        finish_reason: choice?.finish_reason || null,
+        content_preview: content.slice(0, 700),
+      });
+      console.warn(`[AI][${requestId}] Groq validator SCHEMA_REJECT: ${diagnostic}`);
+      return { status: 'unavailable', ok: false, technicalError: true, provider: 'groq', model: data?.model || model, unsupported_claims: [], reason: 'Groq validator zwrócił JSON niespełniający lokalnego kontraktu', error: diagnostic, diagnostic };
+    }
+    console.log(`[AI][${requestId}] Groq validator: status=${normalized.status} supported=${normalized.supported} complete=${normalized.complete}`);
+    return normalized;
+  } catch (err) {
+    const message = String(err?.message || err || '');
+    const status = Number(err?.status ?? err?.statusCode ?? err?.response?.status ?? 0);
+    const is429 = status === 429 || /(?:^|\\D)429(?:\\D|$)/.test(message);
+    if (is429) {
+      const cooldownMs = quotaCooldownMsFromError(err);
+      markProviderQuota(providerKey, cooldownMs);
+      console.warn(`[AI][${requestId}] quota circuit opened for ${providerKey} for ${cooldownMs}ms`);
+    }
+    const timeoutAbort = err?.name === 'TimeoutError'
+      || err?.name === 'AbortError'
+      || /timeout|timed out|aborted|aborterror/i.test(message);
+    const diagnostic = formatProviderError('groq', model, err, {
+      timeoutMs,
+      timeoutAbort,
+      remainingMs: typeof requestState?.remainingMs === 'function' ? requestState.remainingMs() : null,
+      status: status || null,
+    });
+    console.error(`[AI][${requestId}] Groq validator TRANSPORT_ERROR: ${diagnostic}`);
+    return {
+      status: 'unavailable',
+      ok: false,
+      technicalError: true,
+      transient: timeoutAbort || is429,
+      timeoutAbort,
+      quota: is429,
+      provider: 'groq',
+      model,
+      unsupported_claims: [],
+      reason: is429 ? 'limit Groq (HTTP 429) — przełączam validator' : (timeoutAbort ? 'Groq validator timeout/abort — przełączam validator' : 'Groq validator niedostępny'),
+      error: diagnostic,
+      diagnostic,
+    };
+  }
 }
 
 async function walidujOdpowiedzXKiro(persona, pytanie, odpowiedz, dane, requestId = '-', requestState = null, requestMeta = null) {
@@ -1968,6 +2087,56 @@ async function walidujOdpowiedzAIBezCache(persona, pytanie, odpowiedz, dane, his
   }
   if (requestState && budzetValidatoraPrzekroczony()) {
     return { ...(last || {}), status: 'unavailable', ok: false, technicalError: true, unsupported_claims: [], reason: 'budżet czasu validatora wyczerpany' };
+  }
+
+
+  // Groq jest drugim transportem po Gemini. Brak klucza, wyłączenie flagą
+  // lub cooldown limitu pomija go bez zużywania slotu walidatora.
+  const groqValidatorProviderKey = `groq:${AI_MODELS.validator}`;
+  if (process.env.AI_VALIDATOR_GROQ !== '0' && (groqValidatorClientOverride || groq)) {
+    if (isProviderQuotaBlocked(groqValidatorProviderKey)) {
+      console.warn(`[AI][${requestId}] Groq validator pominięty przed rezerwacją slotu: aktywny cooldown ${groqValidatorProviderKey}`);
+    } else {
+      const groqRemainingMs = requestState
+        ? (typeof requestState.remainingMs === 'function' ? requestState.remainingMs() : requestState.maxCzasMs - (Date.now() - requestState.startedAt))
+        : 9000;
+      const groqTimeoutMs = requestState
+        ? computeValidatorTimeout(groqRemainingMs, {
+            maxTimeoutMs: 9000,
+            reserveMs: computeValidatorReserveMs(groqRemainingMs, requestState.validatory + 1, requestState.maxValidatorow),
+            minTimeoutMs: 4000,
+          })
+        : 9000;
+      if (groqTimeoutMs === null) {
+        console.warn(`[AI][${requestId}] Groq validator pominięty przed rezerwacją slotu; remaining=${groqRemainingMs}ms`);
+      } else if (!zarezerwujSlotWalidatora(requestState, 'validator:groq')) {
+        return { ...(last || {}), status: 'unavailable', ok: false, technicalError: true, provider: 'groq', model: AI_MODELS.validator, unsupported_claims: [], reason: 'budżet validatora/modeli wyczerpany przed Groq' };
+      } else {
+        const validatorStartedAt = Date.now();
+        const remainingBefore = requestState?.remainingMs?.() ?? null;
+        requestState?.recordTiming?.('validator_provider_start', { provider: 'groq', model: AI_MODELS.validator, remainingBefore });
+        const groqResult = await walidujOdpowiedzGroq(persona, pytanie, odpowiedz, dane, requestId, requestState, requestMeta);
+        const validatorElapsedMs = Date.now() - validatorStartedAt;
+        const remainingAfter = requestState?.remainingMs?.() ?? null;
+        requestState?.recordTiming?.('validator_provider_end', { provider: 'groq', model: groqResult.model || AI_MODELS.validator, status: groqResult.status, validatorElapsedMs, remainingBefore, remainingAfter, reason: String(groqResult.reason || '').slice(0, 180) });
+        if (requestState) requestState.validatorResults.push({
+          model: groqResult.model || AI_MODELS.validator,
+          provider: 'groq',
+          status: groqResult.status,
+          elapsedMs: validatorElapsedMs,
+          remainingMsBefore: remainingBefore,
+          remainingMsAfter: remainingAfter,
+          complete: groqResult.complete === true,
+          confidence: Number.isFinite(groqResult.confidence) ? groqResult.confidence : null,
+          claimCoverage: Array.isArray(groqResult.claims) && groqResult.claims.length
+            ? groqResult.claims.filter(c => c.supported === true).length / groqResult.claims.length
+            : null,
+          validationDiagnostics: groqResult.diagnostics || null,
+        });
+        if (groqResult.status === 'accepted' || groqResult.status === 'soft_accepted' || groqResult.status === 'rejected') return groqResult;
+        last = groqResult;
+      }
+    }
   }
 
   // xKiro jest trzecim, niezależnym transportem validatora. Używamy go przed
