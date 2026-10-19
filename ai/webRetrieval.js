@@ -77,7 +77,7 @@ async function searchGeminiWeb({ apiKey, query, fetchFn = fetch, startIndex = 0,
         body: JSON.stringify({
           contents: [{ role: 'user', parts: [{ text: String(query).slice(0, 1200) }] }],
           tools: [{ google_search: {} }],
-          generationConfig: { temperature: 0, maxOutputTokens: 900 },
+          generationConfig: { maxOutputTokens: 900 },
         }),
       },
       normalizeTimeoutMs(timeoutMs, 30000, 30000)
