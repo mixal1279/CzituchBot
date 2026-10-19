@@ -154,6 +154,38 @@ test('Tavily does not retry 429 responses and reports rate limiting', async () =
   assert.equal(result.status, 'rate_limited');
 });
 
+test('Tavily distinguishes plan and pay-as-you-go limits from request rate limiting', async () => {
+  for (const [httpStatus, expectedStatus] of [
+    [432, 'plan_limit_exceeded'],
+    [433, 'payg_limit_exceeded'],
+  ]) {
+    let fetchCalls = 0;
+    const search = createTavilySearch({
+      apiKey: 'test-tavily-key',
+      groq: null,
+      normalizeQuery: value => value,
+      fetchZTimeout: async () => {
+        fetchCalls++;
+        return new Response(JSON.stringify({ detail: { error: 'usage limit exceeded' } }), {
+          status: httpStatus,
+          headers: { 'content-type': 'application/json' },
+        });
+      },
+      logger: { log() {}, warn() {}, error() {} },
+      cacheFile: `/tmp/czituch-tavily-${httpStatus}-test.json`,
+      geminiKey: '',
+      exaKey: '',
+    });
+
+    const result = await search(`Tavily HTTP ${httpStatus} classification`, {
+      _skipRewrite: true,
+      returnMeta: true,
+    });
+    assert.equal(fetchCalls, 1, `HTTP ${httpStatus} must not be retried as a transient server error`);
+    assert.equal(result.status, expectedStatus);
+  }
+});
+
 test('Tavily uses Bearer authentication and falls back to the original query when rewriting fails', async () => {
   let observedRequest;
   const search = createTavilySearch({
