@@ -504,6 +504,11 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
   return async function szukajTavily(pytanie, options = {}) {
     const original = String(pytanie || '').trim();
     const { domains, time_range, _skipRewrite = false, returnMeta = false, sourceStartIndex = 0, sourceQuestion = original, remainingMs = 15000, requestState = null, searchDepth = 'basic' } = options;
+    // Tavily Search requires a non-empty query; reject locally instead of spending an API call.
+    if (!original) {
+      onStatus({ status: 'empty', query: '' });
+      return sformatujWynikWyjsciowyTavily({ status: 'empty', text: '' }, { returnMeta });
+    }
     const retrievalStartedAt = Date.now();
     const retrievalBudgetMs = Number.isFinite(Number(remainingMs)) ? Math.max(0, Number(remainingMs)) : 15000;
     const remainingBudgetMs = () => {
