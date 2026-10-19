@@ -55,13 +55,14 @@ function buildAnswerPlan(question, routing = {}) {
   const causalQuestion = slots.has('why');
 
   const clauses = q.split(
-    /\s+(?=(?:i|oraz|a także|natomiast)\s+(?:jak|dlaczego|czemu|kiedy|gdzie|ile|czy|kto|kim|co|czym|jaki|jaka|jakie)\b)/iu,
+    /(?<=[?;])\s+|\s+(?=(?:i|oraz|a także|natomiast)\s+(?:jak|dlaczego|czemu|kiedy|gdzie|ile|czy|kto|kim|co|czym|jaki|jaka|jakie)\b)/iu,
   ).map(x => x.trim()).filter(Boolean).slice(0, 4);
+  if (clauses.length > 1) slots.add('clause_coverage');
 
   const requirements = [...slots].map(slot => ({
     id: slot,
     required: true,
-    reason: matched.includes(slot) ? 'question_signal' : 'intent_contract',
+    reason: slot === 'clause_coverage' ? 'multiple_question_clauses' : (matched.includes(slot) ? 'question_signal' : 'intent_contract'),
   }));
 
   return {
@@ -152,6 +153,30 @@ function containsRequiredEntityContext(answer, plan) {
   return candidates.some(term => contextTermMatches(answerText, term));
 }
 
+const CLAUSE_STOPWORDS = new Set([
+  ...CONTEXT_QUESTION_STOPWORDS,
+  'i', 'oraz', 'a', 'ale', 'do', 'nad', 'jego', 'jej', 'ich', 'w', 'z', 'na', 'po', 'przez', 'czy', 'sie',
+  'jest', 'sa', 'byl', 'byla', 'byli', 'bylo', 'to', 'ktory', 'ktora', 'ktore', 'dlaczego', 'czemu', 'jaki', 'jaka', 'jakie',
+]);
+
+function coversQuestionClauses(answer, clauses) {
+  if (!Array.isArray(clauses) || clauses.length < 2) return true;
+  const answerWords = normalize(answer).split(/\s+/).filter(Boolean);
+  const tokenLists = clauses.map(clause => [...new Set(normalize(clause).split(/\s+/)
+    .filter(word => word.length >= 4 && !CLAUSE_STOPWORDS.has(word)))]);
+  return tokenLists.every((tokens, index) => {
+    const distinctive = tokens.filter(token => !tokenLists.some((other, otherIndex) =>
+      otherIndex !== index && other.some(otherToken => otherToken === token)));
+    const candidates = distinctive.length ? distinctive : tokens;
+    if (!candidates.length) return true;
+    return candidates.some(token => answerWords.some(word => {
+      if (word === token) return true;
+      const prefixLength = Math.min(5, word.length, token.length);
+      return prefixLength >= 4 && word.slice(0, prefixLength) === token.slice(0, prefixLength);
+    }));
+  });
+}
+
 function assessAnswerCompleteness(answer, plan) {
   if (!plan || !Array.isArray(plan.requirements) || !plan.requirements.length) {
     return { ok: true, score: 1, missing: [], checked: [] };
@@ -165,7 +190,9 @@ function assessAnswerCompleteness(answer, plan) {
     if (!id) continue;
     const ok = id === 'entity_context'
       ? containsRequiredEntityContext(answer, plan)
-      : Boolean(signals[id]);
+      : id === 'clause_coverage'
+        ? coversQuestionClauses(answer, plan.clauses)
+        : Boolean(signals[id]);
     checked.push({ id, ok });
     if (!ok) missing.push(id);
   }

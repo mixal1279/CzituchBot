@@ -14,13 +14,27 @@ test('v26 answer plan identifies causal lore requirements', () => {
   assert.ok(plan.requirements.some(x => x.id === 'entity_context'));
 });
 
-test('v26 answer plan detects multiple clauses', () => {
+test('v26 answer plan detects and enforces coverage for multiple clauses', () => {
   const plan = buildAnswerPlan(
     'Dlaczego Wheatley przejął kontrolę nad GLaDOS i co doprowadziło do jego porażki?',
     { intent:'web_fact', is_lore:true, entity:'Wheatley', game:'Portal 2' },
   );
   assert.equal(plan.clauses.length, 2);
   assert.equal(plan.complexity, 'high');
+  assert.ok(plan.requirements.some(x => x.id === 'clause_coverage'));
+
+  const incomplete = judgeAnswer(
+    'Wheatley przejął kontrolę nad GLaDOS, ponieważ został umieszczony w jej systemie.',
+    plan,
+  );
+  assert.equal(incomplete.status, 'repair');
+  assert.ok(incomplete.missing.includes('clause_coverage'));
+
+  const complete = judgeAnswer(
+    'Wheatley przejął kontrolę nad GLaDOS, ponieważ został umieszczony w jej systemie. Jego porażkę spowodowała walka z Chell.',
+    plan,
+  );
+  assert.equal(complete.status, 'accepted', JSON.stringify(complete));
 });
 
 test('v26 judge detects grounded but incomplete causal answer', () => {
