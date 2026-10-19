@@ -562,13 +562,29 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
           }),
         };
         let res;
-        for (let probe = 0; probe < 2; probe++) {
-          res = await fetchZTimeout('https://api.tavily.com/search', request);
-          // 429 = przekroczony limit: ponowienie po 250 ms nic nie da, ponawiamy tylko błędy 5xx.
-          if (res.ok || ![500, 502, 503, 504].includes(res.status) || probe === 1) break;
-          await new Promise(resolve => setTimeout(resolve, 250 * (probe + 1)));
+        const tavilyHttpStartedAt = Date.now();
+        requestState?.recordTiming?.('tavily_http_start', {
+          provider: 'tavily',
+          depth,
+          queryLength: searchQuery.length,
+        });
+        try {
+          for (let probe = 0; probe < 2; probe++) {
+            res = await fetchZTimeout('https://api.tavily.com/search', request);
+            // 429 = przekroczony limit: ponowienie po 250 ms nic nie da, ponawiamy tylko błędy 5xx.
+            if (res.ok || ![500, 502, 503, 504].includes(res.status) || probe === 1) break;
+            await new Promise(resolve => setTimeout(resolve, 250 * (probe + 1)));
+          }
+        } finally {
+          requestState?.recordTiming?.('tavily_http_end', {
+            provider: 'tavily',
+            depth,
+            durationMs: Date.now() - tavilyHttpStartedAt,
+            httpStatus: Number.isFinite(res?.status) ? res.status : null,
+            ok: res?.ok === true,
+          });
         }
-        if (!res.ok) throw new Error(`Tavily HTTP ${res.status}: ${await res.text()}`);
+        if (!res?.ok) throw new Error(`Tavily HTTP ${res?.status ?? 'network'}: ${res ? await res.text() : 'request failed'}`);
         const data = await res.json();
         const all = Array.isArray(data.results) ? data.results : [];
         const rejected = [];
