@@ -5507,13 +5507,13 @@ async function zalogujYouTube() {
     code_challenge: codeChallenge,
     code_challenge_method: 'S256',
   });
-  console.log('\\n========================================');
+  console.log('\n========================================');
   console.log('🔐 LOGOWANIE DO YOUTUBE');
   console.log('========================================');
-  console.log('1. Otwórz ten link w przeglądarce:\\n');
+  console.log('1. Otwórz ten link w przeglądarce:\n');
   console.log(authUrl);
-  console.log('\\n2. Zaloguj się i kliknij "Zezwól"');
-  console.log('3. Przeglądarka przekieruje na localhost – poczekaj chwilę.\\n');
+  console.log('\n2. Zaloguj się i kliknij "Zezwól"');
+  console.log('3. Przeglądarka przekieruje na localhost – poczekaj chwilę.\n');
 
   const code = await new Promise((resolve, reject) => {
     const http = require('http');
