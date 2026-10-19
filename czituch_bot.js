@@ -91,6 +91,72 @@ const { buildBoundedEvidencePrompt } = require('./ai/prompt-context');
 
 // Exact source spans help the validator quote evidence accurately. These are
 // hints only: local code still verifies the quote and semantic support.
+function buildBoundedValidatorEvidence(question, answer, data, maxChars = 10500) {
+  const raw = String(data || '');
+  const blocks = parseEvidenceBlocks(raw);
+  if (!blocks.length) return raw.slice(0, maxChars);
+
+  const stop = new Set([
+    'jest','był','była','było','oraz','który','która','które','tego','też','jego','jej','ich',
+    'this','that','with','from','have','were','they','them','their','into','about','when','what',
+    'where','which','while','after','before','because','during','there','then','than','been','being',
+    'the','and','for','are','was','were','has','had','its','you','your','but','not','who','why','how',
+  ]);
+  const tokens = value => String(value || '').toLocaleLowerCase('pl-PL')
+    .normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').replace(/ł/g, 'l')
+    .match(/[\\p{L}\\p{N}]{3,}/gu)?.filter(token => !stop.has(token)) || [];
+  const queryTokens = new Set(tokens(String(question || '') + ' ' + String(answer || '')));
+  const scoreText = value => {
+    const words = tokens(value);
+    if (!words.length || !queryTokens.size) return 0;
+    const unique = new Set(words);
+    let overlap = 0;
+    for (const word of unique) if (queryTokens.has(word)) overlap++;
+    return overlap / Math.sqrt(unique.size * Math.max(1, queryTokens.size));
+  };
+
+  const candidates = [];
+  for (const block of blocks) {
+    const sentences = String(block.content || '').replace(/\\s+/g, ' ')
+      .split(/(?<=[.!?])\\s+(?=[\\p{Lu}\\d"'“‘(\\[])/u)
+      .map(sentence => sentence.trim()).filter(sentence => sentence.length >= 35);
+    const ranked = sentences.map((sentence, index) => ({ sentence, index, score: scoreText(sentence) }))
+      .filter(item => item.score > 0)
+      .sort((a, b) => b.score - a.score || a.index - b.index)
+      .slice(0, 3)
+      .sort((a, b) => a.index - b.index);
+    const picked = ranked.map(item => item.sentence);
+    if (!picked.length && block.content) picked.push(String(block.content).replace(/\\s+/g, ' ').trim().slice(0, 500));
+    candidates.push({
+      sourceId: block.sourceId, title: block.title, url: block.url,
+      provider: block.provider || '', picked,
+      score: Math.max(0, ...ranked.map(item => item.score)),
+    });
+  }
+  candidates.sort((a, b) => b.score - a.score);
+  const rows = [];
+  let used = 0;
+  for (const block of candidates) {
+    if (!block.picked.length) continue;
+    const header = `[${block.sourceId}]\\nTYTUŁ: ${block.title}\\nURL: ${block.url}\\nTREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>\\n`;
+    const footer = '\\n<<<END_UNTRUSTED_SOURCE_CONTENT>>>\\n';
+    const body = block.picked.join(' ');
+    const row = header + body + footer;
+    if (used + row.length > maxChars) {
+      const remaining = maxChars - used - header.length - footer.length;
+      if (remaining >= 120) {
+        rows.push(header + body.slice(0, remaining) + footer);
+        used = maxChars;
+      }
+      break;
+    }
+    rows.push(row);
+    used += row.length;
+  }
+  // Prompt zostaje mały, ale lokalna walidacja nadal otrzymuje pełne dane źródłowe.
+  return rows.length ? rows.join('\\n') : raw.slice(0, maxChars);
+}
+
 function buildValidatorEvidenceHints(question, answer, data) {
   const blocks = parseEvidenceBlocks(data);
   if (!blocks.length) return '';
@@ -1870,13 +1936,14 @@ async function walidujOdpowiedzGroq(persona, pytanie, odpowiedz, dane, requestId
     return { status: 'unavailable', ok: false, technicalError: true, transient: true, skipped: true, provider: 'groq', model, unsupported_claims: [], reason: 'Groq validator pominięty: zbyt mały pozostały budżet czasu' };
   }
 
-  // Groq ma twardy limit TPM. Duże paczki evidence potrafią przekroczyć limit
-  // jeszcze przed generacją (HTTP 413); pomijamy go wtedy bez marnowania timeoutu.
+  // Groq ma limit TPM. Zamiast pomijać walidację przy dużym retrieval context,
+  // wybieramy krótkie, najbardziej trafne zdania z oryginalnych źródeł.
+  // Lokalne sprawdzanie cytatów nadal używa pełnego `dane`, nie skróconego promptu.
   const groqEvidenceLimitChars = Math.max(8000, Number(process.env.AI_GROQ_VALIDATOR_MAX_EVIDENCE_CHARS) || 12000);
-  if (String(dane).length > groqEvidenceLimitChars) {
-    return { status: 'unavailable', ok: false, technicalError: true, transient: true, skipped: true, provider: 'groq', model, unsupported_claims: [], reason: `Groq validator pominięty: evidence za duże (${String(dane).length} znaków; limit ${groqEvidenceLimitChars})` };
-  }
-  const { system, user } = zbudujPromptWalidatora(pytanie, odpowiedz, dane, requestMeta);
+  const promptEvidence = String(dane).length > groqEvidenceLimitChars
+    ? buildBoundedValidatorEvidence(pytanie, odpowiedz, dane, Math.min(10500, groqEvidenceLimitChars - 1200))
+    : dane;
+  const { system, user } = zbudujPromptWalidatora(pytanie, odpowiedz, promptEvidence, requestMeta);
   const controller = new AbortController();
   try {
     // createGroqCompletion dodaje 800 tokenów rezerwy na reasoning dla gpt-oss-20b:
