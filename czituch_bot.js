@@ -86,7 +86,7 @@ const { parsujStrukturalnePodsumowanie } = require('./ai/history');
 const { createRequestId, sanitizeQuestion, planRequest, evaluateEvidence, shouldValidate, decideValidation, finalText: finalizeAIPipelineText } = require('./ai/pipeline');
 const { buildAnswerPlan } = require('./ai/answer-plan');
 const { judgeAnswer } = require('./ai/answer-judge');
-const { parseEvidenceBlocks, buildQuestionEvidenceContext } = require('./ai/evidence');
+const { parseEvidenceBlocks, buildQuestionEvidenceContext, escapeUntrustedEvidenceContent } = require('./ai/evidence');
 const { buildBoundedEvidencePrompt } = require('./ai/prompt-context');
 
 // Exact source spans help the validator quote evidence accurately. These are
@@ -140,7 +140,7 @@ function buildBoundedValidatorEvidence(question, answer, data, maxChars = 10500)
     if (!block.picked.length) continue;
     const header = `[${block.sourceId}]\nTYTUŁ: ${block.title}\nURL: ${block.url}\nTREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>\n`;
     const footer = '\n<<<END_UNTRUSTED_SOURCE_CONTENT>>>\n';
-    const body = block.picked.join(' ');
+    const body = escapeUntrustedEvidenceContent(block.picked.join(' '));
     const row = header + body + footer;
     if (used + row.length > maxChars) {
       const remaining = maxChars - used - header.length - footer.length;
