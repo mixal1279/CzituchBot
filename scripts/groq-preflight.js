@@ -6,7 +6,7 @@
 // job ma się zatrzymać od razu z czytelnym komunikatem.
 const { AI_MODELS } = require('../ai/modelConfig');
 
-const ENDPOINT = `${String(process.env.GROQ_BASE_URL || 'https://api.groq.com/openai/v1').replace(/\\/+$/, '')}/chat/completions`;
+const ENDPOINT = `${String(process.env.GROQ_BASE_URL || 'https://api.groq.com/openai/v1').replace(/\/+$/, '')}/chat/completions`;
 
 function describeRetry(message) {
   const m = String(message || '').match(/try again in ([0-9hms.]+)/i);
