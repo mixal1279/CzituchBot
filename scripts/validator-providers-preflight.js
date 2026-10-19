@@ -110,6 +110,42 @@ if (OPENROUTER_KEY) {
 if (GROQ_KEY) probes.push(groqProbe(REAL, 2200));
 else console.log('[preflight] Groq: pominięty (brak GROQ_API_KEY)');
 
+// --- Katalog modeli xKiro (publiczny GET, bez klucza i bez kosztu generacji) -------------------
+async function checkXKiroModelCatalog() {
+  const controller = new AbortController();
+  let timer;
+  try {
+    const request = fetch('https://api.xkiro.com/v1/models', { signal: controller.signal });
+    const timeout = new Promise((_, reject) => {
+      timer = setTimeout(() => {
+        controller.abort();
+        const error = new Error('xKiro model catalog timed out after 5000ms');
+        error.name = 'TimeoutError';
+        reject(error);
+      }, 5000);
+    });
+    const response = await Promise.race([request, timeout]);
+    if (!response.ok) {
+      console.log(`[preflight] xKiro model catalog: HTTP ${response.status}; configured model availability not verified`);
+      return;
+    }
+    const data = await response.json();
+    const models = Array.isArray(data?.data) ? data.data : [];
+    const configured = models.find(model => model?.id === XKIRO_MODEL);
+    if (!configured) {
+      console.log(`::warning title=xKiro model catalog::Configured model ${XKIRO_MODEL} is not present in the live chat catalog`);
+      console.log(`[preflight] xKiro model catalog: NOT FOUND · ${XKIRO_MODEL} · ${models.length} chat models returned`);
+      return;
+    }
+    console.log(`[preflight] xKiro model catalog: FOUND · ${configured.id} · tier=${configured.access_tier || 'unknown'} · max_output_tokens=${configured.max_output_tokens ?? 'unknown'}`);
+  } catch (err) {
+    console.log(`::warning title=xKiro model catalog::Could not verify configured model: ${String(err?.message || err).replace(/[\\r\\n]/g, ' ').slice(0, 160)}`);
+    console.log(`[preflight] xKiro model catalog: UNVERIFIED · ${String(err?.message || err).replace(/[\\r\\n]/g, ' ').slice(0, 160)}`);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // --- Wykonanie --------------------------------------------------------------------------------
 function parseJsonLoose(text) {
   const t = String(text || '').trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
@@ -160,6 +196,9 @@ async function run(probe) {
 }
 
 (async () => {
+  // This public, unmetered GET verifies the configured model ID without spending
+  // tokens. Presence does not imply account entitlement; the access tier is logged.
+  await checkXKiroModelCatalog();
   const results = [];
   for (const probe of probes) {
     const r = await run(probe);
