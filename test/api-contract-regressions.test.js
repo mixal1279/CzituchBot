@@ -25,12 +25,12 @@ test('answer-completeness repair reapplies deterministic guards before judging',
   assert.ok(validationIndex >= 0 && guardIndex > validationIndex, 'deterministic guards must run after repair validation');
 });
 
-test('Gemini validator uses GenerateContent JSON schema fields and model-compatible thinking levels', () => {
+test('Gemini validator uses current GenerateContent responseFormat schema and compatible thinking levels', () => {
   const source = read('czituch_bot.js');
   assert.match(source, /systemInstruction:\s*\{\s*parts:/s);
-  assert.match(source, /responseMimeType:\s*'application\/json'/);
-  assert.match(source, /responseSchema:\s*GEMINI_VALIDATOR_JSON_SCHEMA/);
-  assert.doesNotMatch(source, /responseFormat:\s*\{\s*text:/);
+  assert.match(source, /responseFormat:\s*\{\s*text:\s*\{\s*mimeType:\s*'application\/json',\s*schema:\s*GEMINI_VALIDATOR_JSON_SCHEMA/s);
+  assert.doesNotMatch(source, /responseMimeType:\s*'application\/json'/);
+  assert.doesNotMatch(source, /responseSchema:\s*GEMINI_VALIDATOR_JSON_SCHEMA/);
   assert.match(source, /model === 'gemini-3\.8-flash'[\s\S]{0,100}\{ thinkingLevel: 'low' \}/);
   assert.match(source, /model === 'gemini-3\.5-flash-lite'[\s\S]{0,120}\{ thinkingLevel: 'minimal' \}/);
 });
