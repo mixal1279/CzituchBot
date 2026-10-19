@@ -129,11 +129,28 @@ function buildBenchmarkDiagnostics(results, allCases = benchmark.cases, selected
     validatorProviderCalls[provider] = (validatorProviderCalls[provider] || 0) + 1;
     validatorStatusCounts[status] = (validatorStatusCounts[status] || 0) + 1;
   }
+  const classifyGenerationFailure = attempt => {
+    if (attempt.failure) return String(attempt.failure).slice(0, 80);
+    const detail = [attempt.error, attempt.reason, attempt.message, attempt.code, attempt.statusCode]
+      .filter(value => value !== undefined && value !== null)
+      .join(' ');
+    if (/429|rate.?limit|quota|resource.?exhausted/i.test(detail)) return 'rate_limit';
+    if (/timeout|timed out|deadline/i.test(detail) || attempt.timeoutAbort === true) return 'timeout';
+    if (/abort|cancelled|canceled/i.test(detail)) return 'abort';
+    if (/5\\d\\d/.test(detail)) return 'http_5xx';
+    return 'unknown';
+  };
   const generationProviderFailures = [...new Set(results.flatMap(result =>
     (result.generationAttempts || [])
       .filter(attempt => attempt.status === 'error')
-      .map(attempt => `${attempt.provider}:${attempt.model}:${attempt.failure || 'unknown'}`)
+      .map(attempt => `${attempt.provider}:${attempt.model}:${classifyGenerationFailure(attempt)}`)
   ))];
+  const tavilyHttpEvents = results.flatMap(result =>
+    (result.timingTrace || []).filter(event => event.stage === 'tavily_http_end')
+  );
+  const generationCycleStarts = results.flatMap(result =>
+    (result.timingTrace || []).filter(event => event.stage === 'generation_cycle_start')
+  );
   const goldCases = allCases.filter(item => item.expected?.factual?.independentGold === true);
   const selectedGoldCases = selectedCases.filter(item => item.expected?.factual?.independentGold === true);
   const categories = [...new Set(allCases.map(item => item.category || 'uncategorized'))].sort();
@@ -156,6 +173,14 @@ function buildBenchmarkDiagnostics(results, allCases = benchmark.cases, selected
       .map(row => ({ provider: row.provider || 'unknown', model: row.model || null, status: row.status || 'unknown', reason: row.reason || null })),
     validatorSecondOpinions: results.reduce((sum, result) =>
       sum + (result.timingTrace || []).filter(event => event.stage === 'validator_second_opinion').length, 0),
+    tavilyHttpCalls: tavilyHttpEvents.length,
+    tavilyHttpFailures: tavilyHttpEvents.filter(event => event.ok !== true).length,
+    avgTavilyHttpMs: tavilyHttpEvents.length
+      ? Math.round(tavilyHttpEvents.reduce((sum, event) => sum + Math.max(0, Number(event.durationMs) || 0), 0) / tavilyHttpEvents.length)
+      : null,
+    avgElapsedToGenerationCycleMs: generationCycleStarts.length
+      ? Math.round(generationCycleStarts.reduce((sum, event) => sum + Math.max(0, Number(event.elapsedMs) || 0), 0) / generationCycleStarts.length)
+      : null,
     repairUsed: results.filter(result => Number(result.generationBudget?.repairUsed || 0) > 0).length,
     repairSkipped: results.filter(result => Number(result.generationBudget?.repairUsed || 0) === 0 && result.finalStatus === 'rejected').length,
     avgModelCalls: results.filter(result => Number.isFinite(result.modelCalls)).length
