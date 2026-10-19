@@ -602,7 +602,8 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
             // bez zakresu czasu szło jako `advanced`.
             search_depth: depth,
             max_results: depth === 'advanced' ? 10 : 7,
-            chunks_per_source: 3, include_answer: false,
+            ...(depth === 'advanced' && { chunks_per_source: 3 }),
+            include_answer: false,
             include_raw_content: false,
             ...(domains && { include_domains: domains }),
             ...(validTimeRange && { time_range: validTimeRange }),
