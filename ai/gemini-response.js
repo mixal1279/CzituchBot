@@ -86,4 +86,12 @@ function parseGeminiGenerationResponse(data, label = 'Gemini') {
   };
 }
 
-module.exports = { parseGeminiGenerationResponse };
+function buildGeminiGenerateContentUrl(model) {
+  const modelId = String(model || '').trim();
+  if (!/^[a-zA-Z0-9._-]+$/.test(modelId)) {
+    throw new TypeError('Invalid Gemini model ID');
+  }
+  return `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent`;
+}
+
+module.exports = { parseGeminiGenerationResponse, buildGeminiGenerateContentUrl };
