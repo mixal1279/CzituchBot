@@ -104,6 +104,29 @@ test('disabled Firestore state can still load a legacy OAuth token file', async 
   }
 });
 
+test('newer local token backup restores a rotated refresh token', async () => {
+  const db = createMockFirestore();
+  const state = createFirestoreState(db, { encryptionKey: TEST_KEY, logger: { info() {}, warn() {} } });
+  await state.writeToken('twitch_chat_edlor', {
+    access_token: 'old-access',
+    refresh_token: 'already-rotated-refresh',
+  });
+  const record = db.docs.get('bot_runtime_state/oauth__twitch_chat_edlor');
+  record.updatedAt = new Date(Date.now() - 60_000).toISOString();
+
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'czituch-token-rotated-'));
+  const file = path.join(dir, 'token.json');
+  const rotated = { access_token: 'new-access', refresh_token: 'new-refresh' };
+  await fs.writeFile(file, JSON.stringify(rotated), 'utf8');
+  try {
+    assert.deepEqual(await state.migrateTokenFile('twitch_chat_edlor', file), rotated);
+    assert.deepEqual(await state.readToken('twitch_chat_edlor'), rotated);
+    await assert.rejects(fs.access(file));
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});
+
 test('Firestore write failure preserves legacy token file', async () => {
   const db = {
     collection() {
