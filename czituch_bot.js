@@ -5405,6 +5405,18 @@ async function wczytajTokenYT() {
     console.error('[YT Auth] Błąd odczytu tokenu z Firestore; sprawdzam kopie zapasowe bez nadpisywania dokumentu:', err.message);
   }
 
+  // Gdy Firestore ma czytelny, ale starszy token, sprawdź również lokalną kopię
+  // utworzoną po nieudanym zapisie rotacji. migrateTokenFile porównuje czas zapisu
+  // i przywraca kopię tylko wtedy, gdy jest nowsza; stary plik nie nadpisze Firestore.
+  if (credentials && !firestoreReadFailed) {
+    try {
+      const recovered = await FIRESTORE_STATE.migrateTokenFile('youtube', KONFIGURACJA.ytTokenFile);
+      if (recovered) credentials = recovered;
+    } catch (recoveryError) {
+      console.warn('[YT Auth] Nie udało się sprawdzić lokalnej kopii tokenu:', recoveryError.message);
+    }
+  }
+
   try {
     if (!credentials) {
       const legacyDoc = await db.collection('config').doc('youtube_token').get();
