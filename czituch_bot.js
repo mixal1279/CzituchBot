@@ -88,6 +88,7 @@ const { buildAnswerPlan } = require('./ai/answer-plan');
 const { judgeAnswer } = require('./ai/answer-judge');
 const { parseEvidenceBlocks, buildQuestionEvidenceContext, escapeUntrustedEvidenceContent } = require('./ai/evidence');
 const { buildBoundedEvidencePrompt } = require('./ai/prompt-context');
+const { parseGeminiGenerationResponse } = require('./ai/gemini-response');
 
 // Exact source spans help the validator quote evidence accurately. These are
 // hints only: local code still verifies the quote and semantic support.
@@ -3346,9 +3347,17 @@ Pytanie użytkownika: ${pytanie}`;
         const message = data?.error?.message || `HTTP ${response.status}`;
         throw new Error(`${message}${retryAfter ? ` (${retryAfter})` : ''}`);
       }
-      const tekst = (data?.candidates?.[0]?.content?.parts || []).map(part => part?.text || '').join('').trim();
-      if (!tekst) throw new Error('Gemini zwrócił pustą odpowiedź');
-      return { tekst, ucieta: data?.candidates?.[0]?.finishReason === 'MAX_TOKENS', provider: 'gemini', model: AI_MODELS.generatorGemini };
+      const parsed = parseGeminiGenerationResponse(data, 'Gemini');
+      if (!parsed.ok) throw new Error(parsed.reason);
+      return {
+        tekst: parsed.text,
+        ucieta: parsed.truncated,
+        provider: 'gemini',
+        model: AI_MODELS.generatorGemini,
+        ...(parsed.finishReason ? { finishReason: parsed.finishReason } : {}),
+        ...(parsed.finishMessage ? { finishMessage: parsed.finishMessage } : {}),
+        ...(parsed.safetyRatings ? { safetyRatings: parsed.safetyRatings } : {}),
+      };
     } catch (err) {
       console.error(`[Gemini] Fallback nieudany (${powod}):`, err.message);
       if (/quota|rate.?limit|resource.?exhausted|429|limit:/i.test(err.message || '')) ustawGeminiGenerationCooldown('gemini-3.8-flash', 90_000);
@@ -3383,9 +3392,17 @@ Pytanie użytkownika: ${pytanie}`;
         const message = data?.error?.message || `HTTP ${response.status}`;
         throw new Error(`${message}${retryAfter ? ` (${retryAfter})` : ''}`);
       }
-      const tekst = (data?.candidates?.[0]?.content?.parts || []).map(part => part?.text || '').join('').trim();
-      if (!tekst) throw new Error('Gemini Lite zwrócił pustą odpowiedź');
-      return { tekst, ucieta: data?.candidates?.[0]?.finishReason === 'MAX_TOKENS', provider: 'gemini', model: AI_MODELS.generatorGeminiLite };
+      const parsed = parseGeminiGenerationResponse(data, 'Gemini Lite');
+      if (!parsed.ok) throw new Error(parsed.reason);
+      return {
+        tekst: parsed.text,
+        ucieta: parsed.truncated,
+        provider: 'gemini',
+        model: AI_MODELS.generatorGeminiLite,
+        ...(parsed.finishReason ? { finishReason: parsed.finishReason } : {}),
+        ...(parsed.finishMessage ? { finishMessage: parsed.finishMessage } : {}),
+        ...(parsed.safetyRatings ? { safetyRatings: parsed.safetyRatings } : {}),
+      };
     } catch (err) {
       console.error(`[Gemini Lite] Fallback nieudany (${powod}):`, err.message);
       if (/quota|rate.?limit|resource.?exhausted|429|limit:/i.test(err.message || '')) ustawGeminiGenerationCooldown('gemini-3.5-flash-lite', 90_000);
