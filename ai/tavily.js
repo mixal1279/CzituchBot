@@ -499,7 +499,9 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
     } catch (_) { return 'nieznane'; }
   };
   // Głębokość jest częścią klucza: wynik `basic` nie może obsłużyć ponownego, głębszego zapytania.
-  const cacheKey = (query, domains, timeRange, sourceQuestion = '', depth = 'basic') => `${query.toLowerCase().trim()}|${(domains || []).slice().sort().join(',')}|${timeRange || ''}|${slowaKluczoweTavily(sourceQuestion).join(',')}|${depth}`;
+  // Cached output is already filtered/reranked and conflict-checked against the full source question.
+  // Keyword-only keys can collide (e.g. “when was Portal 2 released?” vs “where was Portal 2 released?”).
+  const cacheKey = (query, domains, timeRange, sourceQuestion = '', depth = 'basic') => `${query.toLowerCase().trim()}|${(domains || []).slice().sort().join(',')}|${timeRange || ''}|${String(sourceQuestion || '').toLowerCase().trim().replace(/\\s+/g, ' ')}|${depth}`;
 
   return async function szukajTavily(pytanie, options = {}) {
     const original = String(pytanie || '').trim();
