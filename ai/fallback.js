@@ -111,19 +111,19 @@ function geminiGenerationCooldownMsFromError(error) {
   const status = Number(error?.status ?? error?.statusCode ?? error?.response?.status ?? 0);
   // Gemini documents HTTP 402 as depleted Prepay credits; retrying cannot help
   // until billing is fixed, so suppress repeated calls for a longer interval.
-  if (status === 402 || /(?:HTTP\\s*402|\\b402\\b|prepay credit balance.{0,30}(?:deplet|exhaust)|credit balance.{0,40}(?:deplet|exhaust|insufficient))/i.test(message)) {
+  if (status === 402 || /(?:HTTP\s*402|\b402\b|prepay credit balance.{0,30}(?:deplet|exhaust)|credit balance.{0,40}(?:deplet|exhaust|insufficient))/i.test(message)) {
     return 24 * 60 * 60 * 1000;
   }
 
   // Honor Retry-After when it is available (including the normalized string
   // attached by retryAfterHint); otherwise distinguish daily quota from bursts.
-  const retryAfter = message.match(/retry[- ]after\\s*[=:]\\s*(\\d+(?:\\.\\d+)?)\\s*(?:s|sec(?:ond)?s?)?/i);
+  const retryAfter = message.match(/retry[- ]after\s*[=:]\s*(\d+(?:\.\d+)?)\s*(?:s|sec(?:ond)?s?)?/i);
   if (retryAfter) return Math.max(1_000, Math.ceil(Number(retryAfter[1]) * 1000));
 
-  const dailyQuota = /(?:tokens?\\s*(?:per|\\/)\\s*day|\\bTPD\\b|daily (?:token|usage|request) (?:allowance|quota|limit)|daily allowance exhausted)/i.test(message);
+  const dailyQuota = /(?:tokens?\s*(?:per|\/)\s*day|\bTPD\b|daily (?:token|usage|request) (?:allowance|quota|limit)|daily allowance exhausted)/i.test(message);
   if (dailyQuota) return 24 * 60 * 60 * 1000;
 
-  if (status === 429 || /(?:HTTP\\s*429|\\b429\\b|quota|rate.?limit|resource.?exhausted|limit:)/i.test(message)) return 90_000;
+  if (status === 429 || /(?:HTTP\s*429|\b429\b|quota|rate.?limit|resource.?exhausted|limit:)/i.test(message)) return 90_000;
   return 0;
 }
 
