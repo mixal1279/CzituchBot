@@ -17,7 +17,7 @@ test('Gemini REST calls keep API keys out of URLs and use the auth header', () =
 test('answer-completeness repair reapplies deterministic guards before judging', () => {
   const source = read('czituch_bot.js');
   const start = source.indexOf('const repairResult = await generujOdpowiedz(');
-  const end = source.indexOf("if (walidacja.status === 'accepted') {\\n              answerJudge = judgeAnswer", start);
+  const end = source.indexOf('answerJudge = judgeAnswer(odp, answerPlan);', start);
   assert.ok(start >= 0 && end > start, 'answer completeness repair branch should exist');
   const repairBranch = source.slice(start, end);
   const validationIndex = repairBranch.indexOf('await validateAI(');
