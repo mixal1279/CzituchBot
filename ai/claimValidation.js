@@ -106,7 +106,14 @@ function wyodrebnijLiczbyIDaty(value) {
   // Keep decimal separators until numeric extraction; normalizujClaim intentionally
   // removes punctuation and would turn 2.50 into two unrelated integers (2 and 50).
   const text = String(value || '').toLocaleLowerCase('pl-PL').replace(/,/g, '.');
-  return [...new Set(text.match(/\b(?:19|20)\d{2}\b|\b\d+(?:\.\d+)?%?\b/g) || [])];
+  const matches = text.match(/\b(?:19|20)\d{2}\b|\b\d+(?:\.\d+)?%?\b/g) || [];
+  const canonical = matches.map(value => {
+    const percent = value.endsWith('%');
+    const numeric = Number(percent ? value.slice(0, -1) : value);
+    if (!Number.isFinite(numeric)) return value;
+    return `${String(numeric)}${percent ? '%' : ''}`;
+  });
+  return [...new Set(canonical)];
 }
 const UNIT_ALIASES = new Map([
   ['h','hour'], ['hr','hour'], ['hrs','hour'], ['hour','hour'], ['hours','hour'], ['godzina','hour'], ['godziny','hour'], ['godzin','hour'], ['godz','hour'],
