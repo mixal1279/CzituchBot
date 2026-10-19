@@ -4164,7 +4164,7 @@ async function skompresujHistorie(historiaRozmowy) {
       .map(m => `${m.role === 'user' ? 'Użytkownik' : 'Bot'}: ${m.content}`)
       .join('\n');
 
-    const podsumowanie = await groq.chat.completions.create({
+    const podsumowanie = await createGroqCompletion(groq, {
       model: AI_MODELS.queryRewrite, // lekka kompresja tekstu — nie potrzeba 120b
       max_tokens: 100,
       reasoning_effort: 'low',
@@ -5424,7 +5424,7 @@ async function pobierzPrawdziwyHoroskop(znakEn, znakPl) {
     const tekstEn = json?.horoscope;
     if (!tekstEn) throw new Error('Brak treści horoskopu w odpowiedzi API');
 
-    const tlumaczenie = await groq.chat.completions.create({
+    const tlumaczenie = await createGroqCompletion(groq, {
       model: AI_MODELS.queryRewrite, // lekki model — tylko tłumaczenie, nie trzeba 120b
       max_tokens: 150, // przy niskim limicie model reasoningowy potrafi zjeść tokeny na "myślenie" i uciąć tekst w połowie zdania
       reasoning_effort: 'low',
