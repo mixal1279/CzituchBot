@@ -5012,7 +5012,9 @@ function zapiszStanTikTok(stan) {
 async function pobierzWszystkieTikToki(username) {
   try {
     const res = await fetchZTimeout(`https://rss-bridge.org/bridge01/?action=display&bridge=TikTokBridge&context=By+user&username=${encodeURIComponent(username)}&format=Atom`, {}, 10000);
+    if (!res.ok) throw new Error(`RSS Bridge HTTP ${res.status}`);
     const xml = await res.text();
+    if (!/<feed\\b/i.test(xml)) throw new Error('RSS Bridge returned a non-Atom response');
     // Atom używa <entry>, nie <item> jak RSS 2.0
     const wszystkieWpisy = [...xml.matchAll(/<entry>([\s\S]*?)<\/entry>/g)].map(m => m[1]);
     if (!wszystkieWpisy.length) return [];
