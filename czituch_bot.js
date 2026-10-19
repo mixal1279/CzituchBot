@@ -1975,12 +1975,14 @@ async function walidujOdpowiedzXKiro(persona, pytanie, odpowiedz, dane, requestI
   // OpenRouter remains the next fallback after xKiro, so xKiro must always
   // leave enough time for that final validator. The validator counter alone
   // does not mean xKiro is the last provider in the fallback chain.
-  const timeoutMs = computeValidatorTimeout(remainingMs, {
-    maxTimeoutMs: 9000,
-    reserveMs: computeValidatorReserveMs(remainingMs, requestState?.validatory + 1, requestState?.maxValidatorow),
-    minTimeoutMs: 4000,
-  });
-  if (timeoutMs === null) {
+  const timeoutMs = requestState
+    ? computeValidatorTimeout(remainingMs, {
+        maxTimeoutMs: 9000,
+        reserveMs: computeValidatorReserveMs(remainingMs, requestState.validatory + 1, requestState.maxValidatorow),
+        minTimeoutMs: 4000,
+      })
+    : 9000;
+  if (requestState && timeoutMs === null) {
     return { status: 'unavailable', ok: false, technicalError: true, transient: true, skipped: true, provider: 'xkiro', model, unsupported_claims: [], reason: 'xKiro validator pominięty: zbyt mały pozostały budżet czasu' };
   }
   const controller = new AbortController();
