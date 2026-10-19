@@ -2583,7 +2583,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
   const pobierzCzasHLTBFn = opcje.__testDeps?.pobierzCzasHLTB || pobierzCzasHLTB;
   const validateAI = opcje.__testDeps?.validateAI || walidujOdpowiedzAI;
   const loadMemory = opcje.__testDeps?.loadMemory || wczytajZweryfikowanaPamiecAI;
-  const testMaxTavilySearches = Number.isInteger(opcje.__testDeps?.maxWyszukanTavily) ? Math.max(2, opcje.__testDeps.maxWyszukanTavily) : 3;
+  const testMaxTavilySearches = Number.isInteger(opcje.__testDeps?.maxWyszukanTavily) ? Math.max(2, opcje.__testDeps.maxWyszukanTavily) : DEFAULTS.maxTavilySearches;
   const onAISummary = typeof opcje.__testDeps?.onSummary === 'function' ? opcje.__testDeps.onSummary : null;
   const verifiedMemoryUserId = memoryUserId || String(nick || '').toLowerCase();
   const verifiedMemoryPromise = loadMemory(verifiedMemoryUserId);
@@ -2605,10 +2605,10 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
   const aiState = createAIRequestContext({
     requestId,
     maxCzasMs: DEFAULTS.requestTimeoutMs,
-    maxGeneracji: 6,
-    maxInitialGeneracji: 5,
-    maxRepairGeneracji: 4,
-    maxModelCalls: 12,
+    maxGeneracji: DEFAULTS.maxGenerations,
+    maxInitialGeneracji: DEFAULTS.maxInitialGenerations,
+    maxRepairGeneracji: DEFAULTS.maxRepairGenerations,
+    maxModelCalls: DEFAULTS.maxModelCalls,
     maxValidatorow: DEFAULTS.maxValidators,
     maxWyszukanTavily: testMaxTavilySearches,
   });

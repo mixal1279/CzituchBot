@@ -107,6 +107,10 @@ test('production pipeline reads its timeout from shared AI limits', () => {
   const path = require('node:path');
   const source = fs.readFileSync(path.join(__dirname, '..', 'czituch_bot.js'), 'utf8');
   assert.match(source, /maxCzasMs:\s*DEFAULTS\.requestTimeoutMs/);
+  assert.match(source, /maxGeneracji:\s*DEFAULTS\.maxGenerations/);
+  assert.match(source, /maxInitialGeneracji:\s*DEFAULTS\.maxInitialGenerations/);
+  assert.match(source, /maxRepairGeneracji:\s*DEFAULTS\.maxRepairGenerations/);
+  assert.match(source, /maxModelCalls:\s*DEFAULTS\.maxModelCalls/);
   assert.doesNotMatch(source, /maxCzasMs:\s*25000/);
 });
 
