@@ -4044,21 +4044,21 @@ let botNaPrzerwie = false;
 // pełnego limitu retry. Quota jest liczona dla całego procesu w ruchomym oknie.
 const MODEL_120B_GLOBAL_MAX_REQUESTS = Math.max(1, Number(process.env.AI_120B_GLOBAL_MAX_REQUESTS) || 6);
 const MODEL_120B_GLOBAL_WINDOW_MS = 60 * 60 * 1000;
+let model120bGlobalRequestTimestamps = [];
 let model120bGlobalRequesty = 0;
-let model120bGlobalOknoDo = Date.now() + MODEL_120B_GLOBAL_WINDOW_MS;
 let model120bGlobalZablokowanyDo = 0;
 let model120bCircuitBreakerOpen = false;
 
-function zarezerwujRequest120B(requestId = '-') {
-  const teraz = Date.now();
-  // Okno quota i cooldown circuit breakera są niezależnymi ograniczeniami.
-  // Wygaśnięcie godzinnego okna nie może przedwcześnie otworzyć 120B po 429.
-  if (teraz >= model120bGlobalOknoDo && teraz >= model120bGlobalZablokowanyDo) {
-    model120bGlobalRequesty = 0;
-    model120bGlobalOknoDo = teraz + MODEL_120B_GLOBAL_WINDOW_MS;
-    model120bGlobalZablokowanyDo = 0;
-    model120bCircuitBreakerOpen = false;
-  }
+function zarezerwujRequest120B(requestId = '-', now = Date.now()) {
+  const teraz = Number(now);
+  if (!Number.isFinite(teraz)) return false;
+  // Prawdziwe ruchome okno: usuwaj tylko żądania starsze niż godzina.
+  // Nie resetuj całego licznika na granicy godzinowej — to pozwalałoby
+  // wykonać prawie 2x limit w krótkim czasie wokół granicy okna.
+  model120bGlobalRequestTimestamps = model120bGlobalRequestTimestamps.filter(ts => teraz - ts < MODEL_120B_GLOBAL_WINDOW_MS);
+  model120bGlobalRequesty = model120bGlobalRequestTimestamps.length;
+
+  // Limit liczby żądań i circuit breaker po rzeczywistym błędzie quota są niezależne.
   if (model120bCircuitBreakerOpen && teraz < model120bGlobalZablokowanyDo) {
     console.warn(`[AI][${requestId}] 120B global circuit breaker aktywny do ${new Date(model120bGlobalZablokowanyDo).toISOString()}`);
     return false;
@@ -4071,8 +4071,20 @@ function zarezerwujRequest120B(requestId = '-') {
     console.warn(`[AI][${requestId}] 120B global quota wyczerpana (${MODEL_120B_GLOBAL_MAX_REQUESTS}/${MODEL_120B_GLOBAL_MAX_REQUESTS})`);
     return false;
   }
-  model120bGlobalRequesty++;
+  model120bGlobalRequestTimestamps.push(teraz);
+  model120bGlobalRequesty = model120bGlobalRequestTimestamps.length;
   return true;
+}
+
+function resetModel120BGlobalQuotaForTests() {
+  model120bGlobalRequestTimestamps = [];
+  model120bGlobalRequesty = 0;
+  model120bGlobalZablokowanyDo = 0;
+  model120bCircuitBreakerOpen = false;
+}
+
+function model120BGlobalQuotaSnapshot() {
+  return { maxRequests: MODEL_120B_GLOBAL_MAX_REQUESTS, windowMs: MODEL_120B_GLOBAL_WINDOW_MS, requestTimestamps: [...model120bGlobalRequestTimestamps], requests: model120bGlobalRequesty, blockedUntil: model120bGlobalZablokowanyDo, circuitOpen: model120bCircuitBreakerOpen };
 }
 
 function zablokuj120BGlobalnie(powod = 'limit') {
@@ -8224,6 +8236,9 @@ if (process.env.NODE_ENV === 'test') {
         maxValidators: DEFAULTS.maxValidators,
       };
     },
+    reserveModel120BForTests: zarezerwujRequest120B,
+    resetModel120BGlobalQuotaForTests,
+    getModel120BGlobalQuotaForTests: model120BGlobalQuotaSnapshot,
     KONFIGURACJA,
   };
 }

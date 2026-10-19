@@ -443,6 +443,23 @@ test('OpenRouter retries HTTP 402 only for documented in-flight budget with Retr
   assert.equal(calls, 1);
 });
 
+test('120B quota uses a true rolling one-hour window instead of resetting at the hour boundary', () => {
+  hooks.resetModel120BGlobalQuotaForTests();
+  const { maxRequests, windowMs } = hooks.getModel120BGlobalQuotaForTests();
+  const start = 1_000_000;
+  for (let i = 0; i < maxRequests; i++) {
+    assert.equal(hooks.reserveModel120BForTests('rolling-window-test', start + windowMs - 1000 + i), true);
+  }
+  const snapshot = hooks.getModel120BGlobalQuotaForTests();
+  assert.equal(snapshot.requests, maxRequests);
+  // Crossing the process's old hourly boundary must not reset recent requests.
+  assert.equal(hooks.reserveModel120BForTests('rolling-window-test', start + windowMs + 1000), false);
+  // Once the oldest timestamp is truly one hour old, exactly one slot frees up.
+  assert.equal(hooks.reserveModel120BForTests('rolling-window-test', start + 2 * windowMs - 1000), true);
+  assert.equal(hooks.getModel120BGlobalQuotaForTests().requests, maxRequests);
+  hooks.resetModel120BGlobalQuotaForTests();
+});
+
 test('HTTP circuit breakery xKiro i OpenRouter otwierają się po dwóch mockowanych abortach', async () => {
   for (const provider of ['xkiro', 'openrouter']) {
     hooks.resetValidatorBreakers();
