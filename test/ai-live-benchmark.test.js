@@ -45,6 +45,9 @@ test('benchmark detects common refusal variants as abstentions', () => {
     'Nie mam wystarczających danych, aby odpowiedzieć na to pewnie.',
     'Nie mogę potwierdzić tej informacji, więc nie będę zgadywać.',
     '@benchmark Chwilowo nie mogę potwierdzić tej informacji, więc nie będę zgadywać.',
+    "I don't have enough information to answer confidently.",
+    "I can't confirm this information, so I won't guess.",
+    'Insufficient information.',
   ]) {
     assert.equal(isFailureText(refusal), true, refusal);
   }

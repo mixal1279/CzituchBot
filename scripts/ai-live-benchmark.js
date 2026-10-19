@@ -80,6 +80,12 @@ function isFailureText(text) {
     /^(?:benchmark\s+)?brakuje danych(?: referencyjnych)?$/i,
     /^(?:benchmark\s+)?nie jestem pewien(?: tej informacji)?$/i,
     /^(?:benchmark\s+)?nie wiem$/i,
+    /^(?:benchmark\s+)?i (?:do not|don t) have enough (?:data|information)(?: to answer(?: this)?(?: confidently)?)?$/i,
+    /^(?:benchmark\s+)?i (?:cannot|can t) (?:reliably )?(?:confirm|verify)(?: this information)?(?: so i (?:will not|won t) guess)?$/i,
+    /^(?:benchmark\s+)?i (?:will not|won t) guess$/i,
+    /^(?:benchmark\s+)?i (?:do not|don t) know$/i,
+    /^(?:benchmark\s+)?i cannot answer that confidently$/i,
+    /^(?:benchmark\s+)?insufficient (?:data|information)$/i,
   ];
   return refusalPatterns.some(pattern => pattern.test(normalized));
 }
