@@ -73,7 +73,7 @@ const { resolveGameEntity, scoreExternalGameCandidate, externalGameCandidateMatc
 const { extractExplicitUserMemories, mergeMemoryRecords, buildVerifiedMemoryContext, pruneExpiredMemories } = require('./ai/memory');
 const { parseMemoryCommand, forgetMemories, describeMemories } = require('./ai/memory_manager');
 const { decomposeQuestion, isMultiPartQuestion, buildAdvancedRetrievalPlan, buildSupplementalRetrievalQuery, selectRetrievalQueries } = require('./ai/retrieval');
-const { classifyFailure, nextFallbacks, selectRepairFallbacks, filterAvailableFallbacks, repairBudgetBlockReason, GENERATION_FALLBACK_CHAIN, configuredMaxFallbackSteps, markProviderQuota, isProviderQuotaBlocked, quotaCooldownMsFromError, geminiGenerationCooldownMsFromError, retryAfterHint, shouldOpenQuotaCircuit } = require('./ai/fallback');
+const { classifyFailure, nextFallbacks, selectRepairFallbacks, filterAvailableFallbacks, repairBudgetBlockReason, GENERATION_FALLBACK_CHAIN, configuredMaxFallbackSteps, markProviderQuota, isProviderQuotaBlocked, quotaCooldownMsFromError, geminiGenerationCooldownMsFromError, retryAfterHint, openRouterErrorMessage, shouldOpenQuotaCircuit } = require('./ai/fallback');
 const { createGroqCompletion, awaitWithAbortTimeout, computeValidatorTimeout, computeValidatorReserveMs, computeGenerationTimeout } = require('./ai/provider-runtime');
 const { createAIMetrics, recordAIMetric, snapshotAIMetrics } = require('./ai/metrics');
 const { DEFAULTS, sanitizeRequestText } = require('./ai/limits');
@@ -3428,10 +3428,15 @@ Pytanie użytkownika: ${pytanie}`;
         signal: controller.signal,
       });
       const data = await response.json().catch(() => ({}));
+      const retryAfter = retryAfterHint(response);
       if (!response.ok) {
-        const retryAfter = retryAfterHint(response);
-        const message = data?.error?.message || `HTTP ${response.status}`;
-        throw new Error(`${message}${retryAfter ? ` (${retryAfter})` : ''}`);
+        throw new Error(openRouterErrorMessage(response.status, data, retryAfter));
+      }
+      // OpenRouter documents that some non-streaming provider errors can arrive
+      // with HTTP 200 after the response has been committed. Check the error
+      // envelope before treating a missing choices array as an empty completion.
+      if (data?.error && typeof data.error === 'object') {
+        throw new Error(openRouterErrorMessage(response.status, data, retryAfter));
       }
       const choice = data?.choices?.[0] || null;
       const message = choice?.message || null;
