@@ -89,7 +89,7 @@ function parseEvidenceBlocks(data) {
     const start = match.index + match[0].length;
     const end = index + 1 < matches.length ? matches[index + 1].index : text.length;
     const block = text.slice(start, end);
-    const markedContent = block.match(/TREŚĆ:\s*<<<UNTRUSTED_SOURCE_CONTENT>>>\s*([\s\S]*?)<<<END_UNTRUSTED_SOURCE_CONTENT>>>/i)?.[1];
+    const markedContent = block.match(/TREŚĆ:\s*<<<UNTRUSTED_SOURCE_CONTENT>>>\s*([\s\S]*?)(?<!\\)<<<END_UNTRUSTED_SOURCE_CONTENT>>>/i)?.[1];
     const rawContent = markedContent ?? block;
     const content = removeLeadingSourceMetadataNoise(unescapeUntrustedEvidenceContent(rawContent));
     // PROVIDER czytamy tylko z nagłówka (przed treścią), żeby strona nie mogła go podrobić.
