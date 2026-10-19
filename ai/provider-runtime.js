@@ -8,6 +8,17 @@ const REASONING_TOKEN_CEILING = 4000;
 const boostedPayloads = new WeakSet();
 
 /**
+ * Normalizuje bazowy URL dla oficjalnego groq-sdk.
+ * Surowe fetch musi osobno dodać /openai/v1/chat/completions.
+ */
+function normalizujGroqBaseUrl(value) {
+  return String(value || 'https://api.groq.com')
+    .replace(/\\/+$/, '')
+    .replace(/\\/openai\\/v1$/i, '')
+    .replace(/\\/+$/, '');
+}
+
+/**
  * Add reasoning headroom to max_completion_tokens for gpt-oss models.
  * Mutates the payload in place (callers/tests rely on object identity) and is
  * idempotent per payload object. Other models and payloads without
@@ -121,4 +132,4 @@ function computeGenerationTimeout(remainingMs, {
   return timeoutMs >= minTimeoutMs ? Math.floor(timeoutMs) : null;
 }
 
-module.exports = { createGroqCompletion, awaitWithAbortTimeout, withReasoningHeadroom, computeValidatorTimeout, computeValidatorReserveMs, computeGenerationTimeout };
+module.exports = { createGroqCompletion, awaitWithAbortTimeout, withReasoningHeadroom, computeValidatorTimeout, computeValidatorReserveMs, computeGenerationTimeout, normalizujGroqBaseUrl };
