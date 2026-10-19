@@ -130,7 +130,7 @@ function normalizeQuoteVerificationText(value) {
   // whitespace ("Alpha.Beta"). Keep decimal points between digits as ordinary
   // punctuation so values such as 3.14 are not split into separate sentences.
   const withSentenceBoundaries = String(value || '')
-    .replace(/([.!?])/gu, (punctuation, offset, text) => {
+    .replace(/([.!?])/gu, (match, punctuation, offset, text) => {
       const previous = text[offset - 1] || '';
       const next = text.slice(offset + 1).match(/^\s*(\S)/u)?.[1] || '';
       if (!next) return punctuation;
