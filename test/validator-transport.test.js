@@ -372,6 +372,15 @@ test('tymczasowy HTTP 429 nie otwiera godzinnego circuit breakera 120B, dzienna 
   assert.equal(shouldOpenQuotaCircuit('HTTP 402 openrouter_in_flight_budget Retry-After=5s'), false);
 });
 
+test('HTTP 402 ignoruje Retry-After poza udokumentowanym OpenRouter in-flight budget', () => {
+  assert.equal(quotaCooldownMsFromError({ status: 402, message: 'HTTP 402 Retry-After=5s' }), 24 * 60 * 60 * 1000);
+  assert.equal(quotaCooldownMsFromError({
+    status: 402,
+    message: 'HTTP 402 openrouter_in_flight_budget Retry-After=5s',
+    allowPaymentRequiredRetryAfter: true,
+  }), 5000);
+});
+
 test('Retry-After ma pierwszeństwo przed domyślnym cooldownem przeciążenia', () => {
   assert.equal(quotaCooldownMsFromError({ status: 429, message: 'HTTP 429 overloaded Retry-After=5s' }), 5000);
   assert.equal(quotaCooldownMsFromError({ status: 429, message: 'HTTP 429 overloaded' }), 60000);
