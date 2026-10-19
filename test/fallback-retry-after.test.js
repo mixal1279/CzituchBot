@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { quotaCooldownMsFromError, geminiGenerationCooldownMsFromError } = require('../ai/fallback');
+const { quotaCooldownMsFromError, geminiGenerationCooldownMsFromError, openRouterErrorMessage, classifyFailure, shouldOpenQuotaCircuit } = require('../ai/fallback');
 
 process.env.NODE_ENV = 'test';
 
@@ -47,4 +47,42 @@ test('Gemini generation cooldown detects structured HTTP status even without quo
   assert.equal(geminiGenerationCooldownMsFromError({ status: 402, message: 'payment required' }), 24 * 60 * 60 * 1000);
   assert.equal(geminiGenerationCooldownMsFromError({ status: 429, message: 'too many requests' }), 90_000);
   assert.equal(geminiGenerationCooldownMsFromError({ status: 400, message: 'bad request' }), 0);
+});
+
+test('OpenRouter error envelope in HTTP 200 preserves typed provider error and retry hint', () => {
+  const message = openRouterErrorMessage(200, {
+    error: {
+      code: 429,
+      message: 'Rate limit exceeded',
+      metadata: { error_type: 'rate_limit_exceeded', provider_code: 'rate_limited' },
+    },
+  }, 'Retry-After=60s');
+
+  assert.match(message, /HTTP 429/);
+  assert.match(message, /error_type=rate_limit_exceeded/);
+  assert.match(message, /provider_code=rate_limited/);
+  assert.match(message, /Retry-After=60s/);
+  assert.equal(classifyFailure(message), 'quota');
+});
+
+test('OpenRouter 402 in-flight budget keeps the documented retryable exception identifiable', () => {
+  const message = openRouterErrorMessage(402, {
+    error: {
+      code: 402,
+      message: 'In-flight spending budget exceeded',
+      metadata: { limit_source: 'openrouter_in_flight_budget' },
+    },
+  }, 'Retry-After=5s');
+
+  assert.match(message, /HTTP 402/);
+  assert.match(message, /limit_source=openrouter_in_flight_budget/);
+  assert.equal(shouldOpenQuotaCircuit(message), false);
+});
+
+test('OpenRouter provider overload is classified as transient from its HTTP status', () => {
+  const message = openRouterErrorMessage(503, {
+    error: { code: 503, message: 'No available provider', metadata: { error_type: 'provider_overloaded' } },
+  });
+
+  assert.equal(classifyFailure(message), 'transient');
 });
