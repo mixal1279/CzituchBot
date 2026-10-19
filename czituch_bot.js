@@ -812,11 +812,17 @@ let streamVideoId = {
 // Jednolity timeout chroni pętle czatu przed zawieszeniem na pojedynczym żądaniu HTTP.
 async function fetchZTimeout(url, options = {}, timeoutMs = 15000) {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  const duration = Number.isFinite(Number(timeoutMs)) ? Math.max(1, Number(timeoutMs)) : 15000;
+  const upstreamSignal = options?.signal;
+  const abortFromUpstream = () => controller.abort();
+  if (upstreamSignal?.aborted) controller.abort();
+  else upstreamSignal?.addEventListener('abort', abortFromUpstream, { once: true });
+  const timeout = setTimeout(() => controller.abort(), duration);
   try {
     return await fetch(url, { ...options, signal: controller.signal });
   } finally {
     clearTimeout(timeout);
+    upstreamSignal?.removeEventListener('abort', abortFromUpstream);
   }
 }
 

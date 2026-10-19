@@ -504,6 +504,15 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
   return async function szukajTavily(pytanie, options = {}) {
     const original = String(pytanie || '').trim();
     const { domains, time_range, _skipRewrite = false, returnMeta = false, sourceStartIndex = 0, sourceQuestion = original, remainingMs = 15000, requestState = null, searchDepth = 'basic' } = options;
+    const remainingBudgetMs = () => {
+      const live = typeof requestState?.remainingMs === 'function' ? requestState.remainingMs() : remainingMs;
+      const parsed = Number(live);
+      return Number.isFinite(parsed) ? Math.max(0, parsed) : 15000;
+    };
+    const timeoutFromRemaining = cap => {
+      const remaining = remainingBudgetMs();
+      return remaining > 0 ? Math.max(1, Math.min(cap, remaining)) : 0;
+    };
     try {
       let searchQuery = original;
       const rewriteKey = kluczRewrite(original);
@@ -512,14 +521,14 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
         searchQuery = rewriteZCache.query;
         logger.log(`[Tavily] ♻️ Rewrite z cache — bez wywołania modelu`);
       } else if (!_skipRewrite && original) {
-        const canRewrite = zarezerwujBudzetRewrite(requestState);
+        const rewriteTimeoutMs = timeoutFromRemaining(8000);
+        const canRewrite = rewriteTimeoutMs > 0 && zarezerwujBudzetRewrite(requestState);
         if (!canRewrite) {
-          logger.warn?.('[Tavily] rewrite pominięty — budżet modelu/ czasu requestu wyczerpany');
+          logger.warn?.('[Tavily] rewrite pominięty — budżet modelu/czasu requestu wyczerpany');
         } else {
           const rewriteController = new AbortController();
-          const rewriteTimeoutMs = Math.max(1, Math.min(8000, Number(remainingMs) || 8000));
           const rewriteTimer = setTimeout(() => rewriteController.abort(), rewriteTimeoutMs);
-          let rewrite;
+          let rewrite = null;
           try {
             rewrite = await createGroqCompletion(groq, {
               model: AI_MODELS.queryRewrite, max_completion_tokens: 220, reasoning_effort: 'low',
@@ -529,10 +538,14 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
                 { role: 'user', content: original },
               ],
             }, { signal: rewriteController.signal });
+          } catch (error) {
+            // Query rewriting is an optimization; provider failure must not prevent
+            // the original question from reaching Tavily Search.
+            logger.warn?.(`[Tavily] rewrite nieudany — używam oryginalnego pytania: ${error?.message || error}`);
           } finally {
             clearTimeout(rewriteTimer);
           }
-          const rewritten = normalizeQuery(rewrite.choices?.[0]?.message?.content);
+          const rewritten = normalizeQuery(rewrite?.choices?.[0]?.message?.content);
           if (rewritten && rewritten.length >= 30 && rewritten.length >= Math.min(original.length * 0.28, 80)) searchQuery = rewritten;
           else logger.log(`[Tavily] ↩️ Rewrite odrzucony — używam oryginalnego pytania: "${original}"`);
           rewriteCache.set(rewriteKey, { query: searchQuery, czas: Date.now() });
@@ -572,6 +585,8 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
           }),
         };
         let res;
+        const tavilyTimeoutMs = timeoutFromRemaining(15000);
+        if (tavilyTimeoutMs <= 0) throw new Error('AI request deadline exceeded before Tavily Search');
         const tavilyHttpStartedAt = Date.now();
         requestState?.recordTiming?.('tavily_http_start', {
           provider: 'tavily',
@@ -580,10 +595,12 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
         });
         try {
           for (let probe = 0; probe < 2; probe++) {
-            res = await fetchZTimeout('https://api.tavily.com/search', request);
+            res = await fetchZTimeout('https://api.tavily.com/search', request, tavilyTimeoutMs);
             // 429 = przekroczony limit: ponowienie po 250 ms nic nie da, ponawiamy tylko błędy 5xx.
             if (res.ok || ![500, 502, 503, 504].includes(res.status) || probe === 1) break;
-            await new Promise(resolve => setTimeout(resolve, 250 * (probe + 1)));
+            const delayMs = Math.min(250 * (probe + 1), Math.max(0, remainingBudgetMs() - 1));
+            if (delayMs <= 0) break;
+            await new Promise(resolve => setTimeout(resolve, delayMs));
           }
         } finally {
           requestState?.recordTiming?.('tavily_http_end', {
@@ -612,8 +629,8 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
         if (odrzuconePoScore) logger.log(`[Tavily] 📉 Odrzucono ${odrzuconePoScore} wyników o niskim score (< ${TAVILY_MIN_SCORE})`);
         if (scoreFilter.lowConfidence) logger.log('[Tavily] ⚠️ Wszystkie wyniki poniżej progu jakości — brak materiału dowodowego');
         const primaryResults = results.slice(0, 4);
-        if (czyWymagaSecondaryRetrieval(results, sourceQuestion, time_range)) {
-          const secondaryTimeoutMs = Math.max(1000, Math.min(15000, Number(remainingMs) || 15000));
+        if (czyWymagaSecondaryRetrieval(results, sourceQuestion, time_range) && remainingBudgetMs() > 0) {
+          const secondaryTimeoutMs = timeoutFromRemaining(15000);
           const secondary = await searchSecondaryProviders({
             query: sourceQuestion || searchQuery,
             geminiKey,
@@ -719,6 +736,11 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
       logger.error('[Tavily] Błąd:', err.message);
       const rateLimited = /(?:\b429\b|rate.?limit|too many requests|quota)/i.test(err.message || '');
       const status = rateLimited ? 'rate_limited' : (/timeout|abort|timed out/i.test(err.message || '') ? 'timeout' : 'error');
+      const secondaryTimeoutMs = timeoutFromRemaining(15000);
+      if (secondaryTimeoutMs <= 0) {
+        onStatus({ status: 'timeout', query: original, error: err.message });
+        return sformatujWynikWyjsciowyTavily({ status: 'timeout', text: '', error: err.message }, { returnMeta });
+      }
       const secondary = await searchSecondaryProviders({
         query: sourceQuestion || original,
         geminiKey,
@@ -728,7 +750,7 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
         startIndex: 0,
         domains,
         prefer: 'gemini',
-        timeoutMs: Math.max(1, Math.min(15000, Number(remainingMs) || 15000)),
+        timeoutMs: secondaryTimeoutMs,
       });
       if (secondary.status === 'ok' && secondary.text) {
         const secondaryProviders = [...new Set((secondary.sources || []).map(s => s.provider).filter(Boolean))];

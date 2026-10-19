@@ -176,7 +176,8 @@ test('Tavily Extract: za flagą podmienia streszczenie Gemini treścią strony',
 
   const offCalls = [];
   const off = await withEnv('AI_GEMINI_EXTRACT', undefined, () => web.searchSecondaryProviders({ query: 'x', geminiKey: 'g', exaKey: null, tavilyKey: 't', fetchFn: geminiFetch(offCalls) }));
-  assert.equal(off.sources[0].provider, 'gemini_google_search');
+  assert.equal(off.status, 'empty');
+  assert.deepEqual(off.sources, [], 'grounding metadata without extracted page text is not evidence');
   assert.equal(offCalls.length, 1);
 });
 

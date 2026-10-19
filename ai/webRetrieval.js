@@ -39,15 +39,24 @@ function formatSources(sources, startIndex = 0) {
   }).join('\n---\n');
 }
 
+function normalizeTimeoutMs(value, fallback, max) {
+  const parsed = Number(value);
+  const timeout = Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+  return Math.max(1, Math.min(max, timeout));
+}
+
 function safeHost(url) {
   try { return new URL(url).hostname; } catch (_) { return '(nieznany host)'; }
 }
 
 async function fetchJson(fetchFn, url, options, timeoutMs = 30000) {
+  const boundedTimeoutMs = normalizeTimeoutMs(timeoutMs, 30000, 30000);
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const timer = setTimeout(() => controller.abort(), boundedTimeoutMs);
   try {
-    const response = await fetchFn(url, { ...options, signal: controller.signal });
+    // Forward the timeout to wrapped transports such as fetchZTimeout as well;
+    // otherwise their own default timer can override this shorter budget.
+    const response = await fetchFn(url, { ...options, signal: controller.signal }, boundedTimeoutMs);
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(data?.error?.message || data?.error || `HTTP ${response.status}`);
     return data;
@@ -71,7 +80,7 @@ async function searchGeminiWeb({ apiKey, query, fetchFn = fetch, startIndex = 0,
           generationConfig: { temperature: 0, maxOutputTokens: 900 },
         }),
       },
-      Math.max(1000, Math.min(30000, Number(timeoutMs) || 30000))
+      normalizeTimeoutMs(timeoutMs, 30000, 30000)
     );
     const candidate = data?.candidates?.[0];
     const parts = (candidate?.content?.parts || []).map(p => String(p?.text || ''));
@@ -136,7 +145,7 @@ async function searchExa({ apiKey, query, fetchFn = fetch, startIndex = 0, domai
           ...(domains?.length ? { includeDomains: domains } : {}),
         }),
       },
-      Math.max(1000, Math.min(30000, Number(timeoutMs) || 30000))
+      normalizeTimeoutMs(timeoutMs, 30000, 30000)
     );
     const results = Array.isArray(data?.results) ? data.results : [];
     const sources = results.map((r, i) => normalizeSource({
@@ -165,7 +174,7 @@ async function extractTavilyPages({ apiKey, urls, fetchFn = fetch, timeoutMs = 1
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({ urls: wanted, extract_depth: 'basic' }),
-    }, Math.max(1000, Math.min(20000, Number(timeoutMs) || 12000)));
+    }, normalizeTimeoutMs(timeoutMs, 12000, 20000));
     const out = new Map();
     for (const item of Array.isArray(data?.results) ? data.results : []) {
       const url = String(item?.url || '').trim();
