@@ -1748,11 +1748,13 @@ async function walidujOdpowiedzGeminiModel(model, persona, pytanie, odpowiedz, d
     const message = String(err?.message || '');
     const abortLike = err?.name === 'AbortError' || /aborted|abort|cancelled|canceled/i.test(message);
     const status = Number(err?.status ?? err?.statusCode ?? 0);
-    const quota = status === 429 || /quota|rate.?limit|resource.?exhausted|429|limit:/i.test(message);
-    const transient = quota
+    const quota = status === 402 || status === 429 || /quota|rate.?limit|resource.?exhausted|429|limit:/i.test(message);
+    const transient = status !== 402 && (
+      quota
       || abortLike
       || [408, 409, 429, 500, 502, 503, 504].includes(status)
-      || /(?:HTTP\s*(?:408|409|429|500|502|503|504)|timeout|timed out|network|fetch failed|ECONNRESET|ETIMEDOUT)/i.test(message);
+      || /(?:HTTP\s*(?:408|409|429|500|502|503|504)|timeout|timed out|network|fetch failed|ECONNRESET|ETIMEDOUT)/i.test(message)
+    );
     const elapsedMs = requestState?.startedAt ? Math.max(0, Date.now() - requestState.startedAt) : null;
     const diagnostic = formatProviderError('gemini', model, err, {
       elapsedMs,
@@ -1763,11 +1765,18 @@ async function walidujOdpowiedzGeminiModel(model, persona, pytanie, odpowiedz, d
     console.error(`[AI][${requestId}] ${model} validator TRANSPORT_ERROR: ${diagnostic}`);
     if (quota) {
       const endpoint = `gemini:${model}`;
-      const cooldownMs = quotaCooldownMsFromError(`${message} ${retryAfterHint(err)}`);
+      const cooldownMs = quotaCooldownMsFromError({
+        status,
+        message: `${message} ${retryAfterHint(err)}`,
+      });
       markProviderQuota(endpoint, cooldownMs);
       console.warn(`[AI][${requestId}] quota circuit opened for ${endpoint} for ${cooldownMs}ms`);
+      // The shared gate must not outlive a valid Retry-After on 429, and
+      // must also prevent another Gemini model bypassing account-wide 402.
+      geminiValidatorCooldownUntil = Math.max(geminiValidatorCooldownUntil, Date.now() + cooldownMs);
+    } else if (transient) {
+      geminiValidatorCooldownUntil = Math.max(geminiValidatorCooldownUntil, Date.now() + 60_000);
     }
-    if (transient) geminiValidatorCooldownUntil = Date.now() + (quota ? 90_000 : 60_000);
     return {
       status: 'unavailable',
       ok: false,
@@ -2038,9 +2047,14 @@ async function walidujOdpowiedzGroq(persona, pytanie, odpowiedz, dane, requestId
   } catch (err) {
     const message = String(err?.message || err || '');
     const status = Number(err?.status ?? err?.statusCode ?? err?.response?.status ?? 0);
-    const is429 = status === 429 || /(?:^|\\D)429(?:\\D|$)/.test(message);
-    if (is429) {
-      const cooldownMs = quotaCooldownMsFromError(`${message} ${retryAfterHint(err)}`);
+    const is402 = status === 402 || /(?:HTTP\s*402|(?:^|\D)402(?:\D|$))/.test(message);
+    const is429 = status === 429 || /(?:HTTP\s*429|(?:^|\D)429(?:\D|$))/.test(message);
+    const quota = is402 || is429;
+    if (quota) {
+      const cooldownMs = quotaCooldownMsFromError({
+        status,
+        message: `${message} ${retryAfterHint(err)}`,
+      });
       markProviderQuota(providerKey, cooldownMs);
       console.warn(`[AI][${requestId}] quota circuit opened for ${providerKey} for ${cooldownMs}ms`);
     }
@@ -2060,11 +2074,11 @@ async function walidujOdpowiedzGroq(persona, pytanie, odpowiedz, dane, requestId
       technicalError: true,
       transient: timeoutAbort || is429,
       timeoutAbort,
-      quota: is429,
+      quota,
       provider: 'groq',
       model,
       unsupported_claims: [],
-      reason: is429 ? 'limit Groq (HTTP 429) — przełączam validator' : (timeoutAbort ? 'Groq validator timeout/abort — przełączam validator' : 'Groq validator niedostępny'),
+      reason: is402 ? 'Groq zgłosił brak kredytów/limit (HTTP 402) — pomijam do czasu uzupełnienia' : (is429 ? 'limit Groq (HTTP 429) — przełączam validator' : (timeoutAbort ? 'Groq validator timeout/abort — przełączam validator' : 'Groq validator niedostępny')),
       error: diagnostic,
       diagnostic,
     };
