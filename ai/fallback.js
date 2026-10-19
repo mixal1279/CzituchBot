@@ -132,7 +132,9 @@ function quotaCooldownMsFromError(error) {
   }
 
   if (retryAfterMs !== null) {
-    return Math.max(isOverload ? 60_000 : 1_000, Math.ceil(retryAfterMs));
+    // A valid provider Retry-After is authoritative, including short waits on
+    // overload responses. Do not silently extend it to the local 60s default.
+    return Math.max(1_000, Math.ceil(retryAfterMs));
   }
   // HTTP 402 usually means exhausted credits/quota, not a short-lived rate limit.
   // A Retry-After above is honored when the provider explicitly documents a
