@@ -593,6 +593,7 @@ const KONFIGURACJA = {
   kickChatroomId2:   89555075,
   kickTokenFile:    './kick_token.json',
   billyTokenFile:   './billy_token.json',
+  billyCmLegacyCacheFile: './billy_cm_stream_cache.json',
   cytatyFile:       './cytaty.json',
 
   // ---- Alerty przez bota PolishSteamDB (Discord REST, bez gatewaya) ----
@@ -4837,6 +4838,18 @@ async function zapiszCacheCm(cache) {
 
 const cmStreamCache = wczytajCacheCm();
 
+// Wczytujemy dawny cache Billy !cm tylko raz przy starcie, nie blokujemy czatu
+// przez synchroniczny odczyt pliku przy każdej komendzie.
+const BILLY_CM_LEGACY_CACHE = (() => {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(KONFIGURACJA.billyCmLegacyCacheFile, 'utf8'));
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch (err) {
+    if (err.code !== 'ENOENT') console.warn('[Billy !cm] Nie udało się odczytać starego cache:', err.message);
+    return null;
+  }
+})();
+
 const PERSISTENT_CACHE_FILES = {
   horoscopes: HOROSKOP_CACHE_PLIK,
   daily_bulka: BULKA_CACHE_PLIK,
@@ -6663,22 +6676,12 @@ async function obslugaTwitch(nick, message, wyslijFn, config = TWITCH_CONFIG_BIL
     // procesu nie tworzył nowej puli w trakcie tego samego streamu.
     if (/^!cm(?:\s|$)/i.test(message.trim())) {
       ostatnieUzycie[cooldownKey] = teraz;
-      let legacyCache = null;
-      try {
-        const legacyPath = './billy_cm_stream_cache.json';
-        if (fs.existsSync(legacyPath)) {
-          const parsed = JSON.parse(fs.readFileSync(legacyPath, 'utf8'));
-          if (parsed && typeof parsed === 'object') legacyCache = parsed;
-        }
-      } catch (err) {
-        console.warn('[Billy !cm] Nie udało się odczytać starego cache:', err.message);
-      }
       const result = BILLY_CM.buildBillyCmResponse({
         cache: cmStreamCache,
         streamKey: streamStart.twitch.billybulka || null,
         nick,
         message,
-        legacyCache,
+        legacyCache: BILLY_CM_LEGACY_CACHE,
       });
       if (result) {
         if (result.changed) await zapiszCacheCm(cmStreamCache);
