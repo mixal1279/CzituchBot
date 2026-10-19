@@ -52,11 +52,17 @@ test('worst-case request budget cannot exceed configured model, generation, vali
 });
 
 test('hard-fact response guard canonicalizes equivalent decimal formatting', () => {
-  const evidence = '[SOURCE 1]\\nTREŚĆ: Cena wynosi 2.50 kg.';
+  const evidence = 'Cena wynosi 2.50 kg.';
   const equivalent = sprawdzTwardeFaktyOdpowiedzi('Cena wynosi 2,5 kg.', evidence);
   assert.equal(equivalent.ok, true, JSON.stringify(equivalent.unsupported));
   const mismatch = sprawdzTwardeFaktyOdpowiedzi('Cena wynosi 2,6 kg.', evidence);
   assert.equal(mismatch.ok, false);
+
+  const metadataOnly = sprawdzTwardeFaktyOdpowiedzi(
+    'Wydarzenie miało miejsce w 2011 roku.',
+    '[SOURCE 1]\\nTYTUŁ: Wydarzenie 2011\\nURL: https://example.com/2011\\nTREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>\\nBrak daty w treści źródła.\\n<<<END_UNTRUSTED_SOURCE_CONTENT>>>',
+  );
+  assert.equal(metadataOnly.ok, false, 'dates in source titles/URLs must not count as evidence');
 });
 
 test('quality metrics expose coverage and answer-quality aggregates', () => {

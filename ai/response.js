@@ -1,5 +1,7 @@
 'use strict';
 
+const { parseEvidenceBlocks } = require('./evidence');
+
 function normalizujTokenLiczbowy(token) {
   const text = String(token || '')
     .toLocaleLowerCase('pl-PL')
@@ -116,7 +118,12 @@ function sprawdzSpojnoscLorePortal2(odpowiedz, pytanie) {
 function sprawdzTwardeFaktyOdpowiedzi(odpowiedz, dane, pytanie = '') {
   const questionTokens = new Set(wyodrebnijTwardeTokeny(pytanie));
   const answerTokens = wyodrebnijTwardeTokeny(odpowiedz).filter(token => !questionTokens.has(token));
-  const refs = String(dane || '').toLocaleLowerCase('pl-PL')
+  const rawEvidence = String(dane || '');
+  const parsedSources = parseEvidenceBlocks(rawEvidence);
+  const referenceText = parsedSources.length
+    ? parsedSources.map(source => source.content).filter(Boolean).join('\n')
+    : rawEvidence;
+  const refs = referenceText.toLocaleLowerCase('pl-PL')
     .replace(/[\u00a0\u2009\u202f]/g, ' ').replace(/\s+/g, ' ').replace(/,/g, '.');
   const referenceTokens = new Set(wyodrebnijTwardeTokeny(refs));
   const unsupported = answerTokens.filter(token => !zawieraTokenTwardy(refs, token) && !referenceTokens.has(token));
