@@ -6167,9 +6167,11 @@ async function wyslijYoutube(tekst, chatId) {
 }
 
 async function youtubeLoop(stan) {
-  let nextPollDelay = KONFIGURACJA.pollInterval;
+  // youtubeWatcher już wykonał pierwszy list() i odczekał pollingIntervalMillis.
+  // Pierwszy obrót pętli musi więc pobrać nowe wiadomości od razu, bez drugiego czekania.
+  let nextPollDelay = 0;
   while (true) {
-    await czekaj(nextPollDelay);
+    if (nextPollDelay > 0) await czekaj(nextPollDelay);
     try {
       const res = await youtube.liveChatMessages.list({
         liveChatId: stan.liveChatId, part: ['snippet', 'authorDetails'], pageToken: stan.nextPageToken || undefined,
