@@ -114,7 +114,7 @@ test('Tavily rejects empty queries without making an API request', async () => {
     exaKey: '',
   });
 
-  for (const query of ['', '   ', '\\n\\t']) {
+  for (const query of ['', '   ', '\n\t']) {
     const result = await search(query, { _skipRewrite: true, returnMeta: true });
     assert.equal(result.status, 'empty');
     assert.equal(result.text, '');
