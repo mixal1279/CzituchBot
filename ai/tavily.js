@@ -795,8 +795,17 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
       } finally { if (inFlight.get(key) === promise) inFlight.delete(key); }
     } catch (err) {
       logger.error('[Tavily] Błąd:', err.message);
-      const rateLimited = /(?:\b429\b|rate.?limit|too many requests|quota)/i.test(err.message || '');
-      const status = rateLimited ? 'rate_limited' : (/timeout|abort|timed out/i.test(err.message || '') ? 'timeout' : 'error');
+      const errorMessage = String(err.message || '');
+      const tavilyHttpStatus = Number(errorMessage.match(/\bTavily HTTP (\d{3})\b/i)?.[1] || 0);
+      // Tavily distinguishes request-rate limits (429), plan usage limits (432),
+      // and pay-as-you-go limits (433). Keep those operational causes separate.
+      const status = tavilyHttpStatus === 432
+        ? 'plan_limit_exceeded'
+        : tavilyHttpStatus === 433
+          ? 'payg_limit_exceeded'
+          : (tavilyHttpStatus === 429 || /(?:\b429\b|rate.?limit|too many requests|quota)/i.test(errorMessage))
+            ? 'rate_limited'
+            : (/timeout|abort|timed out/i.test(errorMessage) ? 'timeout' : 'error');
       const secondaryTimeoutMs = timeoutFromRemaining(15000);
       if (secondaryTimeoutMs <= 0) {
         onStatus({ status: 'timeout', query: original, error: err.message });
