@@ -73,7 +73,7 @@ const { resolveGameEntity, scoreExternalGameCandidate, externalGameCandidateMatc
 const { extractExplicitUserMemories, mergeMemoryRecords, buildVerifiedMemoryContext, pruneExpiredMemories } = require('./ai/memory');
 const { parseMemoryCommand, forgetMemories, describeMemories } = require('./ai/memory_manager');
 const { decomposeQuestion, isMultiPartQuestion, buildAdvancedRetrievalPlan, buildSupplementalRetrievalQuery, selectRetrievalQueries } = require('./ai/retrieval');
-const { classifyFailure, nextFallbacks, selectRepairFallbacks, filterAvailableFallbacks, repairBudgetBlockReason, GENERATION_FALLBACK_CHAIN, configuredMaxFallbackSteps, markProviderQuota, isProviderQuotaBlocked, quotaCooldownMsFromError, retryAfterHint } = require('./ai/fallback');
+const { classifyFailure, nextFallbacks, selectRepairFallbacks, filterAvailableFallbacks, repairBudgetBlockReason, GENERATION_FALLBACK_CHAIN, configuredMaxFallbackSteps, markProviderQuota, isProviderQuotaBlocked, quotaCooldownMsFromError, retryAfterHint, shouldOpenQuotaCircuit } = require('./ai/fallback');
 const { createGroqCompletion, awaitWithAbortTimeout, computeValidatorTimeout, computeValidatorReserveMs, computeGenerationTimeout } = require('./ai/provider-runtime');
 const { createAIMetrics, recordAIMetric, snapshotAIMetrics } = require('./ai/metrics');
 const { DEFAULTS, sanitizeRequestText } = require('./ai/limits');
@@ -3365,9 +3365,9 @@ Pytanie użytkownika: ${pytanie}`;
         },
       });
       const diagnosticWithRetryAfter = `${diagnostic}${retryAfter ? `; ${retryAfter}` : ''}`;
-      const isLimit = /429|rate.?limit|tokens per day|tokens per minute|TPD|TPM/i.test(diagnosticWithRetryAfter);
+      const isQuota = shouldOpenQuotaCircuit(diagnosticWithRetryAfter);
       console.error(`[Groq][${requestId}] ${model} request failed: ${diagnosticWithRetryAfter}`);
-      if (model === 'openai/gpt-oss-120b' && isLimit) {
+      if (model === 'openai/gpt-oss-120b' && isQuota) {
         requestBlokada120b = true;
         zablokuj120BGlobalnie(diagnosticWithRetryAfter);
       }

@@ -3,7 +3,7 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
 const { createGroqCompletion, awaitWithAbortTimeout, computeValidatorTimeout, computeValidatorReserveMs, computeGenerationTimeout } = require('../ai/provider-runtime');
-const { classifyFailure, shouldRetryFailure, nextFallbacks, selectRepairFallbacks, filterAvailableFallbacks, repairBudgetBlockReason, resetProviderQuotaCooldowns, markProviderQuota, isProviderQuotaBlocked, quotaCooldownMsFromError, retryAfterHint, configuredMaxFallbackSteps } = require('../ai/fallback');
+const { classifyFailure, shouldRetryFailure, nextFallbacks, selectRepairFallbacks, filterAvailableFallbacks, repairBudgetBlockReason, resetProviderQuotaCooldowns, markProviderQuota, isProviderQuotaBlocked, quotaCooldownMsFromError, retryAfterHint, configuredMaxFallbackSteps, shouldOpenQuotaCircuit } = require('../ai/fallback');
 
 test('Groq request body never contains signal; AbortSignal is passed in SDK transport options', async () => {
   const controller = new AbortController();
@@ -239,6 +239,8 @@ test('adaptive validator reserve follows the remaining slot count and deadline',
 
 test('provider capacity pressure is transient rather than a quota cooldown', () => {
   assert.equal(classifyFailure('HTTP 429: high demand, temporarily unavailable'), 'transient');
+  assert.equal(shouldOpenQuotaCircuit('HTTP 429: high demand, temporarily unavailable'), false);
+  assert.equal(shouldOpenQuotaCircuit('HTTP 429: tokens per day limit exceeded'), true);
   assert.equal(quotaCooldownMsFromError('HTTP 429: high demand, temporarily unavailable'), 60000);
   assert.equal(classifyFailure('HTTP 429: tokens per day limit exceeded'), 'quota');
 });

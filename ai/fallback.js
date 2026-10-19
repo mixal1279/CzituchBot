@@ -211,6 +211,12 @@ function repairBudgetBlockReason({
   return null;
 }
 
+function shouldOpenQuotaCircuit(error) {
+  // HTTP 429 can mean temporary capacity pressure; only true quota failures
+  // should trip the long-lived process-wide model circuit breaker.
+  return classifyFailure(error) === 'quota';
+}
+
 function shouldRetryFailure(failure) {
   // Retry means "try another provider", not "repeat the same failing endpoint".
   // Auth errors are useful only for cross-provider fallback.
@@ -230,5 +236,6 @@ module.exports = {
   selectRepairFallbacks,
   filterAvailableFallbacks,
   repairBudgetBlockReason,
+  shouldOpenQuotaCircuit,
   shouldRetryFailure,
 };
