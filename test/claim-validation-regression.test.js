@@ -9,6 +9,7 @@ const {
   zgodnoscStrukturalna,
   sprawdzSprzecznosciSemantyczne,
   sprawdzTwardeKonflikty,
+  spojnoscTlumaczeniaClaimu,
 } = require('../ai/claimValidation');
 
 test('sentence-initial generic words are not treated as proper names', () => {
@@ -129,6 +130,43 @@ test('English damage vocabulary does not create a false semantic conflict and ze
   const claim = 'Blokowanie redukuje obrażenia od ich oddechu.';
   assert.equal(sprawdzSprzecznosciSemantyczne(evidence, claim).ok, true);
   assert.equal(sprawdzTwardeKonflikty(evidence, claim).ok, true);
+});
+
+test('decimal values normalize across comma and trailing-zero formats', () => {
+  const result = sprawdzTwardeKonflikty('The blade weighs 2.5 kg.', 'The blade weighs 2,50 kg.');
+  assert.equal(result.ok, true, result.reason);
+});
+
+test('claim_en cannot translate killing as capture or reduction as increase', () => {
+  const killedAsCaptured = spojnoscTlumaczeniaClaimu('Wheatley zabił Chella.', 'Wheatley captured Chell.');
+  assert.equal(killedAsCaptured.ok, false);
+  assert.match(killedAsCaptured.reason, /zdarzenie|relację/);
+
+  const reducedAsIncreased = spojnoscTlumaczeniaClaimu('Dragonrend zmniejsza obrażenia od ognia.', 'Dragonrend increases fire damage.');
+  assert.equal(reducedAsIncreased.ok, false);
+  assert.match(reducedAsIncreased.reason, /redukcji|ochrony/);
+});
+
+test('claim_en cannot drop a causal relation but purpose clauses are not causal claims', () => {
+  const droppedCause = spojnoscTlumaczeniaClaimu('Wheatley przejął kontrolę, ponieważ chciał uciec.', 'Wheatley took control.');
+  assert.equal(droppedCause.ok, false);
+  assert.match(droppedCause.reason, /przyczynową/);
+
+  const purposeTranslation = spojnoscTlumaczeniaClaimu(
+    'Dragonborn używa krzyku, aby wchłonąć duszę smoka.',
+    'The Dragonborn uses the shout to absorb the dragon soul.',
+  );
+  assert.equal(purposeTranslation.ok, true, purposeTranslation.reason);
+});
+
+test('English purpose clauses do not trigger the unsupported-causal hard gate', () => {
+  for (const purpose of ['in order to', 'so that he can']) {
+    const result = zgodnoscStrukturalna(
+      'The Dragonborn uses Dragonrend to absorb the dragon soul.',
+      `The Dragonborn uses Dragonrend ${purpose} absorb the dragon soul.`,
+    );
+    assert.equal(result.ok, true, `${purpose}: ${result.reason}`);
+  }
 });
 
 test('English lack of and absence of remain negations in the hard gate', () => {
