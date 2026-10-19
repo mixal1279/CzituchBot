@@ -11,7 +11,7 @@ delete process.env.AI_VALIDATOR_BREAKER_MS;
 
 const { __validatorTestHooks: hooks } = require('../czituch_bot');
 const { createAIRequestContext } = require('../ai/requestContext');
-const { resetProviderQuotaCooldowns } = require('../ai/fallback');
+const { resetProviderQuotaCooldowns, quotaCooldownMsFromError } = require('../ai/fallback');
 const { GROQ_VALIDATOR_JSON_SCHEMA, buildGroqValidatorResponseFormat } = require('../ai/validator');
 
 const EVIDENCE = [
@@ -364,6 +364,11 @@ test('timeout z mockowanego klienta Groq trafia do circuit breakera bez wywołan
 });
 
 
+test('Retry-After ma pierwszeństwo przed domyślnym cooldownem przeciążenia', () => {
+  assert.equal(quotaCooldownMsFromError({ status: 429, message: 'HTTP 429 overloaded Retry-After=5s' }), 5000);
+  assert.equal(quotaCooldownMsFromError({ status: 429, message: 'HTTP 429 overloaded' }), 60000);
+});
+
 test('Gemini i Groq honorują Retry-After dostawcy', async () => {
   resetProviderQuotaCooldowns();
   hooks.KONFIGURACJA.geminiKey = 'test-gemini-key';
@@ -394,6 +399,38 @@ test('Gemini i Groq honorują Retry-After dostawcy', async () => {
   assert.equal(hooks.isProviderQuotaBlocked('groq:openai/gpt-oss-20b'), true);
   assert.equal(hooks.isProviderQuotaBlocked('groq:openai/gpt-oss-20b', Date.now() + 44_000), true);
   assert.equal(hooks.isProviderQuotaBlocked('groq:openai/gpt-oss-20b', Date.now() + 46_000), false);
+});
+
+test('Gemini i Groq klasyfikują HTTP 402 jako trwały problem kredytów', async () => {
+  resetProviderQuotaCooldowns();
+  hooks.KONFIGURACJA.geminiKey = 'test-gemini-key';
+  hooks.KONFIGURACJA.openrouterKey = '';
+  hooks.KONFIGURACJA.xkiroKey = '';
+  mockFetch(async () => ({ ok: false, status: 402, headers: { get: () => null }, json: async () => ({ error: { message: 'Prepay credit balance is depleted' } }) }));
+  const gemini = await hooks.walidujOdpowiedzGeminiModel('gemini-3.5-flash-lite', 'generic', QUESTION, ANSWER, EVIDENCE, [], 'test-gemini-402');
+  assert.equal(gemini.status, 'unavailable');
+  assert.equal(gemini.quota, true);
+  assert.equal(gemini.transient, false);
+  assert.equal(hooks.isProviderQuotaBlocked('gemini:gemini-3.5-flash-lite'), true);
+
+  resetProviderQuotaCooldowns();
+  hooks.KONFIGURACJA.geminiKey = '';
+  let groqCalls = 0;
+  hooks.setGroqClient({ chat: { completions: { create: async () => {
+    groqCalls += 1;
+    const error = new Error('Payment Required');
+    error.status = 402;
+    throw error;
+  } } } });
+  const groq = await hooks.walidujOdpowiedzGroq('generic', QUESTION, ANSWER, EVIDENCE, 'test-groq-402');
+  assert.equal(groq.status, 'unavailable');
+  assert.equal(groq.quota, true);
+  assert.equal(groq.transient, false);
+  assert.equal(groqCalls, 1);
+  assert.equal(hooks.isProviderQuotaBlocked('groq:openai/gpt-oss-20b'), true);
+  const second = await hooks.walidujOdpowiedzGroq('generic', QUESTION, ANSWER, EVIDENCE, 'test-groq-402-second');
+  assert.equal(second.skipped, true);
+  assert.equal(groqCalls, 1);
 });
 
 test('xKiro i OpenRouter honorują 402/429 cooldown i Retry-After bez kolejnych żądań', async () => {
