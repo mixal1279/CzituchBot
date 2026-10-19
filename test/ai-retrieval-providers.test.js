@@ -15,7 +15,7 @@ const {
   nextFallbacks,
   classifyFailure,
 } = require('../ai/fallback');
-const { createTavilySearch, filtrujPoScore, normalizujProgScore, normalizujZakresTavily, hostnamePasujeDoDomenyTavily, sanityzujTrescZrodlaTavily, czyWymagaSecondaryRetrieval, snapshotCacheTavily, ograniczCacheTavily } = require('../ai/tavily');
+const { createTavilySearch, filtrujPoScore, normalizujProgScore, normalizujZakresTavily, normalizujDomenyTavily, hostnamePasujeDoDomenyTavily, sanityzujTrescZrodlaTavily, czyWymagaSecondaryRetrieval, snapshotCacheTavily, ograniczCacheTavily } = require('../ai/tavily');
 
 test('retrieval source contract is normalized', () => {
   const source = normalizeSource({
@@ -39,6 +39,19 @@ test('Tavily time ranges normalize legacy prefixes and reject unsupported values
   assert.equal(normalizujZakresTavily('day'), 'day');
   assert.equal(normalizujZakresTavily('past_24_hours'), null);
   assert.equal(normalizujZakresTavily(null), null);
+});
+
+test('Tavily include_domains normalization enforces the API limit and cleans entries', () => {
+  assert.deepEqual(normalizujDomenyTavily([' example.com ', '', 'example.com', '*.example.org']), [
+    'example.com',
+    '*.example.org',
+  ]);
+  assert.deepEqual(normalizujDomenyTavily('example.com'), ['example.com']);
+  assert.deepEqual(normalizujDomenyTavily(null), []);
+  assert.deepEqual(normalizujDomenyTavily([null, 42, '   ']), []);
+  const domains = Array.from({ length: 305 }, (_, index) => `domain${index}.example`);
+  assert.equal(normalizujDomenyTavily(domains).length, 300);
+  assert.equal(normalizujDomenyTavily(domains)[299], 'domain299.example');
 });
 
 test('Tavily local domain filter supports wildcard domains', () => {
