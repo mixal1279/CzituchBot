@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { normalizujWynikWalidatora } = require('../ai/validator');
+const { normalizujWynikWalidatora, czyDowodPotwierdzaClaim } = require('../ai/validator');
 const { parseEvidenceText } = require('../ai/pipeline');
 const { parseEvidenceBlocks, quoteExists, buildEvidenceRepairContext, buildQuestionEvidenceContext, normalizeEvidenceText, classifyClaimType, evidenceRelationSignals, rankEvidenceForClaim, removeLeadingImageFilenameNoise } = require('../ai/evidence');
 
@@ -231,6 +231,19 @@ test('validator does not repair a malformed source ID when the quote matches mul
   }, 'test-model', 'test', new Set(['SOURCE 1', 'SOURCE 2']), data, 'The same fact is repeated here.');
   assert.equal(result.status, 'rejected');
   assert.ok(result.diagnostics.localRejectReasons.includes('unknown_source_id'));
+});
+
+test('REFERENCE IDs resolve case-insensitively through local quote verification', () => {
+  const data = [
+    '[REFERENCE Steam DB]',
+    'TYTUŁ: Steam DB',
+    'URL: https://store.steampowered.com/app/620/',
+    'TREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>',
+    'Portal 2 was released in 2011.',
+    '<<<END_UNTRUSTED_SOURCE_CONTENT>>>',
+  ].join('\\n');
+  const result = czyDowodPotwierdzaClaim(data, ['REFERENCE STEAM DB'], 'Portal 2 was released in 2011.', 'Portal 2 was released in 2011.');
+  assert.equal(result.ok, true, result.reason);
 });
 
 test('question evidence context preserves REFERENCE identifiers', () => {

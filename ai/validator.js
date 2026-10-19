@@ -160,14 +160,14 @@ function wyodrebnijIdentyfikatoryZrodel(dane) {
 
 function pobierzBlokZrodla(dane, sourceId) {
   const lines = String(dane || '').split(/\r?\n/);
-  const wanted = String(sourceId || '').trim();
+  const wanted = normalizujIdZrodla(sourceId);
   let active = false;
   const body = [];
   for (const line of lines) {
     const header = line.match(/^\[(SOURCE \d+|REFERENCE [^\]\r\n]+)\]\s*$/i);
     if (header) {
       if (active) break;
-      active = header[1].trim() === wanted;
+      active = normalizujIdZrodla(header[1].trim()) === wanted;
       continue;
     }
     if (active) body.push(line);
@@ -266,11 +266,11 @@ function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '', opt
   // around the exact quote; do not allow distant text on the same page to support
   // an otherwise ungrounded claim.
 
-  const byId = new Map(blocks.map(block => [block.sourceId, block]));
+  const byId = new Map(blocks.map(block => [normalizujIdZrodla(block.sourceId), block]));
   const reasons = [];
 
   for (const id of sourceIds) {
-    const block = byId.get(id);
+    const block = byId.get(normalizujIdZrodla(id));
     if (!block) {
       reasons.push('source_id nie istnieje w danych referencyjnych: ' + id);
       continue;
