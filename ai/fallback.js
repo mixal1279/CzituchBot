@@ -127,6 +127,21 @@ function geminiGenerationCooldownMsFromError(error) {
   return 0;
 }
 
+function openRouterErrorMessage(httpStatus, data, retryAfter = '') {
+  const error = data?.error && typeof data.error === 'object' ? data.error : {};
+  const status = Number(error.code || httpStatus || 0);
+  const metadata = error.metadata && typeof error.metadata === 'object' ? error.metadata : {};
+  const parts = [
+    status ? `HTTP ${status}` : '',
+    String(error.message || 'OpenRouter returned an error'),
+    metadata.error_type ? `error_type=${metadata.error_type}` : '',
+    metadata.provider_code ? `provider_code=${metadata.provider_code}` : '',
+    metadata.limit_source ? `limit_source=${metadata.limit_source}` : '',
+    retryAfter ? `Retry-After=${String(retryAfter).replace(/^Retry-After=/i, '')}` : '',
+  ].filter(Boolean);
+  return parts.join('; ');
+}
+
 function retryAfterHint(source, now = Date.now()) {
   const headers = source?.headers || source?.response?.headers || source;
   let raw = null;
@@ -329,6 +344,7 @@ module.exports = {
   quotaCooldownMsFromError,
   geminiGenerationCooldownMsFromError,
   retryAfterHint,
+  openRouterErrorMessage,
   shouldOpenQuotaCircuit,
   markProviderQuota,
   isProviderQuotaBlocked,
