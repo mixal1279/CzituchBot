@@ -69,9 +69,22 @@ test('request context snapshot is stable and exposes one shared budget', () => {
 });
 
 
-test('request context default timeout matches the shared AI limit configuration', () => {
+test('request context defaults match the shared AI limit configuration', () => {
   const ctx = createAIRequestContext();
   assert.equal(ctx.maxCzasMs, DEFAULTS.requestTimeoutMs);
+  assert.equal(ctx.maxGeneracji, DEFAULTS.maxGenerations);
+  assert.equal(ctx.maxInitialGeneracji, DEFAULTS.maxInitialGenerations);
+  assert.equal(ctx.maxRepairGeneracji, DEFAULTS.maxRepairGenerations);
+  assert.equal(ctx.maxModelCalls, DEFAULTS.maxModelCalls);
+  assert.equal(ctx.maxValidatorow, DEFAULTS.maxValidators);
+  assert.equal(ctx.maxWyszukanTavily, DEFAULTS.maxTavilySearches);
+});
+
+test('request context phase generation limits cannot exceed the total generation budget', () => {
+  const ctx = createAIRequestContext({ maxGeneracji: 2, maxInitialGeneracji: 5, maxRepairGeneracji: 4 });
+  assert.equal(ctx.maxGeneracji, 2);
+  assert.equal(ctx.maxInitialGeneracji, 2);
+  assert.equal(ctx.maxRepairGeneracji, 2);
 });
 
 test('shared AI request timeout is 40 seconds to leave room for repair and fallback', () => {

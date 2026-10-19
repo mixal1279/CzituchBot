@@ -15,16 +15,23 @@ function clampLimit(value, fallback) {
 }
 
 function createAIRequestContext(options = {}) {
+  const maxGeneracji = clampLimit(options.maxGeneracji, DEFAULTS.maxGenerations);
   const ctx = {
     requestId: String(options.requestId || '-'),
     startedAt: Number.isFinite(options.startedAt) ? options.startedAt : Date.now(),
     maxCzasMs: clampLimit(options.maxCzasMs, DEFAULTS.requestTimeoutMs),
-    maxGeneracji: clampLimit(options.maxGeneracji, 6),
-    maxInitialGeneracji: clampLimit(options.maxInitialGeneracji, clampLimit(options.maxGeneracji, 6)),
-    maxRepairGeneracji: clampLimit(options.maxRepairGeneracji, 0),
-    maxModelCalls: clampLimit(options.maxModelCalls, 12),
+    maxGeneracji,
+    maxInitialGeneracji: Math.min(
+      clampLimit(options.maxInitialGeneracji, DEFAULTS.maxInitialGenerations),
+      maxGeneracji,
+    ),
+    maxRepairGeneracji: Math.min(
+      clampLimit(options.maxRepairGeneracji, DEFAULTS.maxRepairGenerations),
+      maxGeneracji,
+    ),
+    maxModelCalls: clampLimit(options.maxModelCalls, DEFAULTS.maxModelCalls),
     maxValidatorow: clampLimit(options.maxValidatorow, DEFAULTS.maxValidators),
-    maxWyszukanTavily: clampLimit(options.maxWyszukanTavily, 3),
+    maxWyszukanTavily: clampLimit(options.maxWyszukanTavily, DEFAULTS.maxTavilySearches),
 
     generacje: 0,
     initialGeneracje: 0,

@@ -32,7 +32,9 @@ function createGroqCompletion(groqClient, payload, { signal } = {}) {
     throw new TypeError('Groq chat.completions.create is unavailable');
   }
   withReasoningHeadroom(payload);
-  const requestOptions = signal ? { signal } : {};
+  // The request budget and fallback chain own retries. SDK-level retries would
+  // make one reserved model-call slot issue multiple hidden HTTP requests.
+  const requestOptions = { maxRetries: 0, ...(signal ? { signal } : {}) };
   return groqClient.chat.completions.create(payload, requestOptions);
 }
 
