@@ -98,6 +98,30 @@ test('secondary provider forwards its bounded timeout to wrapped transports', as
   assert.equal(observedTimeout, 275);
 });
 
+test('Tavily rejects empty queries without making an API request', async () => {
+  let fetchCalls = 0;
+  const search = createTavilySearch({
+    apiKey: 'test-tavily-key',
+    groq: null,
+    normalizeQuery: value => value,
+    fetchZTimeout: async () => {
+      fetchCalls++;
+      throw new Error('fetch must not be called for an empty query');
+    },
+    logger: { log() {}, warn() {}, error() {} },
+    cacheFile: '/tmp/czituch-tavily-empty-query-test.json',
+    geminiKey: '',
+    exaKey: '',
+  });
+
+  for (const query of ['', '   ', '\\n\\t']) {
+    const result = await search(query, { _skipRewrite: true, returnMeta: true });
+    assert.equal(result.status, 'empty');
+    assert.equal(result.text, '');
+  }
+  assert.equal(fetchCalls, 0, 'empty queries must be rejected before calling Tavily');
+});
+
 test('Tavily response body consumption is bounded by the request deadline', async () => {
   let observedSignal;
   const search = createTavilySearch({
