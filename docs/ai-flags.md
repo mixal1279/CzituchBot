@@ -31,7 +31,7 @@ Domyślny budżet pojedynczego żądania AI jest współdzielony przez generowan
 | `AI_XKIRO_VALIDATOR_TIMEOUT_MS` | `3000` | Maksymalny budżet pojedynczego wywołania walidatora xKiro. |
 | `AI_PROVIDER_QUOTA_COOLDOWN_MS` | `60000` ms | Domyślny czas przerwy po wykryciu limitu dostawcy; nagłówek `Retry-After` (sekundy lub data HTTP) ma pierwszeństwo, gdy dostawca go zwraca. |
 | `AI_MAX_FALLBACK_STEPS` | długość łańcucha fallbacków (`6`) | Maksymalna liczba prób fallbacku po odfiltrowaniu niedostępnych endpointów; `0` wyłącza dodatkowe próby. |
-| `AI_120B_GLOBAL_MAX_REQUESTS` | `6` | Globalny limit żądań do modelu 120B w procesie. |
+| `AI_120B_GLOBAL_MAX_REQUESTS` | `6` | Limit żądań do 120B w procesie w ruchomym oknie 1 godziny. Rzeczywisty błąd quota otwiera osobny globalny circuit breaker na 1 godzinę; ten bezpiecznik jest niezależny od `Retry-After` i `AI_PROVIDER_QUOTA_COOLDOWN_MS`. |
 | `AI_CACHE_DIR` | katalog projektu (`__dirname`) | Katalog plikowego cache AI. |
 | `AI_TAVILY_CACHE_FILE` | `AI_CACHE_DIR/tavily_cache.json` | Ścieżka pliku cache Tavily; ta zmienna ma pierwszeństwo przed `AI_CACHE_DIR`. |
 | `TAVILY_MIN_SCORE` | `0.2` | Minimalny score wyniku Tavily; wyniki bez score nie są odrzucane wyłącznie z tego powodu. |
