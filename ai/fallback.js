@@ -74,6 +74,12 @@ const GENERATION_FALLBACK_CHAIN = [
   'openrouter:default',
 ];
 
+function configuredMaxFallbackSteps(value = process.env.AI_MAX_FALLBACK_STEPS) {
+  if (value == null || String(value).trim() === '') return GENERATION_FALLBACK_CHAIN.length;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? Math.max(0, Math.floor(parsed)) : GENERATION_FALLBACK_CHAIN.length;
+}
+
 const quotaBlockedUntil = new Map();
 
 function resetProviderQuotaCooldowns() {
@@ -156,10 +162,9 @@ function nextFallbacks({ failure = 'unknown', attempted = [], failedProviders = 
   if (failure === 'grounded_reject') {
     remaining = remaining.filter(provider => !provider.includes('120b'));
   }
-  const limit = Math.max(
-    0,
-    Number(maxFallbacks ?? process.env.AI_MAX_FALLBACK_STEPS ?? GENERATION_FALLBACK_CHAIN.length),
-  );
+  const limit = maxFallbacks == null
+    ? configuredMaxFallbackSteps()
+    : Math.max(0, Number.isFinite(Number(maxFallbacks)) ? Math.floor(Number(maxFallbacks)) : GENERATION_FALLBACK_CHAIN.length);
   return remaining.slice(0, limit);
 }
 
@@ -214,6 +219,7 @@ function shouldRetryFailure(failure) {
 
 module.exports = {
   GENERATION_FALLBACK_CHAIN,
+  configuredMaxFallbackSteps,
   resetProviderQuotaCooldowns,
   quotaCooldownMsFromError,
   retryAfterHint,

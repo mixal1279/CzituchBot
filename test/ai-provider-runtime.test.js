@@ -3,7 +3,7 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
 const { createGroqCompletion, awaitWithAbortTimeout, computeValidatorTimeout, computeValidatorReserveMs, computeGenerationTimeout } = require('../ai/provider-runtime');
-const { classifyFailure, shouldRetryFailure, nextFallbacks, selectRepairFallbacks, filterAvailableFallbacks, repairBudgetBlockReason, resetProviderQuotaCooldowns, markProviderQuota, isProviderQuotaBlocked, quotaCooldownMsFromError, retryAfterHint } = require('../ai/fallback');
+const { classifyFailure, shouldRetryFailure, nextFallbacks, selectRepairFallbacks, filterAvailableFallbacks, repairBudgetBlockReason, resetProviderQuotaCooldowns, markProviderQuota, isProviderQuotaBlocked, quotaCooldownMsFromError, retryAfterHint, configuredMaxFallbackSteps } = require('../ai/fallback');
 
 test('Groq request body never contains signal; AbortSignal is passed in SDK transport options', async () => {
   const controller = new AbortController();
@@ -115,6 +115,13 @@ test('provider and validator failures receive distinct categories', () => {
   assert.equal(classifyFailure('Groq chat.completions.create is unavailable; extra.requestContract={"endpoint":"chat.completions.create"}'), 'provider_unavailable');
   assert.equal(shouldRetryFailure('timeout_abort'), true);
   assert.equal(shouldRetryFailure('validator_rejection'), false, 'semantic rejection must not be treated as transport failure');
+});
+
+test('configured fallback limit parses valid values and defaults safely', () => {
+  assert.equal(configuredMaxFallbackSteps('2'), 2);
+  assert.equal(configuredMaxFallbackSteps('0'), 0);
+  assert.equal(configuredMaxFallbackSteps(''), 6);
+  assert.equal(configuredMaxFallbackSteps('invalid'), 6);
 });
 
 test('fallback selection excludes failed and repeated providers', () => {

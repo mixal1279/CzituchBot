@@ -15,7 +15,7 @@ Wszystkie ustawienia są opcjonalne, chyba że dana integracja jest wymagana prz
 | `AI_GEMINI_VALIDATOR_MODEL` | `gemini-3.5-flash-lite` | Model Gemini do walidacji; można go zmieniać na potrzeby porównania benchmarków. |
 | `OPENROUTER_VALIDATOR_MODEL` | wartość `AI_VALIDATOR_MODEL` | Osobny model walidatora OpenRouter. |
 | `OPENROUTER_GENERATOR_MODEL` | wartość `AI_GENERATOR_MODEL` | Osobny model generatora OpenRouter. |
-| `XKIRO_MODEL` | `qwen/qwen3.5-397b-a17b:free` | Model walidatora xKiro. |
+| `XKIRO_MODEL` | `qwen/qwen3.5-397b-a17b:free` | Model walidatora xKiro i generatora w łańcuchu fallbacków, jeśli `XKIRO_API_KEY` jest skonfigurowany. |
 | `AI_VALIDATOR_GROQ` | włączona | Ustaw `0`, aby wyłączyć ścieżkę walidatora Groq. |
 
 ## Limity i cache
@@ -30,7 +30,7 @@ Domyślny budżet pojedynczego żądania AI jest współdzielony przez generowan
 | `AI_GROQ_VALIDATOR_MAX_EVIDENCE_CHARS` | `12000` (minimum `8000`) | Ogranicza długość dowodów przekazywanych do walidatora Groq. |
 | `AI_XKIRO_VALIDATOR_TIMEOUT_MS` | `3000` | Maksymalny budżet pojedynczego wywołania walidatora xKiro. |
 | `AI_PROVIDER_QUOTA_COOLDOWN_MS` | `60000` ms | Domyślny czas przerwy po wykryciu limitu dostawcy; nagłówek `Retry-After` (sekundy lub data HTTP) ma pierwszeństwo, gdy dostawca go zwraca. |
-| `AI_MAX_FALLBACK_STEPS` | długość łańcucha fallbacków | Górna granica kroków fallbacku. |
+| `AI_MAX_FALLBACK_STEPS` | długość łańcucha fallbacków (`6`) | Maksymalna liczba prób fallbacku po odfiltrowaniu niedostępnych endpointów; `0` wyłącza dodatkowe próby. |
 | `AI_120B_GLOBAL_MAX_REQUESTS` | `6` | Globalny limit żądań do modelu 120B w procesie. |
 | `AI_CACHE_DIR` | katalog projektu (`__dirname`) | Katalog plikowego cache AI. |
 | `AI_TAVILY_CACHE_FILE` | `AI_CACHE_DIR/tavily_cache.json` | Ścieżka pliku cache Tavily; ta zmienna ma pierwszeństwo przed `AI_CACHE_DIR`. |

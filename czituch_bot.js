@@ -73,7 +73,7 @@ const { resolveGameEntity, scoreExternalGameCandidate, externalGameCandidateMatc
 const { extractExplicitUserMemories, mergeMemoryRecords, buildVerifiedMemoryContext, pruneExpiredMemories } = require('./ai/memory');
 const { parseMemoryCommand, forgetMemories, describeMemories } = require('./ai/memory_manager');
 const { decomposeQuestion, isMultiPartQuestion, buildAdvancedRetrievalPlan, buildSupplementalRetrievalQuery, selectRetrievalQueries } = require('./ai/retrieval');
-const { classifyFailure, nextFallbacks, selectRepairFallbacks, filterAvailableFallbacks, repairBudgetBlockReason, GENERATION_FALLBACK_CHAIN, markProviderQuota, isProviderQuotaBlocked, quotaCooldownMsFromError, retryAfterHint } = require('./ai/fallback');
+const { classifyFailure, nextFallbacks, selectRepairFallbacks, filterAvailableFallbacks, repairBudgetBlockReason, GENERATION_FALLBACK_CHAIN, configuredMaxFallbackSteps, markProviderQuota, isProviderQuotaBlocked, quotaCooldownMsFromError, retryAfterHint } = require('./ai/fallback');
 const { createGroqCompletion, awaitWithAbortTimeout, computeValidatorTimeout, computeValidatorReserveMs, computeGenerationTimeout } = require('./ai/provider-runtime');
 const { createAIMetrics, recordAIMetric, snapshotAIMetrics } = require('./ai/metrics');
 const { DEFAULTS, sanitizeRequestText } = require('./ai/limits');
@@ -3478,14 +3478,16 @@ Pytanie użytkownika: ${pytanie}`;
     // Select beyond the limit first, then filter unavailable credentials/cooldowns.
     // Otherwise unconfigured endpoints can occupy the first N slots and hide a
     // configured provider later in the fallback chain.
+    const configuredFallbackLimit = configuredMaxFallbackSteps();
     let candidateSteps = filterAvailableFallbacks(nextFallbacks({
       failure: failureType,
       attempted,
       failedProviders: [...failedFallbackProviders],
-      // Filter credentials before applying the slot cap. Otherwise missing-key
-      // providers at the front of the chain can hide configured providers later.
+      // Filter credentials before applying either the environment cap or the
+      // remaining generation slots; unconfigured providers must not hide later ones.
       maxFallbacks: GENERATION_FALLBACK_CHAIN.length,
-    }), GENERATION_FALLBACK_CHAIN.filter(providerConfiguredForRequest)).slice(0, fallbackLimit);
+    }), GENERATION_FALLBACK_CHAIN.filter(providerConfiguredForRequest))
+      .slice(0, Math.min(fallbackLimit, configuredFallbackLimit));
     if (phase === 'repair') {
       // Semantic repair should not blindly repeat the model that just produced
       // the rejected answer. Prefer the next healthy provider in the chain,
@@ -3498,7 +3500,7 @@ Pytanie użytkownika: ${pytanie}`;
           // Repair has one generation cycle, but may try several providers
           // if an endpoint fails quickly (e.g. quota). Each provider still obeys
           // the shared deadline and model-call budget.
-          maxFallbacks: GENERATION_FALLBACK_CHAIN.length,
+          maxFallbacks: configuredFallbackLimit,
         });
     }
 
