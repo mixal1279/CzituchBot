@@ -5400,8 +5400,8 @@ const youtube = youtubeFactory({ version: 'v3', auth: oauth2Client });
 // Powód: `auth: KONFIGURACJA.googleApiKey` wysyłał klucz API jako bearer token,
 // co Google odrzucał komunikatem "The authenticated user cannot act on behalf
 // of the specified Google account". search.list / videos.list lecą teraz przez
-// OAuth (jak działało miesiąc temu) — wymaga tylko zwykłego scope'youtube.readonly',
-// który już mamy w tokenie konta-menadżera.
+// OAuth. Nowe logowanie prosi o `youtube.force-ssl`, które obsługuje też
+// operacje odczytu oraz wysyłanie wiadomości na czat na żywo.
 
 let liveChatId    = null;
 let nextPageToken = null;
@@ -5452,7 +5452,7 @@ async function wczytajTokenYT() {
       } catch (legacyReadError) {
         // A failure while checking the legacy document must not skip the local
         // encrypted backup. Continue through the normal fallback path below.
-        console.warn('[YT Auth] Nie udało się sprawdzić starego dokumentu tokenu; przechodzę do kopii zapasowej:', legacyReadError.message);
+        console.error('[YT Auth] Nie udało się sprawdzić starego dokumentu tokenu; przechodzę do kopii zapasowej:', legacyReadError.message);
       }
       if (legacyDoc?.exists) {
         credentials = legacyDoc.data();
