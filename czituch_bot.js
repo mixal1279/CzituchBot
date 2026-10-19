@@ -7180,7 +7180,10 @@ async function wyslijTwitchHelix(tekst, kanal, config = TWITCH_CONFIG_BILLYBULKA
 
 async function utworzMarker(nick, opis, config = TWITCH_CONFIG_BILLYBULKA) {
   try {
-    const token    = (getTwitchChatToken(config.botKey) || config.token).replace('oauth:', '');
+    // Create Stream Marker requires a broadcaster user access token with
+    // user:write:broadcast; a bot chat token/App Access Token is not sufficient.
+    const token = String(config.tokenBroadcaster || '').replace(/^oauth:/i, '');
+    if (!token) throw new Error('Brak tokena broadcastera ze scope user:write:broadcast');
     const opis_fin = opis || `Czas momentu – @${nick}`;
 
     // Pobierz broadcaster_id
