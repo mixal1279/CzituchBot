@@ -36,6 +36,10 @@ test('Tavily time ranges normalize legacy prefixes and reject unsupported values
   assert.equal(normalizujZakresTavily('past_week'), 'week');
   assert.equal(normalizujZakresTavily('past_month'), 'month');
   assert.equal(normalizujZakresTavily('past_year'), 'year');
+  assert.equal(normalizujZakresTavily('d'), 'day');
+  assert.equal(normalizujZakresTavily('w'), 'week');
+  assert.equal(normalizujZakresTavily('m'), 'month');
+  assert.equal(normalizujZakresTavily('y'), 'year');
   assert.equal(normalizujZakresTavily('day'), 'day');
   assert.equal(normalizujZakresTavily('past_24_hours'), null);
   assert.equal(normalizujZakresTavily(null), null);

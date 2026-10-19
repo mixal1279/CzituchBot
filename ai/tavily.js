@@ -176,7 +176,7 @@ function parseRewriteCacheEntries(saved) {
 
 function normalizujZakresTavily(timeRange) {
   const range = String(timeRange || '').replace(/^past_/, '').toLowerCase();
-  return ['day', 'week', 'month', 'year'].includes(range) ? range : null;
+  return ({ d: 'day', w: 'week', m: 'month', y: 'year', day: 'day', week: 'week', month: 'month', year: 'year' })[range] || null;
 }
 
 function normalizujDomenyTavily(domains) {
