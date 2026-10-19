@@ -17,9 +17,30 @@ function loadCache(file) {
   return {};
 }
 
+let stateStore = null;
+let initializePromise = null;
+let initializeRetryAfter = 0;
+let cacheReady = false;
+const CACHE_IDS = {
+  [PIEKARZ_CACHE_FILE]: 'billy_piekarz_stream',
+  [KAJZERKA_CACHE_FILE]: 'billy_kajzerka_day',
+};
+
 function saveCache(file, cache) {
+  if (stateStore?.enabled && cacheReady) {
+    stateStore.saveCache(CACHE_IDS[file], cache).catch(err => {
+      console.warn('[Bułka] Nie udało się zapisać cache w Firestore ' + file + ': ' + err.message);
+      try {
+        fs.writeFileSync(file, JSON.stringify(cache, null, 2), { mode: 0o600 });
+      } catch (fallbackError) {
+        console.warn('[Bułka] Nie udało się też zapisać lokalnej kopii cache ' + file + ': ' + fallbackError.message);
+      }
+    });
+    return;
+  }
+  // Until Firestore has loaded successfully, keep the local file as a durable fallback.
   try {
-    fs.writeFileSync(file, JSON.stringify(cache, null, 2));
+    fs.writeFileSync(file, JSON.stringify(cache, null, 2), { mode: 0o600 });
   } catch (err) {
     console.warn('[Bułka] Nie udało się zapisać cache ' + file + ': ' + err.message);
   }
@@ -27,6 +48,41 @@ function saveCache(file, cache) {
 
 const piekarzCache = loadCache(PIEKARZ_CACHE_FILE);
 const kajzerkaCache = loadCache(KAJZERKA_CACHE_FILE);
+
+async function initialize(store) {
+  if (!store?.enabled) return false;
+  if (initializePromise) return initializePromise;
+  if (Date.now() < initializeRetryAfter) return false;
+  initializePromise = (async () => {
+    const [piekarze, kajzerki] = await Promise.all([
+      store.loadCache(CACHE_IDS[PIEKARZ_CACHE_FILE], PIEKARZ_CACHE_FILE),
+      store.loadCache(CACHE_IDS[KAJZERKA_CACHE_FILE], KAJZERKA_CACHE_FILE),
+    ]);
+    // Preserve entries created while loading; Firestore wins for duplicate keys.
+    const mergedPiekarze = { ...piekarzCache, ...piekarze };
+    const mergedKajzerki = { ...kajzerkaCache, ...kajzerki };
+    for (const key of Object.keys(piekarzCache)) delete piekarzCache[key];
+    Object.assign(piekarzCache, mergedPiekarze);
+    for (const key of Object.keys(kajzerkaCache)) delete kajzerkaCache[key];
+    Object.assign(kajzerkaCache, mergedKajzerki);
+    await Promise.all([
+      store.saveCache(CACHE_IDS[PIEKARZ_CACHE_FILE], piekarzCache),
+      store.saveCache(CACHE_IDS[KAJZERKA_CACHE_FILE], kajzerkaCache),
+    ]);
+    stateStore = store;
+    cacheReady = true;
+    initializeRetryAfter = 0;
+    return true;
+  })().catch(error => {
+    stateStore = null;
+    cacheReady = false;
+    initializePromise = null;
+    initializeRetryAfter = Date.now() + 60_000;
+    console.error('[Bułka] Nie udało się wczytać cache z Firestore; ponowię próbę za 60 s i zachowuję cache lokalny:', error.message);
+    return false;
+  });
+  return initializePromise;
+}
 
 function randomInt(rng, min, max) {
   return min + Math.floor(rng() * (max - min + 1));
@@ -455,6 +511,7 @@ function handleCommand({ message, nick, login, streamId }, options = {}) {
 }
 
 module.exports = {
+  initialize,
   ZAKWASZE_KOMENTARZE,
   SWIEZOSC_KOMENTARZE,
   PRZYPALENIE_KOMENTARZE,

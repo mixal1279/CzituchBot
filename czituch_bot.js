@@ -32,6 +32,8 @@
  * Skopiuj .env.example do .env i uzupełnij klucze
  */
 
+require('dotenv').config();
+
 const { youtube: youtubeFactory } = require('@googleapis/youtube');
 const { OAuth2Client } = require('google-auth-library');
 const Groq       = require('groq-sdk');
@@ -59,6 +61,7 @@ process.on('uncaughtException', (err) => {
 const fs = require('fs');
 const path = require('path');
 const BILLY_BAKERY = require('./billy-bakery');
+const { createFirestoreState, encryptSecret, encryptionKeyFromEnv } = require('./storage/firestore-state');
 const AI_POLICY = require('./ai/policy');
 const AI_VALIDATOR = require('./ai/validator');
 const { createTavilySearch } = require('./ai/tavily');
@@ -357,6 +360,26 @@ const db = process.env.CZITUCHBOT_SKIP_STARTUP_IO === '1'
       keyFilename: './czituchbot-9c561-firebase-adminsdk-fbsvc-241e465e40.json',
     });
 
+const FIRESTORE_STATE = createFirestoreState(db);
+
+// Lokalna kopia awaryjna jest szyfrowana tak samo jak token w Firestore.
+// 0600 ogranicza uprawnienia pliku, a AES-256-GCM chroni jego zawartość.
+async function zapiszLokalnaKopieTokenu(file, token, logPrefix = '[OAuth]') {
+  const tempFile = `${file}.tmp-${process.pid}-${crypto.randomUUID()}`;
+  try {
+    const encrypted = encryptSecret(token, encryptionKeyFromEnv());
+    await fs.promises.writeFile(tempFile, JSON.stringify(encrypted, null, 2), { mode: 0o600, flag: 'wx' });
+    await fs.promises.chmod(tempFile, 0o600);
+    await fs.promises.rename(tempFile, file);
+    console.warn(logPrefix + ' Zapisano zaszyfrowaną lokalną kopię awaryjną tokenu; Firestore nie potwierdził trwałego zapisu.');
+    return true;
+  } catch (error) {
+    try { await fs.promises.unlink(tempFile); } catch (_) {}
+    console.error(logPrefix + ' Nie udało się zapisać zaszyfrowanej lokalnej kopii tokenu:', error.message);
+    return false;
+  }
+}
+
 const COL_GRACZE       = 'ekonomia_gracze';
 const COL_PODATKI      = 'ekonomia_podatki';
 const COL_LOKATY       = 'ekonomia_lokaty';
@@ -487,7 +510,7 @@ async function ustawZweryfikowanaPamiecAI(userId, records) {
 
 const readline   = require('readline');
 const crypto     = require('crypto');
-require('dotenv').config();
+
 console.log('[DEBUG] GOOGLE_API_KEY:', process.env.GOOGLE_API_KEY ? '✅ ustawiony' : '❌ BRAK');
 console.log('[Gemini] 🔑 GEMINI_API_KEY:', process.env.GEMINI_API_KEY ? '✅ ustawiony (fallback aktywny)' : '❌ BRAK (fallback wyłączony)');
 console.log('[OpenRouter] 🔑 OPENROUTER_API_KEY:', process.env.OPENROUTER_API_KEY ? '✅ ustawiony (fallback aktywny)' : '❌ BRAK (fallback wyłączony)');
@@ -1243,6 +1266,7 @@ async function pobierzCzasHLTB(nazwaGry) {
             const wynikSteam = zbudujWynikHLTBZCodepotatoes(graSteam, steamGra.nazwa || nazwaGry);
             hltbCache.set(cacheKey, wynikSteam);
             if (hltbCache.size > 200) hltbCache.delete(hltbCache.keys().next().value);
+            await persistMapCache('hltb_results', hltbCache);
             console.log(`[HLTB] Znaleziono przez Steam AppID: ${steamGra.appId}`);
             return wynikSteam;
           }
@@ -1285,6 +1309,7 @@ async function pobierzCzasHLTB(nazwaGry) {
         };
         hltbCache.set(cacheKey, wynik);
         if (hltbCache.size > 200) hltbCache.delete(hltbCache.keys().next().value);
+        await persistMapCache('hltb_results', hltbCache);
         return wynik;
       }
     }
@@ -3392,6 +3417,7 @@ const szukajTavily = createTavilySearch({
   fetchZTimeout,
   normalizeQuery: normalizujZapytanieTavily,
   cacheFile: process.env.AI_TAVILY_CACHE_FILE || path.join(process.env.AI_CACHE_DIR || __dirname, 'tavily_cache.json'),
+  stateStore: FIRESTORE_STATE,
   onStatus: status => {
     if (['error', 'rate_limited', 'timeout'].includes(status?.status)) AI_METRYKI.tavilyErrors++;
     if (status?.status === 'cache' || status?.status === 'deduped') AI_METRYKI.tavilyCacheHits++;
@@ -4297,15 +4323,26 @@ function zapytaj(pytanie) {
 
 const TIKTOK_STATE_PLIK = './tiktok_state.json';
 
-function wczytajStanTikTok() {
+const tiktokTrackingState = (() => {
   try {
-    if (fs.existsSync(TIKTOK_STATE_PLIK)) return JSON.parse(fs.readFileSync(TIKTOK_STATE_PLIK, 'utf8'));
+    if (fs.existsSync(TIKTOK_STATE_PLIK)) {
+      const parsed = JSON.parse(fs.readFileSync(TIKTOK_STATE_PLIK, 'utf8'));
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed;
+    }
   } catch (_) {}
   return {};
+})();
+
+function wczytajStanTikTok() {
+  return tiktokTrackingState;
 }
 
-function zapiszStanTikTok(stan) {
-  try { fs.writeFileSync(TIKTOK_STATE_PLIK, JSON.stringify(stan, null, 2)); } catch (_) {}
+async function zapiszStanTikTok(stan) {
+  const snapshot = stan && typeof stan === 'object' ? { ...stan } : {};
+  for (const key of Object.keys(tiktokTrackingState)) delete tiktokTrackingState[key];
+  Object.assign(tiktokTrackingState, snapshot);
+  await FIRESTORE_STATE.saveCache('tiktok_tracking', tiktokTrackingState)
+    .catch(err => console.error('[Firestore state/TikTok] Zapis nieudany; stan pozostaje w pamięci:', err.message));
 }
 
 async function pobierzWszystkieTikToki(username) {
@@ -4353,7 +4390,7 @@ function uruchomSledzenieTikTok(username, wyslijFn, interwalMs = 15 * 60 * 1000)
       if (!stan[username]) {
         const najnowszy = wpisy[wpisy.length - 1];
         stan[username] = { link: najnowszy.link, czas: najnowszy.czas };
-        zapiszStanTikTok(stan);
+        await zapiszStanTikTok(stan);
       }
       return;
     }
@@ -4364,7 +4401,7 @@ function uruchomSledzenieTikTok(username, wyslijFn, interwalMs = 15 * 60 * 1000)
 
     const najnowszy = nowe[nowe.length - 1];
     stan[username] = { link: najnowszy.link, czas: najnowszy.czas };
-    zapiszStanTikTok(stan);
+    await zapiszStanTikTok(stan);
   }, interwalMs);
   console.log(`[TikTok] ✅ Śledzenie @${username} uruchomione (co ${interwalMs / 60000} min, nadrabianie do ${TIKTOK_OKNO_NADRABIANIA_MS / 3600000}h wstecz)`);
 }
@@ -4407,6 +4444,7 @@ async function geokodujMiasto(miasto) {
     if (geokodowanieCache.size > 300) {
       geokodowanieCache.delete(geokodowanieCache.keys().next().value);
     }
+    await persistMapCache('weather_geocoding', geokodowanieCache);
   }
   return miejsce;
 }
@@ -4488,8 +4526,8 @@ function wczytajCacheHoroskopow() {
   return {};
 }
 
-function zapiszCacheHoroskopow(cache) {
-  try { fs.writeFileSync(HOROSKOP_CACHE_PLIK, JSON.stringify(cache, null, 2)); } catch (_) {}
+async function zapiszCacheHoroskopow(cache) {
+  await savePersistentCache('horoscopes', cache, '[Firestore cache/horoskopy]');
 }
 
 const horoskopDzienneCache = wczytajCacheHoroskopow();
@@ -4499,6 +4537,14 @@ const horoskopDzienneCache = wczytajCacheHoroskopow();
 async function pobierzPrawdziwyHoroskop(znakEn, znakPl) {
   const dzisiaj = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
   const cacheKey = `${znakEn}_${dzisiaj}`;
+  let cachePruned = false;
+  for (const key of Object.keys(horoskopDzienneCache)) {
+    if (!key.endsWith(`_${dzisiaj}`)) {
+      delete horoskopDzienneCache[key];
+      cachePruned = true;
+    }
+  }
+  if (cachePruned) await zapiszCacheHoroskopow(horoskopDzienneCache);
 
   if (horoskopDzienneCache[cacheKey]) return horoskopDzienneCache[cacheKey];
 
@@ -4556,7 +4602,7 @@ async function pobierzPrawdziwyHoroskop(znakEn, znakPl) {
     }
 
     horoskopDzienneCache[cacheKey] = tekstPl;
-    zapiszCacheHoroskopow(horoskopDzienneCache);
+    await zapiszCacheHoroskopow(horoskopDzienneCache);
     return tekstPl;
   } catch (err) {
     console.error(`[Horoskop] ❌ Nie udało się pobrać/przetłumaczyć horoskopu dla ${znakEn}:`, err.message);
@@ -4629,8 +4675,8 @@ function wczytajCacheBulek() {
   return {};
 }
 
-function zapiszCacheBulek(cache) {
-  try { fs.writeFileSync(BULKA_CACHE_PLIK, JSON.stringify(cache, null, 2)); } catch (_) {}
+async function zapiszCacheBulek(cache) {
+  await savePersistentCache('daily_bulka', cache, '[Firestore cache/bułka]');
 }
 
 const bulkaDzienneCache = wczytajCacheBulek();
@@ -4703,8 +4749,8 @@ function wczytajCacheArbuzow() {
   return {};
 }
 
-function zapiszCacheArbuzow(cache) {
-  try { fs.writeFileSync(ARBUZ_CACHE_PLIK, JSON.stringify(cache, null, 2)); } catch (_) {}
+async function zapiszCacheArbuzow(cache) {
+  await savePersistentCache('daily_arbuz', cache, '[Firestore cache/arbuz]');
 }
 
 const arbuzDzienneCache = wczytajCacheArbuzow();
@@ -4762,8 +4808,8 @@ function wczytajCacheCiastek() {
   return {};
 }
 
-function zapiszCacheCiastek(cache) {
-  try { fs.writeFileSync(CIASTKO_CACHE_PLIK, JSON.stringify(cache, null, 2)); } catch (_) {}
+async function zapiszCacheCiastek(cache) {
+  await savePersistentCache('daily_ciastko', cache, '[Firestore cache/ciastko]');
 }
 
 const ciastkoDzienneCache = wczytajCacheCiastek();
@@ -4782,15 +4828,95 @@ function wczytajCacheCm() {
   return {};
 }
 
-function zapiszCacheCm(cache) {
+async function zapiszCacheCm(cache) {
+  await savePersistentCache('stream_cm', cache, '[Firestore cache/!cm]');
+}
+
+
+const cmStreamCache = wczytajCacheCm();
+
+const PERSISTENT_CACHE_FILES = {
+  horoscopes: HOROSKOP_CACHE_PLIK,
+  daily_bulka: BULKA_CACHE_PLIK,
+  daily_arbuz: ARBUZ_CACHE_PLIK,
+  daily_ciastko: CIASTKO_CACHE_PLIK,
+  stream_cm: CM_CACHE_PLIK,
+  tiktok_tracking: TIKTOK_STATE_PLIK,
+  hltb_results: './hltb_cache.json',
+  weather_geocoding: './weather_geocoding_cache.json',
+};
+
+async function savePersistentCache(name, value, logPrefix = '[Firestore cache]') {
+  const ready = await ensurePersistentCachesReady();
+  if (!FIRESTORE_STATE.enabled || !ready) {
+    const file = PERSISTENT_CACHE_FILES[name];
+    if (!file) {
+      console.warn(logPrefix + ' Brak lokalnej ścieżki cache; dane pozostają w pamięci:', name);
+      return;
+    }
+    try {
+      await fs.promises.writeFile(file, JSON.stringify(value, null, 2), { mode: 0o600 });
+    } catch (error) {
+      console.error(logPrefix + ' Nie udało się zapisać lokalnej kopii cache:', error.message);
+    }
+    return;
+  }
   try {
-    fs.writeFileSync(CM_CACHE_PLIK, JSON.stringify(cache, null, 2));
-  } catch (err) {
-    console.error('[!cm] Nie udało się zapisać cache:', err.message);
+    await FIRESTORE_STATE.saveCache(name, value);
+  } catch (error) {
+    console.error(logPrefix + ' Zapis nieudany:', error.message);
+    const file = PERSISTENT_CACHE_FILES[name];
+    if (file) {
+      try { await fs.promises.writeFile(file, JSON.stringify(value, null, 2), { mode: 0o600 }); }
+      catch (fallbackError) { console.error(logPrefix + ' Nie udało się też zapisać kopii lokalnej:', fallbackError.message); }
+    }
   }
 }
 
-const cmStreamCache = wczytajCacheCm();
+let persistentCachesReady = null;
+let persistentCachesRetryAfter = 0;
+function mergeObjectContents(target, source) {
+  const current = { ...target };
+  Object.assign(target, source && typeof source === 'object' ? source : {});
+  // Keep entries added in memory while Firestore was unavailable.
+  Object.assign(target, current);
+}
+
+async function persistMapCache(name, map) {
+  await savePersistentCache(name, Object.fromEntries(map), '[Firestore cache/' + name + ']');
+}
+
+async function ensurePersistentCachesReady() {
+  if (persistentCachesReady) return persistentCachesReady;
+  if (Date.now() < persistentCachesRetryAfter) return false;
+  persistentCachesReady = (async () => {
+    const caches = await Promise.all([
+      FIRESTORE_STATE.loadCache('horoscopes', HOROSKOP_CACHE_PLIK),
+      FIRESTORE_STATE.loadCache('daily_bulka', BULKA_CACHE_PLIK),
+      FIRESTORE_STATE.loadCache('daily_arbuz', ARBUZ_CACHE_PLIK),
+      FIRESTORE_STATE.loadCache('daily_ciastko', CIASTKO_CACHE_PLIK),
+      FIRESTORE_STATE.loadCache('stream_cm', CM_CACHE_PLIK),
+      FIRESTORE_STATE.loadCache('tiktok_tracking', TIKTOK_STATE_PLIK),
+      FIRESTORE_STATE.loadCache('hltb_results', PERSISTENT_CACHE_FILES.hltb_results),
+      FIRESTORE_STATE.loadCache('weather_geocoding', PERSISTENT_CACHE_FILES.weather_geocoding),
+    ]);
+    mergeObjectContents(horoskopDzienneCache, caches[0]);
+    mergeObjectContents(bulkaDzienneCache, caches[1]);
+    mergeObjectContents(arbuzDzienneCache, caches[2]);
+    mergeObjectContents(ciastkoDzienneCache, caches[3]);
+    mergeObjectContents(cmStreamCache, caches[4]);
+    mergeObjectContents(tiktokTrackingState, caches[5]);
+    for (const [key, value] of Object.entries(caches[6])) if (!hltbCache.has(key)) hltbCache.set(key, value);
+    for (const [key, value] of Object.entries(caches[7])) if (!geokodowanieCache.has(key)) geokodowanieCache.set(key, value);
+    return true;
+  })().catch(error => {
+    persistentCachesReady = null;
+    persistentCachesRetryAfter = Date.now() + 60_000;
+    console.error('[Firestore state] Nie udało się wczytać cache — ponowię próbę za 60 s; nie zapisuję niepełnego stanu:', error.message);
+    return false;
+  });
+  return persistentCachesReady;
+}
 
 // Tabela rodzajów ciastek do komendy !ciastko (kanały Edzziego)
 const CIASTKA = [
@@ -4823,6 +4949,7 @@ const BILLYBULKA_KANALY = ['billybulka'];
 
 async function obslugaWiadomosci(nick, message, platforma, wyslijFn, kanal = null, nadawca = null) {
   if (!nick || !message) return;
+  await ensurePersistentCachesReady();
   if (
     nick.toLowerCase() === KONFIGURACJA.botUser.toLowerCase() ||
     nick.toLowerCase() === KONFIGURACJA.kickBotUser.toLowerCase()
@@ -4906,7 +5033,7 @@ async function obslugaWiadomosci(nick, message, platforma, wyslijFn, kanal = nul
     ostatnieUzycie[cooldownKey] = teraz;
 
     const dzisiaj  = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-    const cacheKey = `${nick.toLowerCase()}_${dzisiaj}`;
+    const cacheKey = `${platforma}:${kanalNorm || 'brak-kanalu'}:${nick.toLowerCase()}_${dzisiaj}`;
 
     let arbuz = arbuzDzienneCache[cacheKey];
     if (!arbuz) {
@@ -4916,7 +5043,7 @@ async function obslugaWiadomosci(nick, message, platforma, wyslijFn, kanal = nul
       }
       arbuz = ARBUZY[Math.floor(Math.random() * ARBUZY.length)];
       arbuzDzienneCache[cacheKey] = arbuz;
-      zapiszCacheArbuzow(arbuzDzienneCache);
+      await zapiszCacheArbuzow(arbuzDzienneCache);
     }
 
     return await wyslijFn(`🍉 @${nick} dziś jesteś jak ${arbuz.nazwa}!`);
@@ -4938,13 +5065,19 @@ async function obslugaWiadomosci(nick, message, platforma, wyslijFn, kanal = nul
     }
 
     const userKey = cel.toLocaleLowerCase('pl-PL');
-    const cacheKey = `${kanalNorm}:${streamId}:${userKey}`;
+    const streamPrefix = `${platforma}:${kanalNorm}:`;
+    const currentStreamPrefix = `${streamPrefix}${streamId}:`;
+    const cacheKey = `${currentStreamPrefix}${userKey}`;
     let wynik = cmStreamCache[cacheKey];
 
     if (!Number.isInteger(wynik) || wynik < 1 || wynik > 30) {
+      // Keep only the current stream's assignments for this platform/channel.
+      for (const key of Object.keys(cmStreamCache)) {
+        if (key.startsWith(streamPrefix) && !key.startsWith(currentStreamPrefix)) delete cmStreamCache[key];
+      }
       wynik = Math.floor(Math.random() * 30) + 1;
       cmStreamCache[cacheKey] = wynik;
-      zapiszCacheCm(cmStreamCache);
+      await zapiszCacheCm(cmStreamCache);
     }
 
     return await wyslijFn(`@${cel} ma ${wynik} cm.`);
@@ -4954,7 +5087,7 @@ async function obslugaWiadomosci(nick, message, platforma, wyslijFn, kanal = nul
     ostatnieUzycie[cooldownKey] = teraz;
 
     const dzisiaj  = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-    const cacheKey = `${nick.toLowerCase()}_${dzisiaj}`;
+    const cacheKey = `${platforma}:${kanalNorm || 'brak-kanalu'}:${nick.toLowerCase()}_${dzisiaj}`;
 
     let ciastko = ciastkoDzienneCache[cacheKey];
     if (!ciastko) {
@@ -4964,7 +5097,7 @@ async function obslugaWiadomosci(nick, message, platforma, wyslijFn, kanal = nul
       }
       ciastko = CIASTKA[Math.floor(Math.random() * CIASTKA.length)];
       ciastkoDzienneCache[cacheKey] = ciastko;
-      zapiszCacheCiastek(ciastkoDzienneCache);
+      await zapiszCacheCiastek(ciastkoDzienneCache);
     }
 
     return await wyslijFn(`🍪 @${nick} dziś jesteś jak ${ciastko.nazwa}!`);
@@ -5247,19 +5380,81 @@ let liveChatId    = null;
 let nextPageToken = null;
 
 async function zapiszTokenYT(tokens) {
-  await db.collection('config').doc('youtube_token').set(tokens);
-  console.log('[YT Auth] ✅ Token zapisany do Firestore');
+  try {
+    await FIRESTORE_STATE.writeToken('youtube', tokens);
+    const verified = await FIRESTORE_STATE.readToken('youtube');
+    if (JSON.stringify(verified) !== JSON.stringify(tokens)) throw new Error('Weryfikacja zapisu tokenu YouTube nie powiodła się.');
+    try { await fs.promises.unlink(KONFIGURACJA.ytTokenFile); } catch (err) { if (err.code !== 'ENOENT') console.warn('[YT Auth] Nie usunięto starego pliku tokenu:', err.message); }
+    console.log('[YT Auth] ✅ Zaszyfrowany token zapisany do Firestore');
+    return true;
+  } catch (error) {
+    const fallbackSaved = await zapiszLokalnaKopieTokenu(KONFIGURACJA.ytTokenFile, tokens, '[YT Auth]');
+    if (!fallbackSaved) throw error;
+    console.error('[YT Auth] ⚠️ Firestore nie potwierdził zapisu tokenu; zachowano lokalną kopię:', error.message);
+    return false;
+  }
 }
 
 async function wczytajTokenYT() {
+  let credentials = null;
+  let firestoreReadFailed = false;
   try {
-    const doc = await db.collection('config').doc('youtube_token').get();
-    if (doc.exists) {
-      oauth2Client.setCredentials(doc.data());
-      console.log('[YT Auth] ✅ Wczytano token z Firestore');
+    credentials = await FIRESTORE_STATE.readToken('youtube');
+  } catch (err) {
+    firestoreReadFailed = true;
+    console.error('[YT Auth] Błąd odczytu tokenu z Firestore; sprawdzam kopie zapasowe bez nadpisywania dokumentu:', err.message);
+  }
+
+  // Gdy Firestore ma czytelny, ale starszy token, sprawdź również lokalną kopię
+  // utworzoną po nieudanym zapisie rotacji. migrateTokenFile porównuje czas zapisu
+  // i przywraca kopię tylko wtedy, gdy jest nowsza; stary plik nie nadpisze Firestore.
+  if (credentials && !firestoreReadFailed) {
+    try {
+      const recovered = await FIRESTORE_STATE.migrateTokenFile('youtube', KONFIGURACJA.ytTokenFile);
+      if (recovered) credentials = recovered;
+    } catch (recoveryError) {
+      console.warn('[YT Auth] Nie udało się sprawdzić lokalnej kopii tokenu:', recoveryError.message);
+    }
+  }
+
+  try {
+    if (!credentials) {
+      const legacyDoc = await db.collection('config').doc('youtube_token').get();
+      if (legacyDoc.exists) {
+        credentials = legacyDoc.data();
+        if (!firestoreReadFailed) {
+          try {
+            await zapiszTokenYT(credentials);
+            await db.collection('config').doc('youtube_token').delete();
+            console.log('[YT Auth] ✅ Stary token przeniesiony do szyfrowanego magazynu');
+          } catch (migrationError) {
+            console.warn('[YT Auth] Migracja do szyfrowanego magazynu nieudana; zachowuję istniejący token:', migrationError.message);
+          }
+        } else {
+          console.warn('[YT Auth] Używam starego tokenu jako kopii zapasowej; nie nadpisuję dokumentu, którego nie udało się odszyfrować.');
+        }
+      } else {
+        if (!firestoreReadFailed) {
+          try { credentials = await FIRESTORE_STATE.migrateTokenFile('youtube', KONFIGURACJA.ytTokenFile); }
+          catch (migrationError) {
+            console.warn('[YT Auth] Migracja tokenu z pliku nieudana; plik pozostaje bez zmian:', migrationError.message);
+            try { credentials = JSON.parse(await fs.promises.readFile(KONFIGURACJA.ytTokenFile, 'utf8')); }
+            catch (readError) { if (readError.code !== 'ENOENT') console.error('[YT Auth] Błąd odczytu pliku tokenu:', readError.message); }
+          }
+        } else {
+          try { credentials = JSON.parse(await fs.promises.readFile(KONFIGURACJA.ytTokenFile, 'utf8')); }
+          catch (readError) { if (readError.code !== 'ENOENT') console.error('[YT Auth] Błąd odczytu pliku tokenu:', readError.message); }
+        }
+      }
+    }
+    if (credentials) {
+      oauth2Client.setCredentials(credentials);
+      console.log('[YT Auth] ✅ Wczytano token YouTube');
       return true;
     }
-  } catch (err) { console.error('[YT Auth] Błąd wczytywania:', err.message); }
+  } catch (err) {
+    console.error('[YT Auth] Błąd wczytywania tokenu i kopii zapasowych:', err.message);
+  }
   return false;
 }
 
@@ -5302,12 +5497,26 @@ async function zalogujYouTube() {
 
   const { tokens } = await oauth2Client.getToken(code);
   oauth2Client.setCredentials(tokens);
-  zapiszTokenYT(tokens);
+  try {
+    await zapiszTokenYT(tokens);
+  } catch (error) {
+    // Nie przerywaj pierwszego logowania, gdy Firestore jest chwilowo niedostępny.
+    // Zachowaj zaszyfrowaną kopię, bo refresh token może zostać później obrócony.
+    const fallbackSaved = await zapiszLokalnaKopieTokenu(KONFIGURACJA.ytTokenFile, tokens, '[YT Auth]');
+    console.error('[YT Auth] ⚠️ Nie udało się utrwalić tokenu w Firestore' + (fallbackSaved ? '; zachowano lokalną kopię' : '; brak trwałej kopii awaryjnej') + ':', error.message);
+  }
   oauth2Client.on('tokens', async (newTokens) => {
-    const doc = await db.collection('config').doc('youtube_token').get();
-    const current = doc.exists ? doc.data() : {};
-    await zapiszTokenYT({ ...current, ...newTokens });
-    console.log('[YT Auth] 🔄 Token automatycznie odświeżony');
+    try {
+      // Google często emituje wyłącznie access_token. Zachowujemy refresh_token
+      // z ostatnich credentials, nawet jeśli odczyt Firestore chwilowo nie działa.
+      const stored = await FIRESTORE_STATE.readToken('youtube').catch(() => null);
+      const current = { ...(stored || {}), ...(oauth2Client.credentials || {}) };
+      const merged = { ...current, ...newTokens };
+      await zapiszTokenYT(merged);
+      console.log('[YT Auth] 🔄 Token automatycznie odświeżony');
+    } catch (error) {
+      console.error('[YT Auth] ⚠️ Nie udało się utrwalić odświeżonego tokenu:', error.message);
+    }
   });
   await wyswietlKontoYoutube();
   console.log('[YT Auth] ✅ Zalogowano pomyślnie!');
@@ -5696,21 +5905,34 @@ function generujPKCE() {
   return { verifier, challenge };
 }
 
-function zapiszTokenKick(data) {
-  fs.writeFileSync(KONFIGURACJA.kickTokenFile, JSON.stringify(data, null, 2), { mode: 0o600 });
-  console.log('[Kick Auth] ✅ Token zapisany do kick_token.json');
+async function zapiszTokenKick(data) {
+  try {
+    await FIRESTORE_STATE.writeToken('kick', data);
+    const verified = await FIRESTORE_STATE.readToken('kick');
+    if (JSON.stringify(verified) !== JSON.stringify(data)) throw new Error('Weryfikacja tokenu Kick nie powiodła się.');
+    try { await fs.promises.unlink(KONFIGURACJA.kickTokenFile); } catch (err) { if (err.code !== 'ENOENT') console.warn('[Kick Auth] Nie usunięto starego pliku tokenu:', err.message); }
+    console.log('[Kick Auth] ✅ Zaszyfrowany token zapisany do Firestore');
+    return true;
+  } catch (error) {
+    const fallbackSaved = await zapiszLokalnaKopieTokenu(KONFIGURACJA.kickTokenFile, data, '[Kick Auth]');
+    if (!fallbackSaved) throw error;
+    console.error('[Kick Auth] ⚠️ Firestore nie potwierdził zapisu tokenu; zachowano lokalną kopię:', error.message);
+    return false;
+  }
 }
 
-function wczytajTokenKick() {
+async function wczytajTokenKick() {
   try {
-    if (fs.existsSync(KONFIGURACJA.kickTokenFile)) {
-      const data       = JSON.parse(fs.readFileSync(KONFIGURACJA.kickTokenFile, 'utf8'));
-      kickAccessToken  = data.access_token;
+    const data = await FIRESTORE_STATE.migrateTokenFile('kick', KONFIGURACJA.kickTokenFile);
+    if (data) {
+      kickAccessToken = data.access_token;
       kickRefreshToken = data.refresh_token;
-      console.log('[Kick Auth] ✅ Wczytano token z pliku');
+      console.log('[Kick Auth] ✅ Wczytano token z Firestore');
       return true;
     }
-  } catch (err) { console.error('[Kick Auth] Błąd wczytywania:', err.message); }
+  } catch (err) {
+    console.error('[Kick Auth] Błąd wczytywania tokenu (plik legacy pozostaje bez zmian):', err.message);
+  }
   return false;
 }
 
@@ -5747,7 +5969,7 @@ async function zalogujKick() {
   const data   = await res.json();
   kickAccessToken  = data.access_token;
   kickRefreshToken = data.refresh_token;
-  zapiszTokenKick(data);
+  await zapiszTokenKick(data);
   console.log('[Kick Auth] ✅ Zalogowano pomyślnie!');
 }
 
@@ -5826,38 +6048,39 @@ function getBillyToken() {
   return token ? token.replace(/^oauth:/i, '') : null;
 }
 
-function zapiszTokenBilly(data) {
+async function zapiszTokenBilly(data) {
   const expiresInMs = (data.expires_in ?? 3600) * 1000;
   billyWygasaO = Date.now() + expiresInMs;
-
-  // Najpierw aktualizujemy stan w pamięci — to jest źródło prawdy dla bota,
-  // niezależnie od tego, czy zapis na dysk się powiedzie.
   billyAccessToken = data.access_token;
   if (data.refresh_token) billyRefreshToken = data.refresh_token;
-
-  // Zapis na dysk to tylko persystencja "na przyszły restart" — jego ewentualny
-  // błąd (I/O hiccup itp.) nie może cofnąć tego, co bot już ma w pamięci.
+  const doZapisu = { ...data, wygasa_o: billyWygasaO };
   try {
-    const doZapisu = { ...data, wygasa_o: billyWygasaO };
-    fs.writeFileSync('./billy_token.json', JSON.stringify(doZapisu, null, 2), { mode: 0o600 });
-    console.log('[Billy Auth] ✅ Token zapisany do billy_token.json');
+    await FIRESTORE_STATE.writeToken('twitch_billy', doZapisu);
+    const verified = await FIRESTORE_STATE.readToken('twitch_billy');
+    if (JSON.stringify(verified) !== JSON.stringify(doZapisu)) throw new Error('Weryfikacja tokenu Billy nie powiodła się.');
+    try { await fs.promises.unlink('./billy_token.json'); } catch (err) { if (err.code !== 'ENOENT') console.warn('[Billy Auth] Nie usunięto starego pliku tokenu:', err.message); }
+    console.log('[Billy Auth] ✅ Zaszyfrowany token zapisany do Firestore');
   } catch (err) {
-    console.error('[Billy Auth] ⚠️ Nie udało się zapisać tokenu na dysk (token w pamięci jest aktualny):', err.message);
+    const fallbackSaved = await zapiszLokalnaKopieTokenu('./billy_token.json', doZapisu, '[Billy Auth]');
+    console.error('[Billy Auth] ⚠️ Nie udało się utrwalić tokenu w Firestore' + (fallbackSaved ? '; zachowano lokalną kopię' : '; brak trwałej kopii awaryjnej') + ':', err.message);
   }
 }
 
-function wczytajTokenBilly() {
+async function wczytajTokenBilly() {
+  let data = null;
   try {
-    if (fs.existsSync('./billy_token.json')) {
-      const data = JSON.parse(fs.readFileSync('./billy_token.json', 'utf8'));
-      billyAccessToken = data.access_token;
-      billyRefreshToken = data.refresh_token;
-      billyWygasaO = typeof data.wygasa_o === 'number' ? data.wygasa_o : 0;
-      console.log('[Billy Auth] ✅ Wczytano token z pliku');
-      return true;
-    }
-  } catch (err) { console.error('[Billy Auth] Błąd wczytywania:', err.message); }
-  return false;
+    data = await FIRESTORE_STATE.migrateTokenFile('twitch_billy', './billy_token.json');
+  } catch (err) {
+    console.warn('[Billy Auth] Migracja tokenu nieudana; próbuję użyć pliku bez usuwania go:', err.message);
+    try { data = JSON.parse(await fs.promises.readFile('./billy_token.json', 'utf8')); }
+    catch (readError) { if (readError.code !== 'ENOENT') console.error('[Billy Auth] Błąd wczytywania:', readError.message); }
+  }
+  if (!data) return false;
+  billyAccessToken = data.access_token;
+  billyRefreshToken = data.refresh_token;
+  billyWygasaO = typeof data.wygasa_o === 'number' ? data.wygasa_o : 0;
+  console.log('[Billy Auth] ✅ Wczytano token');
+  return true;
 }
 
 // Liczy realny czas do odświeżenia na podstawie wygasa_o, zamiast sztywnych 55 min od restartu.
@@ -5901,7 +6124,7 @@ async function odswiezTokenBilly() {
       const data = await res.json();
       billyAccessToken = data.access_token;
       if (data.refresh_token) billyRefreshToken = data.refresh_token;
-      zapiszTokenBilly(data);
+      await zapiszTokenBilly(data);
       billyTokenDead = false;
       const refreshTime = ((data.expires_in ?? 3600) - 60) * 1000;
       console.log(`[Billy Auth] ✅ Token odświeżony! Następne za ${Math.round(refreshTime / 60000)} min`);
@@ -5956,7 +6179,7 @@ function rozpocznijOdzyskiwanieKickPrzezWorker() {
 
       kickAccessToken  = token.access_token;
       kickRefreshToken = token.refresh_token;
-      zapiszTokenKick({ access_token: token.access_token, refresh_token: token.refresh_token, expires_in: token.expires_in });
+      await zapiszTokenKick({ access_token: token.access_token, refresh_token: token.refresh_token, expires_in: token.expires_in });
       kickTokenDead = false;
 
       clearInterval(kickOdzyskiwaniePollTimer);
@@ -6006,7 +6229,7 @@ async function odswiezTokenKick() {
       const data = await res.json();
       kickAccessToken  = data.access_token;
       if (data.refresh_token) kickRefreshToken = data.refresh_token;
-      zapiszTokenKick(data);
+      await zapiszTokenKick(data);
       kickTokenDead = false;
       const refreshTime = (data.expires_in - 60) * 1000;
       console.log(`[Kick Auth] ✅ Token odświeżony! Następne za ${Math.round(refreshTime / 60000)} min`);      setTimeout(odswiezTokenKick, refreshTime);
@@ -6388,6 +6611,8 @@ async function pobierzStartStreamu(config = TWITCH_CONFIG_BILLYBULKA) {
 
 async function obslugaTwitch(nick, message, wyslijFn, config = TWITCH_CONFIG_BILLYBULKA, tags = {}) {
   if (!nick || !message) return;
+  await ensurePersistentCachesReady();
+  await BILLY_BAKERY.initialize(FIRESTORE_STATE);
   if (nick.toLowerCase() === config.botNick.toLowerCase()) return;
 
   const msgLower    = message.toLowerCase().trim();
@@ -6487,7 +6712,7 @@ async function obslugaTwitch(nick, message, wyslijFn, config = TWITCH_CONFIG_BIL
       ostatnieUzycie[cooldownKey] = teraz;
 
       const dzisiaj  = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-      const cacheKey = `${nick.toLowerCase()}_${dzisiaj}`;
+      const cacheKey = `twitch:${kanalNorm || 'brak-kanalu'}:${nick.toLowerCase()}_${dzisiaj}`;
 
       let bulka = bulkaDzienneCache[cacheKey];
       if (!bulka) {
@@ -6497,7 +6722,7 @@ async function obslugaTwitch(nick, message, wyslijFn, config = TWITCH_CONFIG_BIL
         }
         bulka = BULKI[Math.floor(Math.random() * BULKI.length)];
         bulkaDzienneCache[cacheKey] = bulka;
-        zapiszCacheBulek(bulkaDzienneCache);
+        await zapiszCacheBulek(bulkaDzienneCache);
       }
 
       return await wyslijFn(`🍞 @${nick} dziś jesteś jak ${bulka.nazwa}!`);
@@ -7124,41 +7349,40 @@ const twitchChatTokeny = {
   edlor: { access: null, refresh: null, dead: false, refreshPromise: null, plik: './twitch_chat_edlor_token.json' },
 };
 
-function wczytajTokenTwitchChat(botKey) {
+async function wczytajTokenTwitchChat(botKey) {
   const stan = twitchChatTokeny[botKey];
+  let data = null;
   try {
-    if (fs.existsSync(stan.plik)) {
-      const data = JSON.parse(fs.readFileSync(stan.plik, 'utf8'));
-      stan.access = data.access_token;
-      stan.refresh = data.refresh_token;
-      // Znacznik czasu wygaśnięcia zapisany przy poprzednim odświeżeniu (jeśli jest).
-      // Brak pola = plik zapisany starą wersją kodu -> traktujemy jako "nieznane", odśwież od razu.
-      stan.wygasaO = typeof data.wygasa_o === 'number' ? data.wygasa_o : 0;
-      console.log(`[Twitch Chat/${botKey}] ✅ Wczytano token z pliku`);
-      return true;
-    }
-  } catch (err) { console.error(`[Twitch Chat/${botKey}] Błąd wczytywania:`, err.message); }
-  return false;
+    data = await FIRESTORE_STATE.migrateTokenFile('twitch_chat_' + botKey, stan.plik);
+  } catch (err) {
+    console.warn(`[Twitch Chat/${botKey}] Migracja tokenu nieudana; próbuję użyć pliku bez usuwania go:`, err.message);
+    try { data = JSON.parse(await fs.promises.readFile(stan.plik, 'utf8')); }
+    catch (readError) { if (readError.code !== 'ENOENT') console.error(`[Twitch Chat/${botKey}] Błąd wczytywania:`, readError.message); }
+  }
+  if (!data) return false;
+  stan.access = data.access_token;
+  stan.refresh = data.refresh_token;
+  stan.wygasaO = typeof data.wygasa_o === 'number' ? data.wygasa_o : 0;
+  console.log(`[Twitch Chat/${botKey}] ✅ Wczytano token`);
+  return true;
 }
 
-function zapiszTokenTwitchChat(botKey, data) {
+async function zapiszTokenTwitchChat(botKey, data) {
   const stan = twitchChatTokeny[botKey];
   const expiresInMs = (data.expires_in ?? 3600) * 1000;
   stan.wygasaO = Date.now() + expiresInMs;
-
-  // Najpierw aktualizujemy stan w pamięci — to jest źródło prawdy dla bota,
-  // niezależnie od tego, czy zapis na dysk się powiedzie.
   stan.access = data.access_token;
   if (data.refresh_token) stan.refresh = data.refresh_token;
-
-  // Zapis na dysk to tylko persystencja "na przyszły restart" — jego ewentualny
-  // błąd (I/O hiccup itp.) nie może cofnąć tego, co bot już ma w pamięci.
   try {
     const doZapisu = { ...data, wygasa_o: stan.wygasaO };
-    fs.writeFileSync(stan.plik, JSON.stringify(doZapisu, null, 2), { mode: 0o600 });
-    console.log(`[Twitch Chat/${botKey}] ✅ Token zapisany do ${stan.plik}`);
+    await FIRESTORE_STATE.writeToken('twitch_chat_' + botKey, doZapisu);
+    const verified = await FIRESTORE_STATE.readToken('twitch_chat_' + botKey);
+    if (JSON.stringify(verified) !== JSON.stringify(doZapisu)) throw new Error('Weryfikacja tokenu czatu Twitch nie powiodła się.');
+    try { await fs.promises.unlink(stan.plik); } catch (err) { if (err.code !== 'ENOENT') console.warn(`[Twitch Chat/${botKey}] Nie usunięto starego pliku tokenu:`, err.message); }
+    console.log(`[Twitch Chat/${botKey}] ✅ Zaszyfrowany token zapisany do Firestore`);
   } catch (err) {
-    console.error(`[Twitch Chat/${botKey}] ⚠️ Nie udało się zapisać tokenu na dysk (token w pamięci jest aktualny):`, err.message);
+    const fallbackSaved = await zapiszLokalnaKopieTokenu(stan.plik, { ...data, wygasa_o: stan.wygasaO }, `[Twitch Chat/${botKey}]`);
+    console.error(`[Twitch Chat/${botKey}] ⚠️ Nie udało się utrwalić tokenu w Firestore${fallbackSaved ? '; zachowano lokalną kopię' : '; brak trwałej kopii awaryjnej'}:`, err.message);
   }
 }
 
@@ -7220,7 +7444,7 @@ async function odswiezTokenTwitchChat(botKey) {
         throw err;
       }
       const data = await res.json();
-      zapiszTokenTwitchChat(botKey, data);
+      await zapiszTokenTwitchChat(botKey, data);
       stan.dead = false;
       const refreshTime = ((data.expires_in ?? 3600) - 60) * 1000;
       console.log(`[Twitch Chat/${botKey}] ✅ Token odświeżony! Następne za ${Math.round(refreshTime / 60000)} min`);
@@ -7323,17 +7547,32 @@ const startBot = async () => {
   console.log('🚀 Uruchamiam CzituchBota (YouTube + Twitch)...\n');
   console.log('[Wersja] v24.5 AI hardened — GameLore lore + GameFAQs gameplay RAG + unique Tavily source IDs + claim validator | Twitch przez Helix\n');
 
+  // ---- Migracja tokenu Kick (kanały Kick są obecnie wyłączone, ale stan pozostaje uporządkowany) ----
+  await wczytajTokenKick();
+
   // ---- YouTube – autoryzacja ----
   const maszTokenYT = await wczytajTokenYT();
   if (!maszTokenYT) {
     await zalogujYouTube();
   } else {
     await wyswietlKontoYoutube();
-    oauth2Client.on('tokens', async (newTokens) => {
-      const doc = await db.collection('config').doc('youtube_token').get();
-      const current = doc.exists ? doc.data() : {};
-      await zapiszTokenYT({ ...current, ...newTokens });
-      console.log('[YT Auth] 🔄 Token automatycznie odświeżony');
+    oauth2Client.on('tokens', (newTokens) => {
+      // EventEmitter does not await async listeners. Catch every persistence failure
+      // here so a transient Firestore outage cannot become an unhandled rejection.
+      void (async () => {
+        try {
+          let current = oauth2Client.credentials || {};
+          try {
+            current = await FIRESTORE_STATE.readToken('youtube') || current;
+          } catch (readError) {
+            console.warn('[YT Auth] Nie udało się odczytać poprzedniego tokenu z Firestore; używam danych klienta OAuth:', readError.message);
+          }
+          await zapiszTokenYT({ ...current, ...newTokens });
+          console.log('[YT Auth] 🔄 Token automatycznie odświeżony i zapisany');
+        } catch (saveError) {
+          console.error('[YT Auth] Nie udało się trwale zapisać odświeżonego tokenu; token pozostaje w pamięci:', saveError.message);
+        }
+      })();
     });
     // Wymuś jedno, pojedyncze odświeżenie tokenu PRZED odpaleniem 4 równoległych
     // youtubeWatcherów. Bez tego, jeśli token access wygasł, kilka zapytań
@@ -7348,7 +7587,7 @@ const startBot = async () => {
   }
 
   // ---- Billy broadcaster token – autoryzacja / auto-refresh ----
-  const maszTokenBilly = wczytajTokenBilly();
+  const maszTokenBilly = await wczytajTokenBilly();
   if (!maszTokenBilly && process.env.TWITCH_OAUTH_TOKEN_BROADCASTER_BILLY) {
     billyAccessToken = process.env.TWITCH_OAUTH_TOKEN_BROADCASTER_BILLY;
     console.log('[Billy Auth] ℹ️  Używam tokena z env (brak refresh – auto-refresh nieaktywny)');
@@ -7356,7 +7595,7 @@ const startBot = async () => {
   zaplanujOdswiezenieBilly();
 
   // ---- Twitch Chat token czituch_industries – auto-refresh ----
-  const maszTokenEdlor = wczytajTokenTwitchChat('edlor');
+  const maszTokenEdlor = await wczytajTokenTwitchChat('edlor');
   if (!maszTokenEdlor) {
     twitchChatTokeny.edlor.access  = process.env.TWITCH_OAUTH_TOKEN_EDLOR || null;
     twitchChatTokeny.edlor.refresh = process.env.TWITCH_REFRESH_TOKEN_EDLOR || null;
@@ -7372,6 +7611,10 @@ const startBot = async () => {
 
   // ---- Ekonomia – odtwórz wypłaty lokat oczekujące po ewentualnym restarcie ----
   await odtworzLokatyPoStarcie();
+
+  // Przenieś cache i stan przed uruchomieniem platform, aby pierwsze wiadomości nie użyły pustych map.
+  await ensurePersistentCachesReady();
+  await BILLY_BAKERY.initialize(FIRESTORE_STATE);
 
   // ---- Uruchom platformy równolegle ----
   // Kick: obsługa kanałów EdzziLive i ArbuzikLive została wyłączona.
