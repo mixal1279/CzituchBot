@@ -373,7 +373,7 @@ test('xKiro i OpenRouter honorują 402/429 cooldown i Retry-After bez kolejnych 
       let calls = 0;
       mockFetch(async () => {
         calls += 1;
-        return { ok: false, status, headers: { get: name => name.toLowerCase() === 'retry-after' ? '30' : null }, json: async () => ({ error: { message: status === 402 ? 'insufficient quota' : 'rate limit exceeded', code: status } }) };
+        return { ok: false, status, headers: { get: name => name.toLowerCase() === 'retry-after' ? (status === 429 ? '30' : null) : null }, json: async () => ({ error: { message: status === 402 ? 'insufficient quota' : 'rate limit exceeded', code: status } }) };
       });
       const invoke = provider === 'xkiro'
         ? () => hooks.walidujOdpowiedzXKiro('generic', QUESTION, ANSWER, EVIDENCE, `test-${provider}-${status}`)
@@ -388,6 +388,25 @@ test('xKiro i OpenRouter honorują 402/429 cooldown i Retry-After bez kolejnych 
       assert.equal(calls, 1, `${provider} HTTP ${status} must be cooled down rather than retried on every request`);
     }
   }
+});
+
+test('OpenRouter retries HTTP 402 only for documented in-flight budget with Retry-After', async () => {
+  resetProviderQuotaCooldowns();
+  hooks.KONFIGURACJA.openrouterKey = 'test-openrouter-key';
+  hooks.KONFIGURACJA.openrouterValidatorModel = 'openai/gpt-oss-20b';
+  let calls = 0;
+  mockFetch(async () => {
+    calls += 1;
+    return { ok: false, status: 402, headers: { get: name => name.toLowerCase() === 'retry-after' ? '30' : null }, json: async () => ({ error: { message: 'in-flight budget exhausted', code: 402, metadata: { limit_source: 'openrouter_in_flight_budget' } } }) };
+  });
+  const first = await hooks.walidujOdpowiedzOpenRouter('generic', QUESTION, ANSWER, EVIDENCE, 'test-openrouter-inflight');
+  assert.equal(first.status, 'unavailable');
+  assert.equal(first.quota, true);
+  assert.equal(first.transient, true);
+  assert.equal(calls, 1);
+  const second = await hooks.walidujOdpowiedzOpenRouter('generic', QUESTION, ANSWER, EVIDENCE, 'test-openrouter-inflight');
+  assert.equal(second.skipped, true);
+  assert.equal(calls, 1);
 });
 
 test('HTTP circuit breakery xKiro i OpenRouter otwierają się po dwóch mockowanych abortach', async () => {

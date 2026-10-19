@@ -1872,9 +1872,14 @@ async function walidujOdpowiedzOpenRouter(persona, pytanie, odpowiedz, dane, req
     if (!response.ok) {
       const status = Number(response.status || 0);
       const retryAfter = retryAfterHint(response);
+      const inFlightBudget = status === 402 && data?.error?.metadata?.limit_source === 'openrouter_in_flight_budget' && Boolean(retryAfter);
       const quota = status === 402 || status === 429;
-      const transient = [408, 409, 425, 429, 500, 502, 503, 504].includes(status);
-      if (quota) markProviderQuota(providerKey, quotaCooldownMsFromError({ message: `HTTP ${status} ${retryAfter}` }));
+      const transient = [408, 409, 425, 429, 500, 502, 503, 504].includes(status) || inFlightBudget;
+      if (quota) {
+        // OpenRouter 402 is retryable only for its documented in-flight budget case.
+        const cooldownMs = status === 402 && !inFlightBudget ? 24 * 60 * 60 * 1000 : quotaCooldownMsFromError({ message: `HTTP ${status} ${retryAfter}` });
+        markProviderQuota(providerKey, cooldownMs);
+      }
       const diagnostic = formatProviderError('openrouter', data?.model || KONFIGURACJA.openrouterValidatorModel, null, {
         status, code: data?.error?.code, type: data?.error?.type, param: data?.error?.param,
         retry_after: retryAfter || null, responseData: data,
@@ -2108,7 +2113,11 @@ async function walidujOdpowiedzXKiro(persona, pytanie, odpowiedz, dane, requestI
       const retryAfter = retryAfterHint(response);
       const quota = status === 402 || status === 429;
       const transient = [408, 409, 425, 429, 500, 502, 503, 504].includes(status);
-      if (quota) markProviderQuota(providerKey, quotaCooldownMsFromError({ message: `HTTP ${status} ${retryAfter}` }));
+      if (quota) {
+        // xKiro 402 means insufficient quota; suppress repeated requests rather than retrying every question.
+        const cooldownMs = status === 402 ? 24 * 60 * 60 * 1000 : quotaCooldownMsFromError({ message: `HTTP ${status} ${retryAfter}` });
+        markProviderQuota(providerKey, cooldownMs);
+      }
       const diagnostic = formatProviderError('xkiro', data?.model || model, null, {
         status, code: data?.error?.code, type: data?.error?.type, param: data?.error?.param,
         retry_after: retryAfter || null, responseData: data,
