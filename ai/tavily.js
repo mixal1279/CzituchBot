@@ -7,7 +7,7 @@ const { resolveGameEntity, normalizujEncje } = require('./entities');
 const { AI_MODELS } = require('./modelConfig');
 const { searchSecondaryProviders, formatSources } = require('./webRetrieval');
 const { sanitizeUntrustedText } = require('./untrustedText');
-const { createGroqCompletion } = require('./provider-runtime');
+const { createGroqCompletion, awaitWithAbortTimeout } = require('./provider-runtime');
 
 
 // Jedna lista autorytetu domen (wcześniej dwie kopie w tym pliku rozjechały się:
@@ -587,6 +587,8 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
           }),
         };
         let res;
+        let responseText = '';
+        let data;
         if (timeoutFromRemaining(15000) <= 0) throw new Error('AI request deadline exceeded before Tavily Search');
         const tavilyHttpStartedAt = Date.now();
         requestState?.recordTiming?.('tavily_http_start', {
@@ -598,7 +600,28 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
           for (let probe = 0; probe < 2; probe++) {
             const attemptTimeoutMs = timeoutFromRemaining(15000);
             if (attemptTimeoutMs <= 0) throw new Error('AI request deadline exceeded during Tavily Search');
-            res = await fetchZTimeout('https://api.tavily.com/search', request, attemptTimeoutMs);
+
+            // Fetch resolves when headers arrive, not when the body is complete.
+            // Keep the same deadline active while consuming the response body too.
+            const attemptController = new AbortController();
+            const attempt = (async () => {
+              const response = await fetchZTimeout(
+                'https://api.tavily.com/search',
+                { ...request, signal: attemptController.signal },
+                attemptTimeoutMs,
+              );
+              const bodyText = await response.text();
+              return { response, bodyText };
+            })();
+            const outcome = await awaitWithAbortTimeout(
+              attempt,
+              attemptTimeoutMs,
+              attemptController,
+              'Tavily Search response',
+            );
+            res = outcome.response;
+            responseText = outcome.bodyText;
+
             // 429 = przekroczony limit: ponowienie po 250 ms nic nie da, ponawiamy tylko błędy 5xx.
             if (res.ok || ![500, 502, 503, 504].includes(res.status) || probe === 1) break;
             const delayMs = Math.min(250 * (probe + 1), Math.max(0, remainingBudgetMs() - 1));
@@ -614,8 +637,8 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
             ok: res?.ok === true,
           });
         }
-        if (!res?.ok) throw new Error(`Tavily HTTP ${res?.status ?? 'network'}: ${res ? await res.text() : 'request failed'}`);
-        const data = await res.json();
+        if (!res?.ok) throw new Error(`Tavily HTTP ${res?.status ?? 'network'}: ${res ? responseText : 'request failed'}`);
+        data = JSON.parse(responseText);
         const all = Array.isArray(data.results) ? data.results : [];
         const rejected = [];
         const poDomenach = all.filter(r => {
