@@ -1722,7 +1722,12 @@ async function walidujOdpowiedzGeminiModel(model, persona, pytanie, odpowiedz, d
         }), signal: controller.signal,
       });
       const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data?.error?.message || `HTTP ${response.status}`);
+      if (!response.ok) {
+        const error = new Error(data?.error?.message || `HTTP ${response.status}`);
+        error.status = response.status;
+        error.headers = response.headers;
+        throw error;
+      }
       const content = (data?.candidates?.[0]?.content?.parts || []).map(part => part?.text || '').join('').trim();
       const parsed = wytnijJsonWalidatora(content);
       if (!parsed) {
@@ -1754,7 +1759,7 @@ async function walidujOdpowiedzGeminiModel(model, persona, pytanie, odpowiedz, d
     console.error(`[AI][${requestId}] ${model} validator TRANSPORT_ERROR: ${diagnostic}`);
     if (quota) {
       const endpoint = `gemini:${model}`;
-      const cooldownMs = quotaCooldownMsFromError(message);
+      const cooldownMs = quotaCooldownMsFromError(`${message} ${retryAfterHint(err)}`);
       markProviderQuota(endpoint, cooldownMs);
       console.warn(`[AI][${requestId}] quota circuit opened for ${endpoint} for ${cooldownMs}ms`);
     }
@@ -2031,7 +2036,7 @@ async function walidujOdpowiedzGroq(persona, pytanie, odpowiedz, dane, requestId
     const status = Number(err?.status ?? err?.statusCode ?? err?.response?.status ?? 0);
     const is429 = status === 429 || /(?:^|\\D)429(?:\\D|$)/.test(message);
     if (is429) {
-      const cooldownMs = quotaCooldownMsFromError(err);
+      const cooldownMs = quotaCooldownMsFromError(`${message} ${retryAfterHint(err)}`);
       markProviderQuota(providerKey, cooldownMs);
       console.warn(`[AI][${requestId}] quota circuit opened for ${providerKey} for ${cooldownMs}ms`);
     }

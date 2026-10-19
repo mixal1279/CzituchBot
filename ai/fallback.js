@@ -162,7 +162,7 @@ function isProviderQuotaBlocked(provider, now = Date.now()) {
   const until = quotaBlockedUntil.get(endpoint);
   if (!until) return false;
   if (until <= now) {
-    quotaBlockedUntil.delete(provider);
+    quotaBlockedUntil.delete(endpoint);
     return false;
   }
   return true;

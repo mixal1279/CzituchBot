@@ -147,6 +147,8 @@ test('quota circuit blocks only the exhausted endpoint and expires', () => {
   assert.ok(next.includes('groq:openai/gpt-oss-20b'));
   assert.ok(next.includes('gemini:gemini-3.8-flash'));
   assert.equal(isProviderQuotaBlocked('groq:openai/gpt-oss-120b', Date.now() + 11_000), false);
+  markProviderQuota('xkiro:default', 1_000);
+  assert.equal(isProviderQuotaBlocked('xkiro:default', Date.now() + 1_500), false);
   resetProviderQuotaCooldowns();
 });
 

@@ -362,6 +362,34 @@ test('timeout z mockowanego klienta Groq trafia do circuit breakera bez wywołan
 });
 
 
+test('Gemini i Groq honorują Retry-After dostawcy', async () => {
+  resetProviderQuotaCooldowns();
+  hooks.KONFIGURACJA.geminiKey = 'test-gemini-key';
+  hooks.KONFIGURACJA.openrouterKey = '';
+  hooks.KONFIGURACJA.xkiroKey = '';
+  mockFetch(async () => ({ ok: false, status: 429, headers: { get: name => name.toLowerCase() === 'retry-after' ? '45' : null }, json: async () => ({ error: { message: 'rate limit exceeded' } }) }));
+  const gemini = await hooks.walidujOdpowiedzGeminiModel('gemini-3.5-flash-lite', 'generic', QUESTION, ANSWER, EVIDENCE, [], 'test-gemini-retry-after');
+  assert.equal(gemini.quota, true);
+  assert.equal(gemini.status, 'unavailable');
+  assert.equal(hooks.isProviderQuotaBlocked('gemini:gemini-3.5-flash-lite'), true);
+
+  resetProviderQuotaCooldowns();
+  hooks.KONFIGURACJA.geminiKey = '';
+  let groqCalls = 0;
+  hooks.setGroqClient({ chat: { completions: { create: async () => {
+    groqCalls += 1;
+    const error = new Error('rate limit exceeded');
+    error.status = 429;
+    error.headers = new Headers({ 'retry-after': '45' });
+    throw error;
+  } } } });
+  const groq = await hooks.walidujOdpowiedzGroq('generic', QUESTION, ANSWER, EVIDENCE, 'test-groq-retry-after');
+  assert.equal(groq.quota, true);
+  assert.equal(groq.status, 'unavailable');
+  assert.equal(groqCalls, 1);
+  assert.equal(hooks.isProviderQuotaBlocked('groq:openai/gpt-oss-20b'), true);
+});
+
 test('xKiro i OpenRouter honorują 402/429 cooldown i Retry-After bez kolejnych żądań', async () => {
   for (const provider of ['xkiro', 'openrouter']) {
     for (const status of [402, 429]) {
