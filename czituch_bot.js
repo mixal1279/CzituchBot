@@ -5101,6 +5101,7 @@ async function geokodujMiasto(miasto) {
     return cached.miejsce;
   }
   const geoRes = await fetchZTimeout(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(miasto)}&count=1&language=pl&format=json`);
+  if (!geoRes.ok) throw new Error(`Open-Meteo geocoding HTTP ${geoRes.status}`);
   const geoData = await geoRes.json();
   const miejsce = geoData.results?.[0] || null;
   if (miejsce) {
@@ -5121,6 +5122,7 @@ async function pobierzPogode(miasto) {
     const { latitude, longitude, name, country } = miejsce;
 
     const pogodaRes = await fetchZTimeout(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,weather_code,precipitation&timezone=auto`);
+    if (!pogodaRes.ok) throw new Error(`Open-Meteo forecast HTTP ${pogodaRes.status}`);
     const pogodaData = await pogodaRes.json();
     const c = pogodaData.current;
     if (!c) return null;
