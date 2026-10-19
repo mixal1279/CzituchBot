@@ -5454,9 +5454,11 @@ async function wczytajTokenYT() {
       try {
         legacyDoc = await db.collection('config').doc('youtube_token').get();
       } catch (legacyReadError) {
-        // A failure while checking the legacy document must not skip the local
-        // encrypted backup. Continue through the normal fallback path below.
-        console.error('[YT Auth] Nie udało się sprawdzić starego dokumentu tokenu; przechodzę do kopii zapasowej:', legacyReadError.message);
+        // Nie traktuj błędu odczytu Firestore jak braku starego tokenu:
+        // jeśli lokalna kopia też nie będzie dostępna, nie rozpoczynaj nowego OAuth,
+        // bo późniejszy zapis mógłby nadpisać token w niedostępnym magazynie.
+        firestoreReadFailed = true;
+        console.error('[YT Auth] Nie udało się sprawdzić starego dokumentu tokenu; przechodzę do kopii zapasowej bez nadpisywania Firestore:', legacyReadError.message);
       }
       if (legacyDoc?.exists) {
         credentials = legacyDoc.data();
@@ -5492,6 +5494,13 @@ async function wczytajTokenYT() {
     }
   } catch (err) {
     console.error('[YT Auth] Błąd wczytywania tokenu i kopii zapasowych:', err.message);
+  }
+
+  // Jeśli Firestore nie dał się odczytać, brak tokenu w kopii lokalnej nie dowodzi,
+  // że token nie istnieje. Przerwij start zamiast uruchamiać OAuth i ryzykować
+  // nadpisanie tokenu, którego zawartości nie udało się sprawdzić.
+  if (firestoreReadFailed) {
+    throw new Error('[YT Auth] Nie można bezpiecznie ustalić stanu tokenu w Firestore i brak dostępnej kopii. Napraw dostęp do Firestore lub przywróć kopię tokenu przed ponowną autoryzacją.');
   }
   return false;
 }
