@@ -98,6 +98,39 @@ test('secondary provider forwards its bounded timeout to wrapped transports', as
   assert.equal(observedTimeout, 275);
 });
 
+test('Tavily response body consumption is bounded by the request deadline', async () => {
+  let observedSignal;
+  const search = createTavilySearch({
+    apiKey: 'test-tavily-key',
+    groq: null,
+    normalizeQuery: value => value,
+    fetchZTimeout: async (_url, options) => {
+      observedSignal = options.signal;
+      // Simulate a server that sends headers but never finishes its response body.
+      return new Response(new ReadableStream({ start() {} }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    },
+    logger: { log() {}, warn() {}, error() {} },
+    cacheFile: '/tmp/czituch-tavily-body-timeout-test.json',
+    geminiKey: '',
+    exaKey: '',
+  });
+
+  const startedAt = Date.now();
+  const result = await search('body timeout regression', {
+    _skipRewrite: true,
+    returnMeta: true,
+    sourceQuestion: 'body timeout regression',
+    remainingMs: 80,
+  });
+
+  assert.ok(Date.now() - startedAt < 1000, 'Tavily must not hang while consuming a stalled body');
+  assert.equal(result.status, 'timeout');
+  assert.equal(observedSignal?.aborted, true, 'timeout must abort the transport signal');
+});
+
 test('Exa parser consumes highlights without requiring full page content', async () => {
   const fakeFetch = async () => new Response(JSON.stringify({
     results: [{
