@@ -2272,7 +2272,18 @@ async function walidujOdpowiedzXKiro(persona, pytanie, odpowiedz, dane, requestI
       const transient = [408, 409, 425, 429, 500, 502, 503, 504, 529].includes(status);
       if (quota) {
         // xKiro 402 means insufficient quota; suppress repeated requests rather than retrying every question.
-        const cooldownMs = status === 402 ? 24 * 60 * 60 * 1000 : quotaCooldownMsFromError({ message: `HTTP ${status} ${retryAfter}` });
+        // For 429, preserve the structured error fields and response headers so a
+        // daily free-token exhaustion gets a daily cooldown rather than the burst default.
+        const providerError = data?.error || {};
+        const cooldownMs = status === 402
+          ? 24 * 60 * 60 * 1000
+          : quotaCooldownMsFromError({
+              status,
+              code: providerError.code,
+              type: providerError.type,
+              message: [providerError.message, providerError.type, providerError.code, retryAfter].filter(Boolean).join(' '),
+              headers: response.headers,
+            });
         markProviderQuota(providerKey, cooldownMs);
       }
       const diagnostic = formatProviderError('xkiro', data?.model || model, null, {
