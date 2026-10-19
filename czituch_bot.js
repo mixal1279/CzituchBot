@@ -591,6 +591,7 @@ const KONFIGURACJA = {
   kickBroadcasterId2: 91048662,
   kickChatroomId2:   89555075,
   kickTokenFile:    './kick_token.json',
+  billyTokenFile:   './billy_token.json',
   cytatyFile:       './cytaty.json',
 
   // ---- Alerty przez bota PolishSteamDB (Discord REST, bez gatewaya) ----
@@ -4341,8 +4342,7 @@ async function zapiszStanTikTok(stan) {
   const snapshot = stan && typeof stan === 'object' ? { ...stan } : {};
   for (const key of Object.keys(tiktokTrackingState)) delete tiktokTrackingState[key];
   Object.assign(tiktokTrackingState, snapshot);
-  await FIRESTORE_STATE.saveCache('tiktok_tracking', tiktokTrackingState)
-    .catch(err => console.error('[Firestore state/TikTok] Zapis nieudany; stan pozostaje w pamięci:', err.message));
+  await savePersistentCache('tiktok_tracking', tiktokTrackingState, '[Firestore state/TikTok]');
 }
 
 async function pobierzWszystkieTikToki(username) {
@@ -4377,6 +4377,7 @@ const TIKTOK_OKNO_NADRABIANIA_MS = 48 * 60 * 60 * 1000; // 48h — ile wstecz bo
 
 function uruchomSledzenieTikTok(username, wyslijFn, interwalMs = 15 * 60 * 1000) {
   setInterval(async () => {
+    if (!(await ensurePersistentCachesReady())) return;
     const stan  = wczytajStanTikTok();
     const wpisy = await pobierzWszystkieTikToki(username);
     if (!wpisy.length) return;
@@ -4889,7 +4890,10 @@ async function persistMapCache(name, map) {
 async function ensurePersistentCachesReady() {
   if (persistentCachesReady) return persistentCachesReady;
   if (Date.now() < persistentCachesRetryAfter) return false;
-  persistentCachesReady = (async () => {
+
+  const deadline = Date.now() + 10_000;
+  let timeout;
+  const loadCaches = (async () => {
     const caches = await Promise.all([
       FIRESTORE_STATE.loadCache('horoscopes', HOROSKOP_CACHE_PLIK),
       FIRESTORE_STATE.loadCache('daily_bulka', BULKA_CACHE_PLIK),
@@ -4900,6 +4904,7 @@ async function ensurePersistentCachesReady() {
       FIRESTORE_STATE.loadCache('hltb_results', PERSISTENT_CACHE_FILES.hltb_results),
       FIRESTORE_STATE.loadCache('weather_geocoding', PERSISTENT_CACHE_FILES.weather_geocoding),
     ]);
+    if (Date.now() >= deadline) throw new Error('Przekroczono limit 10 s podczas wczytywania cache z Firestore.');
     mergeObjectContents(horoskopDzienneCache, caches[0]);
     mergeObjectContents(bulkaDzienneCache, caches[1]);
     mergeObjectContents(arbuzDzienneCache, caches[2]);
@@ -4909,12 +4914,20 @@ async function ensurePersistentCachesReady() {
     for (const [key, value] of Object.entries(caches[6])) if (!hltbCache.has(key)) hltbCache.set(key, value);
     for (const [key, value] of Object.entries(caches[7])) if (!geokodowanieCache.has(key)) geokodowanieCache.set(key, value);
     return true;
-  })().catch(error => {
+  })();
+
+  persistentCachesReady = Promise.race([
+    loadCaches,
+    new Promise((_, reject) => {
+      timeout = setTimeout(() => reject(new Error('Przekroczono limit 10 s podczas wczytywania cache z Firestore.')), 10_000);
+      timeout.unref?.();
+    }),
+  ]).catch(error => {
     persistentCachesReady = null;
     persistentCachesRetryAfter = Date.now() + 60_000;
-    console.error('[Firestore state] Nie udało się wczytać cache — ponowię próbę za 60 s; nie zapisuję niepełnego stanu:', error.message);
+    console.error('[Firestore state] Nie udało się wczytać cache — ponowię próbę za 60 s; pomijam operacje wymagające pełnego stanu:', error.message);
     return false;
-  });
+  }).finally(() => clearTimeout(timeout));
   return persistentCachesReady;
 }
 
@@ -5438,11 +5451,11 @@ async function wczytajTokenYT() {
           try { credentials = await FIRESTORE_STATE.migrateTokenFile('youtube', KONFIGURACJA.ytTokenFile); }
           catch (migrationError) {
             console.warn('[YT Auth] Migracja tokenu z pliku nieudana; plik pozostaje bez zmian:', migrationError.message);
-            try { credentials = JSON.parse(await fs.promises.readFile(KONFIGURACJA.ytTokenFile, 'utf8')); }
+            try { credentials = FIRESTORE_STATE.parseTokenFile(await fs.promises.readFile(KONFIGURACJA.ytTokenFile, 'utf8')); }
             catch (readError) { if (readError.code !== 'ENOENT') console.error('[YT Auth] Błąd odczytu pliku tokenu:', readError.message); }
           }
         } else {
-          try { credentials = JSON.parse(await fs.promises.readFile(KONFIGURACJA.ytTokenFile, 'utf8')); }
+          try { credentials = FIRESTORE_STATE.parseTokenFile(await fs.promises.readFile(KONFIGURACJA.ytTokenFile, 'utf8')); }
           catch (readError) { if (readError.code !== 'ENOENT') console.error('[YT Auth] Błąd odczytu pliku tokenu:', readError.message); }
         }
       }
@@ -6058,10 +6071,10 @@ async function zapiszTokenBilly(data) {
     await FIRESTORE_STATE.writeToken('twitch_billy', doZapisu);
     const verified = await FIRESTORE_STATE.readToken('twitch_billy');
     if (JSON.stringify(verified) !== JSON.stringify(doZapisu)) throw new Error('Weryfikacja tokenu Billy nie powiodła się.');
-    try { await fs.promises.unlink('./billy_token.json'); } catch (err) { if (err.code !== 'ENOENT') console.warn('[Billy Auth] Nie usunięto starego pliku tokenu:', err.message); }
+    try { await fs.promises.unlink(KONFIGURACJA.billyTokenFile); } catch (err) { if (err.code !== 'ENOENT') console.warn('[Billy Auth] Nie usunięto starego pliku tokenu:', err.message); }
     console.log('[Billy Auth] ✅ Zaszyfrowany token zapisany do Firestore');
   } catch (err) {
-    const fallbackSaved = await zapiszLokalnaKopieTokenu('./billy_token.json', doZapisu, '[Billy Auth]');
+    const fallbackSaved = await zapiszLokalnaKopieTokenu(KONFIGURACJA.billyTokenFile, doZapisu, '[Billy Auth]');
     console.error('[Billy Auth] ⚠️ Nie udało się utrwalić tokenu w Firestore' + (fallbackSaved ? '; zachowano lokalną kopię' : '; brak trwałej kopii awaryjnej') + ':', err.message);
   }
 }
@@ -6069,10 +6082,10 @@ async function zapiszTokenBilly(data) {
 async function wczytajTokenBilly() {
   let data = null;
   try {
-    data = await FIRESTORE_STATE.migrateTokenFile('twitch_billy', './billy_token.json');
+    data = await FIRESTORE_STATE.migrateTokenFile('twitch_billy', KONFIGURACJA.billyTokenFile);
   } catch (err) {
     console.warn('[Billy Auth] Migracja tokenu nieudana; próbuję użyć pliku bez usuwania go:', err.message);
-    try { data = JSON.parse(await fs.promises.readFile('./billy_token.json', 'utf8')); }
+    try { data = FIRESTORE_STATE.parseTokenFile(await fs.promises.readFile(KONFIGURACJA.billyTokenFile, 'utf8')); }
     catch (readError) { if (readError.code !== 'ENOENT') console.error('[Billy Auth] Błąd wczytywania:', readError.message); }
   }
   if (!data) return false;
@@ -7356,7 +7369,7 @@ async function wczytajTokenTwitchChat(botKey) {
     data = await FIRESTORE_STATE.migrateTokenFile('twitch_chat_' + botKey, stan.plik);
   } catch (err) {
     console.warn(`[Twitch Chat/${botKey}] Migracja tokenu nieudana; próbuję użyć pliku bez usuwania go:`, err.message);
-    try { data = JSON.parse(await fs.promises.readFile(stan.plik, 'utf8')); }
+    try { data = FIRESTORE_STATE.parseTokenFile(await fs.promises.readFile(stan.plik, 'utf8')); }
     catch (readError) { if (readError.code !== 'ENOENT') console.error(`[Twitch Chat/${botKey}] Błąd wczytywania:`, readError.message); }
   }
   if (!data) return false;
