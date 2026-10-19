@@ -132,8 +132,8 @@ test('secondary provider forwards its bounded timeout to wrapped transports', as
 
 
 
-test('Tavily only sends chunks_per_source for advanced search depth', async () => {
-  for (const [depth, shouldInclude] of [['basic', false], ['advanced', true]]) {
+test('Tavily sends chunks_per_source for basic and advanced search depths', async () => {
+  for (const [depth, shouldInclude] of [['basic', true], ['advanced', true]]) {
     let requestBody = null;
     const search = createTavilySearch({
       apiKey: 'test-tavily-key',
