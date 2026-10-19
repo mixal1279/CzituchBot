@@ -278,6 +278,10 @@ test('provider capacity pressure is transient rather than a quota cooldown', () 
   assert.equal(shouldOpenQuotaCircuit('HTTP 429: tokens per day limit exceeded'), true);
   assert.equal(quotaCooldownMsFromError('HTTP 429: high demand, temporarily unavailable'), 60000);
   assert.equal(classifyFailure('HTTP 429: tokens per day limit exceeded'), 'quota');
+  assert.equal(classifyFailure('HTTP 402: Payment Required'), 'quota');
+  assert.equal(shouldOpenQuotaCircuit('HTTP 402: Payment Required'), true);
+  assert.equal(classifyFailure('HTTP 402: openrouter_in_flight_budget exhausted; Retry-After=30s'), 'quota');
+  assert.equal(shouldOpenQuotaCircuit('HTTP 402: openrouter_in_flight_budget exhausted; Retry-After=30s'), false);
 });
 
 test('repair is skipped when less than the minimum generation plus fallback reserve remains', () => {

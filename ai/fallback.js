@@ -54,6 +54,9 @@ function classifyFailure(error = '') {
     : extractErrorCore(String(error?.message || error || ''));
   // Some providers use HTTP 429 for temporary capacity pressure, not exhausted quota.
   if (/(?:high demand|overloaded|temporarily unavailable|capacity exceeded)/i.test(text)) return 'transient';
+  // HTTP 402 is a credit/payment quota even if the provider omits words such as
+  // "credit" or "insufficient". This also lets generator fallbacks cool down.
+  if (/(?:HTTP\s*402|"status"\s*:\s*402)/i.test(text)) return 'quota';
   for (const [type, pattern] of DETAIL_CLASSIFIERS) {
     if (pattern.test(text)) return type;
   }
@@ -236,7 +239,10 @@ function repairBudgetBlockReason({
 
 function shouldOpenQuotaCircuit(error) {
   // HTTP 429 can mean temporary capacity pressure; only true quota failures
-  // should trip the long-lived process-wide model circuit breaker.
+  // should trip the long-lived process-wide model circuit breaker. OpenRouter's
+  // retryable in-flight budget 402 must not block Groq 120B globally.
+  const text = String(error?.message || error || '');
+  if (/openrouter_in_flight_budget/i.test(text) && /retry[- ]after/i.test(text)) return false;
   return classifyFailure(error) === 'quota';
 }
 
