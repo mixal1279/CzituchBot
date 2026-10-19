@@ -41,6 +41,14 @@ test('wymyślona nazwa nieobecna w dowodzie nadal powoduje odrzucenie', () => wi
   assert.match(res.reason, /nazw własnych/);
 }));
 
+test('produkcyjne aliasy PL/EN normalizują znane encje do jednego kanonicznego identyfikatora', () => {
+  assert.ok(KNOWN_ENTITY_ALIAS_PATTERNS.some(entry => entry.canonical === 'wild hunt'));
+  assert.ok(KNOWN_ENTITY_ALIAS_PATTERNS.some(entry => entry.canonical === 'bloody baron'));
+  assert.deepEqual(wyodrebnijNazwyWlasne('Geralt spotyka Dzikim Gonem na szlaku.'), ['wild hunt']);
+  assert.deepEqual(wyodrebnijNazwyWlasne('Geralt rozmawia z Krwawym Baronem.'), ['bloody baron']);
+  assert.deepEqual(wyodrebnijNazwyWlasne('Dragonborn używa Smoczej Zguby.'), ['dragonrend']);
+});
+
 test('claim_en przepisany z evidence_quote jest odrzucany, prawdziwe tłumaczenie nie', () => {
   const quote = 'Malenia is an optional boss located in Haligtree Elphael.';
   const copy = spojnoscTlumaczeniaClaimu('Malenia jest opcjonalnym bossem w Haligtree Elphael.', quote, { evidenceQuote: quote });
