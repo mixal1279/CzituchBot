@@ -6,6 +6,7 @@ const {
   decideEvidencePolicy,
   normalize,
 } = require('./core');
+const { usunEtykietyDowodow } = require('./claimValidation');
 
 const STATUS = Object.freeze({
   ACCEPTED: 'accepted',
@@ -118,14 +119,14 @@ function decideValidation(status, options = {}) {
 function finalText(text, status, helpers = {}) {
   if (status === STATUS.REJECTED) return helpers.rejectedMessage || 'Nie mam wystarczających danych, żeby odpowiedzieć na to pewnie.';
   if (status === STATUS.SOFT_ACCEPTED) {
-    let value = String(text || '');
+    let value = usunEtykietyDowodow(text);
     if (typeof helpers.sanitizeResponse === 'function') value = helpers.sanitizeResponse(value);
     return value.trim();
   }
   if (status === STATUS.INCONCLUSIVE) return helpers.inconclusiveMessage || 'Chwilowo nie mogę wiarygodnie potwierdzić tej informacji, więc nie będę zgadywać.';
   if (status === STATUS.UNAVAILABLE) return helpers.unavailableMessage || 'Chwilowo nie mogę potwierdzić tej informacji, więc nie będę zgadywać.';
   if (status === STATUS.UNVERIFIED) {
-    let value = String(text || '');
+    let value = usunEtykietyDowodow(text);
     if (typeof helpers.sanitizeResponse === 'function') value = helpers.sanitizeResponse(value);
     value = value.trim();
     const warning = '⚠️ Odpowiedź niezweryfikowana — walidator jest niedostępny. ';
@@ -134,7 +135,7 @@ function finalText(text, status, helpers = {}) {
       : (helpers.unavailableMessage || 'Chwilowo nie mogę potwierdzić tej informacji, więc nie będę zgadywać.');
   }
 
-  let value = String(text || '');
+  let value = usunEtykietyDowodow(text);
   if (typeof helpers.sanitizeResponse === 'function') value = helpers.sanitizeResponse(value);
   return value.trim();
 }

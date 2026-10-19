@@ -330,8 +330,24 @@ function tokenyPokrywajaSie(a, b) {
   if (i < a.length || j < b.length) edits++;
   return edits === 1;
 }
+// Generator czasem przepisuje do odpowiedzi etykietę kandydata dowodu z promptu,
+// np. "(EVIDENCE CANDIDATE 4)". To metadane, a nie treść faktograficzna: bez
+// usunięcia ta etykieta jest liczona jako osobne, niepokryte claimem zdanie
+// (answer_not_covered_by_claims) i odrzuca poprawną odpowiedź, a przy akceptacji
+// trafiałaby do czatu. Usuwamy tylko etykiety z numerem kandydata.
+const EVIDENCE_LABEL_PRESENCE_RE = /EVIDENCE\s+CANDIDATES?/i;
+const EVIDENCE_LABEL_RE = /\s*[(\[]\s*EVIDENCE\s+CANDIDATES?\s*\d+(?:\s*(?:,|;|&|\bi\b|\band\b)\s*\d+)*\s*[)\]]|\s*\bEVIDENCE\s+CANDIDATES?\s*\d+(?:\s*:\s*SOURCE\s*\d+)?/gi;
+function usunEtykietyDowodow(text) {
+  const raw = String(text || '');
+  if (!EVIDENCE_LABEL_PRESENCE_RE.test(raw)) return raw;
+  return raw
+    .replace(EVIDENCE_LABEL_RE, '')
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/[ \t]+([.,;!?])/g, '$1')
+    .trim();
+}
 function sprawdzPokrycieClaimamiOdpowiedzi(answer, claims) {
-  const sentences = String(answer || '').split(/(?<=[.!?])\s+|\n+/).map(x => x.trim()).filter(Boolean);
+  const sentences = usunEtykietyDowodow(answer).split(/(?<=[.!?])\s+|\n+/).map(x => x.trim()).filter(Boolean);
   const claimRows = (Array.isArray(claims) ? claims : [])
     .map(c => ({
       tokens: tokenyPokrycia(c?.claim || ''),
@@ -373,4 +389,4 @@ function sprawdzPokrycieClaimamiOdpowiedzi(answer, claims) {
 function czyDowodSemantyczniePokrywaClaim(evidence, claim, options = {}) {
   return zgodnoscStrukturalna(evidence, claim, options).ok;
 }
-module.exports = { normalizujClaim, tokenyClaim, czyRelacjaPrzyczynowaPokrywaClaim, wyodrebnijLiczbyIDaty, wyodrebnijJednostkoweWartosci, wyodrebnijNazwyWlasne, zgodnoscStrukturalna, sprawdzTwardeKonflikty, sprawdzSprzecznosciSemantyczne, dopasowanieSemantyczne, sprawdzPokrycieClaimamiOdpowiedzi, czyDowodSemantyczniePokrywaClaim };
+module.exports = { normalizujClaim, tokenyClaim, czyRelacjaPrzyczynowaPokrywaClaim, wyodrebnijLiczbyIDaty, wyodrebnijJednostkoweWartosci, wyodrebnijNazwyWlasne, zgodnoscStrukturalna, sprawdzTwardeKonflikty, sprawdzSprzecznosciSemantyczne, dopasowanieSemantyczne, sprawdzPokrycieClaimamiOdpowiedzi, czyDowodSemantyczniePokrywaClaim, usunEtykietyDowodow };
