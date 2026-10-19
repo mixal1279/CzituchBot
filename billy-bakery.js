@@ -451,7 +451,7 @@ function getBillyBulkaForDay(dateKey, options = {}) {
 }
 
 function parseDailyBulkaCommand(message, nick, login) {
-  const match = String(message || '').trim().match(/^!(?:bułka|bulka)(?:\\s+@?([a-zA-Z0-9_]+))?$/i);
+  const match = String(message || '').trim().match(/^!(?:bułka|bulka)(?:\s+@?([a-zA-Z0-9_]+))?$/i);
   if (!match || !nick) return null;
   const targetDisplay = match[1] || nick;
   const targetLogin = (match[1] || login || nick).toLowerCase();
