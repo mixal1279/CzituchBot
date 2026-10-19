@@ -1554,6 +1554,16 @@ Rozbij odpowiedź na atomowe, materialne twierdzenia. Dla każdego zdania faktog
 
 Zwróć WYŁĄCZNIE jeden poprawny obiekt JSON bez markdownu i komentarza, z polami: valid, reason, confidence, unsupported_claims, ok, supported, relevant, complete, hallucination, claims. Każdy element claims ma mieć: claim, supported, source_ids, evidence_quote, reason. ${CLAIM_EN_PROMPT}`;
 
+function dodatniLimitTokenow(envName, fallback) {
+  const raw = String(process.env[envName] || '').trim();
+  if (!/^\\d+$/.test(raw)) return fallback;
+  const value = Number(raw);
+  return Number.isSafeInteger(value) && value > 0 ? value : fallback;
+}
+
+const AI_VALIDATOR_MAX_TOKENS_OPENROUTER = dodatniLimitTokenow('AI_VALIDATOR_MAX_TOKENS_OPENROUTER', 1400);
+const AI_VALIDATOR_MAX_TOKENS_XKIRO = dodatniLimitTokenow('AI_VALIDATOR_MAX_TOKENS_XKIRO', 1600);
+
 function zbudujPromptWalidatora(pytanie, odpowiedz, dane, requestMeta) {
   const evidenceHints = buildValidatorEvidenceHints(pytanie, odpowiedz, dane);
   return {
@@ -1730,7 +1740,7 @@ async function walidujOdpowiedzOpenRouter(persona, pytanie, odpowiedz, dane, req
         model: KONFIGURACJA.openrouterValidatorModel,
         messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
         temperature: 0,
-        max_tokens: 500,
+        max_tokens: AI_VALIDATOR_MAX_TOKENS_OPENROUTER,
         reasoning: { effort: 'low', exclude: true },
         response_format: {
           type: 'json_schema',
@@ -1766,8 +1776,9 @@ async function walidujOdpowiedzOpenRouter(persona, pytanie, odpowiedz, dane, req
         has_reasoning: Boolean(message?.reasoning || message?.reasoning_content || message?.reasoning_details),
         usage: data?.usage || null,
       });
-      console.warn(`[AI][${requestId}] OpenRouter validator EMPTY_CONTENT: ${diagnostic}`);
-      return { status: 'unavailable', ok: false, technicalError: true, provider: 'openrouter', model: data?.model || KONFIGURACJA.openrouterValidatorModel, unsupported_claims: [], reason: 'OpenRouter validator zwrócił pusty content', error: diagnostic, diagnostic };
+      const truncatedJson = choice?.finish_reason === 'length';
+      console.warn(`[AI][${requestId}] OpenRouter validator ${truncatedJson ? 'UCIĘTY_JSON' : 'EMPTY_CONTENT'}: ${diagnostic}`);
+      return { status: 'unavailable', ok: false, technicalError: true, provider: 'openrouter', model: data?.model || KONFIGURACJA.openrouterValidatorModel, unsupported_claims: [], reason: truncatedJson ? 'OpenRouter validator zwrócił UCIĘTY JSON (finish_reason=length)' : 'OpenRouter validator zwrócił pusty content', truncatedJson, error: diagnostic, diagnostic };
     }
     const parsed = wytnijJsonWalidatora(content);
     if (!parsed) {
@@ -1776,8 +1787,9 @@ async function walidujOdpowiedzOpenRouter(persona, pytanie, odpowiedz, dane, req
         finish_reason: choice?.finish_reason || null,
         content_preview: content.slice(0, 700),
       });
-      console.warn(`[AI][${requestId}] OpenRouter validator INVALID_JSON: ${diagnostic}`);
-      return { status: 'unavailable', ok: false, technicalError: true, provider: 'openrouter', model: data?.model || KONFIGURACJA.openrouterValidatorModel, unsupported_claims: [], reason: 'OpenRouter validator zwrócił niepoprawny JSON', error: diagnostic, diagnostic };
+      const truncatedJson = choice?.finish_reason === 'length';
+      console.warn(`[AI][${requestId}] OpenRouter validator ${truncatedJson ? 'UCIĘTY_JSON' : 'INVALID_JSON'}: ${diagnostic}`);
+      return { status: 'unavailable', ok: false, technicalError: true, provider: 'openrouter', model: data?.model || KONFIGURACJA.openrouterValidatorModel, unsupported_claims: [], reason: truncatedJson ? 'OpenRouter validator zwrócił UCIĘTY JSON (finish_reason=length)' : 'OpenRouter validator zwrócił niepoprawny JSON', truncatedJson, error: diagnostic, diagnostic };
     }
     const normalized = normalizujWynikWalidatora(parsed, data?.model || KONFIGURACJA.openrouterValidatorModel, 'openrouter', wyodrebnijIdentyfikatoryZrodel(dane), dane, odpowiedz);
     if (!normalized) {
@@ -1829,7 +1841,7 @@ async function walidujOdpowiedzXKiro(persona, pytanie, odpowiedz, dane, requestI
         model,
         messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
         temperature: 0,
-        max_tokens: 900,
+        max_tokens: AI_VALIDATOR_MAX_TOKENS_XKIRO,
         reasoning_effort: 'none',
         response_format: { type: 'json_object' },
       }),
@@ -1857,7 +1869,9 @@ async function walidujOdpowiedzXKiro(persona, pytanie, odpowiedz, dane, requestI
         finish_reason: choice?.finish_reason || null,
         content_empty: true,
       });
-      return { status: 'unavailable', ok: false, technicalError: true, provider: 'xkiro', model: data?.model || model, unsupported_claims: [], reason: 'xKiro validator zwrócił pusty content', error: diagnostic, diagnostic };
+      const truncatedJson = choice?.finish_reason === 'length';
+      console.warn(`[AI][${requestId}] xKiro validator ${truncatedJson ? 'UCIĘTY_JSON' : 'EMPTY_CONTENT'}: ${diagnostic}`);
+      return { status: 'unavailable', ok: false, technicalError: true, provider: 'xkiro', model: data?.model || model, unsupported_claims: [], reason: truncatedJson ? 'xKiro validator zwrócił UCIĘTY JSON (finish_reason=length)' : 'xKiro validator zwrócił pusty content', truncatedJson, error: diagnostic, diagnostic };
     }
     const parsed = wytnijJsonWalidatora(content);
     if (!parsed) {
@@ -1866,7 +1880,9 @@ async function walidujOdpowiedzXKiro(persona, pytanie, odpowiedz, dane, requestI
         finish_reason: choice?.finish_reason || null,
         content_preview: content.slice(0, 700),
       });
-      return { status: 'unavailable', ok: false, technicalError: true, provider: 'xkiro', model: data?.model || model, unsupported_claims: [], reason: 'xKiro validator zwrócił niepoprawny JSON', error: diagnostic, diagnostic };
+      const truncatedJson = choice?.finish_reason === 'length';
+      console.warn(`[AI][${requestId}] xKiro validator ${truncatedJson ? 'UCIĘTY_JSON' : 'INVALID_JSON'}: ${diagnostic}`);
+      return { status: 'unavailable', ok: false, technicalError: true, provider: 'xkiro', model: data?.model || model, unsupported_claims: [], reason: truncatedJson ? 'xKiro validator zwrócił UCIĘTY JSON (finish_reason=length)' : 'xKiro validator zwrócił niepoprawny JSON', truncatedJson, error: diagnostic, diagnostic };
     }
     const normalized = normalizujWynikWalidatora(parsed, data?.model || model, 'xkiro', wyodrebnijIdentyfikatoryZrodel(dane), dane, odpowiedz);
     if (!normalized) {
