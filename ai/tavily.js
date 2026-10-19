@@ -615,7 +615,7 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
             search_depth: depth,
             max_results: depth === 'advanced' ? 10 : 7,
             // Official Search API supports chunks_per_source for basic, fast and advanced.
-            ...(depth !== 'ultra-fast' && { chunks_per_source: 3 }),
+            chunks_per_source: 3,
             include_answer: false,
             include_raw_content: false,
             ...(domains && { include_domains: domains }),
