@@ -83,6 +83,15 @@ function createFirestoreState(db, options = {}) {
         if (!file) throw new Error('Firestore jest wyłączony i brak lokalnej ścieżki cache dla: ' + cacheName);
         await fs.promises.writeFile(file, JSON.stringify(value, null, 2), { mode: 0o600 });
       },
+      async migrateTokenFile(_provider, file) {
+        try {
+          const parsed = JSON.parse(await fs.promises.readFile(file, 'utf8'));
+          return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null;
+        } catch (error) {
+          if (error.code === 'ENOENT') return null;
+          throw error;
+        }
+      },
     };
   }
 
@@ -165,12 +174,30 @@ function createFirestoreState(db, options = {}) {
   }
 
   async function migrateTokenFile(provider, file) {
-    const stored = await readToken(provider);
+    let stored = null;
+    let firestoreReadError = null;
+    try {
+      stored = await readToken(provider);
+    } catch (error) {
+      // A bad/missing encryption key or a temporary Firestore outage must not
+      // prevent the bot from using an intact legacy token file. Never overwrite
+      // an unreadable Firestore document automatically.
+      firestoreReadError = error;
+    }
+
     let legacy = null;
     try {
       legacy = JSON.parse(await fs.promises.readFile(file, 'utf8'));
     } catch (error) {
       if (error.code !== 'ENOENT') throw error;
+    }
+
+    if (firestoreReadError) {
+      if (legacy && typeof legacy === 'object' && !Array.isArray(legacy)) {
+        logger.warn?.('[Firestore state] Nie mogę odczytać tokenu z Firestore; używam lokalnej kopii bez nadpisywania dokumentu:', provider, firestoreReadError.message);
+        return legacy;
+      }
+      throw firestoreReadError;
     }
 
     if (stored && legacy && JSON.stringify(legacy) !== JSON.stringify(stored)) {
