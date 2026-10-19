@@ -5497,7 +5497,14 @@ async function zalogujYouTube() {
 
   const { tokens } = await oauth2Client.getToken(code);
   oauth2Client.setCredentials(tokens);
-  await zapiszTokenYT(tokens);
+  try {
+    await zapiszTokenYT(tokens);
+  } catch (error) {
+    // Nie przerywaj pierwszego logowania, gdy Firestore jest chwilowo niedostępny.
+    // Zachowaj zaszyfrowaną kopię, bo refresh token może zostać później obrócony.
+    const fallbackSaved = await zapiszLokalnaKopieTokenu(KONFIGURACJA.ytTokenFile, tokens, '[YT Auth]');
+    console.error('[YT Auth] ⚠️ Nie udało się utrwalić tokenu w Firestore' + (fallbackSaved ? '; zachowano lokalną kopię' : '; brak trwałej kopii awaryjnej') + ':', error.message);
+  }
   oauth2Client.on('tokens', async (newTokens) => {
     try {
       // Google często emituje wyłącznie access_token. Zachowujemy refresh_token
