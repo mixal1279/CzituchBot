@@ -218,7 +218,7 @@ test('Tavily query rewrite failure falls back to the original query and respects
     groq: null,
     fetchZTimeout: async (url, options, timeoutMs) => {
       timeouts.push(timeoutMs);
-      bodies.push(JSON.parse(options.body));
+      bodies.push({ body: JSON.parse(options.body), headers: options.headers });
       return { ok: true, status: 200, text: async () => '', json: async () => ({ results: [{
         title: 'Portal 2 soundtrack',
         url: 'https://theportalwiki.com/wiki/Portal_2_soundtrack',
@@ -233,7 +233,9 @@ test('Tavily query rewrite failure falls back to the original query and respects
   const original = 'Portal 2 soundtrack official release information';
   const result = await search(original, { returnMeta: true, remainingMs: 4000, searchDepth: 'basic' });
   assert.equal(result.status, 'ok');
-  assert.equal(bodies[0].query, original, 'failed query rewrite must not prevent the original Tavily query');
+  assert.equal(bodies[0].body.query, original, 'failed query rewrite must not prevent the original Tavily query');
+  assert.equal(bodies[0].headers.Authorization, 'Bearer test-key', 'Tavily API key must use the documented auth header');
+  assert.equal(Object.hasOwn(bodies[0].body, 'api_key'), false, 'API key must not be sent as an undocumented body field');
   assert.equal(timeouts[0], 4000, 'remaining retrieval budget must be forwarded to the transport');
 });
 

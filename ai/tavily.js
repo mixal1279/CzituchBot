@@ -572,9 +572,9 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
         const validTimeRange = time_range?.replace('past_', '') || null;
         const historical = !validTimeRange;
         const request = {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
           body: JSON.stringify({
-            api_key: apiKey, query: searchQuery,
+            query: searchQuery,
             // `advanced` kosztuje 2 kredyty, więc pierwsze zapytanie jest `basic`, a głębsze dopiero
             // przy kolejnych zapytaniach planu (słaby dowód). Wcześniej prawie każde pytanie
             // bez zakresu czasu szło jako `advanced`.
