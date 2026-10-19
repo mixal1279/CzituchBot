@@ -88,6 +88,19 @@ test('AI Core v26 benchmark has exactly 500 cases', () => {
   assert.equal(benchmark.cases.length, 500);
 });
 
+test('independent factual gold is source-linked and spans multiple question categories', () => {
+  const gold = benchmark.cases.filter(item => item.expected?.factual?.independentGold === true);
+  const categories = new Set(gold.map(item => item.category));
+  assert.ok(gold.length >= 8, `Expected at least 8 independent gold cases, got ${gold.length}`);
+  for (const category of ['why', 'who', 'comparison', 'outcome']) {
+    assert.ok(categories.has(category), `Missing independent gold category: ${category}`);
+  }
+  for (const item of gold) {
+    assert.ok(Array.isArray(item.expected.factual.independentGoldSources));
+    assert.ok(item.expected.factual.independentGoldSources.length > 0, `Gold source missing for ${item.id}`);
+  }
+});
+
 test('AI Core v26 500-case benchmark meets 95% target', () => {
   const report = runBenchmark();
   assert.ok(
