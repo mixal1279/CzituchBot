@@ -44,6 +44,18 @@ test('YouTube chat polling respects the interval returned by the API', () => {
   assert.doesNotMatch(source, /Math\.max\([^\n]*initialPollDelay[^\n]*10000/);
 });
 
+test('primary generation honors AI_GENERATOR_MODEL and checks quota cooldown before calling Groq', () => {
+  const source = read('czituch_bot.js');
+  const start = source.indexOf('async function generujOdpowiedz(');
+  const end = source.indexOf('const fallbackSteps = {', start);
+  assert.ok(start >= 0 && end > start, 'generation orchestration should exist');
+  const body = source.slice(start, end);
+  assert.match(body, /const primaryModel = AI_MODELS\.generatorPrimary/);
+  assert.match(body, /isProviderQuotaBlocked\(primaryStep\)/);
+  assert.match(body, /zapytajGlowny\(effectiveMaxTok, prompt, primaryModel\)/);
+  assert.match(body, /allowPrimary \? classifyFailure\(result\.error \|\| ''\) : 'validator_rejection'/);
+});
+
 test('validator provider preflight uses production timeout budgets', () => {
   const source = read('scripts/validator-providers-preflight.js');
   assert.match(source, /xKiro:\s*Number\(process\.env\.AI_XKIRO_VALIDATOR_TIMEOUT_MS\)\s*\|\|\s*3000/);

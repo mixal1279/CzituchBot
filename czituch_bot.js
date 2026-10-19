@@ -3435,25 +3435,28 @@ Pytanie użytkownika: ${pytanie}`;
     if (aiState.generationAttempts.length > 32) aiState.generationAttempts.shift();
   };
 
-  async function generujOdpowiedz(maxTok, prompt = systemPrompt, powod = 'main', allow120b = true) {
+  async function generujOdpowiedz(maxTok, prompt = systemPrompt, powod = 'main', allowPrimary = true) {
     const phase = /repair/i.test(String(powod || '')) ? 'repair' : 'initial';
     const effectiveMaxTok = phase === 'repair' ? Math.min(Math.max(Number(maxTok) || 300, 300), 700) : Math.max(Number(maxTok) || 300, 300);
+    const primaryModel = AI_MODELS.generatorPrimary || 'openai/gpt-oss-120b';
+    const primaryStep = `groq:${primaryModel}`;
+    const primaryQuotaBlocked = allowPrimary && isProviderQuotaBlocked(primaryStep);
+    const shouldAttemptPrimary = allowPrimary && !primaryQuotaBlocked;
     aiState.generationPhase = phase;
     const startedGenerationAt = Date.now();
-    aiState.recordTiming('generation_cycle_start', { phase, provider: 'groq', model: allow120b ? 'openai/gpt-oss-120b' : null });
-    let result = allow120b
-      ? await zapytajGlowny(effectiveMaxTok, prompt, 'openai/gpt-oss-120b')
-      : wynikPusty('groq', 'openai/gpt-oss-120b', '120B skipped for this generation cycle');
+    aiState.recordTiming('generation_cycle_start', { phase, provider: 'groq', model: shouldAttemptPrimary ? primaryModel : null });
+    let result = shouldAttemptPrimary
+      ? await zapytajGlowny(effectiveMaxTok, prompt, primaryModel)
+      : wynikPusty('groq', primaryModel, allowPrimary ? 'provider cooldown active' : 'primary model skipped for this generation cycle');
     let lastResult = result;
-    let failureType = phase === 'repair' ? 'validator_rejection' : classifyFailure(result.error || '');
-    const primaryStep = 'groq:openai/gpt-oss-120b';
+    let failureType = allowPrimary ? classifyFailure(result.error || '') : 'validator_rejection';
 
     if (result.tekst && !result.ucieta) {
       lastSuccessfulGenerationStep = primaryStep;
       recordGenerationAttempt({ provider: result.provider, model: result.model, status: 'success', latencyMs: Date.now() - startedGenerationAt });
       return result;
     }
-    if (result.error && allow120b) {
+    if (result.error && shouldAttemptPrimary) {
       recordGenerationAttempt({ provider: result.provider, model: result.model, status: 'error', failure: failureType, latencyMs: Date.now() - startedGenerationAt });
       failedFallbackProviders.add(primaryStep);
       if (failureType === 'quota') {

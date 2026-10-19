@@ -150,6 +150,15 @@ test('quota circuit blocks only the exhausted endpoint and expires', () => {
   resetProviderQuotaCooldowns();
 });
 
+test('quota cooldown supports configured models outside the default fallback chain', () => {
+  resetProviderQuotaCooldowns();
+  const customModel = 'groq:custom/generator-model:v1';
+  assert.deepEqual(markProviderQuota(customModel, 10_000), [customModel]);
+  assert.equal(isProviderQuotaBlocked(customModel), true);
+  assert.deepEqual(markProviderQuota('unknown:model', 10_000), []);
+  resetProviderQuotaCooldowns();
+});
+
 test('quota in one Gemini model leaves the sibling model available', () => {
   resetProviderQuotaCooldowns();
   markProviderQuota('gemini:gemini-3.8-flash', 10_000);

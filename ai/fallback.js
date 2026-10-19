@@ -132,9 +132,19 @@ function quotaCooldownMsFromError(error) {
   return isOverload ? 60_000 : configured;
 }
 
+function normalizeProviderEndpoint(provider) {
+  const endpoint = String(provider || '').trim();
+  const separator = endpoint.indexOf(':');
+  if (separator <= 0) return '';
+  const providerName = endpoint.slice(0, separator).toLowerCase();
+  const model = endpoint.slice(separator + 1).trim();
+  if (!['groq', 'gemini', 'xkiro', 'openrouter'].includes(providerName) || !model) return '';
+  return `${providerName}:${model}`;
+}
+
 function markProviderQuota(provider, cooldownMs = Number(process.env.AI_PROVIDER_QUOTA_COOLDOWN_MS) || 60_000) {
-  const endpoint = String(provider || '');
-  if (!GENERATION_FALLBACK_CHAIN.includes(endpoint)) return [];
+  const endpoint = normalizeProviderEndpoint(provider);
+  if (!endpoint) return [];
   const duration = Math.max(1_000, Number(cooldownMs) || 60_000);
   const until = Math.max(quotaBlockedUntil.get(endpoint) || 0, Date.now() + duration);
   quotaBlockedUntil.set(endpoint, until);
@@ -142,7 +152,9 @@ function markProviderQuota(provider, cooldownMs = Number(process.env.AI_PROVIDER
 }
 
 function isProviderQuotaBlocked(provider, now = Date.now()) {
-  const until = quotaBlockedUntil.get(provider);
+  const endpoint = normalizeProviderEndpoint(provider);
+  if (!endpoint) return false;
+  const until = quotaBlockedUntil.get(endpoint);
   if (!until) return false;
   if (until <= now) {
     quotaBlockedUntil.delete(provider);
