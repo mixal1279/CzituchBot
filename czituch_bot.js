@@ -1870,6 +1870,12 @@ async function walidujOdpowiedzGroq(persona, pytanie, odpowiedz, dane, requestId
     return { status: 'unavailable', ok: false, technicalError: true, transient: true, skipped: true, provider: 'groq', model, unsupported_claims: [], reason: 'Groq validator pominięty: zbyt mały pozostały budżet czasu' };
   }
 
+  // Groq ma twardy limit TPM. Duże paczki evidence potrafią przekroczyć limit
+  // jeszcze przed generacją (HTTP 413); pomijamy go wtedy bez marnowania timeoutu.
+  const groqEvidenceLimitChars = Math.max(8000, Number(process.env.AI_GROQ_VALIDATOR_MAX_EVIDENCE_CHARS) || 12000);
+  if (String(dane).length > groqEvidenceLimitChars) {
+    return { status: 'unavailable', ok: false, technicalError: true, transient: true, skipped: true, provider: 'groq', model, unsupported_claims: [], reason: `Groq validator pominięty: evidence za duże (${String(dane).length} znaków; limit ${groqEvidenceLimitChars})` };
+  }
   const { system, user } = zbudujPromptWalidatora(pytanie, odpowiedz, dane, requestMeta);
   const controller = new AbortController();
   try {
