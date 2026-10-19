@@ -242,12 +242,13 @@ function repairBudgetBlockReason({
 }
 
 function shouldOpenQuotaCircuit(error) {
-  // HTTP 429 can mean temporary capacity pressure; only true quota failures
-  // should trip the long-lived process-wide model circuit breaker. OpenRouter's
-  // retryable in-flight budget 402 must not block Groq 120B globally.
+  // This breaker lasts an hour and is process-wide for the expensive 120B model.
+  // A generic 429/rate-limit is handled by the endpoint cooldown and must not
+  // trigger the long breaker. Open it only for billing or clearly daily quota.
+  // OpenRouter's documented retryable in-flight budget 402 is also excluded.
   const text = String(error?.message || error || '');
   if (/openrouter_in_flight_budget/i.test(text) && /retry[- ]after/i.test(text)) return false;
-  return classifyFailure(error) === 'quota';
+  return /(?:HTTP\\s*402|payment required|insufficient (?:credits?|quota)|credit balance.{0,40}(?:deplet|exhaust|insufficient)|tokens? per day|\\bTPD\\b|daily (?:token|request|usage) quota|quota exceeded)/i.test(text);
 }
 
 function shouldRetryFailure(failure) {
@@ -262,6 +263,7 @@ module.exports = {
   resetProviderQuotaCooldowns,
   quotaCooldownMsFromError,
   retryAfterHint,
+  shouldOpenQuotaCircuit,
   markProviderQuota,
   isProviderQuotaBlocked,
   classifyFailure,
