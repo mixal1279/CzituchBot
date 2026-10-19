@@ -7,13 +7,8 @@ on:
         description: 'Ziarno rotacji przypadków (0 = stały zestaw, >0 = inne pytania z każdej kategorii)'
         required: false
         default: '0'
-  # Pushes to the workflow file may cancel an already-running benchmark, but
-  # must never start a new live benchmark. Run it only through workflow_dispatch.
-  push:
-    branches:
-      - fix/ai-core-retrieval-validator-hardening
-    paths:
-      - '.github/workflows/ai-live-benchmark.yml'
+  # Benchmark uruchamiamy wyłącznie ręcznie (workflow_dispatch), żeby zwykły push
+  # nie zużywał limitów API ani nie uruchamiał kosztownych testów live.
 
 concurrency:
   group: ai-live-benchmark-current
