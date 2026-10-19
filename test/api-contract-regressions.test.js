@@ -90,6 +90,17 @@ test('live benchmark is manual-only so pushes do not spend API quota', () => {
   assert.doesNotMatch(workflow, /^  push:/m);
 });
 
+test('Twitch Stream Marker uses a broadcaster token with the required scope', () => {
+  const source = read('czituch_bot.js');
+  const start = source.indexOf('async function utworzMarker(');
+  const end = source.indexOf('async function pobierzStartStreamu(', start);
+  assert.ok(start >= 0 && end > start, 'Twitch marker helper should exist');
+  const marker = source.slice(start, end);
+  assert.match(marker, /config\.tokenBroadcaster/);
+  assert.match(marker, /user:write:broadcast/);
+  assert.doesNotMatch(marker, /getTwitchChatToken\(config\.botKey\)/);
+});
+
 test('TikTok RSS Bridge HTTP errors and non-Atom responses are not mistaken for empty feeds', () => {
   const source = read('czituch_bot.js');
   const start = source.indexOf('async function pobierzWszystkieTikToki(');
