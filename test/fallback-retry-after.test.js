@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { quotaCooldownMsFromError } = require('../ai/fallback');
+const { quotaCooldownMsFromError, geminiGenerationCooldownMsFromError } = require('../ai/fallback');
 
 process.env.NODE_ENV = 'test';
 
@@ -33,4 +33,18 @@ test('quotaCooldownMsFromError prefers Retry-After header over message-based dur
 
   const ms = quotaCooldownMsFromError(err);
   assert.equal(ms, 5000);
+});
+
+test('Gemini generation cooldown honors Retry-After and separates daily quota from short rate limits', () => {
+  assert.equal(geminiGenerationCooldownMsFromError('HTTP 429: rate limit exceeded (Retry-After=5s)'), 5000);
+  assert.equal(geminiGenerationCooldownMsFromError('HTTP 429: rate limit exceeded'), 90_000);
+  assert.equal(geminiGenerationCooldownMsFromError('HTTP 429: quota exceeded for tokens per day (TPD)'), 24 * 60 * 60 * 1000);
+  assert.equal(geminiGenerationCooldownMsFromError('HTTP 402: Prepay credit balance is depleted'), 24 * 60 * 60 * 1000);
+  assert.equal(geminiGenerationCooldownMsFromError('HTTP 503: service temporarily unavailable'), 0);
+});
+
+test('Gemini generation cooldown detects structured HTTP status even without quota wording', () => {
+  assert.equal(geminiGenerationCooldownMsFromError({ status: 402, message: 'payment required' }), 24 * 60 * 60 * 1000);
+  assert.equal(geminiGenerationCooldownMsFromError({ status: 429, message: 'too many requests' }), 90_000);
+  assert.equal(geminiGenerationCooldownMsFromError({ status: 400, message: 'bad request' }), 0);
 });
