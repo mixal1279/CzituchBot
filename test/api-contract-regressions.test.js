@@ -14,10 +14,12 @@ test('Gemini REST calls keep API keys out of URLs and use the auth header', () =
   assert.equal((source.match(/x-goog-api-key/g) || []).length, 3);
 });
 
-test('Gemini validator uses the current responseFormat schema and model-compatible thinking levels', () => {
+test('Gemini validator uses GenerateContent JSON schema fields and model-compatible thinking levels', () => {
   const source = read('czituch_bot.js');
-  assert.match(source, /responseFormat:\s*\{\s*text:\s*\{\s*mimeType:\s*'application\/json',\s*schema:\s*GEMINI_VALIDATOR_JSON_SCHEMA/s);
-  assert.doesNotMatch(source, /responseSchema:/);
+  assert.match(source, /systemInstruction:\s*\{\s*parts:/s);
+  assert.match(source, /responseMimeType:\s*'application\/json'/);
+  assert.match(source, /responseSchema:\s*GEMINI_VALIDATOR_JSON_SCHEMA/);
+  assert.doesNotMatch(source, /responseFormat:\s*\{\s*text:/);
   assert.match(source, /model === 'gemini-3\.8-flash'[\s\S]{0,100}\{ thinkingLevel: 'low' \}/);
   assert.match(source, /model === 'gemini-3\.5-flash-lite'[\s\S]{0,120}\{ thinkingLevel: 'minimal' \}/);
 });

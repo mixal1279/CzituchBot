@@ -136,7 +136,7 @@ test('Gemini GenerateContent uses the documented systemInstruction and responseS
   assert.ok(call.body.systemInstruction?.parts?.[0]?.text);
   assert.equal(Object.hasOwn(call.body, 'system_instruction'), false);
   assert.equal(call.body.generationConfig.responseMimeType, 'application/json');
-  assert.equal(call.body.generationConfig.responseSchema.type, 'OBJECT');
+  assert.equal(call.body.generationConfig.responseSchema.type, 'object');
   assert.ok(call.body.generationConfig.responseSchema.properties.claims.items.properties.claim_en);
   assert.equal(Object.hasOwn(call.body.generationConfig, 'responseFormat'), false);
 });
