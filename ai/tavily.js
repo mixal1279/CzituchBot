@@ -416,37 +416,82 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
     });
     return cacheReadyPromise;
   }
-  // Zapis odroczony: wiele wyników w krótkim czasie = jeden zapis pliku (snapshot z chwili zapisu).
+  async function zapiszLokalnySnapshot(file, content) {
+    const tempFile = `${file}.tmp-${process.pid}`;
+    await fs.promises.writeFile(tempFile, content, 'utf8', { mode: 0o600 });
+    await fs.promises.chmod(tempFile, 0o600);
+    await fs.promises.rename(tempFile, file);
+  }
+
+  // Zapis odroczony: wiele wyników w krótkim czasie = jeden zapis.
   let persistTimer = null;
   const persistCache = () => {
     if (persistTimer) return persistQueue;
     persistTimer = setTimeout(() => {
       persistTimer = null;
       const snapshot = snapshotCacheTavily(cache);
-      const tempFile = `${cacheFile}.tmp-${process.pid}`;
       persistQueue = persistQueue
         .catch(err => logger.warn?.('[Tavily] poprzedni zapis cache nieudany:', err.message))
         .then(async () => {
-          if (stateStore?.enabled) {
-            if (!cacheReady) {
-              logger.warn?.('[Tavily] Pomijam zapis cache do Firestore, dopóki odczyt nie powiedzie się; dane pozostają w pamięci.');
-              return;
-            }
+          if (stateStore?.enabled && cacheReady) {
             await stateStore.saveCache('tavily_search', JSON.parse(snapshot));
             return;
           }
-          await fs.promises.writeFile(tempFile, snapshot, 'utf8', { mode: 0o600 });
-          await fs.promises.rename(tempFile, cacheFile);
+          if (stateStore?.enabled && !cacheReady) {
+            logger.warn?.('[Tavily] Firestore nie jest gotowy — zapisuję cache lokalnie jako kopię awaryjną.');
+          }
+          await zapiszLokalnySnapshot(cacheFile, snapshot);
         })
-        .catch(err => {
-          logger.warn?.('[Tavily] zapis cache nieudany:', err.message);
-          return fs.promises.unlink(tempFile).catch(() => {});
+        .catch(async err => {
+          logger.warn?.('[Tavily] zapis cache do Firestore nieudany; próbuję zapisu lokalnego:', err.message);
+          try {
+            await zapiszLokalnySnapshot(cacheFile, snapshot);
+          } catch (fallbackError) {
+            logger.error?.('[Tavily] Nie udało się też zapisać lokalnej kopii cache:', fallbackError.message);
+          }
         });
     }, TAVILY_PERSIST_DEBOUNCE_MS);
     persistTimer.unref?.();
     return persistQueue;
   };
   const rewriteCache = new Map();
+  const rewriteCacheFile = './tavily_rewrite_cache.json';
+  try {
+    const saved = JSON.parse(fs.readFileSync(rewriteCacheFile, 'utf8'));
+    if (saved && typeof saved === 'object' && !Array.isArray(saved)) {
+      for (const [key, value] of Object.entries(saved)) {
+        if (value?.query && Number.isFinite(Number(value.czas)) && Date.now() - Number(value.czas) < TAVILY_REWRITE_TTL_MS) {
+          rewriteCache.set(key, value);
+        }
+      }
+    }
+  } catch (_) {}
+
+  let rewritePersistTimer = null;
+  let rewritePersistQueue = Promise.resolve();
+  const persistRewriteCache = () => {
+    if (rewritePersistTimer) return rewritePersistQueue;
+    rewritePersistTimer = setTimeout(() => {
+      rewritePersistTimer = null;
+      const snapshot = JSON.stringify(ograniczCacheRewrite(rewriteCache));
+      rewritePersistQueue = rewritePersistQueue
+        .catch(err => logger.warn?.('[Tavily] poprzedni zapis rewrite cache nieudany:', err.message))
+        .then(async () => {
+          if (stateStore?.enabled && cacheReady) {
+            await stateStore.saveCache('tavily_rewrite', JSON.parse(snapshot));
+            return;
+          }
+          await zapiszLokalnySnapshot(rewriteCacheFile, snapshot);
+        })
+        .catch(async err => {
+          logger.warn?.('[Tavily] zapis rewrite cache nieudany; próbuję kopii lokalnej:', err.message);
+          try { await zapiszLokalnySnapshot(rewriteCacheFile, snapshot); }
+          catch (fallbackError) { logger.error?.('[Tavily] Nie udało się zapisać lokalnego rewrite cache:', fallbackError.message); }
+        });
+    }, TAVILY_PERSIST_DEBOUNCE_MS);
+    rewritePersistTimer.unref?.();
+    return rewritePersistQueue;
+  };
   const kluczRewrite = q => String(q || '').toLowerCase().replace(/\s+/g, ' ').trim();
 
   const ocenaZrodla = (url, requestedDomains = []) => {
@@ -507,10 +552,7 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
           else logger.log(`[Tavily] ↩️ Rewrite odrzucony — używam oryginalnego pytania: "${original}"`);
           rewriteCache.set(rewriteKey, { query: searchQuery, czas: Date.now() });
           if (rewriteCache.size > TAVILY_REWRITE_MAX_ENTRIES) rewriteCache.delete(rewriteCache.keys().next().value);
-          if (stateStore?.enabled) {
-            stateStore.saveCache('tavily_rewrite', ograniczCacheRewrite(rewriteCache))
-              .catch(err => logger.warn?.('[Tavily] Zapis cache przepisywania do Firestore nieudany:', err.message));
-          }
+          persistRewriteCache();
         }
       }
       logger.log(`[Tavily] searchQuery: "${searchQuery}" | domains: ${JSON.stringify(domains)} | time_range: ${time_range}`);
