@@ -143,6 +143,46 @@ test('Gemini GenerateContent uses the documented systemInstruction and responseF
   assert.equal(Object.hasOwn(call.body.generationConfig, 'responseMimeType'), false);
 });
 
+test('Gemini zachowuje promptFeedback, gdy prompt jest zablokowany i nie ma kandydatów', async () => {
+  hooks.KONFIGURACJA.geminiKey = 'test-gemini-key';
+  mockFetch(async () => jsonResponse({
+    promptFeedback: {
+      blockReason: 'SAFETY',
+      safetyRatings: [
+        { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', blocked: true, probability: 'HIGH' },
+      ],
+    },
+  }));
+
+  const result = await hooks.walidujOdpowiedzGeminiModel(
+    'gemini-3.5-flash-lite', 'generic', QUESTION, ANSWER, EVIDENCE, [], 'test-gemini-prompt-blocked',
+  );
+
+  assert.equal(result.status, 'unavailable');
+  assert.equal(result.provider, 'gemini');
+  assert.equal(result.blockReason, 'SAFETY');
+  assert.match(result.reason, /promptFeedback\.blockReason=SAFETY/);
+  assert.match(result.reason, /HARM_CATEGORY_DANGEROUS_CONTENT/);
+  assert.equal(result.safetyRatings[0].blocked, true);
+  assert.equal(result.transient, false);
+});
+
+test('Gemini raportuje brak kandydatów bez promptFeedback jako osobny błąd odpowiedzi', async () => {
+  hooks.KONFIGURACJA.geminiKey = 'test-gemini-key';
+  mockFetch(async () => jsonResponse({ candidates: [] }));
+
+  const result = await hooks.walidujOdpowiedzGeminiModel(
+    'gemini-3.5-flash-lite', 'generic', QUESTION, ANSWER, EVIDENCE, [], 'test-gemini-no-candidates',
+  );
+
+  assert.equal(result.status, 'unavailable');
+  assert.equal(result.provider, 'gemini');
+  assert.match(result.reason, /nie zwrócił kandydatów/);
+  assert.match(result.reason, /nie podał promptFeedback\.blockReason/);
+  assert.equal(Object.hasOwn(result, 'blockReason'), false);
+  assert.equal(result.transient, false);
+});
+
 test('OpenRouter wysyła json_object, reasoning low i honoruje własny endpoint', async () => {
   hooks.KONFIGURACJA.openrouterKey = 'test-openrouter-key';
   hooks.KONFIGURACJA.openrouterBaseUrl = 'https://openrouter.example/custom/v1';
