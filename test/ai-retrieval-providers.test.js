@@ -98,6 +98,40 @@ test('secondary provider forwards its bounded timeout to wrapped transports', as
   assert.equal(observedTimeout, 275);
 });
 
+
+test('Tavily uses Bearer authentication and falls back to the original query when rewriting fails', async () => {
+  let observedRequest;
+  const search = createTavilySearch({
+    apiKey: 'test-tavily-key',
+    groq: {
+      chat: {
+        completions: {
+          create: async () => { throw new Error('simulated rewrite provider failure'); },
+        },
+      },
+    },
+    normalizeQuery: value => String(value || '').trim(),
+    fetchZTimeout: async (url, options) => {
+      observedRequest = { url, options };
+      return new Response(JSON.stringify({ results: [] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    },
+    logger: { log() {}, warn() {}, error() {} },
+    cacheFile: '/tmp/czituch-tavily-auth-fallback-test.json',
+    geminiKey: '',
+    exaKey: '',
+  });
+
+  const result = await search('Jak działa przykładowa funkcja?', { returnMeta: true });
+  assert.equal(result.status, 'empty');
+  assert.equal(observedRequest.url, 'https://api.tavily.com/search');
+  assert.equal(observedRequest.options.headers.Authorization, 'Bearer test-tavily-key');
+  assert.equal(observedRequest.options.headers['Content-Type'], 'application/json');
+  assert.equal(JSON.parse(observedRequest.options.body).query, 'Jak działa przykładowa funkcja?');
+});
+
 test('Tavily rejects empty queries without making an API request', async () => {
   let fetchCalls = 0;
   const search = createTavilySearch({
