@@ -101,6 +101,18 @@ test('TikTok RSS Bridge HTTP errors and non-Atom responses are not mistaken for 
   assert.match(fetcher, /non-Atom response/);
 });
 
+test('Open-Meteo geocoding and forecast distinguish HTTP errors from missing weather data', () => {
+  const source = read('czituch_bot.js');
+  const geoStart = source.indexOf('async function geokodujMiasto(');
+  const weatherStart = source.indexOf('async function pobierzPogode(', geoStart);
+  const weatherEnd = source.indexOf('async function wyodrebnijMiastoPogoda(', weatherStart);
+  assert.ok(geoStart >= 0 && weatherStart > geoStart && weatherEnd > weatherStart);
+  assert.match(source.slice(geoStart, weatherStart), /if \(!geoRes\.ok\) throw new Error/);
+  assert.match(source.slice(geoStart, weatherStart), /Open-Meteo geocoding HTTP/);
+  assert.match(source.slice(weatherStart, weatherEnd), /if \(!pogodaRes\.ok\) throw new Error/);
+  assert.match(source.slice(weatherStart, weatherEnd), /Open-Meteo forecast HTTP/);
+});
+
 test('Kick REST helper does not parse JSON error bodies as successful API responses', () => {
   const source = read('czituch_bot.js');
   const start = source.indexOf('async function kickApi(');
