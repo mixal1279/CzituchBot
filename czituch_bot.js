@@ -6753,15 +6753,16 @@ async function obslugaTwitch(nick, message, wyslijFn, config = TWITCH_CONFIG_BIL
       return await wyslijFn(`🔮 ${znak.pl} @${nick}: ${horoskop}`);
     }
 
-    if (msgLower === '!bułka' || msgLower === '!bulka') {
+    const dailyBulkaCommand = BILLY_BAKERY.parseDailyBulkaCommand(message, nick, tags?.username || nick);
+    if (dailyBulkaCommand) {
       ostatnieUzycie[cooldownKey] = teraz;
 
-      const dzisiaj  = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-      const cacheKey = `twitch:${kanalNorm || 'brak-kanalu'}:${nick.toLowerCase()}_${dzisiaj}`;
+      const dzisiaj = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+      const cacheKey = `twitch:${kanalNorm || 'brak-kanalu'}:${dailyBulkaCommand.targetLogin}_${dzisiaj}`;
 
       let bulka = bulkaDzienneCache[cacheKey];
       if (!bulka) {
-        // Czyścimy wpisy sprzed dzisiaj, żeby plik nie rósł w nieskończoność
+        // Czyścimy wpisy sprzed dzisiaj, żeby plik nie rósł w nieskończoność.
         for (const klucz of Object.keys(bulkaDzienneCache)) {
           if (!klucz.endsWith(`_${dzisiaj}`)) delete bulkaDzienneCache[klucz];
         }
@@ -6770,7 +6771,7 @@ async function obslugaTwitch(nick, message, wyslijFn, config = TWITCH_CONFIG_BIL
         await zapiszCacheBulek(bulkaDzienneCache);
       }
 
-      return await wyslijFn(`🍞 @${nick} dziś jesteś jak ${bulka.nazwa}!`);
+      return await wyslijFn(`🍞 @${dailyBulkaCommand.targetDisplay} dziś jesteś jak ${bulka.nazwa}!`);
     }
 
     if (msgLower === '!komendy') {
