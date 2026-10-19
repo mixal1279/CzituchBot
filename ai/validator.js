@@ -185,7 +185,7 @@ function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '', opt
   // Twarde kontrole robimy na angielskim tłumaczeniu claimu tylko wtedy, gdy cytat jest po angielsku,
   // a tłumaczenie przeszło mechaniczną kontrolę zgodności z polskim oryginałem.
   if (options.claimEn && typeof evidenceQuote === 'string' && wyglądaNaAngielski(evidenceQuote)) {
-    const consistency = spojnoscTlumaczeniaClaimu(claim, options.claimEn, { nameOracle });
+    const consistency = spojnoscTlumaczeniaClaimu(claim, options.claimEn, { nameOracle, evidenceQuote });
     if (consistency.ok) claim = String(options.claimEn);
   }
   if (!Array.isArray(sourceIds) || !sourceIds.length || typeof evidenceQuote !== 'string') {
@@ -600,7 +600,7 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
           // claim_en i wynik mechanicznej kontroli spójności: widać, czy model w ogóle zwraca tłumaczenie
           // i czy odpada ono na liczbach/negacji/nazwach, zanim trafi do twardych bramek.
           claimEn: String(claim.claim_en || '').slice(0, 600),
-          claimEnConsistency: claim.claim_en ? spojnoscTlumaczeniaClaimu(claim.claim, claim.claim_en, { nameOracle }) : null,
+          claimEnConsistency: claim.claim_en ? spojnoscTlumaczeniaClaimu(claim.claim, claim.claim_en, { nameOracle, evidenceQuote: claim.evidence_quote }) : null,
           supported: claim.supported === true,
           sourceIds: Array.isArray(claim.source_ids) ? claim.source_ids : [],
           evidenceQuote: String(claim.evidence_quote || '').slice(0, 500),
