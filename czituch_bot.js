@@ -1834,6 +1834,10 @@ async function walidujOdpowiedzOpenRouter(persona, pytanie, odpowiedz, dane, req
   if (!KONFIGURACJA.openrouterKey || !dane) {
     return { status: 'unavailable', ok: false, technicalError: true, provider: 'openrouter', model: KONFIGURACJA.openrouterValidatorModel, unsupported_claims: [], reason: 'brak fallbacku OpenRouter' };
   }
+  const providerKey = `openrouter:${KONFIGURACJA.openrouterValidatorModel}`;
+  if (isProviderQuotaBlocked(providerKey)) {
+    return { status: 'unavailable', ok: false, technicalError: true, transient: true, quota: true, skipped: true, provider: 'openrouter', model: KONFIGURACJA.openrouterValidatorModel, unsupported_claims: [], reason: 'OpenRouter validator pominięty: aktywny cooldown limitu dostawcy' };
+  }
   const { system, user } = zbudujPromptWalidatora(pytanie, odpowiedz, dane, requestMeta);
 
   const controller = new AbortController();
@@ -1866,13 +1870,16 @@ async function walidujOdpowiedzOpenRouter(persona, pytanie, odpowiedz, dane, req
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
-      throw new Error(formatProviderError('openrouter', data?.model || KONFIGURACJA.openrouterValidatorModel, null, {
-        status: response.status,
-        code: data?.error?.code,
-        type: data?.error?.type,
-        param: data?.error?.param,
-        responseData: data,
-      }));
+      const status = Number(response.status || 0);
+      const retryAfter = retryAfterHint(response);
+      const quota = status === 402 || status === 429;
+      const transient = [408, 409, 425, 429, 500, 502, 503, 504].includes(status);
+      if (quota) markProviderQuota(providerKey, quotaCooldownMsFromError({ message: `HTTP ${status} ${retryAfter}` }));
+      const diagnostic = formatProviderError('openrouter', data?.model || KONFIGURACJA.openrouterValidatorModel, null, {
+        status, code: data?.error?.code, type: data?.error?.type, param: data?.error?.param,
+        retry_after: retryAfter || null, responseData: data,
+      });
+      return { status: 'unavailable', ok: false, technicalError: true, transient, quota, provider: 'openrouter', model: data?.model || KONFIGURACJA.openrouterValidatorModel, unsupported_claims: [], reason: quota ? `OpenRouter limit/credit error (HTTP ${status})` : `OpenRouter HTTP error (${status})`, error: diagnostic, diagnostic };
     }
     const choice = data?.choices?.[0] || {};
     const message = choice?.message || {};
@@ -2055,6 +2062,10 @@ async function walidujOdpowiedzXKiro(persona, pytanie, odpowiedz, dane, requestI
   if (!KONFIGURACJA.xkiroKey || !dane) {
     return { status: 'unavailable', ok: false, technicalError: true, provider: 'xkiro', model, unsupported_claims: [], reason: 'brak XKIRO_API_KEY lub danych referencyjnych' };
   }
+  const providerKey = `xkiro:${model}`;
+  if (isProviderQuotaBlocked(providerKey)) {
+    return { status: 'unavailable', ok: false, technicalError: true, transient: true, quota: true, skipped: true, provider: 'xkiro', model, unsupported_claims: [], reason: 'xKiro validator pominięty: aktywny cooldown limitu dostawcy' };
+  }
   const { system, user } = zbudujPromptWalidatora(pytanie, odpowiedz, dane, requestMeta);
 
   const remainingMs = requestState
@@ -2093,14 +2104,16 @@ async function walidujOdpowiedzXKiro(persona, pytanie, odpowiedz, dane, requestI
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
+      const status = Number(response.status || 0);
+      const retryAfter = retryAfterHint(response);
+      const quota = status === 402 || status === 429;
+      const transient = [408, 409, 425, 429, 500, 502, 503, 504].includes(status);
+      if (quota) markProviderQuota(providerKey, quotaCooldownMsFromError({ message: `HTTP ${status} ${retryAfter}` }));
       const diagnostic = formatProviderError('xkiro', data?.model || model, null, {
-        status: response.status,
-        code: data?.error?.code,
-        type: data?.error?.type,
-        param: data?.error?.param,
-        responseData: data,
+        status, code: data?.error?.code, type: data?.error?.type, param: data?.error?.param,
+        retry_after: retryAfter || null, responseData: data,
       });
-      return { status: 'unavailable', ok: false, technicalError: true, transient: response.status >= 500, provider: 'xkiro', model: data?.model || model, unsupported_claims: [], reason: 'xKiro validator HTTP error', error: diagnostic, diagnostic };
+      return { status: 'unavailable', ok: false, technicalError: true, transient, quota, provider: 'xkiro', model: data?.model || model, unsupported_claims: [], reason: quota ? `xKiro limit/credit error (HTTP ${status})` : `xKiro HTTP error (${status})`, error: diagnostic, diagnostic };
     }
     const choice = data?.choices?.[0] || {};
     const rawContent = choice?.message?.content;
