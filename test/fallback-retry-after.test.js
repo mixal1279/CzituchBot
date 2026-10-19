@@ -8,10 +8,11 @@ const { quotaCooldownMsFromError } = require('../ai/fallback');
 process.env.NODE_ENV = 'test';
 
 test('quotaCooldownMsFromError honors Retry-After header as RFC1123 date', () => {
-  // construct a Retry-After HTTP-date 45s in the future
+  // HTTP-date values have one-second precision, so toUTCString() truncates
+  // the milliseconds. Allow for that truncation plus normal test execution time.
   const now = Date.now();
   const futureMs = 45_000;
-  const dateStr = new Date(now + futureMs).toUTCString(); // RFC1123-like
+  const dateStr = new Date(now + futureMs).toUTCString();
 
   const err = {
     message: 'rate limited',
@@ -19,8 +20,8 @@ test('quotaCooldownMsFromError honors Retry-After header as RFC1123 date', () =>
   };
 
   const ms = quotaCooldownMsFromError(err);
-  // Allow some leeway for timing during the test run (±150ms)
-  assert.ok(ms >= futureMs - 200 && ms <= futureMs + 2000, `expected ~${futureMs}ms, got ${ms}ms`);
+  // The date format can lose up to 999ms; leave a small additional timing margin.
+  assert.ok(ms >= futureMs - 1200 && ms <= futureMs + 2000, `expected ~${futureMs}ms, got ${ms}ms`);
 });
 
 test('quotaCooldownMsFromError prefers Retry-After header over message-based durations', () => {
