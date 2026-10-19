@@ -1919,7 +1919,11 @@ async function walidujOdpowiedzOpenRouter(persona, pytanie, odpowiedz, dane, req
           ? resetCooldownMs
           : status === 402 && !inFlightBudget
             ? 24 * 60 * 60 * 1000
-            : quotaCooldownMsFromError({ message: `HTTP ${status} ${retryAfter}` });
+            : quotaCooldownMsFromError({
+              status,
+              message: `HTTP ${status} ${retryAfter} ${inFlightBudget ? 'openrouter_in_flight_budget' : ''}`,
+              allowPaymentRequiredRetryAfter: inFlightBudget,
+            });
         markProviderQuota(resetAwareLimit ? 'openrouter:*' : providerKey, cooldownMs);
       }
       const diagnostic = formatProviderError('openrouter', data?.model || KONFIGURACJA.openrouterValidatorModel, null, {
