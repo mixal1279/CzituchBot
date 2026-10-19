@@ -94,6 +94,19 @@ test('unreadable Firestore token falls back to the legacy file without overwriti
   }
 });
 
+test('encrypted local OAuth fallback is decrypted when Firestore is disabled', async () => {
+  const state = createFirestoreState(null, { encryptionKey: TEST_KEY, logger: { info() {}, warn() {} } });
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'czituch-token-encrypted-local-'));
+  const file = path.join(dir, 'token.json');
+  const token = { access_token: 'secret-local-access', refresh_token: 'secret-local-refresh' };
+  await fs.writeFile(file, JSON.stringify(encryptSecret(token, Buffer.from(TEST_KEY, 'base64'))), 'utf8');
+  try {
+    assert.deepEqual(await state.migrateTokenFile('kick', file), token);
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});
+
 test('disabled Firestore state can still load a legacy OAuth token file', async () => {
   const state = createFirestoreState(null, { logger: { info() {}, warn() {} } });
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'czituch-token-local-'));
