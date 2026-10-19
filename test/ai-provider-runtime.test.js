@@ -237,7 +237,7 @@ test('repair after validator rejection selects only configured healthy providers
 
 test('repair checks shared model-call and generation limits before selecting a provider', () => {
   const budget = {
-    // Naprawa wymaga co najmniej 8,5 s (osobny test niżej), więc ten test używa wyraźnie więcej.
+    // Naprawa wymaga co najmniej 13,5 s (3 s generowania + 10,5 s rezerwy).
     remainingMs: 20000,
     generations: 5,
     maxGenerations: 6,
@@ -282,7 +282,7 @@ test('provider capacity pressure is transient rather than a quota cooldown', () 
 
 test('repair is skipped when less than the minimum generation plus fallback reserve remains', () => {
   const budget = {
-    remainingMs: 8499,
+    remainingMs: 13499,
     generations: 1,
     maxGenerations: 6,
     repairGenerations: 0,
@@ -291,7 +291,7 @@ test('repair is skipped when less than the minimum generation plus fallback rese
     maxModelCalls: 12,
   };
   assert.equal(repairBudgetBlockReason(budget), 'insufficient_time_for_fallback');
-  assert.equal(repairBudgetBlockReason({ ...budget, remainingMs: 8500 }), null);
+  assert.equal(repairBudgetBlockReason({ ...budget, remainingMs: 13500 }), null);
 });
 
 
