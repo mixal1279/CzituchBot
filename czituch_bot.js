@@ -2151,7 +2151,7 @@ async function walidujOdpowiedzAIBezCache(persona, pytanie, odpowiedz, dane, his
     last = result;
   }
   if (requestState && budzetValidatoraPrzekroczony()) {
-    return { ...(last || {}), status: 'unavailable', ok: false, technicalError: true, unsupported_claims: [], reason: 'budżet czasu validatora wyczerpany' };
+    return lastRejected || { ...(last || {}), status: 'unavailable', ok: false, technicalError: true, unsupported_claims: [], reason: 'budżet czasu validatora wyczerpany' };
   }
 
 
@@ -2177,7 +2177,7 @@ async function walidujOdpowiedzAIBezCache(persona, pytanie, odpowiedz, dane, his
       if (groqTimeoutMs === null) {
         console.warn(`[AI][${requestId}] Groq validator pominięty przed rezerwacją slotu; remaining=${groqRemainingMs}ms`);
       } else if (!zarezerwujSlotWalidatora(requestState, 'validator:groq')) {
-        return { ...(last || {}), status: 'unavailable', ok: false, technicalError: true, provider: 'groq', model: AI_MODELS.validator, unsupported_claims: [], reason: 'budżet validatora/modeli wyczerpany przed Groq' };
+        return lastRejected || { ...(last || {}), status: 'unavailable', ok: false, technicalError: true, provider: 'groq', model: AI_MODELS.validator, unsupported_claims: [], reason: 'budżet validatora/modeli wyczerpany przed Groq' };
       } else {
         const validatorStartedAt = Date.now();
         const remainingBefore = requestState?.remainingMs?.() ?? null;
@@ -2232,7 +2232,7 @@ async function walidujOdpowiedzAIBezCache(persona, pytanie, odpowiedz, dane, his
       console.warn(`[AI][${requestId}] xKiro validator pominięty: zbyt mały remaining budget=${xkiroRemainingMs}ms; przechodzę do następnego validatora`);
     } else {
       if (!zarezerwujSlotWalidatora(requestState, 'validator:xkiro')) {
-        return { ...(last || {}), status: 'unavailable', ok: false, technicalError: true, unsupported_claims: [], reason: 'budżet validatora/modeli wyczerpany przed xKiro' };
+        return lastRejected || { ...(last || {}), status: 'unavailable', ok: false, technicalError: true, unsupported_claims: [], reason: 'budżet validatora/modeli wyczerpany przed xKiro' };
       }
       const validatorStartedAt = Date.now();
       const remainingBefore = requestState?.remainingMs?.() ?? null;
