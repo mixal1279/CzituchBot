@@ -77,7 +77,7 @@ test('live diagnostics distinguish validator failures from generation failures a
       { provider: 'gemini', model: 'gemini-3.8-flash', status: 'rejected' },
       { provider: 'groq', model: 'openai/gpt-oss-20b', status: 'unavailable', technicalError: true, reason: 'timeout' },
     ],
-    timingTrace: [{ stage: 'validator_second_opinion' }],
+    timingTrace: [{ stage: 'validator_second_opinion' }, { stage: 'tavily_http_end', durationMs: 1200, ok: true }, { stage: 'generation_cycle_start', elapsedMs: 24200 }],
   }], benchmark.cases, selected);
 
   assert.equal(diagnostics.validatorCalls, 2);
@@ -87,6 +87,9 @@ test('live diagnostics distinguish validator failures from generation failures a
   assert.equal(diagnostics.validatorTransportFailures.length, 1);
   assert.deepEqual(diagnostics.generationProviderFailures, ['gemini:gemini-3.8-flash:timeout']);
   assert.equal(diagnostics.validatorSecondOpinions, 1);
+  assert.equal(diagnostics.tavilyHttpCalls, 1);
+  assert.equal(diagnostics.avgTavilyHttpMs, 1200);
+  assert.equal(diagnostics.avgElapsedToGenerationCycleMs, 24200);
   assert.equal(diagnostics.independentGoldCasesInSample.length, 1);
   assert.equal(diagnostics.goldCoverageByCategory.how.independentGold, 0);
 });
