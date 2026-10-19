@@ -170,13 +170,15 @@ function markProviderQuota(provider, cooldownMs = Number(process.env.AI_PROVIDER
 function isProviderQuotaBlocked(provider, now = Date.now()) {
   const endpoint = normalizeProviderEndpoint(provider);
   if (!endpoint) return false;
-  const until = quotaBlockedUntil.get(endpoint);
-  if (!until) return false;
-  if (until <= now) {
-    quotaBlockedUntil.delete(endpoint);
-    return false;
+  const providerName = endpoint.slice(0, endpoint.indexOf(':'));
+  const keys = [endpoint, `${providerName}:*`];
+  let blockedUntil = 0;
+  for (const key of keys) {
+    const until = quotaBlockedUntil.get(key) || 0;
+    if (until && until <= now) quotaBlockedUntil.delete(key);
+    else blockedUntil = Math.max(blockedUntil, until);
   }
-  return true;
+  return blockedUntil > now;
 }
 
 function nextFallbacks({ failure = 'unknown', attempted = [], failedProviders = [], maxFallbacks = null } = {}) {
