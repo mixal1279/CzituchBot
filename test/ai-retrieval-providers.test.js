@@ -15,7 +15,7 @@ const {
   nextFallbacks,
   classifyFailure,
 } = require('../ai/fallback');
-const { createTavilySearch, filtrujPoScore, normalizujProgScore, sanityzujTrescZrodlaTavily, czyWymagaSecondaryRetrieval, snapshotCacheTavily, ograniczCacheTavily } = require('../ai/tavily');
+const { createTavilySearch, filtrujPoScore, normalizujProgScore, normalizujZakresTavily, sanityzujTrescZrodlaTavily, czyWymagaSecondaryRetrieval, snapshotCacheTavily, ograniczCacheTavily } = require('../ai/tavily');
 
 test('retrieval source contract is normalized', () => {
   const source = normalizeSource({
@@ -29,6 +29,16 @@ test('retrieval source contract is normalized', () => {
   assert.equal(source.url, 'https://example.com/a');
   assert.equal(source.score, 0.8);
   assert.match(formatSources([source]), /\[SOURCE 1\]/);
+});
+
+test('Tavily time ranges normalize legacy prefixes and reject unsupported values', () => {
+  assert.equal(normalizujZakresTavily('past_day'), 'day');
+  assert.equal(normalizujZakresTavily('past_week'), 'week');
+  assert.equal(normalizujZakresTavily('past_month'), 'month');
+  assert.equal(normalizujZakresTavily('past_year'), 'year');
+  assert.equal(normalizujZakresTavily('day'), 'day');
+  assert.equal(normalizujZakresTavily('past_24_hours'), null);
+  assert.equal(normalizujZakresTavily(null), null);
 });
 
 test('Tavily score filter rejects low-confidence result sets', () => {
