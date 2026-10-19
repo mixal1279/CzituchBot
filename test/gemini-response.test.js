@@ -82,6 +82,20 @@ test('Gemini generation: MAX_TOKENS zachowuje tekst i oznacza odpowiedź jako uc
   assert.equal(result.finishReason, 'MAX_TOKENS');
 });
 
+test('Gemini generation: CONTINUATION nie jest używane jako kompletna odpowiedź', () => {
+  const result = parseGeminiGenerationResponse({
+    candidates: [{
+      finishReason: 'CONTINUATION',
+      finishMessage: 'Response can be continued with the continuation token',
+      content: { parts: [{ text: '{"claims": [' }] },
+    }],
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.finishReason, 'CONTINUATION');
+  assert.match(result.reason, /finishReason=CONTINUATION/);
+});
+
 test('Gemini generation: STOP zwraca kompletną odpowiedź tekstową', () => {
   const result = parseGeminiGenerationResponse({
     candidates: [{

@@ -2,7 +2,7 @@
 
 const BLOCKED_FINISH_REASONS = new Set([
   'SAFETY', 'RECITATION', 'LANGUAGE', 'BLOCKLIST',
-  'PROHIBITED_CONTENT', 'SPII', 'IMAGE_SAFETY',
+  'PROHIBITED_CONTENT', 'SPII', 'IMAGE_SAFETY', 'CONTINUATION',
 ]);
 
 function normalizeSafetyRatings(value) {

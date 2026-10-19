@@ -1772,7 +1772,7 @@ async function walidujOdpowiedzGeminiModel(model, persona, pytanie, odpowiedz, d
         .map(rating => rating.category + (rating.blocked ? ' (blocked)' : '') + (rating.probability ? ` probability=${rating.probability}` : ''))
         .join(', ');
       const content = (candidate.content?.parts || []).map(part => part?.text || '').join('').trim();
-      const blockedFinishReasons = new Set(['SAFETY', 'RECITATION', 'LANGUAGE', 'BLOCKLIST', 'PROHIBITED_CONTENT', 'SPII', 'IMAGE_SAFETY']);
+      const blockedFinishReasons = new Set(['SAFETY', 'RECITATION', 'LANGUAGE', 'BLOCKLIST', 'PROHIBITED_CONTENT', 'SPII', 'IMAGE_SAFETY', 'CONTINUATION']);
       if (!content || blockedFinishReasons.has(finishReason)) {
         const reason = [
           !content ? 'Gemini zwrócił kandydata bez użytecznej treści tekstowej' : '',
