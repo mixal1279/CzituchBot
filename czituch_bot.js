@@ -1698,12 +1698,21 @@ async function walidujOdpowiedzGeminiModel(model, persona, pytanie, odpowiedz, d
     }
     const timer = setTimeout(() => controller.abort(), validatorTimeoutMs);
     try {
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(KONFIGURACJA.geminiKey)}`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': KONFIGURACJA.geminiKey },
         body: JSON.stringify({
           system_instruction: { parts: [{ text: system }] },
           contents: [{ role: 'user', parts: [{ text: user }] }],
-          generationConfig: { temperature: 0, maxOutputTokens: 1400, responseMimeType: 'application/json', responseSchema: GEMINI_VALIDATOR_JSON_SCHEMA, thinkingConfig: { thinkingLevel: model === 'gemini-3.7-flash' ? 'low' : 'minimal' } },
+          generationConfig: {
+            temperature: 0,
+            maxOutputTokens: 1400,
+            responseFormat: { text: { mimeType: 'application/json', schema: GEMINI_VALIDATOR_JSON_SCHEMA } },
+            ...(model === 'gemini-3.8-flash'
+              ? { thinkingConfig: { thinkingLevel: 'low' } }
+              : model === 'gemini-3.5-flash-lite'
+                ? { thinkingConfig: { thinkingLevel: 'minimal' } }
+                : {}),
+          },
         }), signal: controller.signal,
       });
       const data = await response.json().catch(() => ({}));
@@ -3137,8 +3146,8 @@ Pytanie użytkownika: ${pytanie}`;
     const timeoutMs = timeoutDlaGeneracji();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${encodeURIComponent(KONFIGURACJA.geminiKey)}`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+      const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': KONFIGURACJA.geminiKey },
         body: JSON.stringify({
           system_instruction: { parts: [{ text: overrideSystemPrompt }] },
           contents: [
@@ -3170,8 +3179,8 @@ Pytanie użytkownika: ${pytanie}`;
     const timeoutMs = timeoutDlaGeneracji();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=${encodeURIComponent(KONFIGURACJA.geminiKey)}`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+      const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': KONFIGURACJA.geminiKey },
         body: JSON.stringify({
           system_instruction: { parts: [{ text: overrideSystemPrompt }] },
           contents: [
@@ -6167,7 +6176,10 @@ async function youtubeLoop(stan) {
       });
       const { items, nextPageToken: newToken, pollingIntervalMillis } = res.data;
       stan.nextPageToken = newToken;
-      nextPollDelay = Math.max(pollingIntervalMillis || KONFIGURACJA.pollInterval, 10000);
+      const serverPollDelay = Number(pollingIntervalMillis);
+      nextPollDelay = Number.isFinite(serverPollDelay) && serverPollDelay > 0
+        ? serverPollDelay
+        : KONFIGURACJA.pollInterval;
       if (items?.length) {
         for (const item of items) {
           const nick    = item.authorDetails?.displayName?.replace(/^@/, '');
@@ -6307,7 +6319,10 @@ async function youtubeWatcher(nazwaKanalu, wyslijFn) {
 
       const res  = await youtube.liveChatMessages.list({ liveChatId: stan.liveChatId, part: ['snippet'] });
       stan.nextPageToken = res.data.nextPageToken;
-      const startDelay = Math.max(res.data.pollingIntervalMillis || KONFIGURACJA.pollInterval, 10000);
+      const initialPollDelay = Number(res.data.pollingIntervalMillis);
+      const startDelay = Number.isFinite(initialPollDelay) && initialPollDelay > 0
+        ? initialPollDelay
+        : KONFIGURACJA.pollInterval;
       console.log(`${tag} Pominięto stare wiadomości. Nasłuchuję... (pierwsze poll za ${Math.round(startDelay/1000)}s)`);
       await czekaj(startDelay);
       await youtubeLoop(stan);
