@@ -3390,8 +3390,8 @@ Pytanie użytkownika: ${pytanie}`;
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
         const retryAfter = retryAfterHint(response);
-        const message = data?.error?.message || `HTTP ${response.status}`;
-        throw new Error(`${message}${retryAfter ? ` (${retryAfter})` : ''}`);
+        const message = data?.error?.message || 'provider returned an error';
+        throw new Error(`HTTP ${response.status}: ${message}${retryAfter ? ` (${retryAfter})` : ''}`);
       }
       const parsed = parseGeminiGenerationResponse(data, 'Gemini Lite');
       if (!parsed.ok) throw new Error(parsed.reason);
