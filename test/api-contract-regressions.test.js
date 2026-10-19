@@ -1,0 +1,46 @@
+'use strict';
+
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+
+const root = path.resolve(__dirname, '..');
+const read = file => fs.readFileSync(path.join(root, file), 'utf8');
+
+test('Gemini REST calls keep API keys out of URLs and use the auth header', () => {
+  const source = read('czituch_bot.js');
+  assert.equal((source.match(/generativelanguage\.googleapis\.com[^\n]*\?key=/g) || []).length, 0);
+  assert.equal((source.match(/x-goog-api-key/g) || []).length, 3);
+});
+
+test('Gemini validator uses the current responseFormat schema and model-compatible thinking levels', () => {
+  const source = read('czituch_bot.js');
+  assert.match(source, /responseFormat:\s*\{\s*text:\s*\{\s*mimeType:\s*'application\/json',\s*schema:\s*GEMINI_VALIDATOR_JSON_SCHEMA/s);
+  assert.doesNotMatch(source, /responseSchema:/);
+  assert.match(source, /model === 'gemini-3\.8-flash'[\s\S]{0,100}\{ thinkingLevel: 'low' \}/);
+  assert.match(source, /model === 'gemini-3\.5-flash-lite'[\s\S]{0,120}\{ thinkingLevel: 'minimal' \}/);
+});
+
+test('YouTube chat polling respects the interval returned by the API', () => {
+  const source = read('czituch_bot.js');
+  assert.match(source, /const serverPollDelay = Number\(pollingIntervalMillis\)/);
+  assert.match(source, /const initialPollDelay = Number\(res\.data\.pollingIntervalMillis\)/);
+  assert.doesNotMatch(source, /Math\.max\([^\n]*pollingIntervalMillis[^\n]*10000/);
+  assert.doesNotMatch(source, /Math\.max\([^\n]*initialPollDelay[^\n]*10000/);
+});
+
+test('validator provider preflight uses production timeout budgets', () => {
+  const source = read('scripts/validator-providers-preflight.js');
+  assert.match(source, /xKiro:\s*Number\(process\.env\.AI_XKIRO_VALIDATOR_TIMEOUT_MS\)\s*\|\|\s*3000/);
+  assert.match(source, /OpenRouter:\s*3000/);
+  assert.match(source, /Groq:\s*3000/);
+  assert.match(source, /result\.ms > productionTimeoutMs/);
+  assert.doesNotMatch(source, /PROD_TIMEOUT_MS\s*=\s*9000/);
+});
+
+test('live benchmark is manual-only so pushes do not spend API quota', () => {
+  const workflow = read('.github/workflows/ai-live-benchmark.yml');
+  assert.match(workflow, /workflow_dispatch:/);
+  assert.doesNotMatch(workflow, /^  push:/m);
+});
