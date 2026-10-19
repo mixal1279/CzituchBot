@@ -6661,7 +6661,7 @@ async function obslugaTwitch(nick, message, wyslijFn, config = TWITCH_CONFIG_BIL
     // !cm: stała liczba 1–30 dla użytkownika przez cały stream BillyBulki.
     // Używamy czasu startu zwróconego przez Twitch API/EventSub, żeby restart
     // procesu nie tworzył nowej puli w trakcie tego samego streamu.
-    if (/^!cm(?:\\s|$)/i.test(message.trim())) {
+    if (/^!cm(?:\s|$)/i.test(message.trim())) {
       ostatnieUzycie[cooldownKey] = teraz;
       let legacyCache = null;
       try {
