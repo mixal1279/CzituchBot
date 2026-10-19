@@ -186,6 +186,42 @@ test('Tavily distinguishes plan and pay-as-you-go limits from request rate limit
   }
 });
 
+test('Tavily cache separates distinct source questions with the same keywords', async () => {
+  let fetchCalls = 0;
+  const search = createTavilySearch({
+    apiKey: 'test-tavily-key',
+    groq: null,
+    normalizeQuery: value => value,
+    fetchZTimeout: async () => {
+      fetchCalls++;
+      return new Response(JSON.stringify({
+        results: [
+          { title: 'Portal 2 release date', url: 'https://source-one.example/portal-2', content: 'Portal 2 was released in 2011.', score: 0.95 },
+          { title: 'Portal 2 release details', url: 'https://source-two.example/portal-2', content: 'Portal 2 was released in 2011.', score: 0.90 },
+        ],
+      }), { status: 200, headers: { 'content-type': 'application/json' } });
+    },
+    logger: { log() {}, warn() {}, error() {} },
+    cacheFile: '/tmp/czituch-tavily-source-question-cache-key-test.json',
+    geminiKey: '',
+    exaKey: '',
+  });
+
+  const sharedQuery = 'Portal 2 release';
+  await search(sharedQuery, {
+    _skipRewrite: true,
+    returnMeta: true,
+    sourceQuestion: 'Kiedy wydano Portal 2?',
+  });
+  await search(sharedQuery, {
+    _skipRewrite: true,
+    returnMeta: true,
+    sourceQuestion: 'Gdzie wydano Portal 2?',
+  });
+
+  assert.equal(fetchCalls, 2, 'different source questions must not reuse already processed evidence');
+});
+
 test('Tavily uses Bearer authentication and falls back to the original query when rewriting fails', async () => {
   let observedRequest;
   const search = createTavilySearch({
