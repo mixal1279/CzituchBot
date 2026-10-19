@@ -6,7 +6,13 @@
 // nie zgaduj tłumaczeń. Nazwa nieobecna w tej tabeli nadal podlega pełnej,
 // twardej kontroli w dowodzie.
 const ENTITY_ALIAS_GROUPS = Object.freeze([
-  // Przykład formatu: { canonical: 'cathedral of dragon communion', names: ['Cathedral of Dragon Communion', '<polska nazwa z gry>'] },
+  // Zweryfikowane odpowiedniki nazw z lokalizacji gier. Trzymajmy tu tylko
+  // encje, dla których mapowanie PL/EN jest jednoznaczne; nie dopisujemy
+  // nazw opisowych ani tłumaczeń zgadywanych na podstawie samego kontekstu.
+  { canonical: 'wild hunt', names: ['Wild Hunt', 'Dziki Gon'] },
+  { canonical: 'bloody baron', names: ['Bloody Baron', 'Krwawy Baron', 'Baron Krwawy'] },
+  { canonical: 'dragonrend', names: ['Dragonrend', 'Smocza Zguba'] },
+  { canonical: 'cathedral of dragon communion', names: ['Cathedral of Dragon Communion', 'Katedra Smoczej Komunii'] },
 ]);
 
 const DIACRITIC_CLASSES = { a: 'aą', c: 'cć', e: 'eę', l: 'lł', n: 'nń', o: 'oó', s: 'sś', z: 'zźż' };
