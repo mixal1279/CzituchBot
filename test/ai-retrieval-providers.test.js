@@ -84,6 +84,20 @@ test('Gemini grounding parser preserves web source URLs', async () => {
   assert.equal(result.text, '', 'metadata-only grounding must not create a source evidence block');
 });
 
+test('secondary provider forwards its bounded timeout to wrapped transports', async () => {
+  let observedTimeout = null;
+  await searchExa({
+    apiKey: 'exa',
+    query: 'q',
+    timeoutMs: 275,
+    fetchFn: async (_url, _options, timeoutMs) => {
+      observedTimeout = timeoutMs;
+      return new Response(JSON.stringify({ results: [] }), { status: 200, headers: { 'content-type': 'application/json' } });
+    },
+  });
+  assert.equal(observedTimeout, 275);
+});
+
 test('Exa parser consumes highlights without requiring full page content', async () => {
   const fakeFetch = async () => new Response(JSON.stringify({
     results: [{

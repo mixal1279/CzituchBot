@@ -210,6 +210,33 @@ test('Tavily: pierwsze zapytanie jest basic, głębsze advanced, a cache rozró�
   assert.deepEqual(bodies.map(b => b.search_depth), ['basic', 'advanced']);
 });
 
+test('Tavily query rewrite failure falls back to the original query and respects remaining timeout', async () => {
+  const bodies = [];
+  const timeouts = [];
+  const search = createTavilySearch({
+    apiKey: 'test-key',
+    groq: null,
+    fetchZTimeout: async (url, options, timeoutMs) => {
+      timeouts.push(timeoutMs);
+      bodies.push(JSON.parse(options.body));
+      return { ok: true, status: 200, text: async () => '', json: async () => ({ results: [{
+        title: 'Portal 2 soundtrack',
+        url: 'https://theportalwiki.com/wiki/Portal_2_soundtrack',
+        content: 'Portal 2 soundtrack release information. '.repeat(40),
+        score: 0.92,
+      }] }) };
+    },
+    normalizeQuery: value => String(value || '').trim(),
+    logger: { log() {}, warn() {}, error() {} },
+    cacheFile: `/tmp/czituchbot-rewrite-fallback-${process.pid}-${Date.now()}.json`,
+  });
+  const original = 'Portal 2 soundtrack official release information';
+  const result = await search(original, { returnMeta: true, remainingMs: 4000, searchDepth: 'basic' });
+  assert.equal(result.status, 'ok');
+  assert.equal(bodies[0].query, original, 'failed query rewrite must not prevent the original Tavily query');
+  assert.equal(timeouts[0], 4000, 'remaining retrieval budget must be forwarded to the transport');
+});
+
 // ------------------------------------------------------------- pamięć, jakość, rewrite
 
 test('pamięć nie zapisuje nic bez identyfikatora użytkownika', () => {
