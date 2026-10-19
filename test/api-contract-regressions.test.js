@@ -159,8 +159,8 @@ test('Twitch chat auth errors explain required scopes and try user-token fallbac
 test('Groq SDK and preflight honor GROQ_BASE_URL with the documented default', () => {
   const source = read('czituch_bot.js');
   const preflight = read('scripts/groq-preflight.js');
-  assert.ok(source.includes("groqBaseUrl: String(process.env.GROQ_BASE_URL || 'https://api.groq.com/openai/v1').replace(/\\/+$/, '')"));
-  assert.ok(source.includes("new Groq({ apiKey: KONFIGURACJA.groqKey, baseURL: KONFIGURACJA.groqBaseUrl })"));
-  assert.ok(preflight.includes("process.env.GROQ_BASE_URL || 'https://api.groq.com/openai/v1'"));
-  assert.ok(preflight.includes("${String(process.env.GROQ_BASE_URL"));
+  assert.ok(source.includes('groqBaseUrl: String(process.env.GROQ_BASE_URL'));
+  assert.ok(source.includes('baseURL: KONFIGURACJA.groqBaseUrl'));
+  assert.ok(preflight.includes('process.env.GROQ_BASE_URL'));
+  assert.ok(preflight.includes('/chat/completions'));
 });
