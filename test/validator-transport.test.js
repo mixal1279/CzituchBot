@@ -261,3 +261,30 @@ test('timeout z mockowanego klienta Groq trafia do circuit breakera bez wywołan
   assert.ok(!slotPurposes.includes('validator:groq'));
 });
 
+
+test('HTTP circuit breakery xKiro i OpenRouter otwierają się po dwóch mockowanych abortach', async () => {
+  for (const provider of ['xkiro', 'openrouter']) {
+    hooks.resetValidatorBreakers();
+    if (provider === 'xkiro') {
+      hooks.KONFIGURACJA.xkiroKey = 'test-xkiro-key';
+      hooks.KONFIGURACJA.xkiroModel = 'qwen/qwen3.5-397b-a17b:free';
+    } else {
+      hooks.KONFIGURACJA.openrouterKey = 'test-openrouter-key';
+    }
+    mockFetch(async () => {
+      const error = new Error('mocked fetch abort');
+      error.name = 'AbortError';
+      throw error;
+    });
+    const invoke = provider === 'xkiro'
+      ? () => hooks.walidujOdpowiedzXKiro('generic', QUESTION, ANSWER, EVIDENCE, 'test-' + provider)
+      : () => hooks.walidujOdpowiedzOpenRouter('generic', QUESTION, ANSWER, EVIDENCE, 'test-' + provider);
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const result = await invoke();
+      assert.equal(result.status, 'unavailable');
+      assert.equal(result.timeoutAbort, true);
+      hooks.recordValidatorTransportResult(provider, result, 'test-' + provider + '-' + attempt);
+    }
+    assert.equal(hooks.validatorBreakerIsOpen(provider), true, provider);
+  }
+});
