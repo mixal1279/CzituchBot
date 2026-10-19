@@ -1684,13 +1684,13 @@ async function walidujOdpowiedzGeminiModel(model, persona, pytanie, odpowiedz, d
     const controller = new AbortController();
     const validatorRemainingMs = requestState
       ? (typeof requestState.remainingMs === 'function' ? requestState.remainingMs() : requestState.maxCzasMs - (Date.now() - requestState.startedAt))
-      : 9000;
+      : 3500;
     // Adapt the reserve to remaining validator slots and deadline.
     const validatorTimeoutMs = requestState
       ? computeValidatorTimeout(validatorRemainingMs, {
-          maxTimeoutMs: 9000,
+          maxTimeoutMs: 3500,
           reserveMs: computeValidatorReserveMs(validatorRemainingMs, requestState?.validatory + 1, requestState?.maxValidatorow),
-          minTimeoutMs: 4000,
+          minTimeoutMs: 2000,
         })
       : 9000;
     if (requestState && validatorTimeoutMs === null) {
@@ -1827,11 +1827,11 @@ async function walidujOdpowiedzOpenRouter(persona, pytanie, odpowiedz, dane, req
     : 12000;
   const validatorTimeoutMs = requestState
     ? computeValidatorTimeout(remainingMs, {
-        maxTimeoutMs: 9000,
+        maxTimeoutMs: 3000,
         reserveMs: computeValidatorReserveMs(remainingMs, requestState?.validatory + 1, requestState?.maxValidatorow),
-        minTimeoutMs: 4000,
+        minTimeoutMs: 2000,
       })
-    : 9000;
+    : 3000;
   if (requestState && validatorTimeoutMs === null) {
     return { status: 'unavailable', ok: false, technicalError: true, transient: true, skipped: true, provider: 'openrouter', model: KONFIGURACJA.openrouterValidatorModel, unsupported_claims: [], reason: 'OpenRouter validator pominięty: zbyt mały pozostały budżet czasu' };
   }
@@ -1924,12 +1924,12 @@ async function walidujOdpowiedzGroq(persona, pytanie, odpowiedz, dane, requestId
 
   const remainingMs = requestState
     ? (typeof requestState.remainingMs === 'function' ? requestState.remainingMs() : requestState.maxCzasMs - (Date.now() - requestState.startedAt))
-    : 9000;
+    : 3000;
   const timeoutMs = requestState
     ? computeValidatorTimeout(remainingMs, {
-        maxTimeoutMs: 9000,
+        maxTimeoutMs: 3000,
         reserveMs: computeValidatorReserveMs(remainingMs, requestState?.validatory + 1, requestState?.maxValidatorow),
-        minTimeoutMs: 4000,
+        minTimeoutMs: 2000,
       })
     : 9000;
   if (requestState && timeoutMs === null) {
@@ -2204,9 +2204,9 @@ async function walidujOdpowiedzAIBezCache(persona, pytanie, odpowiedz, dane, his
       : 9000;
     const timeoutMs = requestState
       ? computeValidatorTimeout(remainingMs, {
-          maxTimeoutMs: 9000,
+          maxTimeoutMs: 3500,
           reserveMs: computeValidatorReserveMs(remainingMs, requestState.validatory + 1, requestState.maxValidatorow),
-          minTimeoutMs: 4000,
+          minTimeoutMs: 2000,
         })
       : 9000;
     if (requestState && timeoutMs === null) {
@@ -2253,9 +2253,9 @@ async function walidujOdpowiedzAIBezCache(persona, pytanie, odpowiedz, dane, his
         : 9000;
       const groqTimeoutMs = requestState
         ? computeValidatorTimeout(groqRemainingMs, {
-            maxTimeoutMs: 9000,
+            maxTimeoutMs: 3000,
             reserveMs: computeValidatorReserveMs(groqRemainingMs, requestState.validatory + 1, requestState.maxValidatorow),
-            minTimeoutMs: 4000,
+            minTimeoutMs: 2000,
           })
         : 9000;
       if (groqTimeoutMs === null) {
@@ -2290,6 +2290,9 @@ async function walidujOdpowiedzAIBezCache(persona, pytanie, odpowiedz, dane, his
           if (!czyWartoDrugaOpinieWalidatora(groqResult)) return groqResult;
           lastRejected = groqResult;
           requestState?.recordTiming?.('validator_second_opinion', { rejectedProvider: groqResult.provider || 'groq', reason: String(groqResult.reason || '').slice(0, 180) });
+          // Groq returned a real rejection that already passed local evidence
+          // checks. Avoid spending the repair budget on slow third opinions.
+          return groqResult;
         }
         last = groqResult;
       }
