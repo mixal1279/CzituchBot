@@ -130,7 +130,7 @@ function normalizeQuoteVerificationText(value) {
   // in terminal punctuation and whitespace. Without this marker, "Alpha. Beta"
   // normalizes to "alpha beta" and incorrectly validates the quote "Alpha Beta".
   const withSentenceBoundaries = String(value || '')
-    .replace(/([.!?])(?=\\s+\\S)/gu, ' SENTENCEBOUNDARYTOKEN ');
+    .replace(/([.!?])(?=\s+\S)/gu, ' SENTENCEBOUNDARYTOKEN ');
   return normalizeEvidenceText(withSentenceBoundaries);
 }
 
@@ -138,14 +138,14 @@ function quoteExists(sourceContent, quote) {
   const sourceSegments = String(sourceContent || '')
     // Split before punctuation normalization: otherwise source-side ellipses
     // collapse into spaces and allow a quote to bridge omitted text.
-    .split(/\\[\\s*(?:\\.{3}|…)\\s*\\]|\\.\\.\\.|…/u)
+    .split(/\[\s*(?:\.{3}|…)\s*\]|\.\.\.|…/u)
     .map(normalizeQuoteVerificationText)
     .filter(Boolean);
   const q = normalizeQuoteVerificationText(quote);
   // A quote must be one contiguous span after conservative text normalization.
   // Disconnected fragments joined by an ellipsis can hide omitted negations,
   // entities, or causal language and must not count as a verbatim quotation.
-  if (/\\[\\s*(?:\\.{3}|…)\\s*\\]|\\.\\.\\.|…/u.test(String(quote || ''))) return false;
+  if (/\[\s*(?:\.{3}|…)\s*\]|\.\.\.|…/u.test(String(quote || ''))) return false;
   return Boolean(q && q.length >= 3 && sourceSegments.some(source => source.includes(q)));
 }
 
