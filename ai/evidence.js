@@ -126,11 +126,19 @@ function parseEvidenceBlocks(data) {
 }
 
 function normalizeQuoteVerificationText(value) {
-  // Preserve internal sentence boundaries while still tolerating differences
-  // in terminal punctuation and whitespace. Without this marker, "Alpha. Beta"
-  // normalizes to "alpha beta" and incorrectly validates the quote "Alpha Beta".
+  // Preserve sentence boundaries even when punctuation is missing following
+  // whitespace ("Alpha.Beta"). Keep decimal points between digits as ordinary
+  // punctuation so values such as 3.14 are not split into separate sentences.
   const withSentenceBoundaries = String(value || '')
-    .replace(/([.!?])(?=\s+\S)/gu, ' SENTENCEBOUNDARYTOKEN ');
+    .replace(/([.!?])/gu, (punctuation, offset, text) => {
+      const previous = text[offset - 1] || '';
+      const next = text.slice(offset + 1).match(/^\s*(\S)/u)?.[1] || '';
+      if (!next) return punctuation;
+      if (punctuation === '.' && /\d/u.test(previous) && /\d/u.test(next)) {
+        return punctuation;
+      }
+      return ' SENTENCEBOUNDARYTOKEN ';
+    });
   return normalizeEvidenceText(withSentenceBoundaries);
 }
 
