@@ -216,8 +216,38 @@ function createFirestoreState(db, options = {}) {
     }
 
     if (stored && legacy && JSON.stringify(legacy) !== JSON.stringify(stored)) {
-      // Firestore is canonical once it can be decrypted. Keep the local file as a
-      // backup, but do not prefer a possibly stale refresh token.
+      let localIsNewer = false;
+      try {
+        const [stat, snapshot] = await Promise.all([
+          fs.promises.stat(file),
+          db.collection(collection).doc('oauth__' + provider).get(),
+        ]);
+        const updatedAt = Date.parse(snapshot.data()?.updatedAt || '');
+        localIsNewer = Number.isFinite(updatedAt) && stat.mtimeMs > updatedAt;
+      } catch (_) {}
+
+      if (localIsNewer) {
+        // A local copy written after the last Firestore update is likely a token
+        // rotation that could not be persisted. Try to restore it, but never
+        // delete the local copy until the encrypted value has been read back.
+        try {
+          await writeToken(provider, legacy);
+          const verified = await readToken(provider);
+          if (JSON.stringify(verified) !== JSON.stringify(legacy)) {
+            throw new Error('Weryfikacja odzyskanego tokenu OAuth nie powiodła się.');
+          }
+          try { await fs.promises.unlink(file); } catch (error) {
+            if (error.code !== 'ENOENT') logger.warn?.('[Firestore state] Token odzyskany, ale nie usunięto lokalnej kopii:', error.message);
+          }
+          logger.warn?.('[Firestore state] Odzyskano nowszy token z lokalnej kopii awaryjnej:', provider);
+          return verified;
+        } catch (error) {
+          logger.warn?.('[Firestore state] Nie udało się przywrócić nowszego tokenu do Firestore; używam lokalnej kopii i zachowuję plik:', provider, error.message);
+          return legacy;
+        }
+      }
+
+      // A stale legacy file must not replace a newer, readable Firestore token.
       logger.warn?.('[Firestore state] Token lokalny różni się od Firestore; używam Firestore, a plik zachowuję jako kopię zapasową:', provider);
       return stored;
     }
