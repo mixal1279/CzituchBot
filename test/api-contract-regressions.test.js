@@ -26,6 +26,7 @@ test('YouTube chat polling respects the interval returned by the API', () => {
   const source = read('czituch_bot.js');
   assert.match(source, /const serverPollDelay = Number\(pollingIntervalMillis\)/);
   assert.match(source, /const initialPollDelay = Number\(res\.data\.pollingIntervalMillis\)/);
+  assert.match(source, /let nextPollDelay = 0;[\s\S]{0,180}if \(nextPollDelay > 0\) await czekaj\(nextPollDelay\)/);
   assert.doesNotMatch(source, /Math\.max\([^\n]*pollingIntervalMillis[^\n]*10000/);
   assert.doesNotMatch(source, /Math\.max\([^\n]*initialPollDelay[^\n]*10000/);
 });
