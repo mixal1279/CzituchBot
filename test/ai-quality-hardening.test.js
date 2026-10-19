@@ -6,6 +6,7 @@ const { parsujStrukturalnePodsumowanie } = require('../ai/history');
 const { scoreExternalGameCandidate } = require('../ai/entities');
 const { createAIRequestContext } = require('../ai/requestContext');
 const { createAIMetrics, recordAIMetric, snapshotAIMetrics } = require('../ai/metrics');
+const { sprawdzTwardeFaktyOdpowiedzi } = require('../ai/response');
 
 test('structured history keeps entities, decisions and open questions', () => {
   const summary = parsujStrukturalnePodsumowanie(JSON.stringify({
@@ -48,6 +49,14 @@ test('worst-case request budget cannot exceed configured model, generation, vali
   const tavilyCtx = createAIRequestContext({ maxCzasMs: 60000, maxGeneracji: 6, maxModelCalls: 10, maxValidatorow: 3, maxWyszukanTavily: 2 });
   for (let i = 0; i < 2; i++) assert.equal(tavilyCtx.reserveTavily('retrieval'), true);
   assert.equal(tavilyCtx.reserveTavily('overflow'), false);
+});
+
+test('hard-fact response guard canonicalizes equivalent decimal formatting', () => {
+  const evidence = '[SOURCE 1]\\nTREŚĆ: Cena wynosi 2.50 kg.';
+  const equivalent = sprawdzTwardeFaktyOdpowiedzi('Cena wynosi 2,5 kg.', evidence);
+  assert.equal(equivalent.ok, true, JSON.stringify(equivalent.unsupported));
+  const mismatch = sprawdzTwardeFaktyOdpowiedzi('Cena wynosi 2,6 kg.', evidence);
+  assert.equal(mismatch.ok, false);
 });
 
 test('quality metrics expose coverage and answer-quality aggregates', () => {

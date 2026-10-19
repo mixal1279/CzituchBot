@@ -1,11 +1,15 @@
 'use strict';
 
 function normalizujTokenLiczbowy(token) {
-  return String(token || '')
+  const text = String(token || '')
     .toLocaleLowerCase('pl-PL')
     .replace(/\s+/g, ' ')
     .replace(/,/g, '.')
     .trim();
+  const match = text.match(/^(\d+(?:\.\d+)?)(\s*)(.*)$/u);
+  if (!match) return text;
+  const number = Number(match[1]);
+  return `${Number.isFinite(number) ? String(number) : match[1]}${match[2]}${match[3]}`.trim();
 }
 
 function wyodrebnijTwardeTokeny(tekst) {
@@ -114,7 +118,8 @@ function sprawdzTwardeFaktyOdpowiedzi(odpowiedz, dane, pytanie = '') {
   const answerTokens = wyodrebnijTwardeTokeny(odpowiedz).filter(token => !questionTokens.has(token));
   const refs = String(dane || '').toLocaleLowerCase('pl-PL')
     .replace(/[\u00a0\u2009\u202f]/g, ' ').replace(/\s+/g, ' ').replace(/,/g, '.');
-  const unsupported = answerTokens.filter(token => !zawieraTokenTwardy(refs, token));
+  const referenceTokens = new Set(wyodrebnijTwardeTokeny(refs));
+  const unsupported = answerTokens.filter(token => !zawieraTokenTwardy(refs, token) && !referenceTokens.has(token));
   const contextCheck = sprawdzZgodnoscKontekstuGry(odpowiedz, pytanie);
   const contextUnsupported = contextCheck.conflicting.map(name => `odpowiedź wprowadza inną grę/uniwersum: ${name}`);
   const loreCheck = sprawdzSpojnoscLorePortal2(odpowiedz, pytanie);
