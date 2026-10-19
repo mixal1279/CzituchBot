@@ -96,10 +96,15 @@ function snapshotCacheTavily(cache, maxBytes = TAVILY_CACHE_MAX_BYTES) {
   return serialized;
 }
 
+function normalizujZakresTavily(timeRange) {
+  const range = String(timeRange || '').replace(/^past_/, '').toLowerCase();
+  return ['day', 'week', 'month', 'year'].includes(range) ? range : null;
+}
+
 function ttlDlaZakresu(timeRange) {
-  const r = String(timeRange || '').replace(/^past_/, '').toLowerCase();
+  const r = normalizujZakresTavily(timeRange);
   if (!r) return 6 * 60 * 60 * 1000;
-  if (['day', 'd', 'week', 'w'].includes(r)) return TAVILY_CACHE_TTL_MS;
+  if (['day', 'week'].includes(r)) return TAVILY_CACHE_TTL_MS;
   return 60 * 60 * 1000;
 }
 
@@ -586,7 +591,7 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
       }
 
       const promise = (async () => {
-        const validTimeRange = time_range?.replace('past_', '') || null;
+        const validTimeRange = normalizujZakresTavily(time_range);
         const historical = !validTimeRange;
         const request = {
           method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
@@ -673,7 +678,7 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
         if (rejected.length) logger.log(`[Tavily] 🛡️ Odrzucono ${rejected.length} wyników przez lokalny filtr domen/URL`);
         const scoreFilter = filtrujPoScore(poDomenach);
         const resultsPoScore = scoreFilter.kept;
-        const results = rerankujWynikiTavily(resultsPoScore, sourceQuestion, domains, { freshness: time_range === 'day' || time_range === 'week' ? 'live' : 'evergreen' });
+        const results = rerankujWynikiTavily(resultsPoScore, sourceQuestion, domains, { freshness: ['day', 'week'].includes(validTimeRange) ? 'live' : 'evergreen' });
         const odrzuconePoScore = scoreFilter.dropped;
         if (odrzuconePoScore) logger.log(`[Tavily] 📉 Odrzucono ${odrzuconePoScore} wyników o niskim score (< ${TAVILY_MIN_SCORE})`);
         if (scoreFilter.lowConfidence) logger.log('[Tavily] ⚠️ Wszystkie wyniki poniżej progu jakości — brak materiału dowodowego');
@@ -845,6 +850,7 @@ module.exports = {
   hostnamePasujeDoDomenyTavily,
   czyZablokowanyHostTavily,
   ttlDlaZakresu,
+  normalizujZakresTavily,
   ograniczCacheTavily,
   przesunSourceIdsTavily,
   sformatujWynikWyjsciowyTavily,
