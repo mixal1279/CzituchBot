@@ -135,6 +135,14 @@ test('quote verification does not bridge omitted source text marked by an ellips
   assert.equal(quoteExists(source, 'wanted to save John.'), true);
 });
 
+test('quote verification preserves sentence boundaries after punctuation normalization', () => {
+  assert.equal(quoteExists('Alpha. Beta.', 'Alpha Beta'), false);
+  assert.equal(quoteExists('Alpha. Beta.', 'Alpha. Beta.'), true);
+  assert.equal(quoteExists('Alpha. Beta.', 'Alpha'), true);
+  assert.equal(quoteExists('Alpha. Beta.', 'Beta'), true);
+  assert.equal(quoteExists('Alpha, Beta.', 'Alpha Beta'), true);
+});
+
 test('validator accepts an exact quoted span without requiring the whole source block to match', () => {
   const data = '[SOURCE 1]\nTYTUŁ: Portal 2\nTREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>\nWheatley zostaje przeniesiony do ciała GLaDOS.\nPóźniej uzyskuje kontrolę nad systemem Aperture.\n<<<END_UNTRUSTED_SOURCE_CONTENT>>>';
   const result = normalizujWynikWalidatora({
