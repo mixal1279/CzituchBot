@@ -122,18 +122,33 @@ function createFirestoreState(db, options = {}) {
   async function loadCache(cacheName, legacyFile = null) {
     const stored = await read('cache', cacheName);
     let legacy = {};
+    let localIsNewer = false;
     if (legacyFile) {
       try {
         const parsed = JSON.parse(await fs.promises.readFile(legacyFile, 'utf8'));
         if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) legacy = parsed;
+        // A local file rewritten after a failed Firestore save is a newer
+        // recovery copy. Prefer it for duplicate keys, then verify the merged
+        // state in Firestore before considering migration complete.
+        if (stored && typeof stored === 'object' && !Array.isArray(stored)) {
+          const [stat, snapshot] = await Promise.all([
+            fs.promises.stat(legacyFile),
+            db.collection(collection).doc('cache__' + cacheName).get(),
+          ]);
+          const updatedAt = Date.parse(snapshot.data()?.updatedAt || '');
+          localIsNewer = Number.isFinite(updatedAt) && stat.mtimeMs > updatedAt;
+        }
       } catch (error) {
         if (error.code !== 'ENOENT') logger.warn?.('[Firestore state] Nie udało się odczytać starego cache:', error.message);
       }
     }
 
     const storedIsObject = stored && typeof stored === 'object' && !Array.isArray(stored);
-    // Merge legacy entries missing from Firestore; Firestore wins on duplicate keys.
-    const merged = storedIsObject ? { ...legacy, ...stored } : legacy;
+    // Normally Firestore wins on duplicates. A local file modified after the
+    // last successful Firestore write is a recovery copy and takes precedence.
+    const merged = storedIsObject
+      ? (localIsNewer ? { ...stored, ...legacy } : { ...legacy, ...stored })
+      : legacy;
     const needsWrite = !storedIsObject || JSON.stringify(merged) !== JSON.stringify(stored);
     if (needsWrite) {
       await write('cache', cacheName, merged);
