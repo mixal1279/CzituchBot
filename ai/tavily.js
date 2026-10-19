@@ -610,8 +610,14 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
                 { ...request, signal: attemptController.signal },
                 attemptTimeoutMs,
               );
+              // JSON parsing consumes the response body asynchronously too; keep it
+              // inside the same deadline. For HTTP errors, retain the text for diagnostics.
+              if (response.ok) {
+                const bodyData = await response.json();
+                return { response, bodyData, bodyText: '' };
+              }
               const bodyText = await response.text();
-              return { response, bodyText };
+              return { response, bodyData: null, bodyText };
             })();
             const outcome = await awaitWithAbortTimeout(
               attempt,
@@ -621,6 +627,7 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
             );
             res = outcome.response;
             responseText = outcome.bodyText;
+            data = outcome.bodyData;
 
             // 429 = przekroczony limit: ponowienie po 250 ms nic nie da, ponawiamy tylko błędy 5xx.
             if (res.ok || ![500, 502, 503, 504].includes(res.status) || probe === 1) break;
@@ -638,8 +645,7 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
           });
         }
         if (!res?.ok) throw new Error(`Tavily HTTP ${res?.status ?? 'network'}: ${res ? responseText : 'request failed'}`);
-        data = JSON.parse(responseText);
-        const all = Array.isArray(data.results) ? data.results : [];
+        const all = Array.isArray(data?.results) ? data.results : [];
         const rejected = [];
         const poDomenach = all.filter(r => {
           if (!r?.url || czyZablokowanyHostTavily(r.url) || (domains?.length && !hostnamePasujeDoDomenyTavily(r.url, domains))) {
