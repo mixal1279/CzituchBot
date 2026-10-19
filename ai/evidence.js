@@ -47,7 +47,9 @@ function parseEvidenceBlocks(data) {
     // PROVIDER czytamy tylko z nagłówka (przed treścią), żeby strona nie mogła go podrobić.
     const header = block.split(/TREŚĆ:/i)[0];
     const provider = header.match(/^\s*PROVIDER:\s*([^\r\n]+)/im)?.[1]?.trim();
-    return { sourceId: match[1].trim(), title: block.match(/TYTUŁ:\s*([^\r\n]+)/i)?.[1] || '', url: block.match(/URL:\s*(https?:\/\/[^\s\r\n]+)/i)?.[1] || '', content, ...(provider ? { provider } : {}) };
+    const title = header.match(/^\s*TYTUŁ:\s*([^\r\n]+)/im)?.[1] || '';
+    const url = header.match(/^\s*URL:\s*(https?:\/\/[^\s\r\n]+)/im)?.[1] || '';
+    return { sourceId: match[1].trim(), title, url, content, ...(provider ? { provider } : {}) };
   });
 }
 
@@ -103,11 +105,11 @@ function classifyClaimType(claim) {
 function evidenceRelationSignals(value) {
   const text = normalizeEvidenceText(value);
   return {
-    causal: /(?:bo|poniewaz|gdyz|dlatego|z powodu|dzieki|przez|spowod\w*|doprowadz\w*|umozliw\w*|because|therefore|due to|caus\w*|led to|lead\w*\s+(?:\w+\s+){0,3}to|so that|so\s+(?:approach|use|avoid|keep|stay|choose|take|do|be)\b|accidentally|by mistake|regain\w* control|odzysk\w* kontrol\w*|reactivat\w*|uruchom\w* ponownie)/i.test(text),
-    procedural: /(?:najpierw|następnie|nastepnie|potem|krok|steps?|first|then|after|before|use|użyj|uzyj|kliknij|click|instrukcj|walkthrough)/i.test(text),
+    causal: /\b(?:bo|poniewaz|gdyz|dlatego|przez|dzieki|because|therefore|accidentally)\b|\bz powodu\b|\b(?:spowod\w*|doprowadz\w*|umozliw\w*|caus\w*|regain\w*|reactivat\w*)\b|\bdue to\b|\bled to\b|\blead\w*(?:\s+\w+){0,3}\s+to\b|\bso that\b|\bso\s+(?:approach|use|avoid|keep|stay|choose|take|do|be)\b|\bby mistake\b|\bodzysk\w*\s+kontrol\w*\b|\buruchom\w*\s+ponownie\b/i.test(text),
+    procedural: /\b(?:najpierw|nastepnie|potem|krok\w*|steps?|first|then|after|before|use|uzyj|kliknij|click|walkthrough)\b|\binstrukcj\w*\b/i.test(text),
     temporal: /\b(?:19|20)\d{2}\b|\b(?:(?:stycz|lut|marz|marc|kwiet|kwiec|maj|czerw|lip|sierp|wrzes|pazdz|listopad|grudzi|grudn|grudz)\w*|wczoraj|dzis\w*|jutro|today|yesterday|tomorrow)\b/i.test(text),
-    location: /(?:w |na |near |located|znajduj|lokacj|miejsce|location|area|region|city|miasto)/i.test(text),
-    relationship: /(?:relationship|związk|zwiazk|partner|przyjaź|przyjaz|enemy|wróg|wrog|conflict|konflikt|alliance|sojusz)/i.test(text),
+    location: /\b(?:w|na|near|located|location|area|region|city|miasto)\b|\b(?:znajduj\w*|lokacj\w*|miejsce\w*)\b/i.test(text),
+    relationship: /\b(?:relationship|zwiazk\w*|partner\w*|przyjaz\w*|enemy|wrog\w*|conflict|konflikt\w*|alliance|sojusz\w*)\b/i.test(text),
   };
 }
 
@@ -319,7 +321,7 @@ function buildQuestionEvidenceContext(question, blocks, allowedSourceIds = null,
       ? '\nQUESTION PART: ' + candidate.query.slice(0, 300)
       : '';
     return [
-      'EVIDENCE CANDIDATE ' + (index + 1) + ': SOURCE ' + candidate.sourceId.replace(/^SOURCE\s+/i, ''),
+      'EVIDENCE CANDIDATE ' + (index + 1) + ': ' + (candidate.sourceId.match(/^REFERENCE\s+/i) ? candidate.sourceId : 'SOURCE ' + candidate.sourceId.replace(/^SOURCE\s+/i, '')),
       queryLabel,
       'QUOTE: ' + candidate.quote.slice(0, 500),
     ].filter(Boolean).join('\n');
