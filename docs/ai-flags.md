@@ -35,7 +35,7 @@ Plan odpowiedzi ma osobne wymagania dotyczące kompletności. Gdy pytanie zawier
 | `AI_XKIRO_VALIDATOR_TIMEOUT_MS` | `3000` | Maksymalny budżet pojedynczego wywołania walidatora xKiro. |
 | `AI_PROVIDER_QUOTA_COOLDOWN_MS` | `60000` ms | Domyślny czas przerwy po wykryciu limitu dla pary dostawca/model; aliasy `xkiro:default` i `openrouter:default` rozwiązują się do skonfigurowanego modelu. Nagłówek `Retry-After` (sekundy lub data HTTP) ma pierwszeństwo. Workflow CI ustawia `1800000` ms na czas live benchmarku. |
 | `AI_MAX_FALLBACK_STEPS` | długość łańcucha fallbacków (`6`) | Maksymalna liczba prób fallbacku po odfiltrowaniu niedostępnych endpointów; `0` wyłącza dodatkowe próby. |
-| `AI_120B_GLOBAL_MAX_REQUESTS` | `6` | Limit żądań do 120B w procesie w ruchomym oknie 1 godziny. Rzeczywisty błąd quota otwiera osobny globalny circuit breaker na 1 godzinę; ten bezpiecznik jest niezależny od `Retry-After` i `AI_PROVIDER_QUOTA_COOLDOWN_MS`. Workflow CI ustawia `20` dla pięciu próbek. |
+| `AI_120B_GLOBAL_MAX_REQUESTS` | `6` | Limit żądań do 120B w procesie w ruchomym oknie 1 godziny. HTTP 402 lub jednoznaczny dzienny limit tokenów (np. TPD) otwiera osobny globalny circuit breaker na 1 godzinę. Zwykły HTTP 429 z krótkim `Retry-After` otwiera tylko cooldown endpointu i nie blokuje 120B na całą godzinę. Workflow CI ustawia `20` dla pięciu próbek. |
 | `AI_CACHE_DIR` | katalog projektu (`__dirname`) | Katalog plikowego cache AI. |
 | `AI_TAVILY_CACHE_FILE` | `AI_CACHE_DIR/tavily_cache.json` | Ścieżka pliku cache Tavily; ta zmienna ma pierwszeństwo przed `AI_CACHE_DIR`. |
 | `TAVILY_MIN_SCORE` | `0.2` | Minimalny score wyniku Tavily; wyniki bez score nie są odrzucane wyłącznie z tego powodu. |
