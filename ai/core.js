@@ -120,7 +120,11 @@ function sourceKey(source = {}) {
 }
 
 function normalizeSource(source = {}, index = 0) {
-  const content = String(source.content || source.raw_content || source.snippet || '').replace(/\s+/g, ' ').trim();
+  // Gemini grounding snippets are model-output spans tied to a URL, not page text.
+  // webRetrieval deliberately marks them with content: ''; preserve that sentinel
+  // instead of promoting the snippet into evidence during core normalization.
+  const metadataOnlyGemini = /^gemini/i.test(String(source.provider || '')) && source.content === '';
+  const content = String(metadataOnlyGemini ? '' : (source.content || source.raw_content || source.snippet || '')).replace(/\s+/g, ' ').trim();
   const title = String(source.title || '').replace(/\s+/g, ' ').trim();
   return {
     ...source,
