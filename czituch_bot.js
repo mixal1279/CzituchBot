@@ -2179,7 +2179,9 @@ async function walidujOdpowiedzXKiro(persona, pytanie, odpowiedz, dane, requestI
       const status = Number(response.status || 0);
       const retryAfter = retryAfterHint(response);
       const quota = status === 402 || status === 429;
-      const transient = [408, 409, 425, 429, 500, 502, 503, 504].includes(status);
+      // 529 is xKiro's documented upstream-overloaded status. Treat it as
+      // transient for cross-provider failover, not as a same-endpoint retry.
+      const transient = [408, 409, 425, 429, 500, 502, 503, 504, 529].includes(status);
       if (quota) {
         // xKiro 402 means insufficient quota; suppress repeated requests rather than retrying every question.
         const cooldownMs = status === 402 ? 24 * 60 * 60 * 1000 : quotaCooldownMsFromError({ message: `HTTP ${status} ${retryAfter}` });
@@ -3377,9 +3379,20 @@ Pytanie użytkownika: ${pytanie}`;
         return { response, data };
       })(), timeoutMs, controller, 'xKiro generation');
       if (!response.ok) {
+        const status = Number(response.status || 0);
         const retryAfter = retryAfterHint(response);
-        const message = data?.message || data?.error?.message || `HTTP ${response.status}`;
-        throw new Error(`xKiro HTTP ${response.status}: ${message}${retryAfter ? ` (${retryAfter})` : ''}`);
+        // Keep xKiro's stable type/code/status in the diagnostic. The fallback
+        // router uses status for failover and the cooldown parser uses Retry-After
+        // or explicit daily-quota wording; never retry this POST in-place.
+        const diagnostic = formatProviderError('xkiro', data?.model || model, null, {
+          status,
+          code: data?.error?.code,
+          type: data?.error?.type,
+          param: data?.error?.param,
+          retry_after: retryAfter || null,
+          responseData: data,
+        });
+        throw new Error(diagnostic);
       }
       const choice = data?.choices?.[0];
       const tekst = (typeof choice?.message?.content === 'string' ? choice.message.content : '').trim();
