@@ -4,7 +4,7 @@ const CLASSIFIERS = Object.freeze({
   quota: /(?:(?<![\d.,])429(?!\d)|quota|rate.?limit|tokens per day|tokens per minute|TPD|TPM|credit|insufficient)/i,
   auth: /(?:(?<![\d.,])40[13](?!\d)|unauthori[sz]ed|forbidden|invalid.*key|api.?key|missing.*key|brak .*key)/i,
   invalid_request: /(?:invalid.*request|bad request|(?<![\d.,])400(?!\d)|invalid.*schema|malformed.*json|json.*invalid)/i,
-  transient: /(?:timeout|timed ?out|ETIMEDOUT|ECONNRESET|(?<![\d.,])5\d\d(?!\d|\s*(?:tokens?|ms|chars?|znak|bytes?|words|slów))|temporar|overloaded|unavailable|fetch failed|aborted|abort|network e[...]/i,
+  transient: /(?:timeout|timed ?out|ETIMEDOUT|ECONNRESET|(?<![\d.,])5\d\d(?!\d|\s*(?:tokens?|ms|chars?|znak|bytes?|words|slów))|temporar|overloaded|unavailable|fetch failed|aborted|abort|network error|socket hang up)/i,
   provider_cooldown: /(?:generation cooldown|provider cooldown|temporarily disabled)/i,
 });
 
@@ -112,6 +112,7 @@ function quotaCooldownMsFromError(error) {
   const isOverload = /(?:high demand|overloaded|temporarily unavailable|capacity exceeded)/i.test(message);
   const configured = Number(process.env.AI_PROVIDER_QUOTA_COOLDOWN_MS) || 60_000;
   let retryAfterMs = null;
+  let hasRetryAfterHeader = false;
 
   // First, honor any Retry-After coming from headers on the error/response object.
   try {
@@ -125,20 +126,20 @@ function quotaCooldownMsFromError(error) {
       const v = String(rawHeader).trim();
       const parsedDate = Date.parse(v);
       const seconds = /^\d+(?:\.\d+)?$/.test(v) ? Number(v) : (Number.isFinite(parsedDate) ? Math.max(0, (parsedDate - Date.now()) / 1000) : NaN);
-      if (Number.isFinite(seconds)) retryAfterMs = Math.max(0, seconds * 1000);
+      if (Number.isFinite(seconds)) { retryAfterMs = Math.max(0, seconds * 1000); hasRetryAfterHeader = true; }
     }
   } catch (_) {}
 
   // Message-based 'retry-after' tokens (some providers embed this in text)
   const retryAfterMatch = message.match(/retry[- ]after\s*[=:]\s*(\d+(?:\.\d+)?)\s*(?:s|sec(?:ond)?s?)?/i);
-  if (retryAfterMatch) {
+  if (retryAfterMatch && !hasRetryAfterHeader) {
     retryAfterMs = Math.max(retryAfterMs || 0, Number(retryAfterMatch[1]) * 1000);
   }
 
   // Groq uses "try again in 1h2m3s", "3m22.176s", "5.43s", and sometimes
   // omits the seconds component ("2m" or "1h30m").
   const tryAgainMatch = message.match(/try again in\s+(?:(\d+(?:\.\d+)?)h)?\s*(?:(\d+(?:\.\d+)?)m(?!s))?\s*(?:(\d+(?:\.\d+)?)s)?/i);
-  if (tryAgainMatch && (tryAgainMatch[1] || tryAgainMatch[2] || tryAgainMatch[3])) {
+  if (tryAgainMatch && !hasRetryAfterHeader && (tryAgainMatch[1] || tryAgainMatch[2] || tryAgainMatch[3])) {
     const hours = Number(tryAgainMatch[1] || 0);
     const minutes = Number(tryAgainMatch[2] || 0);
     const seconds = Number(tryAgainMatch[3] || 0);
@@ -267,13 +268,13 @@ function shouldOpenQuotaCircuit(error) {
   // OpenRouter's documented retryable in-flight budget 402 is also excluded.
   const text = String(error?.message || error || '');
   if (/openrouter_in_flight_budget/i.test(text) && /retry[- ]after/i.test(text)) return false;
-  return /(?:"status"\s*:\s*402|HTTP\s*402|payment required|insufficient (?:credits?|quota)|credit balance.{0,40}(?:deplet|exhaust|insufficient)|tokens? per day|\bTPD\b|daily (?:token|request|usa[...]/i.test(text);
+  return /(?:"status"\s*:\s*402|HTTP\s*402|payment required|insufficient (?:credits?|quota)|credit balance.{0,40}(?:deplet|exhaust|insufficient)|tokens? per day|\bTPD\b|daily (?:token|request|usage) quota|quota exceeded)/i.test(text);
 }
 
 function shouldRetryFailure(failure) {
   // Retry means "try another provider", not "repeat the same failing endpoint".
   // Auth errors are useful only for cross-provider fallback.
-  return ['transient', 'timeout_abort', 'transport_error', 'empty_response', 'invalid_json', 'schema_rejection', 'provider_unavailable', 'budget_exhausted', 'quota', 'auth', 'invalid_request', 'p[...];
+  return ['transient', 'timeout_abort', 'transport_error', 'empty_response', 'invalid_json', 'schema_rejection', 'provider_unavailable', 'budget_exhausted', 'quota', 'auth', 'invalid_request', 'provider_cooldown', 'validator_inconclusive', 'unknown'].includes(failure);
 }
 
 module.exports = {
