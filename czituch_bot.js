@@ -2131,7 +2131,7 @@ async function walidujOdpowiedzAIBezCache(persona, pytanie, odpowiedz, dane, his
       continue;
     }
     if (!zarezerwujSlotWalidatora(requestState, `validator:${models[i]}`)) {
-      return { status: 'unavailable', ok: false, technicalError: true, provider: 'gemini', model: models[i], unsupported_claims: [], reason: 'budżet validatora/modeli wyczerpany' };
+      return lastRejected || { status: 'unavailable', ok: false, technicalError: true, provider: 'gemini', model: models[i], unsupported_claims: [], reason: 'budżet validatora/modeli wyczerpany' };
     }
     const validatorStartedAt = Date.now();
     const remainingBefore = requestState?.remainingMs?.() ?? null;
@@ -2267,7 +2267,7 @@ async function walidujOdpowiedzAIBezCache(persona, pytanie, odpowiedz, dane, his
   }
   if (validatorBreakerIsOpen('openrouter')) {
     console.warn(`[AI][${requestId}] OpenRouter validator pominięty przed rezerwacją slotu: circuit breaker aktywny`);
-    return { ...(last || {}), status: 'unavailable', ok: false, technicalError: true, transient: true, skipped: true, provider: 'openrouter', model: KONFIGURACJA.openrouterValidatorModel, unsupported_claims: [], reason: 'OpenRouter validator pominięty: circuit breaker aktywny' };
+    return lastRejected || { ...(last || {}), status: 'unavailable', ok: false, technicalError: true, transient: true, skipped: true, provider: 'openrouter', model: KONFIGURACJA.openrouterValidatorModel, unsupported_claims: [], reason: 'OpenRouter validator pominięty: circuit breaker aktywny' };
   }
   if (requestState) {
     const remainingMs = typeof requestState.remainingMs === 'function'
@@ -2279,10 +2279,10 @@ async function walidujOdpowiedzAIBezCache(persona, pytanie, odpowiedz, dane, his
       minTimeoutMs: 4000,
     });
     if (timeoutMs === null) {
-      return { ...(last || {}), status: 'unavailable', ok: false, technicalError: true, transient: true, skipped: true, provider: 'openrouter', model: KONFIGURACJA.openrouterValidatorModel, unsupported_claims: [], reason: 'OpenRouter validator pominięty: zbyt mały pozostały budżet czasu' };
+      return lastRejected || { ...(last || {}), status: 'unavailable', ok: false, technicalError: true, transient: true, skipped: true, provider: 'openrouter', model: KONFIGURACJA.openrouterValidatorModel, unsupported_claims: [], reason: 'OpenRouter validator pominięty: zbyt mały pozostały budżet czasu' };
     }
     if (!zarezerwujSlotWalidatora(requestState, 'validator:openrouter')) {
-      return { ...(last || {}), status: 'unavailable', ok: false, technicalError: true, provider: 'openrouter', model: KONFIGURACJA.openrouterValidatorModel, unsupported_claims: [], reason: 'budżet validatora/modeli wyczerpany' };
+      return lastRejected || { ...(last || {}), status: 'unavailable', ok: false, technicalError: true, provider: 'openrouter', model: KONFIGURACJA.openrouterValidatorModel, unsupported_claims: [], reason: 'budżet validatora/modeli wyczerpany' };
     }
     requestState.validatorResults.push({ provider: 'openrouter', model: KONFIGURACJA.openrouterValidatorModel, status: 'fallback', complete: false, confidence: null, claimCoverage: null });
   }
