@@ -1903,22 +1903,24 @@ async function walidujOdpowiedzOpenRouter(persona, pytanie, odpowiedz, dane, req
       const inFlightBudget = status === 402 && limitSource === 'openrouter_in_flight_budget' && Boolean(retryAfter);
       const requestTooExpensive = status === 402 && limitSource === 'openrouter_credits' && metadata.reason === 'weight_exceeds_budget';
       const budgetBlocked = status === 403 && ['openrouter_guardrail_budget', 'openrouter_workspace_budget', 'openrouter_key_limit'].includes(limitSource);
+      const accountWideCreditLimit = status === 402 && ['openrouter_credits', 'openrouter_key_limit'].includes(limitSource) && !requestTooExpensive && !inFlightBudget;
       const quota = status === 402 || status === 429 || budgetBlocked;
       const transient = [408, 409, 425, 429, 500, 502, 503, 504].includes(status) || inFlightBudget;
       if (quota && !requestTooExpensive) {
-        // OpenRouter's 403 budget limits apply to the key/workspace, not only
-        // this model. Prefer the documented reset instant; use a local 24h
-        // suppression only when the response does not provide one.
+        // OpenRouter 403 budget limits and 402 account/key credit limits apply
+        // beyond this model. Prefer a documented reset instant; use a local
+        // 24h suppression only when the response has no usable reset timestamp.
         const resetAt = Date.parse(String(metadata.resets_at || ''));
         const resetCooldownMs = Number.isFinite(resetAt) && resetAt > Date.now()
           ? resetAt - Date.now()
           : 24 * 60 * 60 * 1000;
-        const cooldownMs = budgetBlocked
+        const resetAwareLimit = budgetBlocked || accountWideCreditLimit;
+        const cooldownMs = resetAwareLimit
           ? resetCooldownMs
           : status === 402 && !inFlightBudget
             ? 24 * 60 * 60 * 1000
             : quotaCooldownMsFromError({ message: `HTTP ${status} ${retryAfter}` });
-        markProviderQuota(budgetBlocked ? 'openrouter:*' : providerKey, cooldownMs);
+        markProviderQuota(resetAwareLimit ? 'openrouter:*' : providerKey, cooldownMs);
       }
       const diagnostic = formatProviderError('openrouter', data?.model || KONFIGURACJA.openrouterValidatorModel, null, {
         status, code: data?.error?.code, type: data?.error?.type, param: data?.error?.param,
