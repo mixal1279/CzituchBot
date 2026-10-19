@@ -1656,7 +1656,7 @@ ${dane}
   };
 }
 
-const { GEMINI_VALIDATOR_JSON_SCHEMA, wytnijJsonWalidatora, normalizujWynikWalidatora, wyodrebnijIdentyfikatoryZrodel } = AI_VALIDATOR;
+const { GEMINI_VALIDATOR_JSON_SCHEMA, GROQ_VALIDATOR_JSON_SCHEMA, wytnijJsonWalidatora, normalizujWynikWalidatora, wyodrebnijIdentyfikatoryZrodel } = AI_VALIDATOR;
 
 function zarezerwujSlotWalidatora(requestState, purpose) {
   if (!requestState) return true;
@@ -1955,7 +1955,14 @@ async function walidujOdpowiedzGroq(persona, pytanie, odpowiedz, dane, requestId
         temperature: 0,
         max_completion_tokens: 1400,
         reasoning_effort: 'low',
-        response_format: { type: 'json_object' },
+        response_format: {
+          type: 'json_schema',
+          json_schema: {
+            name: 'czituch_validator',
+            strict: true,
+            schema: GROQ_VALIDATOR_JSON_SCHEMA,
+          },
+        },
       }, { signal: controller.signal }),
       timeoutMs,
       controller,
