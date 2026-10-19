@@ -1590,7 +1590,7 @@ ${dane}
   };
 }
 
-const { VALIDATOR_JSON_SCHEMA, GEMINI_VALIDATOR_JSON_SCHEMA, wytnijJsonWalidatora, normalizujWynikWalidatora, wyodrebnijIdentyfikatoryZrodel } = AI_VALIDATOR;
+const { GEMINI_VALIDATOR_JSON_SCHEMA, wytnijJsonWalidatora, normalizujWynikWalidatora, wyodrebnijIdentyfikatoryZrodel } = AI_VALIDATOR;
 
 function zarezerwujSlotWalidatora(requestState, purpose) {
   if (!requestState) return true;
@@ -1742,14 +1742,7 @@ async function walidujOdpowiedzOpenRouter(persona, pytanie, odpowiedz, dane, req
         temperature: 0,
         max_tokens: AI_VALIDATOR_MAX_TOKENS_OPENROUTER,
         reasoning: { effort: 'low', exclude: true },
-        response_format: {
-          type: 'json_schema',
-          json_schema: {
-            name: 'czituch_ai_validator',
-            strict: true,
-            schema: VALIDATOR_JSON_SCHEMA,
-          },
-        },
+        response_format: { type: 'json_object' },
       }), signal: controller.signal,
     });
     const data = await response.json().catch(() => ({}));
