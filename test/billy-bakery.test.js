@@ -88,3 +88,18 @@ test('komendy obsługują cel opcjonalny i generują odpowiedź', () => {
   }, { cache: {}, persist: false, rng: () => 0.2 });
   assert.ok(targeted.includes('@BillyBulka'));
 });
+
+test('parser dziennej bułki obsługuje alias, własny login i wskazany cel', () => {
+  assert.deepEqual(bakery.parseDailyBulkaCommand('!bułka', 'Viewer', 'viewer_login'), {
+    targetDisplay: 'Viewer',
+    targetLogin: 'viewer_login',
+    isExplicitTarget: false,
+  });
+  assert.deepEqual(bakery.parseDailyBulkaCommand('!bulka @MiXal', 'Viewer', 'viewer_login'), {
+    targetDisplay: 'MiXal',
+    targetLogin: 'mixal',
+    isExplicitTarget: true,
+  });
+  assert.equal(bakery.parseDailyBulkaCommand('!bułka dodatkowy argument', 'Viewer', 'viewer_login'), null);
+  assert.equal(bakery.parseDailyBulkaCommand('!zakwas', 'Viewer', 'viewer_login'), null);
+});
