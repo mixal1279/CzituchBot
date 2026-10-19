@@ -1734,7 +1734,46 @@ async function walidujOdpowiedzGeminiModel(model, persona, pytanie, odpowiedz, d
         error.headers = response.headers;
         throw error;
       }
-      const content = (data?.candidates?.[0]?.content?.parts || []).map(part => part?.text || '').join('').trim();
+      const candidates = Array.isArray(data?.candidates) ? data.candidates : [];
+      if (candidates.length === 0) {
+        const feedback = data?.promptFeedback && typeof data.promptFeedback === 'object'
+          ? data.promptFeedback
+          : {};
+        const blockReason = typeof feedback.blockReason === 'string'
+          ? feedback.blockReason.trim()
+          : '';
+        const safetyRatings = Array.isArray(feedback.safetyRatings)
+          ? feedback.safetyRatings
+              .filter(rating => rating && typeof rating === 'object')
+              .map(rating => ({
+                category: typeof rating.category === 'string' ? rating.category : '',
+                blocked: rating.blocked === true,
+                probability: typeof rating.probability === 'string' ? rating.probability : '',
+              }))
+              .filter(rating => rating.category || rating.blocked || rating.probability)
+          : [];
+        const safetySummary = safetyRatings
+          .filter(rating => rating.blocked || rating.category)
+          .map(rating => rating.category + (rating.blocked ? ' (blocked)' : ''))
+          .join(', ');
+        const reason = blockReason
+          ? `Gemini nie zwrócił kandydatów: promptFeedback.blockReason=${blockReason}${safetySummary ? `; safetyRatings: ${safetySummary}` : ''}`
+          : 'Gemini nie zwrócił kandydatów i nie podał promptFeedback.blockReason';
+        console.warn(`[AI][${requestId}] ${model}: ${reason}`);
+        return {
+          status: 'unavailable',
+          ok: false,
+          technicalError: true,
+          transient: false,
+          provider: 'gemini',
+          model,
+          unsupported_claims: [],
+          reason,
+          ...(blockReason ? { blockReason } : {}),
+          ...(safetyRatings.length ? { safetyRatings } : {}),
+        };
+      }
+      const content = (candidates[0]?.content?.parts || []).map(part => part?.text || '').join('').trim();
       const parsed = wytnijJsonWalidatora(content);
       if (!parsed) {
         console.warn(`[AI][${requestId}] ${model}: niepoprawny JSON validatora (raw=${content.slice(0, 300)})`);
