@@ -24,15 +24,15 @@ function buildBillyCmResponse({ cache, streamKey, nick, message, rng = Math.rand
   }
 
   const currentPrefix = `${BILLY_CM_PREFIX}${normalizedStreamKey}:`;
+  let changed = false;
   // Migruj przypisania ze starego cache plikowego, ale wyłącznie dla tego samego streamu.
   if (legacyCache && String(legacyCache.streamKey || '') === normalizedStreamKey && legacyCache.users && typeof legacyCache.users === 'object') {
     for (const [user, value] of Object.entries(legacyCache.users)) {
       const key = `${currentPrefix}${String(user).toLocaleLowerCase('pl-PL')}`;
-      if (Number.isInteger(value) && value >= 1 && value <= 30 && !Number.isInteger(cache[key])) cache[key] = value;
+      if (Number.isInteger(value) && value >= 1 && value <= 30 && !Number.isInteger(cache[key])) { cache[key] = value; changed = true; }
     }
   }
 
-  let changed = false;
   for (const key of Object.keys(cache)) {
     if (key.startsWith(BILLY_CM_PREFIX) && !key.startsWith(currentPrefix)) {
       delete cache[key];
