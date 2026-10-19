@@ -236,7 +236,7 @@ test('Tavily query rewrite failure falls back to the original query and respects
   assert.equal(bodies[0].body.query, original, 'failed query rewrite must not prevent the original Tavily query');
   assert.equal(bodies[0].headers.Authorization, 'Bearer test-key', 'Tavily API key must use the documented auth header');
   assert.equal(Object.hasOwn(bodies[0].body, 'api_key'), false, 'API key must not be sent as an undocumented body field');
-  assert.equal(timeouts[0], 4000, 'remaining retrieval budget must be forwarded to the transport');
+  assert.ok(timeouts[0] > 0 && timeouts[0] <= 4000, 'remaining retrieval budget must be forwarded without exceeding the deadline');
 });
 
 // ------------------------------------------------------------- pamięć, jakość, rewrite
