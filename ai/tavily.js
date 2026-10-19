@@ -22,7 +22,7 @@ const TAVILY_PERSIST_DEBOUNCE_MS = 5000;
 const TAVILY_CACHE_MAX_ENTRIES = 300;
 const TAVILY_CACHE_MAX_BYTES = 2 * 1024 * 1024;
 const TAVILY_REWRITE_MAX_ENTRIES = 500;
-const TAVILY_CACHE_VERSION = 3;
+const TAVILY_CACHE_VERSION = 4;
 function normalizujProgScore(value, fallback = 0.2) {
   if (value == null || String(value).trim() === '') return fallback;
   const parsed = Number(value);
