@@ -33,7 +33,7 @@ Plan odpowiedzi ma osobne wymagania dotyczące kompletności. Dla pytań o lore 
 | `AI_QUALITY_ALL_PROFILES=1` | wyłączona | Uruchamia bramkę jakości także dla profili `simple`, `comparison` i `technical`; może zwiększyć liczbę odrzuceń. |
 | `AI_GROQ_VALIDATOR_MAX_EVIDENCE_CHARS` | `12000` (minimum `8000`) | Ogranicza długość dowodów przekazywanych do walidatora Groq. |
 | `AI_XKIRO_VALIDATOR_TIMEOUT_MS` | `3000` | Maksymalny budżet pojedynczego wywołania walidatora xKiro. |
-| `AI_PROVIDER_QUOTA_COOLDOWN_MS` | `60000` ms | Domyślny czas przerwy po wykryciu limitu dostawcy; nagłówek `Retry-After` (sekundy lub data HTTP) ma pierwszeństwo, gdy dostawca go zwraca. Workflow CI ustawia `1800000` ms na czas live benchmarku. |
+| `AI_PROVIDER_QUOTA_COOLDOWN_MS` | `60000` ms | Domyślny czas przerwy po wykryciu limitu dla pary dostawca/model; aliasy `xkiro:default` i `openrouter:default` rozwiązują się do skonfigurowanego modelu. Nagłówek `Retry-After` (sekundy lub data HTTP) ma pierwszeństwo. Workflow CI ustawia `1800000` ms na czas live benchmarku. |
 | `AI_MAX_FALLBACK_STEPS` | długość łańcucha fallbacków (`6`) | Maksymalna liczba prób fallbacku po odfiltrowaniu niedostępnych endpointów; `0` wyłącza dodatkowe próby. |
 | `AI_120B_GLOBAL_MAX_REQUESTS` | `6` | Limit żądań do 120B w procesie w ruchomym oknie 1 godziny. Rzeczywisty błąd quota otwiera osobny globalny circuit breaker na 1 godzinę; ten bezpiecznik jest niezależny od `Retry-After` i `AI_PROVIDER_QUOTA_COOLDOWN_MS`. Workflow CI ustawia `20` dla pięciu próbek. |
 | `AI_CACHE_DIR` | katalog projektu (`__dirname`) | Katalog plikowego cache AI. |

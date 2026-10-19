@@ -137,8 +137,13 @@ function normalizeProviderEndpoint(provider) {
   const separator = endpoint.indexOf(':');
   if (separator <= 0) return '';
   const providerName = endpoint.slice(0, separator).toLowerCase();
-  const model = endpoint.slice(separator + 1).trim();
+  let model = endpoint.slice(separator + 1).trim();
   if (!['groq', 'gemini', 'xkiro', 'openrouter'].includes(providerName) || !model) return '';
+  if (model === 'default' && providerName === 'xkiro') {
+    model = process.env.XKIRO_MODEL || 'qwen/qwen3.5-397b-a17b:free';
+  } else if (model === 'default' && providerName === 'openrouter') {
+    model = process.env.OPENROUTER_GENERATOR_MODEL || process.env.AI_GENERATOR_MODEL || 'openai/gpt-oss-120b';
+  }
   return `${providerName}:${model}`;
 }
 

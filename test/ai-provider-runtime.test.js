@@ -159,6 +159,28 @@ test('quota cooldown supports configured models outside the default fallback cha
   resetProviderQuotaCooldowns();
 });
 
+test('xKiro and OpenRouter generation aliases share cooldown with their configured model', () => {
+  const previousXkiro = process.env.XKIRO_MODEL;
+  const previousOpenRouterGenerator = process.env.OPENROUTER_GENERATOR_MODEL;
+  const previousGenerator = process.env.AI_GENERATOR_MODEL;
+  try {
+    process.env.XKIRO_MODEL = 'custom/qwen:model';
+    process.env.OPENROUTER_GENERATOR_MODEL = 'openai/custom-generator';
+    process.env.AI_GENERATOR_MODEL = 'openai/other-primary';
+    resetProviderQuotaCooldowns();
+    markProviderQuota('xkiro:custom/qwen:model', 10_000);
+    markProviderQuota('openrouter:openai/custom-generator', 10_000);
+    assert.equal(isProviderQuotaBlocked('xkiro:default'), true);
+    assert.equal(isProviderQuotaBlocked('openrouter:default'), true);
+    assert.equal(isProviderQuotaBlocked('openrouter:openai/other-validator'), false);
+  } finally {
+    resetProviderQuotaCooldowns();
+    if (previousXkiro === undefined) delete process.env.XKIRO_MODEL; else process.env.XKIRO_MODEL = previousXkiro;
+    if (previousOpenRouterGenerator === undefined) delete process.env.OPENROUTER_GENERATOR_MODEL; else process.env.OPENROUTER_GENERATOR_MODEL = previousOpenRouterGenerator;
+    if (previousGenerator === undefined) delete process.env.AI_GENERATOR_MODEL; else process.env.AI_GENERATOR_MODEL = previousGenerator;
+  }
+});
+
 test('quota in one Gemini model leaves the sibling model available', () => {
   resetProviderQuotaCooldowns();
   markProviderQuota('gemini:gemini-3.8-flash', 10_000);
