@@ -119,6 +119,28 @@ test('wspólny prompt zachowuje claim_en, metadane, pytanie, odpowiedź i źród
   assert.match(prompt.user, /Portal 2 was released on 19 April 2011/);
 });
 
+test('Gemini GenerateContent uses the documented systemInstruction and responseSchema fields', async () => {
+  hooks.KONFIGURACJA.geminiKey = 'test-gemini-key';
+  hooks.KONFIGURACJA.openrouterKey = '';
+  hooks.KONFIGURACJA.xkiroKey = '';
+  let call;
+  mockFetch(async (url, options) => {
+    if (!url.includes('generativelanguage.googleapis.com')) throw new Error('Unexpected provider request: ' + url);
+    call = { url, options, body: JSON.parse(options.body) };
+    return jsonResponse({ candidates: [{ content: { parts: [{ text: JSON.stringify(VALID_VERDICT) }] } }] });
+  });
+  const requestState = createAIRequestContext({ maxCzasMs: 40000, maxValidators: 4, maxModelCalls: 12 });
+  const result = await hooks.walidujOdpowiedzAIBezCache('generic', QUESTION, ANSWER, EVIDENCE, [], 'test-gemini-schema', requestState, { entity: 'Portal 2' });
+  assert.equal(result.status, 'accepted');
+  assert.match(call.url, /:generateContent$/);
+  assert.ok(call.body.systemInstruction?.parts?.[0]?.text);
+  assert.equal(Object.hasOwn(call.body, 'system_instruction'), false);
+  assert.equal(call.body.generationConfig.responseMimeType, 'application/json');
+  assert.equal(call.body.generationConfig.responseSchema.type, 'OBJECT');
+  assert.ok(call.body.generationConfig.responseSchema.properties.claims.items.properties.claim_en);
+  assert.equal(Object.hasOwn(call.body.generationConfig, 'responseFormat'), false);
+});
+
 test('OpenRouter wysyła json_object, reasoning low i domyślny limit 1400; length oznacza ucięty JSON', async () => {
   hooks.KONFIGURACJA.openrouterKey = 'test-openrouter-key';
   hooks.KONFIGURACJA.openrouterValidatorModel = 'openai/gpt-oss-20b';

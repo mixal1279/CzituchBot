@@ -1707,12 +1707,13 @@ async function walidujOdpowiedzGeminiModel(model, persona, pytanie, odpowiedz, d
       const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': KONFIGURACJA.geminiKey },
         body: JSON.stringify({
-          system_instruction: { parts: [{ text: system }] },
+          systemInstruction: { parts: [{ text: system }] },
           contents: [{ role: 'user', parts: [{ text: user }] }],
           generationConfig: {
             temperature: 0,
             maxOutputTokens: 1400,
-            responseFormat: { text: { mimeType: 'application/json', schema: GEMINI_VALIDATOR_JSON_SCHEMA } },
+            responseMimeType: 'application/json',
+            responseSchema: GEMINI_VALIDATOR_JSON_SCHEMA,
             ...(model === 'gemini-3.8-flash'
               ? { thinkingConfig: { thinkingLevel: 'low' } }
               : model === 'gemini-3.5-flash-lite'
