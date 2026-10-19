@@ -42,12 +42,13 @@ function scoreGoldenFacts(answer, factual) {
     const ok = group.every(phrase => phraseMatches(text, phrase));
     if (!ok) missing.push(group);
   }
-  const forbidden = (factual.mustNot || []).filter(phrase => {
-    const normalizedPhrase = normalizeFactText(phrase);
-    return normalizedPhrase.length > 0 && ` ${text} `.includes(` ${normalizedPhrase} `);
-  });
-  const total = (factual.mustInclude || []).length;
-  const score = total ? (total - missing.length) / total : 1;
+  const forbidden = (factual.mustNot || []).filter(phrase => phraseMatches(text, phrase));
+  const includedTotal = (factual.mustInclude || []).length;
+  const forbiddenTotal = (factual.mustNot || []).length;
+  const total = includedTotal + forbiddenTotal;
+  const score = total
+    ? ((includedTotal - missing.length) + (forbiddenTotal - forbidden.length)) / total
+    : 1;
   return { applicable: true, score, passed: missing.length === 0 && forbidden.length === 0, missing, forbidden };
 }
 

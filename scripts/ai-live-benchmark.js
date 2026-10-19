@@ -72,7 +72,16 @@ function buildQuestionForBot(item) {
 
 function isFailureText(text) {
   const normalized = normalizeFactText(text);
-  return /^(?:benchmark\s+)?(?:nie mam wystarczajacych danych(?: zeby odpowiedziec na to pewnie)?|nie moge wiarygodnie potwierdzic|nie moge potwierdzic tej informacji|nie bede zgadywac|chwilowo nie moge potwierdzic tej informacji wiec nie bede zgadywac)$/i.test(normalized);
+  const refusalPatterns = [
+    /^(?:benchmark\s+)?nie mam wystarczajacych danych(?:\s+(?:zeby|aby) odpowiedziec(?: na to)?(?: pewnie)?)?$/i,
+    /^(?:benchmark\s+)?nie moge(?: wiarygodnie)? potwierdzic(?: tej informacji)?(?: wiec nie bede zgadywac)?$/i,
+    /^(?:benchmark\s+)?chwilowo nie moge(?: wiarygodnie)? potwierdzic(?: tej informacji)?(?: wiec nie bede zgadywac)?$/i,
+    /^(?:benchmark\s+)?nie bede zgadywac$/i,
+    /^(?:benchmark\s+)?brakuje danych(?: referencyjnych)?$/i,
+    /^(?:benchmark\s+)?nie jestem pewien(?: tej informacji)?$/i,
+    /^(?:benchmark\s+)?nie wiem$/i,
+  ];
+  return refusalPatterns.some(pattern => pattern.test(normalized));
 }
 
 function evaluateBenchmarkAnswer(answer, item) {

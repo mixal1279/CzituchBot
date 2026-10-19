@@ -29,14 +29,25 @@ test('gold facts require normalized whole phrases, not accidental substrings', (
   assert.deepEqual(falsePositive.missing, [['Wheatley', 'przejął kontrolę']]);
 });
 
-test('forbidden golden fact is detected after Polish normalization', () => {
-  const result = scoreGoldenFacts('Wheatley przejął kontrolę, a GLaDOS nie została wyłączona.', {
+test('forbidden golden facts reduce factual score and are detected after normalization', () => {
+  const result = scoreGoldenFacts('Steve i Alex mają ramiona o tej samej szerokości.', {
     independentGold: true,
-    mustInclude: [['Wheatley']],
-    mustNot: ['GLaDOS nie została wyłączona'],
+    mustInclude: [['Steve']],
+    mustNot: ['Steve i Alex mają ramiona o tej samej szerokości'],
   });
   assert.equal(result.passed, false);
-  assert.deepEqual(result.forbidden, ['GLaDOS nie została wyłączona']);
+  assert.equal(result.score, 0.5);
+  assert.deepEqual(result.forbidden, ['Steve i Alex mają ramiona o tej samej szerokości']);
+});
+
+test('benchmark detects common refusal variants as abstentions', () => {
+  for (const refusal of [
+    'Nie mam wystarczających danych, aby odpowiedzieć na to pewnie.',
+    'Nie mogę potwierdzić tej informacji, więc nie będę zgadywać.',
+    '@benchmark Chwilowo nie mogę potwierdzić tej informacji, więc nie będę zgadywać.',
+  ]) {
+    assert.equal(isFailureText(refusal), true, refusal);
+  }
 });
 
 test('a canned refusal is reported as abstention, not a complete where answer', () => {
@@ -52,6 +63,14 @@ test('a canned refusal is reported as abstention, not a complete where answer', 
   assert.equal(result.judgeStatus, 'abstained');
   assert.deepEqual(result.missing, ['entity_context', 'where']);
   assert.equal(isFailureText('Wielki Miecz leży na zachód od Caelid.'), false);
+});
+
+test('Dragonrend gold facts match ordinary Polish inflections in the benchmark fixture', () => {
+  const benchmark = JSON.parse(fs.readFileSync(path.join(__dirname, 'ai-benchmark.json'), 'utf8'));
+  const item = benchmark.cases.find(testCase => testCase.id === 'how-057');
+  assert.ok(item, 'expected Skyrim Dragonrend gold case');
+  const answer = 'W Skyrim użyj Krzyku Dragonrend, aby zmusić smoka do lądowania, a potem atakuj go bronią białą lub łukiem.';
+  assert.equal(scoreGoldenFacts(answer, item.expected.factual).passed, true);
 });
 
 test('live benchmark always samples an independent gold case, even with a nonzero seed', () => {

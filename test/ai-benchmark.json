@@ -63,8 +63,7 @@
               "pomóc"
             ],
             [
-              "Ciri",
-              "nie"
+              "Ciri"
             ]
           ],
           "mustNot": [],
@@ -1173,11 +1172,11 @@
           "mustInclude": [
             [
               "Dragonrend",
-              "ląd"
+              "lądowania"
             ],
             [
-              "smok",
-              "atak"
+              "smoka",
+              "atakuj"
             ]
           ],
           "mustNot": [],
@@ -3264,7 +3263,7 @@
             ],
             [
               "Caelid",
-              "woz"
+              "wozie"
             ]
           ],
           "mustNot": [],
@@ -7354,7 +7353,7 @@
             ]
           ],
           "mustNot": [
-            "Vesemir przeżywa bitwę pod Kaer Morhen"
+            "Vesemir przeżył bitwę pod Kaer Morhen"
           ],
           "independentGold": true,
           "independentGoldSources": [
