@@ -41,6 +41,32 @@ const GEMINI_VALIDATOR_JSON_SCHEMA = {
   required: ['valid', 'reason', 'confidence', 'unsupported_claims', 'claims'],
 };
 
+// Groq Structured Outputs strict mode requires every declared property to be required
+// and every object to reject unknown properties. Keep this separate from Gemini's
+// more permissive schema: both providers still pass through the same local verifier.
+const GROQ_VALIDATOR_JSON_SCHEMA = (() => {
+  const properties = GEMINI_VALIDATOR_JSON_SCHEMA.properties;
+  const claimProperties = properties.claims.items.properties;
+  return {
+    type: 'object',
+    properties: {
+      ...properties,
+      confidence: { type: 'number' },
+      claims: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: claimProperties,
+          required: Object.keys(claimProperties),
+          additionalProperties: false,
+        },
+      },
+    },
+    required: Object.keys(properties),
+    additionalProperties: false,
+  };
+})();
+
 const VALIDATOR_JSON_SCHEMA = {
   ...GEMINI_VALIDATOR_JSON_SCHEMA,
   additionalProperties: false,
@@ -657,6 +683,7 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
 module.exports = {
   VALIDATOR_JSON_SCHEMA,
   GEMINI_VALIDATOR_JSON_SCHEMA,
+  GROQ_VALIDATOR_JSON_SCHEMA,
   wytnijJsonWalidatora,
   normalizujWynikWalidatora,
   wyodrebnijIdentyfikatoryZrodel,
