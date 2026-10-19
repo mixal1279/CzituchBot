@@ -727,6 +727,22 @@ test('OpenRouter retries HTTP 402 only for documented in-flight budget with Retr
   assert.equal(calls, 1);
 });
 
+test('OpenRouter treats documented HTTP 529 overloaded as transient', async () => {
+  resetProviderQuotaCooldowns();
+  hooks.KONFIGURACJA.openrouterKey = 'test-openrouter-key';
+  hooks.KONFIGURACJA.openrouterValidatorModel = 'openai/gpt-oss-20b';
+  mockFetch(async () => ({
+    ok: false,
+    status: 529,
+    headers: { get: () => null },
+    json: async () => ({ error: { message: 'provider overloaded', code: 529 } }),
+  }));
+  const result = await hooks.walidujOdpowiedzOpenRouter('generic', QUESTION, ANSWER, EVIDENCE, 'test-openrouter-529');
+  assert.equal(result.status, 'unavailable');
+  assert.equal(result.quota, false);
+  assert.equal(result.transient, true);
+});
+
 test('120B quota uses a true rolling one-hour window instead of resetting at the hour boundary', () => {
   hooks.resetModel120BGlobalQuotaForTests();
   const { maxRequests, windowMs } = hooks.getModel120BGlobalQuotaForTests();

@@ -1978,7 +1978,7 @@ async function walidujOdpowiedzOpenRouter(persona, pytanie, odpowiedz, dane, req
       const budgetBlocked = status === 403 && ['openrouter_guardrail_budget', 'openrouter_workspace_budget', 'openrouter_key_limit'].includes(limitSource);
       const accountWideCreditLimit = status === 402 && ['openrouter_credits', 'openrouter_key_limit'].includes(limitSource) && !requestTooExpensive && !inFlightBudget;
       const quota = status === 402 || status === 429 || budgetBlocked;
-      const transient = [408, 409, 425, 429, 500, 502, 503, 504].includes(status) || inFlightBudget;
+      const transient = [408, 409, 425, 429, 500, 502, 503, 504, 529].includes(status) || inFlightBudget;
       if (quota && !requestTooExpensive) {
         // OpenRouter 403 budget limits and 402 account/key credit limits apply
         // beyond this model. Prefer a documented reset instant; use a local
