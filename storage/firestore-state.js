@@ -54,6 +54,16 @@ function decryptSecret(payload, key) {
   return JSON.parse(plaintext.toString('utf8'));
 }
 
+function parseTokenFile(content, key) {
+  const parsed = JSON.parse(content);
+  if (parsed && parsed.algorithm === 'aes-256-gcm' && parsed.version === 1) {
+    return decryptSecret(parsed, key);
+  }
+  // Legacy plaintext files remain readable for migration/recovery, but all new
+  // fallback writes use encrypted payloads.
+  return parsed;
+}
+
 function createFirestoreState(db, options = {}) {
   const logger = options.logger || console;
   const key = encryptionKeyFromEnv(options.encryptionKey);
@@ -85,7 +95,7 @@ function createFirestoreState(db, options = {}) {
       },
       async migrateTokenFile(_provider, file) {
         try {
-          const parsed = JSON.parse(await fs.promises.readFile(file, 'utf8'));
+          const parsed = parseTokenFile(await fs.promises.readFile(file, 'utf8'), key);
           return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null;
         } catch (error) {
           if (error.code === 'ENOENT') return null;
@@ -202,7 +212,7 @@ function createFirestoreState(db, options = {}) {
 
     let legacy = null;
     try {
-      legacy = JSON.parse(await fs.promises.readFile(file, 'utf8'));
+      legacy = parseTokenFile(await fs.promises.readFile(file, 'utf8'), key);
     } catch (error) {
       if (error.code !== 'ENOENT') throw error;
     }
