@@ -246,9 +246,9 @@ test('Tavily conflict report only references evidence blocks retained by the cha
     sourceQuestion: 'Kiedy wydano Portal 2?',
     remainingMs: 15000,
   });
-  const blockIds = [...result.text.matchAll(/^\\[SOURCE (\\d+)\\]$/gm)].map(match => Number(match[1]));
-  const conflictSection = result.text.match(/\\[SOURCE_CONFLICTS\\]([\\s\\S]*?)\\[\\/SOURCE_CONFLICTS\\]/)?.[1] || '';
-  const conflictIds = [...conflictSection.matchAll(/\\bSOURCE (\\d+)\\b/g)].map(match => Number(match[1]));
+  const blockIds = [...result.text.matchAll(/^\[SOURCE (\d+)\]$/gm)].map(match => Number(match[1]));
+  const conflictSection = result.text.match(/\[SOURCE_CONFLICTS\]([\s\S]*?)\[\/SOURCE_CONFLICTS\]/)?.[1] || '';
+  const conflictIds = [...conflictSection.matchAll(/\bSOURCE (\d+)\b/g)].map(match => Number(match[1]));
   assert.ok(blockIds.length > 0, 'at least one source block should be retained');
   assert.ok(conflictIds.length > 0, 'fixture should produce a conflict report');
   assert.ok(conflictIds.every(id => blockIds.includes(id)), 'conflict report must not cite excluded source blocks');
