@@ -216,6 +216,43 @@ test('kolejność walidatorów to Gemini, Groq, potem dalsze fallbacki; brak pra
   assert.ok(requestState.timingTrace.some(row => row.stage === 'validator_provider_end' && row.provider === 'groq'));
 });
 
+test('odrzucenie dotyczące cytatu uruchamia drugą opinię, ale lokalna weryfikacja nadal obowiązuje', async () => {
+  hooks.KONFIGURACJA.geminiKey = 'test-gemini-key';
+  hooks.KONFIGURACJA.openrouterKey = '';
+  hooks.KONFIGURACJA.xkiroKey = '';
+  const order = [];
+  const badQuoteVerdict = {
+    ...VALID_VERDICT,
+    claims: [{
+      ...VALID_VERDICT.claims[0],
+      evidence_quote: 'Portal 2 was released on 19 April 2011 [...]',
+      reason: 'Quote is not an exact continuous source span.',
+    }],
+  };
+  mockFetch(async url => {
+    if (url.includes('generativelanguage.googleapis.com')) {
+      order.push('gemini');
+      return jsonResponse({
+        candidates: [{ content: { parts: [{ text: JSON.stringify(badQuoteVerdict) }] } }],
+      });
+    }
+    throw new Error('Niezamockowane żądanie sieciowe: ' + url);
+  });
+  const groqCalls = mockGroq(() => {
+    order.push('groq');
+    return openAIResponse(VALID_VERDICT);
+  });
+  const requestState = createAIRequestContext({ maxCzasMs: 40000, maxValidators: 4, maxModelCalls: 12 });
+  const result = await hooks.walidujOdpowiedzAIBezCache(
+    'generic', QUESTION, ANSWER, EVIDENCE, [], 'test-evidence-second-opinion', requestState, { entity: 'Portal 2' },
+  );
+  assert.deepEqual(order, ['gemini', 'groq']);
+  assert.equal(groqCalls.length, 1);
+  assert.equal(result.status, 'accepted');
+  assert.deepEqual(requestState.validatorResults.map(row => row.provider), ['gemini', 'groq']);
+  assert.ok(requestState.timingTrace.some(row => row.stage === 'validator_second_opinion'));
+});
+
 test('circuit breaker dla Groq, xKiro i OpenRouter otwiera się po dwóch timeoutach i resetuje po sukcesie', () => {
   for (const provider of ['groq', 'xkiro', 'openrouter']) {
     hooks.resetValidatorBreakers();
