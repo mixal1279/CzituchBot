@@ -40,6 +40,11 @@ Plan odpowiedzi ma osobne wymagania dotyczące kompletności. Dla pytań o lore 
 | `AI_TAVILY_CACHE_FILE` | `AI_CACHE_DIR/tavily_cache.json` | Ścieżka pliku cache Tavily; ta zmienna ma pierwszeństwo przed `AI_CACHE_DIR`. |
 | `TAVILY_MIN_SCORE` | `0.2` | Minimalny score wyniku Tavily; wyniki bez score nie są odrzucane wyłącznie z tego powodu. |
 | `AI_BENCHMARK_SEED` | `0` | Ziarno rotacji pytań live benchmarku; 0 oznacza zestaw stały. |
+| `AI_BENCHMARK_LIMIT` | `10` (skrypt) | Liczba przypadków live benchmarku; workflow CI jawnie ustawia `5`. |
+| `AI_BENCHMARK_DELAY_MS` | `0` ms | Opcjonalna przerwa między przypadkami; workflow CI ustawia `5000` ms. |
+| `AI_BENCHMARK_REQUIRE_PERFECT=1` | wyłączona | Kończy run błędem, jeśli nie wszystkie próbki zostały odpowiedziane i kompletne albo choć jeden gold fact nie przejdzie. Workflow CI włącza tę kontrolę. |
+
+Live benchmark porównuje kompletność planu odpowiedzi oraz ręcznie przygotowane grupy `mustInclude`/`mustNot`. Wynik gold jest dopasowaniem fraz z ograniczoną obsługą odmian, a nie semantycznym weryfikatorem wszystkich twierdzeń; źródła `independentGoldSources` są referencjami do ręcznej kontroli, nie są pobierane ani oceniane automatycznie. Frazy zabronione obniżają teraz także wynik punktowy. Typowe odmowy po polsku i angielsku są klasyfikowane jako abstencja, a nie odpowiedź kompletna.
 
 ## Klucze i endpointy dostawców
 

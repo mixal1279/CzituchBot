@@ -28,7 +28,7 @@ Szczegóły modeli, limitów, cache i przełączników są opisane w [docs/ai-fl
 - `npm run benchmark:offline` — deterministyczny test pipeline'u na syntetycznych danych.
 - Workflow **AI live benchmark** — ręczny test pięciu przypadków na żywych dostawcach; wymaga skonfigurowanych GitHub Actions Secrets i może zużywać limity API.
 
-Testy offline nie potwierdzają dostępności dostawców ani bieżącej jakości modeli. Po zmianach integracji należy sprawdzić logi preflightu i, gdy klucze są dostępne, uruchomić live benchmark ręcznie.
+Testy offline nie potwierdzają dostępności dostawców ani bieżącej jakości modeli. Live benchmark używa ręcznie przygotowanych grup fraz gold (`mustInclude`/`mustNot`), więc jest testem regresji, a nie pełnym semantycznym fact-checkiem wszystkich twierdzeń. Po zmianach integracji należy sprawdzić logi preflightu i, gdy klucze są dostępne, uruchomić live benchmark ręcznie.
 
 ## Bezpieczeństwo
 
