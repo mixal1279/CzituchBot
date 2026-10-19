@@ -1745,9 +1745,11 @@ async function walidujOdpowiedzGeminiModel(model, persona, pytanie, odpowiedz, d
   } catch (err) {
     const message = String(err?.message || '');
     const abortLike = err?.name === 'AbortError' || /aborted|abort|cancelled|canceled/i.test(message);
-    const quota = /quota|rate.?limit|resource.?exhausted|429|limit:/i.test(message);
+    const status = Number(err?.status ?? err?.statusCode ?? 0);
+    const quota = status === 429 || /quota|rate.?limit|resource.?exhausted|429|limit:/i.test(message);
     const transient = quota
       || abortLike
+      || [408, 409, 429, 500, 502, 503, 504].includes(status)
       || /(?:HTTP\s*(?:408|409|429|500|502|503|504)|timeout|timed out|network|fetch failed|ECONNRESET|ETIMEDOUT)/i.test(message);
     const elapsedMs = requestState?.startedAt ? Math.max(0, Date.now() - requestState.startedAt) : null;
     const diagnostic = formatProviderError('gemini', model, err, {
