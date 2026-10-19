@@ -1168,7 +1168,24 @@
           "steps",
           "entity_context"
         ],
-        "must_plan": true
+        "must_plan": true,
+        "factual": {
+          "mustInclude": [
+            [
+              "Dragonrend",
+              "ląd"
+            ],
+            [
+              "smok",
+              "atak"
+            ]
+          ],
+          "mustNot": [],
+          "independentGold": true,
+          "independentGoldSources": [
+            "https://skyrim.fandom.com/wiki/Dragonrend"
+          ]
+        }
       }
     },
     {
@@ -3239,7 +3256,24 @@
           "where",
           "entity_context"
         ],
-        "must_plan": true
+        "must_plan": true,
+        "factual": {
+          "mustInclude": [
+            [
+              "Caelem Ruins"
+            ],
+            [
+              "Caelid",
+              "woz"
+            ]
+          ],
+          "mustNot": [],
+          "independentGold": true,
+          "independentGoldSources": [
+            "https://eldenring.fandom.com/wiki/Greatsword",
+            "https://eldenring.fandom.com/wiki/Caelem_Ruins"
+          ]
+        }
       }
     },
     {
