@@ -38,7 +38,7 @@ const GEMINI_VALIDATOR_JSON_SCHEMA = {
       },
     },
   },
-  required: ['valid', 'reason', 'confidence', 'unsupported_claims', 'claims', 'supported', 'relevant', 'complete', 'hallucination'],
+  required: ['valid', 'reason', 'confidence', 'unsupported_claims', 'claims'],
 };
 
 const VALIDATOR_JSON_SCHEMA = {
@@ -318,9 +318,10 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
   if (typeof wynik.reason !== 'string') return null;
   if (!Array.isArray(wynik.unsupported_claims)) return null;
   if (!Array.isArray(wynik.claims) && !Array.isArray(wynik.claims_list)) return null;
-  for (const key of ['supported', 'relevant', 'complete', 'hallucination']) {
-    if (typeof wynik[key] !== 'boolean') return null;
-  }
+  // Pola agregujące bywają pomijane przez Gemini mimo poprawnego JSON i kompletnego
+  // zestawu claims. Nie traktuj tego jako awarii transportu: niżej lokalny kontrakt
+  // sprawdza każdy claim, cytat, źródło i pokrycie odpowiedzi. Jeśli model zwrócił
+  // komplet pól agregujących, nadal wymagamy ich zgodności z lokalnym werdyktem.
   if (typeof wynik.confidence !== 'number' || !Number.isFinite(wynik.confidence) || wynik.confidence < 0 || wynik.confidence > 1) return null;
 
   const validFromModel = typeof wynik.valid === 'boolean' ? wynik.valid : wynik.ok;
