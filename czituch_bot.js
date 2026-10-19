@@ -8276,7 +8276,7 @@ if (process.env.NODE_ENV === 'test') {
     isProviderQuotaBlocked,
     validatorBreakerIsOpen,
     resetValidatorBreakers() { validatorTransportBreakers.clear(); geminiValidatorCooldownUntil = 0; geminiAccountQuotaCooldownUntil = 0; },
-    isGeminiValidatorCoolingDown(now = Date.now()) { return geminiValidatorCooldownUntil > now || geminiAccountQuotaCooldownUntil > now; }
+    isGeminiValidatorCoolingDown(now = Date.now()) { return geminiValidatorCooldownUntil > now || geminiAccountQuotaCooldownUntil > now; },
     setGroqClient(client) { groqValidatorClientOverride = client; },
     getGroqClient() { return groqValidatorClientOverride || groq; },
     getValidatorConstants() {
