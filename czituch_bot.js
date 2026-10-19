@@ -61,7 +61,8 @@ process.on('uncaughtException', (err) => {
 const fs = require('fs');
 const path = require('path');
 const BILLY_BAKERY = require('./billy-bakery');
-const { createFirestoreState } = require('./storage/firestore-state');
+const crypto = require('crypto');
+const { createFirestoreState, encryptSecret, encryptionKeyFromEnv } = require('./storage/firestore-state');
 const AI_POLICY = require('./ai/policy');
 const AI_VALIDATOR = require('./ai/validator');
 const { createTavilySearch } = require('./ai/tavily');
@@ -362,20 +363,20 @@ const db = process.env.CZITUCHBOT_SKIP_STARTUP_IO === '1'
 
 const FIRESTORE_STATE = createFirestoreState(db);
 
-// Ograniczona uprawnieniami kopia awaryjna na wypadek awarii Firestore.
-// Plik jest zapisywany atomowo i z prawami 0600; usuwamy go dopiero po
-// potwierdzonym zapisie i odczycie tokenu z Firestore.
+// Lokalna kopia awaryjna jest szyfrowana tak samo jak token w Firestore.
+// 0600 ogranicza uprawnienia pliku, a AES-256-GCM chroni jego zawartość.
 async function zapiszLokalnaKopieTokenu(file, token, logPrefix = '[OAuth]') {
-  const tempFile = `${file}.tmp-${process.pid}`;
+  const tempFile = `${file}.tmp-${process.pid}-${crypto.randomUUID()}`;
   try {
-    await fs.promises.writeFile(tempFile, JSON.stringify(token, null, 2), { mode: 0o600 });
+    const encrypted = encryptSecret(token, encryptionKeyFromEnv());
+    await fs.promises.writeFile(tempFile, JSON.stringify(encrypted, null, 2), { mode: 0o600, flag: 'wx' });
     await fs.promises.chmod(tempFile, 0o600);
     await fs.promises.rename(tempFile, file);
-    console.warn(logPrefix + ' Zapisano lokalną kopię awaryjną tokenu; Firestore nie potwierdził trwałego zapisu.');
+    console.warn(logPrefix + ' Zapisano zaszyfrowaną lokalną kopię awaryjną tokenu; Firestore nie potwierdził trwałego zapisu.');
     return true;
   } catch (error) {
     try { await fs.promises.unlink(tempFile); } catch (_) {}
-    console.error(logPrefix + ' Nie udało się zapisać lokalnej kopii tokenu:', error.message);
+    console.error(logPrefix + ' Nie udało się zapisać zaszyfrowanej lokalnej kopii tokenu:', error.message);
     return false;
   }
 }
