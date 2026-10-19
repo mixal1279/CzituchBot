@@ -6859,16 +6859,31 @@ async function kickApi(path, options = {}, _retry = true) {
     if (kickTokenDead) { throw new Error('[Kick API] Refresh nieudany (token martwy), rezygnuję z tego zapytania.'); }
     return kickApi(path, options, false);
   }
-  // Kick czasem zwraca puste body przy sukcesie (np. PATCH) – obsłuż to bezpiecznie
   const text = await res.text();
+  if (!res.ok) {
+    // Kick error responses are commonly JSON too. Do not return them as if
+    // they were successful data (that made chat sends log false success).
+    let details = text;
+    try {
+      const parsed = JSON.parse(text);
+      details = parsed?.message || parsed?.error || text;
+    } catch (_) {}
+    throw new Error(`Kick API HTTP ${res.status}: ${String(details).slice(0, 500)}`);
+  }
+  // Kick sometimes returns an empty body on success (e.g. PATCH).
   if (!text || text.trim() === '') return { _status: res.status, _empty: true };
   try { return JSON.parse(text); } catch { return { _status: res.status, _raw: text }; }
 }
 
 // Szuka kategorii (gry) po nazwie – Kick zwraca listę dopasowań, bierzemy najlepsze (pierwsze).
 async function wyszukajKategorieKick(zapytanie) {
-  const res = await kickApi(`/public/v1/categories?q=${encodeURIComponent(zapytanie)}`);
-  return res?.data?.[0] ?? null;
+  try {
+    const res = await kickApi(`/public/v1/categories?q=${encodeURIComponent(zapytanie)}`);
+    return res?.data?.[0] ?? null;
+  } catch (err) {
+    console.error('[Kick] Błąd wyszukiwania kategorii:', err.message);
+    return null;
+  }
 }
 
 // UWAGA: PATCH /public/v1/channels nie przyjmuje broadcaster_user_id w body –
