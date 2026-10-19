@@ -377,6 +377,31 @@ test('Retry-After ma pierwszeństwo przed domyślnym cooldownem przeciążenia',
   assert.equal(quotaCooldownMsFromError({ status: 429, message: 'HTTP 429 overloaded' }), 60000);
 });
 
+test('OpenRouter 402 openrouter_key_limit respektuje reset i blokuje inne modele', async () => {
+  resetProviderQuotaCooldowns();
+  hooks.KONFIGURACJA.openrouterKey = 'test-openrouter-key';
+  hooks.KONFIGURACJA.openrouterBaseUrl = 'https://openrouter.example/custom/v1';
+  const resetsAt = new Date(Date.now() + 60_000).toISOString();
+  mockFetch(async () => ({
+    ok: false,
+    status: 402,
+    headers: { get: () => null },
+    json: async () => ({
+      error: {
+        code: 402,
+        message: 'API key credit limit exhausted',
+        metadata: { limit_source: 'openrouter_key_limit', resets_at: resetsAt },
+      },
+    }),
+  }));
+
+  const result = await hooks.walidujOdpowiedzOpenRouter('generic', QUESTION, ANSWER, EVIDENCE, 'test-openrouter-key-limit-402');
+  assert.equal(result.quota, true);
+  assert.equal(result.transient, false);
+  assert.equal(hooks.isProviderQuotaBlocked('openrouter:another-model'), true);
+  assert.equal(hooks.isProviderQuotaBlocked('openrouter:another-model', Date.now() + 61_000), false);
+});
+
 test('Gemini Retry-After nie jest wydłużany przez wcześniejszy ogólny cooldown transportu', async () => {
   resetProviderQuotaCooldowns();
   hooks.resetValidatorBreakers();
