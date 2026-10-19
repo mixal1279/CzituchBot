@@ -70,16 +70,14 @@ for (const [question, expectedIntent, expectedEntity, expectedType] of cases) {
   if (expectedType) assert.equal(routing.entity_type, expectedType, question);
 }
 
-test('duration of fights, updates, and downloads is not routed to HowLongToBeat', () => {
-  for (const question of [
-    'Ile trwa fight w Elden Ring?',
-    'Ile trwa update Cyberpunka 2077?',
-    'Ile trwa download GTA 5?',
-  ]) {
-    const routing = classifyAIRequest(question, okreslKategorieAI);
-    assert.notEqual(routing.intent, 'hltb', question);
-    assert.equal(routing.needs_web, true, question);
-  }
-});
+for (const question of [
+  'Ile trwa fight w Elden Ring?',
+  'Ile trwa update Cyberpunka 2077?',
+  'Ile trwa download GTA 5?',
+]) {
+  const routing = classifyAIRequest(question, okreslKategorieAI);
+  assert.notEqual(routing.intent, 'hltb', question);
+  assert.equal(routing.needs_web, true, question);
+}
 
 console.log('AI routing benchmark: OK');
