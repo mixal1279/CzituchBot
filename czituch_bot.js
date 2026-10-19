@@ -2609,7 +2609,15 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
   const pozostalyCzasMs = () => aiState.remainingMs();
   // Dzielimy pozostały deadline między aktualną i potencjalne kolejne próby.
   // Każda generacja pozostawia minimum 6,5 s na końcowy walidator i jego fallback.
-  const timeoutDlaGeneracji = () => computeGenerationTimeout(pozostalyCzasMs());
+  const timeoutDlaGeneracji = () => {
+    const remaining = pozostalyCzasMs();
+    // A repair is useful only if the final validator still has time to run.
+    // Keep the repair attempt short instead of spending the whole request
+    // deadline on a second generation that cannot be validated afterwards.
+    return aiState.generationPhase === 'repair'
+      ? computeGenerationTimeout(remaining, { maxTimeoutMs: 4500, reserveMs: 10500, minTimeoutMs: 3000 })
+      : computeGenerationTimeout(remaining);
+  };
   const zarezerwujModel = (purpose = 'model') => {
     const reserved = aiState.reserveModel(purpose);
     if (!reserved) {
@@ -3392,11 +3400,12 @@ Pytanie użytkownika: ${pytanie}`;
 
   async function generujOdpowiedz(maxTok, prompt = systemPrompt, powod = 'main', allow120b = true) {
     const phase = /repair/i.test(String(powod || '')) ? 'repair' : 'initial';
+    const effectiveMaxTok = phase === 'repair' ? Math.min(Math.max(Number(maxTok) || 300, 300), 700) : Math.max(Number(maxTok) || 300, 300);
     aiState.generationPhase = phase;
     const startedGenerationAt = Date.now();
     aiState.recordTiming('generation_cycle_start', { phase, provider: 'groq', model: allow120b ? 'openai/gpt-oss-120b' : null });
     let result = allow120b
-      ? await zapytajGlowny(Math.max(maxTok, 300), prompt, 'openai/gpt-oss-120b')
+      ? await zapytajGlowny(effectiveMaxTok, prompt, 'openai/gpt-oss-120b')
       : wynikPusty('groq', 'openai/gpt-oss-120b', '120B skipped for this generation cycle');
     let lastResult = result;
     let failureType = phase === 'repair' ? 'validator_rejection' : classifyFailure(result.error || '');
@@ -3420,12 +3429,12 @@ Pytanie użytkownika: ${pytanie}`;
     aiState.fallbackReasons.push(failureType || 'unknown');
     const attempted = [primaryStep];
     const fallbackSteps = {
-      'groq:openai/gpt-oss-120b': () => zapytajGlowny(Math.max(maxTok, 300), prompt, 'openai/gpt-oss-120b'),
-      'groq:openai/gpt-oss-20b': () => zapytajGlowny(Math.max(maxTok, 300), prompt, 'openai/gpt-oss-20b'),
-      'xkiro:default': () => zapytajXKiro(Math.max(maxTok, 300), prompt, powod),
-      'gemini:gemini-3.8-flash': () => zapytajGeminiFallback(Math.max(maxTok, 300), prompt, powod),
-      'gemini:gemini-3.5-flash-lite': () => zapytajGeminiLiteFallback(Math.max(maxTok, 300), prompt, powod),
-      'openrouter:default': () => zapytajOpenRouterFallback(Math.max(maxTok, 300), prompt, powod),
+      'groq:openai/gpt-oss-120b': () => zapytajGlowny(effectiveMaxTok, prompt, 'openai/gpt-oss-120b'),
+      'groq:openai/gpt-oss-20b': () => zapytajGlowny(effectiveMaxTok, prompt, 'openai/gpt-oss-20b'),
+      'xkiro:default': () => zapytajXKiro(effectiveMaxTok, prompt, powod),
+      'gemini:gemini-3.8-flash': () => zapytajGeminiFallback(effectiveMaxTok, prompt, powod),
+      'gemini:gemini-3.5-flash-lite': () => zapytajGeminiLiteFallback(effectiveMaxTok, prompt, powod),
+      'openrouter:default': () => zapytajOpenRouterFallback(effectiveMaxTok, prompt, powod),
     };
 
     const repairBudgetFailure = phase === 'repair' ? repairBudgetBlockReason({
@@ -3640,7 +3649,7 @@ function oczyscOdpowiedzPrzedWalidacja(tekst) {
       const repairRemainingMs = pozostalyCzasMs();
       // Repair needs at least a 4 s generation window plus 6.5 s reserved for
       // the final validator. A lower gate would admit a call that cannot finish safely.
-      const minRepairGenerationBudgetMs = 10_500;
+      const minRepairGenerationBudgetMs = 13_500;
       aiState.recordTiming('repair_generation_decision', {
         remainingMsBeforeRepair: repairRemainingMs,
         willAttempt: Number.isFinite(repairRemainingMs) && repairRemainingMs >= minRepairGenerationBudgetMs,
