@@ -54,6 +54,16 @@ function decryptSecret(payload, key) {
   return JSON.parse(plaintext.toString('utf8'));
 }
 
+function parseTokenFile(content, key) {
+  const parsed = JSON.parse(content);
+  if (parsed && parsed.algorithm === 'aes-256-gcm' && parsed.version === 1) {
+    return decryptSecret(parsed, key);
+  }
+  // Legacy plaintext files remain readable for migration/recovery, but all new
+  // fallback writes use encrypted payloads.
+  return parsed;
+}
+
 function createFirestoreState(db, options = {}) {
   const logger = options.logger || console;
   const key = encryptionKeyFromEnv(options.encryptionKey);
@@ -82,6 +92,15 @@ function createFirestoreState(db, options = {}) {
         const file = LEGACY_CACHE_FILES[cacheName];
         if (!file) throw new Error('Firestore jest wyłączony i brak lokalnej ścieżki cache dla: ' + cacheName);
         await fs.promises.writeFile(file, JSON.stringify(value, null, 2), { mode: 0o600 });
+      },
+      async migrateTokenFile(_provider, file) {
+        try {
+          const parsed = parseTokenFile(await fs.promises.readFile(file, 'utf8'), key);
+          return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null;
+        } catch (error) {
+          if (error.code === 'ENOENT') return null;
+          throw error;
+        }
       },
     };
   }
@@ -113,18 +132,33 @@ function createFirestoreState(db, options = {}) {
   async function loadCache(cacheName, legacyFile = null) {
     const stored = await read('cache', cacheName);
     let legacy = {};
+    let localIsNewer = false;
     if (legacyFile) {
       try {
         const parsed = JSON.parse(await fs.promises.readFile(legacyFile, 'utf8'));
         if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) legacy = parsed;
+        // A local file rewritten after a failed Firestore save is a newer
+        // recovery copy. Prefer it for duplicate keys, then verify the merged
+        // state in Firestore before considering migration complete.
+        if (stored && typeof stored === 'object' && !Array.isArray(stored)) {
+          const [stat, snapshot] = await Promise.all([
+            fs.promises.stat(legacyFile),
+            db.collection(collection).doc('cache__' + cacheName).get(),
+          ]);
+          const updatedAt = Date.parse(snapshot.data()?.updatedAt || '');
+          localIsNewer = Number.isFinite(updatedAt) && stat.mtimeMs > updatedAt;
+        }
       } catch (error) {
         if (error.code !== 'ENOENT') logger.warn?.('[Firestore state] Nie udało się odczytać starego cache:', error.message);
       }
     }
 
     const storedIsObject = stored && typeof stored === 'object' && !Array.isArray(stored);
-    // Merge legacy entries missing from Firestore; Firestore wins on duplicate keys.
-    const merged = storedIsObject ? { ...legacy, ...stored } : legacy;
+    // Normally Firestore wins on duplicates. A local file modified after the
+    // last successful Firestore write is a recovery copy and takes precedence.
+    const merged = storedIsObject
+      ? (localIsNewer ? { ...stored, ...legacy } : { ...legacy, ...stored })
+      : legacy;
     const needsWrite = !storedIsObject || JSON.stringify(merged) !== JSON.stringify(stored);
     if (needsWrite) {
       await write('cache', cacheName, merged);
@@ -165,17 +199,65 @@ function createFirestoreState(db, options = {}) {
   }
 
   async function migrateTokenFile(provider, file) {
-    const stored = await readToken(provider);
+    let stored = null;
+    let firestoreReadError = null;
+    try {
+      stored = await readToken(provider);
+    } catch (error) {
+      // A bad/missing encryption key or a temporary Firestore outage must not
+      // prevent the bot from using an intact legacy token file. Never overwrite
+      // an unreadable Firestore document automatically.
+      firestoreReadError = error;
+    }
+
     let legacy = null;
     try {
-      legacy = JSON.parse(await fs.promises.readFile(file, 'utf8'));
+      legacy = parseTokenFile(await fs.promises.readFile(file, 'utf8'), key);
     } catch (error) {
       if (error.code !== 'ENOENT') throw error;
     }
 
+    if (firestoreReadError) {
+      if (legacy && typeof legacy === 'object' && !Array.isArray(legacy)) {
+        logger.warn?.('[Firestore state] Nie mogę odczytać tokenu z Firestore; używam lokalnej kopii bez nadpisywania dokumentu:', provider, firestoreReadError.message);
+        return legacy;
+      }
+      throw firestoreReadError;
+    }
+
     if (stored && legacy && JSON.stringify(legacy) !== JSON.stringify(stored)) {
-      // Firestore is canonical once it can be decrypted. Keep the local file as a
-      // backup, but do not prefer a possibly stale refresh token.
+      let localIsNewer = false;
+      try {
+        const [stat, snapshot] = await Promise.all([
+          fs.promises.stat(file),
+          db.collection(collection).doc('oauth__' + provider).get(),
+        ]);
+        const updatedAt = Date.parse(snapshot.data()?.updatedAt || '');
+        localIsNewer = Number.isFinite(updatedAt) && stat.mtimeMs > updatedAt;
+      } catch (_) {}
+
+      if (localIsNewer) {
+        // A local copy written after the last Firestore update is likely a token
+        // rotation that could not be persisted. Try to restore it, but never
+        // delete the local copy until the encrypted value has been read back.
+        try {
+          await writeToken(provider, legacy);
+          const verified = await readToken(provider);
+          if (JSON.stringify(verified) !== JSON.stringify(legacy)) {
+            throw new Error('Weryfikacja odzyskanego tokenu OAuth nie powiodła się.');
+          }
+          try { await fs.promises.unlink(file); } catch (error) {
+            if (error.code !== 'ENOENT') logger.warn?.('[Firestore state] Token odzyskany, ale nie usunięto lokalnej kopii:', error.message);
+          }
+          logger.warn?.('[Firestore state] Odzyskano nowszy token z lokalnej kopii awaryjnej:', provider);
+          return verified;
+        } catch (error) {
+          logger.warn?.('[Firestore state] Nie udało się przywrócić nowszego tokenu do Firestore; używam lokalnej kopii i zachowuję plik:', provider, error.message);
+          return legacy;
+        }
+      }
+
+      // A stale legacy file must not replace a newer, readable Firestore token.
       logger.warn?.('[Firestore state] Token lokalny różni się od Firestore; używam Firestore, a plik zachowuję jako kopię zapasową:', provider);
       return stored;
     }

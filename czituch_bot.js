@@ -61,7 +61,7 @@ process.on('uncaughtException', (err) => {
 const fs = require('fs');
 const path = require('path');
 const BILLY_BAKERY = require('./billy-bakery');
-const { createFirestoreState } = require('./storage/firestore-state');
+const { createFirestoreState, encryptSecret, encryptionKeyFromEnv } = require('./storage/firestore-state');
 const AI_POLICY = require('./ai/policy');
 const AI_VALIDATOR = require('./ai/validator');
 const { createTavilySearch } = require('./ai/tavily');
@@ -361,6 +361,24 @@ const db = process.env.CZITUCHBOT_SKIP_STARTUP_IO === '1'
     });
 
 const FIRESTORE_STATE = createFirestoreState(db);
+
+// Lokalna kopia awaryjna jest szyfrowana tak samo jak token w Firestore.
+// 0600 ogranicza uprawnienia pliku, a AES-256-GCM chroni jego zawartość.
+async function zapiszLokalnaKopieTokenu(file, token, logPrefix = '[OAuth]') {
+  const tempFile = `${file}.tmp-${process.pid}-${crypto.randomUUID()}`;
+  try {
+    const encrypted = encryptSecret(token, encryptionKeyFromEnv());
+    await fs.promises.writeFile(tempFile, JSON.stringify(encrypted, null, 2), { mode: 0o600, flag: 'wx' });
+    await fs.promises.chmod(tempFile, 0o600);
+    await fs.promises.rename(tempFile, file);
+    console.warn(logPrefix + ' Zapisano zaszyfrowaną lokalną kopię awaryjną tokenu; Firestore nie potwierdził trwałego zapisu.');
+    return true;
+  } catch (error) {
+    try { await fs.promises.unlink(tempFile); } catch (_) {}
+    console.error(logPrefix + ' Nie udało się zapisać zaszyfrowanej lokalnej kopii tokenu:', error.message);
+    return false;
+  }
+}
 
 const COL_GRACZE       = 'ekonomia_gracze';
 const COL_PODATKI      = 'ekonomia_podatki';
@@ -5362,11 +5380,19 @@ let liveChatId    = null;
 let nextPageToken = null;
 
 async function zapiszTokenYT(tokens) {
-  await FIRESTORE_STATE.writeToken('youtube', tokens);
-  const verified = await FIRESTORE_STATE.readToken('youtube');
-  if (JSON.stringify(verified) !== JSON.stringify(tokens)) throw new Error('Weryfikacja zapisu tokenu YouTube nie powiodła się.');
-  try { await fs.promises.unlink(KONFIGURACJA.ytTokenFile); } catch (err) { if (err.code !== 'ENOENT') console.warn('[YT Auth] Nie usunięto starego pliku tokenu:', err.message); }
-  console.log('[YT Auth] ✅ Zaszyfrowany token zapisany do Firestore');
+  try {
+    await FIRESTORE_STATE.writeToken('youtube', tokens);
+    const verified = await FIRESTORE_STATE.readToken('youtube');
+    if (JSON.stringify(verified) !== JSON.stringify(tokens)) throw new Error('Weryfikacja zapisu tokenu YouTube nie powiodła się.');
+    try { await fs.promises.unlink(KONFIGURACJA.ytTokenFile); } catch (err) { if (err.code !== 'ENOENT') console.warn('[YT Auth] Nie usunięto starego pliku tokenu:', err.message); }
+    console.log('[YT Auth] ✅ Zaszyfrowany token zapisany do Firestore');
+    return true;
+  } catch (error) {
+    const fallbackSaved = await zapiszLokalnaKopieTokenu(KONFIGURACJA.ytTokenFile, tokens, '[YT Auth]');
+    if (!fallbackSaved) throw error;
+    console.error('[YT Auth] ⚠️ Firestore nie potwierdził zapisu tokenu; zachowano lokalną kopię:', error.message);
+    return false;
+  }
 }
 
 async function wczytajTokenYT() {
@@ -5377,6 +5403,18 @@ async function wczytajTokenYT() {
   } catch (err) {
     firestoreReadFailed = true;
     console.error('[YT Auth] Błąd odczytu tokenu z Firestore; sprawdzam kopie zapasowe bez nadpisywania dokumentu:', err.message);
+  }
+
+  // Gdy Firestore ma czytelny, ale starszy token, sprawdź również lokalną kopię
+  // utworzoną po nieudanym zapisie rotacji. migrateTokenFile porównuje czas zapisu
+  // i przywraca kopię tylko wtedy, gdy jest nowsza; stary plik nie nadpisze Firestore.
+  if (credentials && !firestoreReadFailed) {
+    try {
+      const recovered = await FIRESTORE_STATE.migrateTokenFile('youtube', KONFIGURACJA.ytTokenFile);
+      if (recovered) credentials = recovered;
+    } catch (recoveryError) {
+      console.warn('[YT Auth] Nie udało się sprawdzić lokalnej kopii tokenu:', recoveryError.message);
+    }
   }
 
   try {
@@ -5459,12 +5497,26 @@ async function zalogujYouTube() {
 
   const { tokens } = await oauth2Client.getToken(code);
   oauth2Client.setCredentials(tokens);
-  zapiszTokenYT(tokens);
+  try {
+    await zapiszTokenYT(tokens);
+  } catch (error) {
+    // Nie przerywaj pierwszego logowania, gdy Firestore jest chwilowo niedostępny.
+    // Zachowaj zaszyfrowaną kopię, bo refresh token może zostać później obrócony.
+    const fallbackSaved = await zapiszLokalnaKopieTokenu(KONFIGURACJA.ytTokenFile, tokens, '[YT Auth]');
+    console.error('[YT Auth] ⚠️ Nie udało się utrwalić tokenu w Firestore' + (fallbackSaved ? '; zachowano lokalną kopię' : '; brak trwałej kopii awaryjnej') + ':', error.message);
+  }
   oauth2Client.on('tokens', async (newTokens) => {
-    const doc = await db.collection('config').doc('youtube_token').get();
-    const current = doc.exists ? doc.data() : {};
-    await zapiszTokenYT({ ...current, ...newTokens });
-    console.log('[YT Auth] 🔄 Token automatycznie odświeżony');
+    try {
+      // Google często emituje wyłącznie access_token. Zachowujemy refresh_token
+      // z ostatnich credentials, nawet jeśli odczyt Firestore chwilowo nie działa.
+      const stored = await FIRESTORE_STATE.readToken('youtube').catch(() => null);
+      const current = { ...(stored || {}), ...(oauth2Client.credentials || {}) };
+      const merged = { ...current, ...newTokens };
+      await zapiszTokenYT(merged);
+      console.log('[YT Auth] 🔄 Token automatycznie odświeżony');
+    } catch (error) {
+      console.error('[YT Auth] ⚠️ Nie udało się utrwalić odświeżonego tokenu:', error.message);
+    }
   });
   await wyswietlKontoYoutube();
   console.log('[YT Auth] ✅ Zalogowano pomyślnie!');
@@ -5854,11 +5906,19 @@ function generujPKCE() {
 }
 
 async function zapiszTokenKick(data) {
-  await FIRESTORE_STATE.writeToken('kick', data);
-  const verified = await FIRESTORE_STATE.readToken('kick');
-  if (JSON.stringify(verified) !== JSON.stringify(data)) throw new Error('Weryfikacja tokenu Kick nie powiodła się.');
-  try { await fs.promises.unlink(KONFIGURACJA.kickTokenFile); } catch (err) { if (err.code !== 'ENOENT') console.warn('[Kick Auth] Nie usunięto starego pliku tokenu:', err.message); }
-  console.log('[Kick Auth] ✅ Zaszyfrowany token zapisany do Firestore');
+  try {
+    await FIRESTORE_STATE.writeToken('kick', data);
+    const verified = await FIRESTORE_STATE.readToken('kick');
+    if (JSON.stringify(verified) !== JSON.stringify(data)) throw new Error('Weryfikacja tokenu Kick nie powiodła się.');
+    try { await fs.promises.unlink(KONFIGURACJA.kickTokenFile); } catch (err) { if (err.code !== 'ENOENT') console.warn('[Kick Auth] Nie usunięto starego pliku tokenu:', err.message); }
+    console.log('[Kick Auth] ✅ Zaszyfrowany token zapisany do Firestore');
+    return true;
+  } catch (error) {
+    const fallbackSaved = await zapiszLokalnaKopieTokenu(KONFIGURACJA.kickTokenFile, data, '[Kick Auth]');
+    if (!fallbackSaved) throw error;
+    console.error('[Kick Auth] ⚠️ Firestore nie potwierdził zapisu tokenu; zachowano lokalną kopię:', error.message);
+    return false;
+  }
 }
 
 async function wczytajTokenKick() {
@@ -6001,7 +6061,8 @@ async function zapiszTokenBilly(data) {
     try { await fs.promises.unlink('./billy_token.json'); } catch (err) { if (err.code !== 'ENOENT') console.warn('[Billy Auth] Nie usunięto starego pliku tokenu:', err.message); }
     console.log('[Billy Auth] ✅ Zaszyfrowany token zapisany do Firestore');
   } catch (err) {
-    console.error('[Billy Auth] ⚠️ Nie udało się utrwalić tokenu w Firestore (token w pamięci jest aktualny):', err.message);
+    const fallbackSaved = await zapiszLokalnaKopieTokenu('./billy_token.json', doZapisu, '[Billy Auth]');
+    console.error('[Billy Auth] ⚠️ Nie udało się utrwalić tokenu w Firestore' + (fallbackSaved ? '; zachowano lokalną kopię' : '; brak trwałej kopii awaryjnej') + ':', err.message);
   }
 }
 
@@ -7320,7 +7381,8 @@ async function zapiszTokenTwitchChat(botKey, data) {
     try { await fs.promises.unlink(stan.plik); } catch (err) { if (err.code !== 'ENOENT') console.warn(`[Twitch Chat/${botKey}] Nie usunięto starego pliku tokenu:`, err.message); }
     console.log(`[Twitch Chat/${botKey}] ✅ Zaszyfrowany token zapisany do Firestore`);
   } catch (err) {
-    console.error(`[Twitch Chat/${botKey}] ⚠️ Nie udało się utrwalić tokenu w Firestore (token w pamięci jest aktualny):`, err.message);
+    const fallbackSaved = await zapiszLokalnaKopieTokenu(stan.plik, { ...data, wygasa_o: stan.wygasaO }, `[Twitch Chat/${botKey}]`);
+    console.error(`[Twitch Chat/${botKey}] ⚠️ Nie udało się utrwalić tokenu w Firestore${fallbackSaved ? '; zachowano lokalną kopię' : '; brak trwałej kopii awaryjnej'}:`, err.message);
   }
 }
 

@@ -16,7 +16,9 @@ OAuth tokens are encrypted with AES-256-GCM before they are written to the `bot_
 
 ## First startup
 
-The bot migrates existing files when it first loads the corresponding state. It writes the data to Firestore, reads it back to verify the migration, and only then removes the matching legacy file. If Firestore is unavailable, the encryption key is missing, or the local token differs from the Firestore copy, the legacy token file is retained and a warning is logged. Do not manually delete a retained file until the bot confirms that its data is stored correctly.
+The bot migrates existing files when it first loads the corresponding state. It writes the data to Firestore, reads it back to verify the migration, and only then removes the matching legacy file. If Firestore is unavailable or a token write/read-back verification fails, the bot keeps a local token copy encrypted with AES-256-GCM and protected by file permissions (0600), then logs a warning. The same stable OAUTH_TOKEN_ENCRYPTION_KEY is required to decrypt both Firestore tokens and encrypted local backups. Existing legacy plaintext token files remain readable for migration, but new fallback writes are encrypted. Do not manually delete a retained file until the bot confirms that its data is stored correctly. If a local token/cache backup is newer than the last successful Firestore write, startup attempts to restore it and only removes the file after read-back verification. A stale local token file does not override a newer readable Firestore token.
+
+When Firestore cache writes fail, local JSON files may reappear as recovery copies. These are intentional fallbacks; they should only be removed after Firestore has accepted and verified the latest state.
 
 The migrated OAuth providers are YouTube, Kick, the Billy broadcaster token, and Twitch chat tokens. The migrated runtime data includes daily command assignments, the `!cm` stream cache, Tavily search cache, Billy bakery assignments, and TikTok tracking state.
 

@@ -19,6 +19,7 @@ function loadCache(file) {
 
 let stateStore = null;
 let initializePromise = null;
+let initializeRetryAfter = 0;
 let cacheReady = false;
 const CACHE_IDS = {
   [PIEKARZ_CACHE_FILE]: 'billy_piekarz_stream',
@@ -27,8 +28,14 @@ const CACHE_IDS = {
 
 function saveCache(file, cache) {
   if (stateStore?.enabled && cacheReady) {
-    stateStore.saveCache(CACHE_IDS[file], cache)
-      .catch(err => console.warn('[Bułka] Nie udało się zapisać cache w Firestore ' + file + ': ' + err.message));
+    stateStore.saveCache(CACHE_IDS[file], cache).catch(err => {
+      console.warn('[Bułka] Nie udało się zapisać cache w Firestore ' + file + ': ' + err.message);
+      try {
+        fs.writeFileSync(file, JSON.stringify(cache, null, 2), { mode: 0o600 });
+      } catch (fallbackError) {
+        console.warn('[Bułka] Nie udało się też zapisać lokalnej kopii cache ' + file + ': ' + fallbackError.message);
+      }
+    });
     return;
   }
   // Until Firestore has loaded successfully, keep the local file as a durable fallback.
@@ -45,6 +52,7 @@ const kajzerkaCache = loadCache(KAJZERKA_CACHE_FILE);
 async function initialize(store) {
   if (!store?.enabled) return false;
   if (initializePromise) return initializePromise;
+  if (Date.now() < initializeRetryAfter) return false;
   initializePromise = (async () => {
     const [piekarze, kajzerki] = await Promise.all([
       store.loadCache(CACHE_IDS[PIEKARZ_CACHE_FILE], PIEKARZ_CACHE_FILE),
@@ -63,12 +71,14 @@ async function initialize(store) {
     ]);
     stateStore = store;
     cacheReady = true;
+    initializeRetryAfter = 0;
     return true;
   })().catch(error => {
     stateStore = null;
     cacheReady = false;
     initializePromise = null;
-    console.error('[Bułka] Nie udało się wczytać cache z Firestore; pozostawiam cache lokalny:', error.message);
+    initializeRetryAfter = Date.now() + 60_000;
+    console.error('[Bułka] Nie udało się wczytać cache z Firestore; ponowię próbę za 60 s i zachowuję cache lokalny:', error.message);
     return false;
   });
   return initializePromise;
