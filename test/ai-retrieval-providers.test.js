@@ -110,6 +110,40 @@ test('secondary provider forwards its bounded timeout to wrapped transports', as
 
 
 
+test('Tavily only sends chunks_per_source for advanced search depth', async () => {
+  for (const [depth, shouldInclude] of [['basic', false], ['advanced', true]]) {
+    let requestBody = null;
+    const search = createTavilySearch({
+      apiKey: 'test-tavily-key',
+      groq: null,
+      normalizeQuery: value => value,
+      fetchZTimeout: async (_url, options) => {
+        requestBody = JSON.parse(options.body);
+        return new Response(JSON.stringify({ results: [] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      },
+      logger: { log() {}, warn() {}, error() {} },
+      cacheFile: `/tmp/czituch-tavily-chunks-depth-${depth}-test.json`,
+      geminiKey: '',
+      exaKey: '',
+    });
+
+    await search(`Tavily chunks depth ${depth}`, {
+      _skipRewrite: true,
+      searchDepth: depth,
+    });
+
+    assert.equal(
+      Object.hasOwn(requestBody, 'chunks_per_source'),
+      shouldInclude,
+      `chunks_per_source should ${shouldInclude ? 'be present' : 'be omitted'} for ${depth}`,
+    );
+    if (shouldInclude) assert.equal(requestBody.chunks_per_source, 3);
+  }
+});
+
 test('Tavily retries transient 5xx responses once and stops after recovery', async () => {
   let fetchCalls = 0;
   const search = createTavilySearch({
