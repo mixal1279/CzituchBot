@@ -169,6 +169,33 @@ test('legacy cache is retained and warning logged when it conflicts with Firesto
   }
 });
 
+test('newer local recovery cache wins over stale Firestore values', async () => {
+  const db = createMockFirestore();
+  await db.collection('bot_runtime_state').doc('cache__daily_cache').set({
+    value: { user: 'old-firestore-value', existing: 'keep' },
+    updatedAt: new Date(Date.now() - 60_000).toISOString(),
+    schemaVersion: 1,
+  });
+  const state = createFirestoreState(db, { encryptionKey: TEST_KEY, logger: { info() {}, warn() {} } });
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'czituch-cache-recovery-'));
+  const file = path.join(dir, 'daily-cache.json');
+  await fs.writeFile(file, JSON.stringify({ user: 'new-local-value', localOnly: 'keep-too' }), 'utf8');
+  try {
+    const loaded = await state.loadCache('daily_cache', file);
+    assert.deepEqual(loaded, {
+      user: 'new-local-value',
+      existing: 'keep',
+      localOnly: 'keep-too',
+    });
+    assert.deepEqual(
+      (await db.collection('bot_runtime_state').doc('cache__daily_cache').get()).data().value,
+      loaded,
+    );
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});
+
 test('legacy cache is migrated and deleted only after Firestore verification', async () => {
   const db = createMockFirestore();
   const state = createFirestoreState(db, { encryptionKey: TEST_KEY, logger: { info() {}, warn() {} } });
