@@ -6348,7 +6348,7 @@ async function youtubeLoop(stan) {
           nextPollDelay = 60 * 1000;
           continue;
         }
-        if (reason === 'forbidden' || reason === 'liveChatEnded' || reason === 'liveChatNotFound' || /no longer live/i.test(msg403)) {
+        if (reason === 'liveChatEnded' || reason === 'liveChatNotFound' || reason === 'liveChatDisabled' || /no longer live/i.test(msg403)) {
           console.log(`[YouTube] Stream zakończony (403/${reason || 'brak reason, wykryto po treści komunikatu'}).`);
           return;
         }
