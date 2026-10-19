@@ -395,6 +395,42 @@ test('Gemini Retry-After nie jest wydłużany przez wcześniejszy ogólny cooldo
   assert.equal(hooks.isProviderQuotaBlocked('gemini:gemini-3.5-flash-lite', Date.now() + 6_000), false);
 });
 
+test('OpenRouter honoruje reset 403 budget limit i blokuje dalsze modele tej samej integracji', async () => {
+  resetProviderQuotaCooldowns();
+  hooks.KONFIGURACJA.openrouterKey = 'test-openrouter-key';
+  hooks.KONFIGURACJA.openrouterBaseUrl = 'https://openrouter.example/custom/v1';
+  const resetsAt = new Date(Date.now() + 60_000).toISOString();
+  let calls = 0;
+  mockFetch(async () => {
+    calls += 1;
+    return {
+      ok: false,
+      status: 403,
+      headers: { get: () => null },
+      json: async () => ({
+        error: {
+          code: 403,
+          message: 'Org member budget limit exceeded',
+          metadata: {
+            limit_source: 'openrouter_workspace_budget',
+            remedy_hint: 'Wait for the budget window to reset.',
+            resets_at: resetsAt,
+          },
+        },
+      }),
+    };
+  });
+
+  const result = await hooks.walidujOdpowiedzOpenRouter('generic', QUESTION, ANSWER, EVIDENCE, 'test-openrouter-budget-403');
+  assert.equal(result.status, 'unavailable');
+  assert.equal(result.quota, true);
+  assert.equal(result.transient, false);
+  assert.match(result.reason, /budget limit/);
+  assert.equal(calls, 1);
+  assert.equal(hooks.isProviderQuotaBlocked('openrouter:another-model'), true);
+  assert.equal(hooks.isProviderQuotaBlocked('openrouter:another-model', Date.now() + 61_000), false);
+});
+
 test('Gemini i Groq honorują Retry-After dostawcy', async () => {
   resetProviderQuotaCooldowns();
   hooks.KONFIGURACJA.geminiKey = 'test-gemini-key';
