@@ -137,10 +137,12 @@ test('quote verification does not bridge omitted source text marked by an ellips
 
 test('quote verification preserves sentence boundaries after punctuation normalization', () => {
   assert.equal(quoteExists('Alpha. Beta.', 'Alpha Beta'), false);
+  assert.equal(quoteExists('Alpha.Beta', 'AlphaBeta'), false);
   assert.equal(quoteExists('Alpha. Beta.', 'Alpha. Beta.'), true);
   assert.equal(quoteExists('Alpha. Beta.', 'Alpha'), true);
   assert.equal(quoteExists('Alpha. Beta.', 'Beta'), true);
   assert.equal(quoteExists('Alpha, Beta.', 'Alpha Beta'), true);
+  assert.equal(quoteExists('Pi is 3.14 units.', 'Pi is 3.14 units.'), true);
 });
 
 test('validator accepts an exact quoted span without requiring the whole source block to match', () => {
