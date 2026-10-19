@@ -46,7 +46,7 @@ test('produkcyjne aliasy PL/EN normalizują znane encje do jednego kanonicznego 
   assert.ok(KNOWN_ENTITY_ALIAS_PATTERNS.some(entry => entry.canonical === 'bloody baron'));
   assert.deepEqual(wyodrebnijNazwyWlasne('Geralt spotyka Dzikim Gonem na szlaku.'), ['wild hunt', 'geralt']);
   assert.deepEqual(wyodrebnijNazwyWlasne('Geralt rozmawia z Krwawym Baronem.'), ['bloody baron', 'geralt']);
-  assert.deepEqual(wyodrebnijNazwyWlasne('Dragonborn używa Smoczej Zguby.'), ['dragonrend']);
+  assert.deepEqual(wyodrebnijNazwyWlasne('Dragonborn używa Smoczej Zguby.'), ['dragonrend', 'dragonborn']);
 });
 
 test('claim_en przepisany z evidence_quote jest odrzucany, prawdziwe tłumaczenie nie', () => {
