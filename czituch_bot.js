@@ -88,7 +88,7 @@ const { buildAnswerPlan } = require('./ai/answer-plan');
 const { judgeAnswer } = require('./ai/answer-judge');
 const { parseEvidenceBlocks, buildQuestionEvidenceContext, escapeUntrustedEvidenceContent } = require('./ai/evidence');
 const { buildBoundedEvidencePrompt } = require('./ai/prompt-context');
-const { parseGeminiGenerationResponse } = require('./ai/gemini-response');
+const { parseGeminiGenerationResponse, buildGeminiGenerateContentUrl } = require('./ai/gemini-response');
 
 // Exact source spans help the validator quote evidence accurately. These are
 // hints only: local code still verifies the quote and semantic support.
@@ -3332,16 +3332,16 @@ Pytanie użytkownika: ${pytanie}`;
   }
 
   async function zapytajGeminiFallback(maxTok = 700, overrideSystemPrompt = systemPrompt, powod = 'Groq') {
-    if (!moznaWykonacGeneracje('gemini', 'gemini-3.8-flash')) return wynikPusty('gemini', 'gemini-3.8-flash', 'AI request budget exceeded');
-    if (!KONFIGURACJA.geminiKey) return wynikPusty('gemini', 'gemini-3.8-flash', 'brak GEMINI_API_KEY');
-    if (Date.now() < geminiGenerationCooldownUntil('gemini-3.8-flash')) return wynikPusty('gemini', 'gemini-3.8-flash', 'Gemini generation cooldown: gemini-3.8-flash');
+    if (!moznaWykonacGeneracje('gemini', AI_MODELS.generatorGemini)) return wynikPusty('gemini', AI_MODELS.generatorGemini, 'AI request budget exceeded');
+    if (!KONFIGURACJA.geminiKey) return wynikPusty('gemini', AI_MODELS.generatorGemini, 'brak GEMINI_API_KEY');
+    if (Date.now() < geminiGenerationCooldownUntil(AI_MODELS.generatorGemini)) return wynikPusty('gemini', AI_MODELS.generatorGemini, 'Gemini generation cooldown: gemini-3.8-flash');
     const messages = buildMessages(overrideSystemPrompt);
     const prompt = messages.user;
     const controller = new AbortController();
     const timeoutMs = timeoutDlaGeneracji();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent', {
+      const response = await fetch(buildGeminiGenerateContentUrl(AI_MODELS.generatorGemini), {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': KONFIGURACJA.geminiKey },
         body: JSON.stringify({
           systemInstruction: { parts: [{ text: overrideSystemPrompt }] },
@@ -3372,22 +3372,22 @@ Pytanie użytkownika: ${pytanie}`;
     } catch (err) {
       console.error(`[Gemini] Fallback nieudany (${powod}):`, err.message);
       const cooldownMs = geminiGenerationCooldownMsFromError(err);
-      if (cooldownMs > 0) ustawGeminiGenerationCooldown('gemini-3.8-flash', cooldownMs);
-      return wynikPusty('gemini', 'gemini-3.8-flash', err.message);
+      if (cooldownMs > 0) ustawGeminiGenerationCooldown(AI_MODELS.generatorGemini, cooldownMs);
+      return wynikPusty('gemini', AI_MODELS.generatorGemini, err.message);
     } finally { clearTimeout(timer); }
   }
 
   async function zapytajGeminiLiteFallback(maxTok = 700, overrideSystemPrompt = systemPrompt, powod = 'Gemini 3.8 Flash') {
-    if (!moznaWykonacGeneracje('gemini', 'gemini-3.5-flash-lite')) return wynikPusty('gemini', 'gemini-3.5-flash-lite', 'AI request budget exceeded');
-    if (!KONFIGURACJA.geminiKey) return wynikPusty('gemini', 'gemini-3.5-flash-lite', 'brak GEMINI_API_KEY');
-    if (Date.now() < geminiGenerationCooldownUntil('gemini-3.5-flash-lite')) return wynikPusty('gemini', 'gemini-3.5-flash-lite', 'Gemini generation cooldown: gemini-3.5-flash-lite');
+    if (!moznaWykonacGeneracje('gemini', AI_MODELS.generatorGeminiLite)) return wynikPusty('gemini', AI_MODELS.generatorGeminiLite, 'AI request budget exceeded');
+    if (!KONFIGURACJA.geminiKey) return wynikPusty('gemini', AI_MODELS.generatorGeminiLite, 'brak GEMINI_API_KEY');
+    if (Date.now() < geminiGenerationCooldownUntil(AI_MODELS.generatorGeminiLite)) return wynikPusty('gemini', AI_MODELS.generatorGeminiLite, 'Gemini generation cooldown: gemini-3.5-flash-lite');
     const messages = buildMessages(overrideSystemPrompt);
     const prompt = messages.user;
     const controller = new AbortController();
     const timeoutMs = timeoutDlaGeneracji();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent', {
+      const response = await fetch(buildGeminiGenerateContentUrl(AI_MODELS.generatorGeminiLite), {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': KONFIGURACJA.geminiKey },
         body: JSON.stringify({
           systemInstruction: { parts: [{ text: overrideSystemPrompt }] },
@@ -3418,8 +3418,8 @@ Pytanie użytkownika: ${pytanie}`;
     } catch (err) {
       console.error(`[Gemini Lite] Fallback nieudany (${powod}):`, err.message);
       const cooldownMs = geminiGenerationCooldownMsFromError(err);
-      if (cooldownMs > 0) ustawGeminiGenerationCooldown('gemini-3.5-flash-lite', cooldownMs);
-      return wynikPusty('gemini', 'gemini-3.5-flash-lite', err.message);
+      if (cooldownMs > 0) ustawGeminiGenerationCooldown(AI_MODELS.generatorGeminiLite, cooldownMs);
+      return wynikPusty('gemini', AI_MODELS.generatorGeminiLite, err.message);
     } finally { clearTimeout(timer); }
   }
 
