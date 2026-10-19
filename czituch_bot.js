@@ -73,7 +73,7 @@ const { resolveGameEntity, scoreExternalGameCandidate, externalGameCandidateMatc
 const { extractExplicitUserMemories, mergeMemoryRecords, buildVerifiedMemoryContext, pruneExpiredMemories } = require('./ai/memory');
 const { parseMemoryCommand, forgetMemories, describeMemories } = require('./ai/memory_manager');
 const { decomposeQuestion, isMultiPartQuestion, buildAdvancedRetrievalPlan, buildSupplementalRetrievalQuery, selectRetrievalQueries } = require('./ai/retrieval');
-const { classifyFailure, nextFallbacks, selectRepairFallbacks, filterAvailableFallbacks, repairBudgetBlockReason, GENERATION_FALLBACK_CHAIN, markProviderQuota, isProviderQuotaBlocked, quotaCooldownMsFromError } = require('./ai/fallback');
+const { classifyFailure, nextFallbacks, selectRepairFallbacks, filterAvailableFallbacks, repairBudgetBlockReason, GENERATION_FALLBACK_CHAIN, markProviderQuota, isProviderQuotaBlocked, quotaCooldownMsFromError, retryAfterHint } = require('./ai/fallback');
 const { createGroqCompletion, awaitWithAbortTimeout, computeValidatorTimeout, computeValidatorReserveMs, computeGenerationTimeout } = require('./ai/provider-runtime');
 const { createAIMetrics, recordAIMetric, snapshotAIMetrics } = require('./ai/metrics');
 const { DEFAULTS, sanitizeRequestText } = require('./ai/limits');
@@ -3158,7 +3158,11 @@ Pytanie użytkownika: ${pytanie}`;
         }), signal: controller.signal,
       });
       const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data?.error?.message || `HTTP ${response.status}`);
+      if (!response.ok) {
+        const retryAfter = retryAfterHint(response);
+        const message = data?.error?.message || `HTTP ${response.status}`;
+        throw new Error(`${message}${retryAfter ? ` (${retryAfter})` : ''}`);
+      }
       const tekst = (data?.candidates?.[0]?.content?.parts || []).map(part => part?.text || '').join('').trim();
       if (!tekst) throw new Error('Gemini zwrócił pustą odpowiedź');
       return { tekst, ucieta: data?.candidates?.[0]?.finishReason === 'MAX_TOKENS', provider: 'gemini', model: AI_MODELS.generatorGemini };
@@ -3191,7 +3195,11 @@ Pytanie użytkownika: ${pytanie}`;
         }), signal: controller.signal,
       });
       const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data?.error?.message || `HTTP ${response.status}`);
+      if (!response.ok) {
+        const retryAfter = retryAfterHint(response);
+        const message = data?.error?.message || `HTTP ${response.status}`;
+        throw new Error(`${message}${retryAfter ? ` (${retryAfter})` : ''}`);
+      }
       const tekst = (data?.candidates?.[0]?.content?.parts || []).map(part => part?.text || '').join('').trim();
       if (!tekst) throw new Error('Gemini Lite zwrócił pustą odpowiedź');
       return { tekst, ucieta: data?.candidates?.[0]?.finishReason === 'MAX_TOKENS', provider: 'gemini', model: AI_MODELS.generatorGeminiLite };
@@ -3218,7 +3226,11 @@ Pytanie użytkownika: ${pytanie}`;
         signal: controller.signal,
       });
       const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data?.error?.message || `HTTP ${response.status}`);
+      if (!response.ok) {
+        const retryAfter = retryAfterHint(response);
+        const message = data?.error?.message || `HTTP ${response.status}`;
+        throw new Error(`${message}${retryAfter ? ` (${retryAfter})` : ''}`);
+      }
       const choice = data?.choices?.[0] || null;
       const message = choice?.message || null;
       const tekst = (typeof message?.content === 'string' ? message.content : '').trim();
@@ -3269,9 +3281,9 @@ Pytanie użytkownika: ${pytanie}`;
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
-        const retryAfter = response.headers.get('retry-after');
+        const retryAfter = retryAfterHint(response);
         const message = data?.message || data?.error?.message || `HTTP ${response.status}`;
-        throw new Error(`xKiro HTTP ${response.status}: ${message}${retryAfter ? ` (Retry-After=${retryAfter}s)` : ''}`);
+        throw new Error(`xKiro HTTP ${response.status}: ${message}${retryAfter ? ` (${retryAfter})` : ''}`);
       }
       const choice = data?.choices?.[0];
       const tekst = (typeof choice?.message?.content === 'string' ? choice.message.content : '').trim();
@@ -3339,6 +3351,7 @@ Pytanie użytkownika: ${pytanie}`;
       }
       return ujednolicWynik({ tekst: content, ucieta: choice?.finish_reason === 'length' }, 'groq', model);
     } catch (err) {
+      const retryAfter = retryAfterHint(err);
       const diagnostic = formatProviderError('groq', model, err, {
         timeoutMs: groqTimeoutMs,
         remainingMs: pozostalyCzasMs(),
@@ -3351,11 +3364,12 @@ Pytanie użytkownika: ${pytanie}`;
           temperature,
         },
       });
-      const isLimit = /429|rate.?limit|tokens per day|tokens per minute|TPD|TPM/i.test(diagnostic);
-      console.error(`[Groq][${requestId}] ${model} request failed: ${diagnostic}`);
+      const diagnosticWithRetryAfter = `${diagnostic}${retryAfter ? `; ${retryAfter}` : ''}`;
+      const isLimit = /429|rate.?limit|tokens per day|tokens per minute|TPD|TPM/i.test(diagnosticWithRetryAfter);
+      console.error(`[Groq][${requestId}] ${model} request failed: ${diagnosticWithRetryAfter}`);
       if (model === 'openai/gpt-oss-120b' && isLimit) {
         requestBlokada120b = true;
-        zablokuj120BGlobalnie(diagnostic);
+        zablokuj120BGlobalnie(diagnosticWithRetryAfter);
       }
       return wynikPusty('groq', model, diagnostic);
     }

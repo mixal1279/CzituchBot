@@ -80,6 +80,22 @@ function resetProviderQuotaCooldowns() {
   quotaBlockedUntil.clear();
 }
 
+function retryAfterHint(source, now = Date.now()) {
+  const headers = source?.headers || source?.response?.headers || source;
+  let raw = null;
+  try { raw = headers?.get?.('retry-after') ?? headers?.get?.('Retry-After') ?? null; } catch (_) {}
+  if (raw == null && headers && typeof headers === 'object') {
+    raw = headers['retry-after'] ?? headers['Retry-After'] ?? headers.retryAfter ?? null;
+  }
+  if (raw == null || String(raw).trim() === '') return '';
+  const value = String(raw).trim();
+  const parsedDate = Date.parse(value);
+  const seconds = /^\d+(?:\.\d+)?$/.test(value)
+    ? Number(value)
+    : (Number.isFinite(parsedDate) ? Math.max(0, (parsedDate - now) / 1000) : NaN);
+  return Number.isFinite(seconds) ? `Retry-After=${Math.max(0, seconds)}s` : '';
+}
+
 function quotaCooldownMsFromError(error) {
   const message = String(error?.message || error || '');
   const isOverload = /(?:high demand|overloaded|temporarily unavailable|capacity exceeded)/i.test(message);
@@ -200,6 +216,7 @@ module.exports = {
   GENERATION_FALLBACK_CHAIN,
   resetProviderQuotaCooldowns,
   quotaCooldownMsFromError,
+  retryAfterHint,
   markProviderQuota,
   isProviderQuotaBlocked,
   classifyFailure,

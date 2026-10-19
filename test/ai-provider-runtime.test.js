@@ -3,7 +3,7 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
 const { createGroqCompletion, awaitWithAbortTimeout, computeValidatorTimeout, computeValidatorReserveMs, computeGenerationTimeout } = require('../ai/provider-runtime');
-const { classifyFailure, shouldRetryFailure, nextFallbacks, selectRepairFallbacks, filterAvailableFallbacks, repairBudgetBlockReason, resetProviderQuotaCooldowns, markProviderQuota, isProviderQuotaBlocked, quotaCooldownMsFromError } = require('../ai/fallback');
+const { classifyFailure, shouldRetryFailure, nextFallbacks, selectRepairFallbacks, filterAvailableFallbacks, repairBudgetBlockReason, resetProviderQuotaCooldowns, markProviderQuota, isProviderQuotaBlocked, quotaCooldownMsFromError, retryAfterHint } = require('../ai/fallback');
 
 test('Groq request body never contains signal; AbortSignal is passed in SDK transport options', async () => {
   const controller = new AbortController();
@@ -152,6 +152,13 @@ test('quota in one Gemini model leaves the sibling model available', () => {
   assert.ok(!next.includes('gemini:gemini-3.8-flash'));
   assert.ok(next.includes('gemini:gemini-3.5-flash-lite'));
   resetProviderQuotaCooldowns();
+});
+
+test('Retry-After supports seconds and HTTP-date headers', () => {
+  const now = Date.parse('2026-10-19T12:00:00Z');
+  assert.equal(retryAfterHint({ headers: new Headers({ 'retry-after': '12' }) }, now), 'Retry-After=12s');
+  assert.equal(retryAfterHint({ headers: new Headers({ 'retry-after': 'Mon, 19 Oct 2026 12:00:20 GMT' }) }, now), 'Retry-After=20s');
+  assert.equal(retryAfterHint({ headers: new Headers() }, now), '');
 });
 
 test('quota cooldown respects Retry-After and never goes below the configured backoff', () => {

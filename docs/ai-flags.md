@@ -29,7 +29,7 @@ Domyślny budżet pojedynczego żądania AI jest współdzielony przez generowan
 | `AI_QUALITY_ALL_PROFILES=1` | wyłączona | Uruchamia bramkę jakości także dla profili `simple`, `comparison` i `technical`; może zwiększyć liczbę odrzuceń. |
 | `AI_GROQ_VALIDATOR_MAX_EVIDENCE_CHARS` | `12000` (minimum `8000`) | Ogranicza długość dowodów przekazywanych do walidatora Groq. |
 | `AI_XKIRO_VALIDATOR_TIMEOUT_MS` | `3000` | Maksymalny budżet pojedynczego wywołania walidatora xKiro. |
-| `AI_PROVIDER_QUOTA_COOLDOWN_MS` | `60000` ms | Domyślny czas przerwy po wykryciu limitu dostawcy; `Retry-After` może go nadpisać. |
+| `AI_PROVIDER_QUOTA_COOLDOWN_MS` | `60000` ms | Domyślny czas przerwy po wykryciu limitu dostawcy; nagłówek `Retry-After` (sekundy lub data HTTP) ma pierwszeństwo, gdy dostawca go zwraca. |
 | `AI_MAX_FALLBACK_STEPS` | długość łańcucha fallbacków | Górna granica kroków fallbacku. |
 | `AI_120B_GLOBAL_MAX_REQUESTS` | `6` | Globalny limit żądań do modelu 120B w procesie. |
 | `AI_CACHE_DIR` | katalog projektu (`__dirname`) | Katalog plikowego cache AI. |
