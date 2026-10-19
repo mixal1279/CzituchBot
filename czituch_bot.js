@@ -2155,22 +2155,26 @@ async function walidujOdpowiedzXKiro(persona, pytanie, odpowiedz, dane, requestI
     return { status: 'unavailable', ok: false, technicalError: true, transient: true, skipped: true, provider: 'xkiro', model, unsupported_claims: [], reason: 'xKiro validator pominięty: zbyt mały pozostały budżet czasu' };
   }
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const response = await fetch(`${KONFIGURACJA.xkiroBaseUrl}/chat/completions`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${KONFIGURACJA.xkiroKey}` },
-      body: JSON.stringify({
-        model,
-        messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
-        temperature: 0,
-        max_tokens: AI_VALIDATOR_MAX_TOKENS_XKIRO,
-        reasoning_effort: 'none',
-        response_format: { type: 'json_object' },
-      }),
-      signal: controller.signal,
-    });
-    const data = await response.json().catch(() => ({}));
+    // Race the complete HTTP + body-read operation against the deadline. AbortSignal
+    // requests transport cancellation; the race independently bounds the caller's wait.
+    const { response, data } = await awaitWithAbortTimeout((async () => {
+      const response = await fetch(`${KONFIGURACJA.xkiroBaseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${KONFIGURACJA.xkiroKey}` },
+        body: JSON.stringify({
+          model,
+          messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
+          temperature: 0,
+          max_tokens: AI_VALIDATOR_MAX_TOKENS_XKIRO,
+          reasoning_effort: 'none',
+          response_format: { type: 'json_object' },
+        }),
+        signal: controller.signal,
+      });
+      const data = await response.json().catch(() => ({}));
+      return { response, data };
+    })(), timeoutMs, controller, 'xKiro validator');
     if (!response.ok) {
       const status = Number(response.status || 0);
       const retryAfter = retryAfterHint(response);
@@ -2236,8 +2240,6 @@ async function walidujOdpowiedzXKiro(persona, pytanie, odpowiedz, dane, requestI
     });
     console.error(`[AI][${requestId}] xKiro validator TRANSPORT_ERROR: ${diagnostic}`);
     return { status: 'unavailable', ok: false, technicalError: true, transient: timeoutAbort, timeoutAbort, provider: 'xkiro', model, unsupported_claims: [], reason: timeoutAbort ? 'xKiro validator timeout/abort' : 'xKiro validator niedostępny', error: diagnostic, diagnostic };
-  } finally {
-    clearTimeout(timer);
   }
 }
 
@@ -3351,27 +3353,29 @@ Pytanie użytkownika: ${pytanie}`;
     if (!Number.isFinite(remainingMs) || remainingMs <= 0) return wynikPusty('xkiro', model, 'AI request deadline exceeded');
     const controller = new AbortController();
     const timeoutMs = timeoutDlaGeneracji();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) return wynikPusty('xkiro', model, 'AI request deadline too short for xKiro');
     try {
-      // All providers must use the same bounded prompt contract so the original
-      // question survives missing or oversized evidence context.
+      // Race the complete HTTP + body-read operation against the shared request deadline.
       const messages = buildMessages(overrideSystemPrompt);
-      const response = await fetch(`${KONFIGURACJA.xkiroBaseUrl}/chat/completions`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${KONFIGURACJA.xkiroKey}` },
-        body: JSON.stringify({
-          model,
-          messages: [
-            { role: 'system', content: messages.system },
-            ...messages.history,
-            { role: 'user', content: messages.user },
-          ],
-          temperature,
-          max_tokens: maxTok,
-        }),
-        signal: controller.signal,
-      });
-      const data = await response.json().catch(() => ({}));
+      const { response, data } = await awaitWithAbortTimeout((async () => {
+        const response = await fetch(`${KONFIGURACJA.xkiroBaseUrl}/chat/completions`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${KONFIGURACJA.xkiroKey}` },
+          body: JSON.stringify({
+            model,
+            messages: [
+              { role: 'system', content: messages.system },
+              ...messages.history,
+              { role: 'user', content: messages.user },
+            ],
+            temperature,
+            max_tokens: maxTok,
+          }),
+          signal: controller.signal,
+        });
+        const data = await response.json().catch(() => ({}));
+        return { response, data };
+      })(), timeoutMs, controller, 'xKiro generation');
       if (!response.ok) {
         const retryAfter = retryAfterHint(response);
         const message = data?.message || data?.error?.message || `HTTP ${response.status}`;
@@ -3384,7 +3388,7 @@ Pytanie użytkownika: ${pytanie}`;
     } catch (err) {
       console.error(`[xKiro] Fallback nieudany (${powod}):`, err.message);
       return wynikPusty('xkiro', model, err.message);
-    } finally { clearTimeout(timer); }
+    }
   }
 
   // Jedna główna próba 120B + najwyżej jeden retry tylko dla pustej/uciętej odpowiedzi.
