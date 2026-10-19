@@ -67,6 +67,24 @@ const GROQ_VALIDATOR_JSON_SCHEMA = (() => {
   };
 })();
 
+function buildGroqValidatorResponseFormat(model) {
+  const modelId = String(model || '').trim().toLowerCase();
+  // Groq documents strict Structured Outputs only for these model IDs.
+  // Unsupported models must use JSON Object Mode rather than receive a schema
+  // request that is guaranteed to fail with HTTP 400.
+  if (modelId === 'openai/gpt-oss-20b' || modelId === 'openai/gpt-oss-120b') {
+    return {
+      type: 'json_schema',
+      json_schema: {
+        name: 'czituch_validator',
+        strict: true,
+        schema: GROQ_VALIDATOR_JSON_SCHEMA,
+      },
+    };
+  }
+  return { type: 'json_object' };
+}
+
 const VALIDATOR_JSON_SCHEMA = {
   ...GEMINI_VALIDATOR_JSON_SCHEMA,
   additionalProperties: false,
@@ -684,6 +702,7 @@ module.exports = {
   VALIDATOR_JSON_SCHEMA,
   GEMINI_VALIDATOR_JSON_SCHEMA,
   GROQ_VALIDATOR_JSON_SCHEMA,
+  buildGroqValidatorResponseFormat,
   wytnijJsonWalidatora,
   normalizujWynikWalidatora,
   wyodrebnijIdentyfikatoryZrodel,
