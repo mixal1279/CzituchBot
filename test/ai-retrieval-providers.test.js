@@ -15,7 +15,7 @@ const {
   nextFallbacks,
   classifyFailure,
 } = require('../ai/fallback');
-const { createTavilySearch, filtrujPoScore, normalizujProgScore, normalizujZakresTavily, sanityzujTrescZrodlaTavily, czyWymagaSecondaryRetrieval, snapshotCacheTavily, ograniczCacheTavily } = require('../ai/tavily');
+const { createTavilySearch, filtrujPoScore, normalizujProgScore, normalizujZakresTavily, hostnamePasujeDoDomenyTavily, sanityzujTrescZrodlaTavily, czyWymagaSecondaryRetrieval, snapshotCacheTavily, ograniczCacheTavily } = require('../ai/tavily');
 
 test('retrieval source contract is normalized', () => {
   const source = normalizeSource({
@@ -39,6 +39,15 @@ test('Tavily time ranges normalize legacy prefixes and reject unsupported values
   assert.equal(normalizujZakresTavily('day'), 'day');
   assert.equal(normalizujZakresTavily('past_24_hours'), null);
   assert.equal(normalizujZakresTavily(null), null);
+});
+
+test('Tavily local domain filter supports wildcard domains', () => {
+  assert.equal(hostnamePasujeDoDomenyTavily('https://news.example.com/story', ['*.example.com']), true);
+  assert.equal(hostnamePasujeDoDomenyTavily('https://example.com/story', ['*.example.com']), false);
+  assert.equal(hostnamePasujeDoDomenyTavily('https://news.example.com/story', ['example.com']), true);
+  assert.equal(hostnamePasujeDoDomenyTavily('https://example.com/story', ['example.com']), true);
+  assert.equal(hostnamePasujeDoDomenyTavily('https://news.example.org/story', ['*.example.com']), false);
+  assert.equal(hostnamePasujeDoDomenyTavily('not-a-url', ['*.example.com']), false);
 });
 
 test('Tavily score filter rejects low-confidence result sets', () => {
