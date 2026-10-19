@@ -51,6 +51,30 @@ function unescapeUntrustedEvidenceContent(value) {
     .replace(/\\\\/g, '\\');
 }
 
+function findUnescapedMarker(text, marker, startIndex = 0) {
+  const upperText = String(text || '').toUpperCase();
+  const upperMarker = String(marker || '').toUpperCase();
+  let index = upperText.indexOf(upperMarker, startIndex);
+  while (index >= 0 && isEscapedAt(text, index)) {
+    index = upperText.indexOf(upperMarker, index + upperMarker.length);
+  }
+  return index;
+}
+
+function extractMarkedEvidenceContent(block) {
+  const opening = /TREŚĆ:\s*<<<UNTRUSTED_SOURCE_CONTENT>>>/i.exec(block);
+  if (!opening) return null;
+
+  let contentStart = opening.index + opening[0].length;
+  // Match the former parser's whitespace handling after the opening marker.
+  while (contentStart < block.length && /\s/.test(block[contentStart])) contentStart++;
+
+  const closingMarker = '<<<END_UNTRUSTED_SOURCE_CONTENT>>>';
+  const closingIndex = findUnescapedMarker(block, closingMarker, contentStart);
+  if (closingIndex < 0) return null;
+  return block.slice(contentStart, closingIndex);
+}
+
 function findEvidenceHeaderMatches(text) {
   const matches = [];
   let offset = 0;
@@ -89,7 +113,7 @@ function parseEvidenceBlocks(data) {
     const start = match.index + match[0].length;
     const end = index + 1 < matches.length ? matches[index + 1].index : text.length;
     const block = text.slice(start, end);
-    const markedContent = block.match(/TREŚĆ:\s*<<<UNTRUSTED_SOURCE_CONTENT>>>\s*([\s\S]*?)(?<!\\)<<<END_UNTRUSTED_SOURCE_CONTENT>>>/i)?.[1];
+    const markedContent = extractMarkedEvidenceContent(block);
     const rawContent = markedContent ?? block;
     const content = removeLeadingSourceMetadataNoise(unescapeUntrustedEvidenceContent(rawContent));
     // PROVIDER czytamy tylko z nagłówka (przed treścią), żeby strona nie mogła go podrobić.
