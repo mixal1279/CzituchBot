@@ -23,7 +23,12 @@ const TAVILY_CACHE_MAX_ENTRIES = 300;
 const TAVILY_CACHE_MAX_BYTES = 2 * 1024 * 1024;
 const TAVILY_REWRITE_MAX_ENTRIES = 500;
 const TAVILY_CACHE_VERSION = 3;
-const TAVILY_MIN_SCORE = Number(process.env.TAVILY_MIN_SCORE) || 0.2;
+function normalizujProgScore(value, fallback = 0.2) {
+  if (value == null || String(value).trim() === '') return fallback;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? Math.max(0, Math.min(1, parsed)) : fallback;
+}
+const TAVILY_MIN_SCORE = normalizujProgScore(process.env.TAVILY_MIN_SCORE);
 const TAVILY_MIN_STRONG_RESULTS = 1;
 
 // TTL zależny od tego, jak szybko odpowiedź się starzeje: świeże wiadomości krótko,
@@ -103,15 +108,20 @@ function ttlDlaZakresu(timeRange) {
 // Przy braku score zachowujemy wyniki, bo API nie dostarczyło nam sygnału jakości.
 function filtrujPoScore(results, minScore = TAVILY_MIN_SCORE) {
   const lista = Array.isArray(results) ? results : [];
-  if (!lista.length || !lista.every(r => typeof r?.score === 'number')) {
-    return { kept: lista, dropped: 0, lowConfidence: false };
-  }
-  const sorted = [...lista].sort((a, b) => b.score - a.score);
-  const strong = sorted.filter(r => r.score >= minScore);
-  if (strong.length < TAVILY_MIN_STRONG_RESULTS) {
-    return { kept: [], dropped: lista.length, lowConfidence: true };
-  }
-  return { kept: strong.slice(0, 7), dropped: lista.length - Math.min(strong.length, 7), lowConfidence: false };
+  if (!lista.length) return { kept: [], dropped: 0, lowConfidence: false };
+  const hasScore = lista.some(r => Number.isFinite(r?.score));
+  if (!hasScore) return { kept: lista, dropped: 0, lowConfidence: false };
+  // Apply the threshold per result. An unscored result is retained, but it must
+  // not disable filtering for other results whose numeric score is too low.
+  const filtered = lista.filter(r => !Number.isFinite(r?.score) || r.score >= minScore);
+  const sorted = [...filtered].sort((a, b) => {
+    const scoreA = Number.isFinite(a?.score) ? a.score : -Infinity;
+    const scoreB = Number.isFinite(b?.score) ? b.score : -Infinity;
+    return scoreB - scoreA;
+  });
+  if (!sorted.length) return { kept: [], dropped: lista.length, lowConfidence: true };
+  const kept = sorted.slice(0, 7);
+  return { kept, dropped: lista.length - kept.length, lowConfidence: false };
 }
 
 
@@ -395,7 +405,7 @@ function czyWymagaSecondaryRetrieval(results, sourceQuestion = '', timeRange = n
   if (lista.length >= 2) {
     const hosts = new Set(lista.map(r => { try { return new URL(r?.url).hostname.toLowerCase().replace(/^www\./, ''); } catch (_) { return ''; } }).filter(Boolean));
     const providers = new Set(lista.map(r => String(r?.provider || 'tavily')).filter(Boolean));
-    const strong = lista.filter(r => typeof r?.score !== 'number' || r.score >= 0.55).length;
+    const strong = lista.filter(r => Number.isFinite(r?.score) && r.score >= 0.55).length;
     if (strong >= 1 && (hosts.size >= 2 || providers.size >= 2)) return false;
     return true;
   }
@@ -747,6 +757,7 @@ module.exports = {
   zarezerwujBudzetRewrite,
   snapshotCacheTavily,
   filtrujPoScore,
+  normalizujProgScore,
   rerankujWynikiTavily,
   sygnalyClaimuTavily,
   claimCoverageTavily,

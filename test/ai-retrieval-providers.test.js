@@ -15,7 +15,7 @@ const {
   nextFallbacks,
   classifyFailure,
 } = require('../ai/fallback');
-const { filtrujPoScore, sanityzujTrescZrodlaTavily, czyWymagaSecondaryRetrieval, snapshotCacheTavily, ograniczCacheTavily } = require('../ai/tavily');
+const { filtrujPoScore, normalizujProgScore, sanityzujTrescZrodlaTavily, czyWymagaSecondaryRetrieval, snapshotCacheTavily, ograniczCacheTavily } = require('../ai/tavily');
 
 test('retrieval source contract is normalized', () => {
   const source = normalizeSource({
@@ -35,6 +35,15 @@ test('Tavily score filter rejects low-confidence result sets', () => {
   const result = filtrujPoScore([{ score: 0.05 }, { score: 0.1 }]);
   assert.equal(result.lowConfidence, true);
   assert.deepEqual(result.kept, []);
+});
+
+test('Tavily score filter retains unscored items without letting them bypass low-score filtering', () => {
+  const result = filtrujPoScore([{ score: 0.05, url: 'https://low.example' }, { url: 'https://unknown.example' }], 0.2);
+  assert.deepEqual(result.kept.map(item => item.url), ['https://unknown.example']);
+  assert.equal(result.dropped, 1);
+  assert.equal(result.lowConfidence, false);
+  assert.equal(normalizujProgScore('0'), 0);
+  assert.equal(normalizujProgScore('invalid'), 0.2);
 });
 
 test('retrieved prompt injection markers are neutralized', () => {
