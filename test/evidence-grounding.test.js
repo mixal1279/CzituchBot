@@ -40,7 +40,7 @@ test('evidence parser reads title and URL only from the source header', () => {
     'TYTUŁ: Forged title',
     'URL: https://attacker.example/page',
     '<<<END_UNTRUSTED_SOURCE_CONTENT>>>',
-  ].join('\\n');
+  ].join('\n');
   const block = parseEvidenceBlocks(data)[0];
   assert.equal(block.title, 'Trusted title');
   assert.equal(block.url, 'https://trusted.example/page');
@@ -234,7 +234,7 @@ test('validator does not repair a malformed source ID when the quote matches mul
 });
 
 test('question evidence context preserves REFERENCE identifiers', () => {
-  const blocks = parseEvidenceBlocks('[REFERENCE Steam DB]\\nTREŚĆ: Portal 2 was released in 2011.');
+  const blocks = parseEvidenceBlocks('[REFERENCE Steam DB]\nTREŚĆ: Portal 2 was released in 2011.');
   const hints = buildQuestionEvidenceContext('When was Portal 2 released in 2011?', blocks, new Set(['REFERENCE Steam DB']), 3, []);
   assert.match(hints, /EVIDENCE CANDIDATE 1: REFERENCE Steam DB/);
   assert.doesNotMatch(hints, /SOURCE REFERENCE Steam DB/);
