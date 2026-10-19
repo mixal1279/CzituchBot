@@ -1712,7 +1712,6 @@ async function walidujOdpowiedzGeminiModel(model, persona, pytanie, odpowiedz, d
           systemInstruction: { parts: [{ text: system }] },
           contents: [{ role: 'user', parts: [{ text: user }] }],
           generationConfig: {
-            temperature: 0,
             maxOutputTokens: 1400,
             responseFormat: { text: { mimeType: 'application/json', schema: GEMINI_VALIDATOR_JSON_SCHEMA } },
             ...(model === 'gemini-3.8-flash'
@@ -3236,7 +3235,7 @@ Pytanie użytkownika: ${pytanie}`;
             ...messages.history.map(m => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] })),
             { role: 'user', parts: [{ text: prompt }] },
           ],
-          generationConfig: { temperature: Math.min(Number(temperature) || 0.2, 0.4), maxOutputTokens: Math.max(300, Math.min(Number(maxTok) || 700, 1200)) },
+          generationConfig: { maxOutputTokens: Math.max(300, Math.min(Number(maxTok) || 700, 1200)) },
         }), signal: controller.signal,
       });
       const data = await response.json().catch(() => ({}));
@@ -3273,7 +3272,7 @@ Pytanie użytkownika: ${pytanie}`;
             ...messages.history.map(m => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] })),
             { role: 'user', parts: [{ text: prompt }] },
           ],
-          generationConfig: { temperature: Math.min(Number(temperature) || 0.2, 0.4), maxOutputTokens: Math.max(300, Math.min(Number(maxTok) || 700, 1200)), thinkingConfig: { thinkingLevel: 'minimal' } },
+          generationConfig: { maxOutputTokens: Math.max(300, Math.min(Number(maxTok) || 700, 1200)), thinkingConfig: { thinkingLevel: 'minimal' } },
         }), signal: controller.signal,
       });
       const data = await response.json().catch(() => ({}));
