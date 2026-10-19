@@ -63,9 +63,16 @@ const KNOWN_ENTITY_ALIAS_PATTERNS = [
   { canonical: 'bloody baron', pattern: /\b(?:bloody\s+baron|baron(?:a)?\s+krwaw(?:y|ego|ym)|krwaw(?:y|ego|emu)\s+baron(?:a|em|owi)?)\b/iu },
   { canonical: 'wild hunt', pattern: /\b(?:wild\s+hunt|dziki\s+gon|dzikiego\s+gonu|dzikim\s+gonem)\b/iu },
 ];
-// Aliasy z tabeli danych (ai/entityAliases.js) dołączamy do wbudowanych wzorców.
+// Aliasy z tabeli danych (ai/entityAliases.js) łączymy z legacy regexami.
+// Nie pomijamy grupy tylko dlatego, że jej kanoniczna nazwa już istnieje:
+// starszy regex może nie obsługiwać odmiany polskiej (np. „Krwawym Baronem”).
 for (const entry of buildEntityAliasPatterns(ENTITY_ALIAS_GROUPS)) {
-  if (!KNOWN_ENTITY_ALIAS_PATTERNS.some(existing => existing.canonical === entry.canonical)) KNOWN_ENTITY_ALIAS_PATTERNS.push(entry);
+  const existing = KNOWN_ENTITY_ALIAS_PATTERNS.find(item => item.canonical === entry.canonical);
+  if (!existing) {
+    KNOWN_ENTITY_ALIAS_PATTERNS.push(entry);
+    continue;
+  }
+  existing.pattern = new RegExp(`(?:${existing.pattern.source})|(?:${entry.pattern.source})`, 'iu');
 }
 function normalizujClaim(value) {
   return String(value || '')
