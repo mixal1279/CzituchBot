@@ -64,3 +64,13 @@ Plik `.env.example` w katalogu głównym zawiera listę zmiennych konfiguracyjny
 ## Cache werdyktów
 
 Werdykty `accepted` i `rejected` są cache'owane przez 10 minut, maksymalnie 200 wpisów. Cache nie powinien przechowywać werdyktów niejednoznacznych ani niedostępności dostawcy.
+
+## Zgodność API i znane ograniczenia
+
+- **Gemini:** klucz API jest przesyłany nagłówkiem `x-goog-api-key`. Wymuszony JSON korzysta z `generationConfig.responseFormat.text`; nie używaj wycofanego pola `responseSchema`. `thinkingLevel` jest ustawiany tylko dla modeli, dla których kod zna zgodną wartość.
+- **YouTube Live Chat:** polling korzysta z `pollingIntervalMillis` zwróconego przez API. Nie ustawiaj arbitralnego minimum 10 sekund, bo zwiększa to opóźnienie komend. Dokumentacja YouTube zaleca `liveChatMessages.streamList` dla nowych integracji; migracja z pollingu wymaga osobnego wdrożenia i testu reconnectów.
+- **Twitch Send Chat Message:** App Access Token uzyskany przez `client_credentials` nie ma własnych scope'ów. Wysłanie wiadomości nim wymaga wcześniejszej autoryzacji aplikacji: konto nadawcy musi przyznać `user:write:chat` i `user:bot`, a broadcaster `channel:bot`, chyba że nadawca jest moderatorem. Kod próbuje tokena użytkownika jako fallbacku po błędzie autoryzacji; taki fallback wymaga scope `user:write:chat` i nie gwarantuje odznaki Chat Bot.
+- **Kick VOD:** odczyt VOD przez endpoint `kick.com/api/v2/channels/.../livestream` nie jest stabilnym, udokumentowanym publicznym kontraktem API. Zmiana po stronie Kick może go zepsuć; kod powinien traktować brak danych jako błąd integracji, a nie jako dowód, że VOD nie istnieje.
+- **HowLongToBeat:** endpoint `/api/bleed` jest wewnętrznym endpointem strony, nie oficjalnym publicznym API. Zależność od niego jest podatna na zmiany po stronie serwisu.
+- **TikTok przez RSS-Bridge:** integracja zależy od zewnętrznego mostka i dostępności źródła RSS, a nie od stabilnego oficjalnego API TikToka. Monitoruj błędy pobierania i nie traktuj braku wpisów jako pewności, że konto nic nie opublikowało.
+- **Preflight:** mierzy czas odpowiedzi i kompletność JSON, ale nie potwierdza semantycznej poprawności dowodów. Limity produkcyjne są różne per dostawca i są wyświetlane w podsumowaniu.
