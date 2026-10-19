@@ -99,6 +99,61 @@ test('secondary provider forwards its bounded timeout to wrapped transports', as
 });
 
 
+
+test('Tavily retries transient 5xx responses once and stops after recovery', async () => {
+  let fetchCalls = 0;
+  const search = createTavilySearch({
+    apiKey: 'test-tavily-key',
+    groq: null,
+    normalizeQuery: value => value,
+    fetchZTimeout: async () => {
+      fetchCalls++;
+      if (fetchCalls === 1) {
+        return new Response(JSON.stringify({ detail: { error: 'temporary upstream failure' } }), {
+          status: 503,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      return new Response(JSON.stringify({ results: [] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    },
+    logger: { log() {}, warn() {}, error() {} },
+    cacheFile: '/tmp/czituch-tavily-5xx-retry-test.json',
+    geminiKey: '',
+    exaKey: '',
+  });
+
+  const result = await search('Tavily transient error recovery', { _skipRewrite: true, returnMeta: true });
+  assert.equal(fetchCalls, 2, 'a transient 5xx should be retried once');
+  assert.equal(result.status, 'empty');
+});
+
+test('Tavily does not retry 429 responses and reports rate limiting', async () => {
+  let fetchCalls = 0;
+  const search = createTavilySearch({
+    apiKey: 'test-tavily-key',
+    groq: null,
+    normalizeQuery: value => value,
+    fetchZTimeout: async () => {
+      fetchCalls++;
+      return new Response(JSON.stringify({ detail: { error: 'rate limit exceeded' } }), {
+        status: 429,
+        headers: { 'content-type': 'application/json' },
+      });
+    },
+    logger: { log() {}, warn() {}, error() {} },
+    cacheFile: '/tmp/czituch-tavily-429-test.json',
+    geminiKey: '',
+    exaKey: '',
+  });
+
+  const result = await search('Tavily rate limit handling', { _skipRewrite: true, returnMeta: true });
+  assert.equal(fetchCalls, 1, '429 should not be retried immediately');
+  assert.equal(result.status, 'rate_limited');
+});
+
 test('Tavily uses Bearer authentication and falls back to the original query when rewriting fails', async () => {
   let observedRequest;
   const search = createTavilySearch({
