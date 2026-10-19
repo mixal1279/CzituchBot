@@ -90,6 +90,16 @@ test('live benchmark is manual-only so pushes do not spend API quota', () => {
   assert.doesNotMatch(workflow, /^  push:/m);
 });
 
+test('TikTok RSS Bridge HTTP errors and non-Atom responses are not mistaken for empty feeds', () => {
+  const source = read('czituch_bot.js');
+  const start = source.indexOf('async function pobierzWszystkieTikToki(');
+  const end = source.indexOf('const TIKTOK_OKNO_NADRABIANIA_MS', start);
+  assert.ok(start >= 0 && end > start, 'TikTok RSS Bridge fetcher should exist');
+  const fetcher = source.slice(start, end);
+  assert.match(fetcher, /RSS Bridge HTTP \\$\\{res\\.status\\}/);
+  assert.match(fetcher, /non-Atom response/);
+});
+
 test('Twitch chat auth errors explain required scopes and try user-token fallback', () => {
   const source = read('czituch_bot.js');
   assert.match(source, /Wymagana wcześniejsza autoryzacja/);
