@@ -57,6 +57,11 @@ function classifyFailure(error = '') {
   const rawError = typeof error === 'string' ? error : '';
   const diagnosticStatus = rawError.match(/"status"\s*:\s*(\d{3})(?!\d)/);
   const httpStatus = structuredStatus || (diagnosticStatus ? Number(diagnosticStatus[1]) : 0);
+  const statusContext = error && typeof error === 'object'
+    ? [error.message, error.code, error.type, error.diagnostic].filter(Boolean).join(' ')
+    : rawError;
+  // Some providers use 429 for overload/capacity pressure rather than quota exhaustion.
+  if (httpStatus === 429 && /(?:high demand|overloaded|temporarily unavailable|capacity exceeded)/i.test(statusContext)) return 'transient';
   if ([402, 429].includes(httpStatus)) return 'quota';
   if ([400, 422, 404].includes(httpStatus)) return 'invalid_request';
   if ([401, 403].includes(httpStatus)) return 'auth';
