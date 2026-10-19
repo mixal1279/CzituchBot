@@ -539,6 +539,8 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
       logger.warn?.(`[Tavily] rewrite cache pominięty — plik przekracza limit ${TAVILY_CACHE_MAX_BYTES} B`);
     }
   } catch (_) {}
+  // A previously saved cache can exceed today's entry limit; normalize it at startup.
+  ograniczCacheRewrite(rewriteCache);
 
   let rewritePersistTimer = null;
   let rewritePersistQueue = Promise.resolve();
@@ -546,6 +548,7 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
     if (rewritePersistTimer) return rewritePersistQueue;
     rewritePersistTimer = setTimeout(() => {
       rewritePersistTimer = null;
+      ograniczCacheRewrite(rewriteCache);
       const snapshot = snapshotCacheRewrite(rewriteCache);
       rewritePersistQueue = rewritePersistQueue
         .catch(err => logger.warn?.('[Tavily] poprzedni zapis rewrite cache nieudany:', err.message))
