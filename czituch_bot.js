@@ -2082,6 +2082,19 @@ async function walidujOdpowiedzAI(persona, pytanie, odpowiedz, dane, historiaRoz
   return result;
 }
 
+// Dajemy drugiemu validatorowi szansę poprawić formatowanie dowodu, ale nie
+// obchodzimy twardych konfliktów merytorycznych. Każdy wynik nadal przechodzi
+// ten sam lokalny kontrakt, w tym dokładne przypisanie cytatu do SOURCE ID.
+function czyWartoDrugaOpinieWalidatora(result) {
+  if (result?.status !== 'rejected') return false;
+  const reasons = [
+    result.reason,
+    ...(result.diagnostics?.localRejectReasons || []),
+    ...(result.diagnostics?.unsupportedEvidenceClaims || []).flatMap(item => item.reasons || []),
+  ].filter(Boolean).join(' ').toLocaleLowerCase('pl-PL');
+  return /evidence_quote|evidence not verified|evidence_not_verified|cytat|source.?id|claims_missing|malformed_claims|answer_not_covered_by_claims|claim_en|nazw własnych|nazw wlasnych|claimy nie pokrywają|claimy nie pokrywaja/i.test(reasons);
+}
+
 async function walidujOdpowiedzAIBezCache(persona, pytanie, odpowiedz, dane, historiaRozmowy = [], requestId = '-', requestState = null, requestMeta = null) {
   if (!dane) {
     return { status: 'unavailable', ok: false, technicalError: true, provider: 'gemini', model: null, unsupported_claims: [], reason: 'brak danych referencyjnych' };
@@ -2100,6 +2113,7 @@ async function walidujOdpowiedzAIBezCache(persona, pytanie, odpowiedz, dane, his
     : [];
   if (!models.length) console.warn(`[AI][${requestId}] Gemini validator w cooldownie — używam fallbacku OpenRouter`);
   let last = null;
+  let lastRejected = null;
   for (let i = 0; i < models.length; i++) {
     const remainingMs = requestState
       ? (typeof requestState.remainingMs === 'function' ? requestState.remainingMs() : requestState.maxCzasMs - (Date.now() - requestState.startedAt))
@@ -2128,7 +2142,12 @@ async function walidujOdpowiedzAIBezCache(persona, pytanie, odpowiedz, dane, his
     requestState?.recordTiming?.('validator_provider_end', { provider: 'gemini', model: models[i], status: result.status, validatorElapsedMs, remainingBefore, remainingAfter, reason: String(result.reason || '').slice(0, 180) });
     if (requestState) requestState.validatorResults.push({ model: models[i], provider: 'gemini', status: result.status, elapsedMs: validatorElapsedMs, remainingMsBefore: remainingBefore, remainingMsAfter: remainingAfter, complete: result.complete === true, confidence: Number.isFinite(result.confidence) ? result.confidence : null, claimCoverage: Array.isArray(result.claims) && result.claims.length ? result.claims.filter(c => c.supported === true).length / result.claims.length : null, validationDiagnostics: result.diagnostics || null });
     console.log(`[AI][${requestId}] validator #${i + 1} ${models[i]} → ${result.status}${result.diagnostics ? ` localReject=${JSON.stringify(result.diagnostics.localRejectReasons)} claimCoverage=${result.diagnostics.claimCoverage}` : ''}`);
-    if (result.status === 'accepted' || result.status === 'soft_accepted' || result.status === 'rejected') return result;
+    if (result.status === 'accepted' || result.status === 'soft_accepted') return result;
+    if (result.status === 'rejected') {
+      if (!czyWartoDrugaOpinieWalidatora(result)) return result;
+      lastRejected = result;
+      requestState?.recordTiming?.('validator_second_opinion', { rejectedProvider: result.provider || 'unknown', reason: String(result.reason || '').slice(0, 180) });
+    }
     last = result;
   }
   if (requestState && budzetValidatoraPrzekroczony()) {
@@ -2182,7 +2201,12 @@ async function walidujOdpowiedzAIBezCache(persona, pytanie, odpowiedz, dane, his
             : null,
           validationDiagnostics: groqResult.diagnostics || null,
         });
-        if (groqResult.status === 'accepted' || groqResult.status === 'soft_accepted' || groqResult.status === 'rejected') return groqResult;
+        if (groqResult.status === 'accepted' || groqResult.status === 'soft_accepted') return groqResult;
+        if (groqResult.status === 'rejected') {
+          if (!czyWartoDrugaOpinieWalidatora(groqResult)) return groqResult;
+          lastRejected = groqResult;
+          requestState?.recordTiming?.('validator_second_opinion', { rejectedProvider: groqResult.provider || 'groq', reason: String(groqResult.reason || '').slice(0, 180) });
+        }
         last = groqResult;
       }
     }
@@ -2232,7 +2256,12 @@ async function walidujOdpowiedzAIBezCache(persona, pytanie, odpowiedz, dane, his
           : null,
         validationDiagnostics: xkiroResult.diagnostics || null,
       });
-      if (xkiroResult.status === 'accepted' || xkiroResult.status === 'soft_accepted' || xkiroResult.status === 'rejected') return xkiroResult;
+      if (xkiroResult.status === 'accepted' || xkiroResult.status === 'soft_accepted') return xkiroResult;
+      if (xkiroResult.status === 'rejected') {
+        if (!czyWartoDrugaOpinieWalidatora(xkiroResult)) return xkiroResult;
+        lastRejected = xkiroResult;
+        requestState?.recordTiming?.('validator_second_opinion', { rejectedProvider: xkiroResult.provider || 'xkiro', reason: String(xkiroResult.reason || '').slice(0, 180) });
+      }
       last = xkiroResult;
     }
   }
@@ -2273,7 +2302,11 @@ async function walidujOdpowiedzAIBezCache(persona, pytanie, odpowiedz, dane, his
       Object.assign(lastResult, { elapsedMs: validatorElapsedMs, remainingMsBefore: remainingBefore, remainingMsAfter: remainingAfter, status: fallback.status });
     }
   }
-  if (fallback.status === 'accepted' || fallback.status === 'soft_accepted' || fallback.status === 'rejected') return fallback;
+  if (fallback.status === 'accepted' || fallback.status === 'soft_accepted') return fallback;
+  if (fallback.status === 'rejected') return fallback;
+  // Jeśli druga opinia była technicznie niedostępna, zachowaj wcześniejszy
+  // merytoryczny reject zamiast maskować go jako awarię transportu.
+  if (lastRejected) return lastRejected;
   return { ...fallback, status: 'unavailable', ok: false, technicalError: true, unsupported_claims: [], reason: fallback.reason || 'Gemini i fallback validatora są technicznie niedostępne' };
 }
 
