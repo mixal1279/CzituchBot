@@ -44,7 +44,12 @@ function stratifiedCases(all, requested, seed = 0) {
   if (requested > 0 && !selected.some(item => item.expected?.factual?.independentGold === true)) {
     const goldCases = all.filter(item => item.expected?.factual?.independentGold === true);
     if (goldCases.length) {
-      const gold = goldCases[offset % goldCases.length];
+      // Wybierz gold z kategorii już obecnej w próbce, aby wymóg factual nie
+      // zmieniał stratified sample w zestaw z duplikatami kategorii.
+      const selectedCategories = new Set(selected.map(item => item.category));
+      const eligibleGoldCases = goldCases.filter(item => selectedCategories.has(item.category));
+      const candidates = eligibleGoldCases.length ? eligibleGoldCases : goldCases;
+      const gold = candidates[offset % candidates.length];
       const replacementIndex = selected.findIndex(item => item.category === gold.category);
       if (replacementIndex >= 0) selected[replacementIndex] = gold;
       else if (selected.length) selected[selected.length - 1] = gold;
