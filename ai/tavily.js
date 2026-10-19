@@ -689,8 +689,6 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
         }
         if (!results.length) { onStatus({ status: 'empty', query: searchQuery }); return { status: 'empty', text: '' }; }
         const limit = historical ? 6000 : 5000;
-        const sourceConflicts = wykryjKonfliktyZrodelTavily(primaryResults, sourceQuestion, domains);
-        const sourceConflictReport = zbudujRaportKonfliktowTavily(sourceConflicts);
         const sourceBlocks = primaryResults.map((r, index) => {
           const content = String(r.content || '').trim();
           const raw = String(r.raw_content || '').trim();
@@ -717,7 +715,23 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
           includedSources.push(primaryResults[index]);
           used += extra + block.length;
         }
-        const text = [sourceConflictReport, blocks.join('\n---\n')].filter(Boolean).join('\n---\n');
+        // Only report conflicts among sources actually included in the prompt.
+        // Otherwise the report can cite SOURCE IDs whose evidence blocks were cut by
+        // the character budget, causing false unknown-source rejections downstream.
+        let sourceConflictReport = zbudujRaportKonfliktowTavily(
+          wykryjKonfliktyZrodelTavily(includedSources, sourceQuestion, domains),
+        );
+        let blocksText = blocks.join('\n---\n');
+        const combinedLength = () => sourceConflictReport.length + (sourceConflictReport && blocksText ? 5 : 0) + blocksText.length;
+        while (blocks.length && combinedLength() > limit) {
+          blocks.pop();
+          includedSources.pop();
+          sourceConflictReport = zbudujRaportKonfliktowTavily(
+            wykryjKonfliktyZrodelTavily(includedSources, sourceQuestion, domains),
+          );
+          blocksText = blocks.join('\n---\n');
+        }
+        const text = [sourceConflictReport, blocksText].filter(Boolean).join('\n---\n');
         const canonical = {
           status: 'ok',
           text,

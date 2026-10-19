@@ -6,6 +6,7 @@ const assert = require('node:assert/strict');
 const {
   normalizeSource,
   formatSources,
+  createTavilySearch,
   searchGeminiWeb,
   searchExa,
   searchSecondaryProviders,
@@ -219,6 +220,39 @@ test('retrieval sanitizer removes invisible bidi/zero-width and HTML injection p
   assert.doesNotMatch(clean, /<script/i);
   assert.doesNotMatch(clean, /steal\(\)/i);
   assert.doesNotMatch(clean, /hidden/);
+});
+
+test('Tavily conflict report only references evidence blocks retained by the character budget', async () => {
+  const bodyResults = [2011, 2012, 2011, 2012].map((year, index) => ({
+    title: `Portal 2 release date source ${index + 1}`,
+    url: `https://source${index + 1}.example/portal-2`,
+    content: (`Portal 2 was released in ${year}. Portal 2 release details are described here. `).repeat(30),
+  }));
+  const search = createTavilySearch({
+    apiKey: 'test-tavily-key',
+    groq: null,
+    normalizeQuery: value => value,
+    fetchZTimeout: async () => new Response(JSON.stringify({ results: bodyResults }), {
+      status: 200, headers: { 'content-type': 'application/json' },
+    }),
+    logger: { log() {}, warn() {}, error() {} },
+    cacheFile: '/tmp/czituch-tavily-conflict-budget-test.json',
+    geminiKey: '',
+    exaKey: '',
+  });
+  const result = await search('Kiedy wydano Portal 2?', {
+    _skipRewrite: true,
+    returnMeta: true,
+    sourceQuestion: 'Kiedy wydano Portal 2?',
+    remainingMs: 15000,
+  });
+  const blockIds = [...result.text.matchAll(/^\\[SOURCE (\\d+)\\]$/gm)].map(match => Number(match[1]));
+  const conflictSection = result.text.match(/\\[SOURCE_CONFLICTS\\]([\\s\\S]*?)\\[\\/SOURCE_CONFLICTS\\]/)?.[1] || '';
+  const conflictIds = [...conflictSection.matchAll(/\\bSOURCE (\\d+)\\b/g)].map(match => Number(match[1]));
+  assert.ok(blockIds.length > 0, 'at least one source block should be retained');
+  assert.ok(conflictIds.length > 0, 'fixture should produce a conflict report');
+  assert.ok(conflictIds.every(id => blockIds.includes(id)), 'conflict report must not cite excluded source blocks');
+  assert.ok(result.text.length <= 6000, 'conflict report must fit inside the total evidence budget');
 });
 
 test('Tavily cache snapshot is size bounded and versioned', () => {
