@@ -135,7 +135,7 @@ function buildBenchmarkDiagnostics(results, allCases = benchmark.cases, selected
     validatorStatusCounts[status] = (validatorStatusCounts[status] || 0) + 1;
   }
   const classifyGenerationFailure = attempt => {
-    if (attempt.failure) return String(attempt.failure).slice(0, 80);
+    if (attempt.failure && String(attempt.failure).toLowerCase() !== 'unknown') return String(attempt.failure).slice(0, 80);
     const detail = [attempt.error, attempt.reason, attempt.message, attempt.code, attempt.statusCode]
       .filter(value => value !== undefined && value !== null)
       .join(' ');
