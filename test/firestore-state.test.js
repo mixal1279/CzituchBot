@@ -62,6 +62,9 @@ test('Firestore token wins on mismatch while local backup is preserved', async (
   const stale = { access_token: 'stale', refresh_token: 'stale-refresh' };
   await state.writeToken('youtube', current);
   await fs.writeFile(file, JSON.stringify(stale), 'utf8');
+  // Simulate a genuinely stale legacy file from before the latest Firestore write.
+  const staleTime = new Date(Date.now() - 60_000);
+  await fs.utimes(file, staleTime, staleTime);
   try {
     assert.deepEqual(await state.migrateTokenFile('youtube', file), current);
     assert.deepEqual(JSON.parse(await fs.readFile(file, 'utf8')), stale);
