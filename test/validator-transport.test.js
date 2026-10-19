@@ -12,7 +12,7 @@ delete process.env.AI_VALIDATOR_BREAKER_MS;
 const { __validatorTestHooks: hooks } = require('../czituch_bot');
 const { createAIRequestContext } = require('../ai/requestContext');
 const { resetProviderQuotaCooldowns } = require('../ai/fallback');
-const { GROQ_VALIDATOR_JSON_SCHEMA } = require('../ai/validator');
+const { GROQ_VALIDATOR_JSON_SCHEMA, buildGroqValidatorResponseFormat } = require('../ai/validator');
 
 const EVIDENCE = [
   '[SOURCE 1]',
@@ -174,6 +174,7 @@ test('Groq używa klienta mockowanego, payload 2200 tokenów po rezerwie reasoni
   assert.equal(calls[0].payload.response_format.json_schema.name, 'czituch_validator');
   assert.equal(calls[0].payload.response_format.json_schema.strict, true);
   assert.deepEqual(calls[0].payload.response_format.json_schema.schema, GROQ_VALIDATOR_JSON_SCHEMA);
+  assert.deepEqual(calls[0].payload.response_format, buildGroqValidatorResponseFormat('openai/gpt-oss-20b'));
   assert.ok(calls[0].options.signal instanceof AbortSignal);
   assert.equal(result.provider, 'groq');
   assert.equal(result.status, 'accepted');
