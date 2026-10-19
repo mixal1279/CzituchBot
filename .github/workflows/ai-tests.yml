@@ -1,6 +1,7 @@
 name: AI regression tests
 
 on:
+  workflow_dispatch:
   push:
     paths:
       - 'ai/**'
