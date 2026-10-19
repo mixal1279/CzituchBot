@@ -105,7 +105,7 @@ function retryAfterHint(source, now = Date.now()) {
 function quotaCooldownMsFromError(error) {
   const message = String(error?.message || error || '');
   const status = Number(error?.status ?? error?.statusCode ?? error?.response?.status ?? 0);
-  const isPaymentRequired = status === 402 || /(?:HTTP\\s*402|\"status\"\\s*:\\s*402)/i.test(message);
+  const isPaymentRequired = status === 402 || /(?:HTTP\s*402|"status"\s*:\s*402)/i.test(message);
   const isOverload = /(?:high demand|overloaded|temporarily unavailable|capacity exceeded)/i.test(message);
   const configured = Number(process.env.AI_PROVIDER_QUOTA_COOLDOWN_MS) || 60_000;
   let retryAfterMs = null;
