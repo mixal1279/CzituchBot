@@ -3184,7 +3184,7 @@ Pytanie użytkownika: ${pytanie}`;
       const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent', {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': KONFIGURACJA.geminiKey },
         body: JSON.stringify({
-          system_instruction: { parts: [{ text: overrideSystemPrompt }] },
+          systemInstruction: { parts: [{ text: overrideSystemPrompt }] },
           contents: [
             ...messages.history.map(m => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] })),
             { role: 'user', parts: [{ text: prompt }] },
@@ -3221,7 +3221,7 @@ Pytanie użytkownika: ${pytanie}`;
       const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent', {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': KONFIGURACJA.geminiKey },
         body: JSON.stringify({
-          system_instruction: { parts: [{ text: overrideSystemPrompt }] },
+          systemInstruction: { parts: [{ text: overrideSystemPrompt }] },
           contents: [
             ...messages.history.map(m => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] })),
             { role: 'user', parts: [{ text: prompt }] },

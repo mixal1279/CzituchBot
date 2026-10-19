@@ -25,9 +25,11 @@ test('answer-completeness repair reapplies deterministic guards before judging',
   assert.ok(validationIndex >= 0 && guardIndex > validationIndex, 'deterministic guards must run after repair validation');
 });
 
-test('Gemini validator uses current GenerateContent responseFormat schema and compatible thinking levels', () => {
+test('Gemini validator and generation fallbacks use documented GenerateContent fields', () => {
   const source = read('czituch_bot.js');
   assert.match(source, /systemInstruction:\s*\{\s*parts:/s);
+  assert.equal((source.match(/systemInstruction:\s*\{\s*parts:\s*\[\{\s*text:\s*overrideSystemPrompt\s*\}\]\s*\}/g) || []).length, 2, 'both Gemini generation fallbacks must send the system instruction');
+  assert.doesNotMatch(source, /system_instruction:/);
   assert.match(source, /responseFormat:\s*\{\s*text:\s*\{\s*mimeType:\s*'application\/json',\s*schema:\s*GEMINI_VALIDATOR_JSON_SCHEMA/s);
   assert.doesNotMatch(source, /responseMimeType:\s*'application\/json'/);
   assert.doesNotMatch(source, /responseSchema:\s*GEMINI_VALIDATOR_JSON_SCHEMA/);
