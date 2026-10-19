@@ -140,12 +140,16 @@ test('Gemini grounding offsets use the provided segment text even with Unicode o
     candidates: [{
       content: { parts: [{ text: 'Łódź: Portal działa poprawnie.' }] },
       groundingMetadata: {
-        groundingChunks: [{ web: { uri: 'https://example.com/source', title: 'Source' } }],
+        groundingChunks: [
+          { web: { uri: 'https://example.com/source', title: 'Source' } },
+          { web: { uri: 'https://example.com/unsupported', title: 'Unsupported' } },
+        ],
         groundingSupports: [{ groundingChunkIndices: [0], segment: { partIndex: 0, startIndex: 7, endIndex: 30, text: 'Portal działa poprawnie.' } }],
       },
     }],
   }), { status: 200, headers: { 'content-type': 'application/json' } });
   const result = await searchGeminiWeb({ apiKey: 'test', query: 'q', fetchFn: fakeFetch });
+  assert.equal(result.sources.length, 1, 'unreferenced grounding chunks must be ignored');
   assert.equal(result.sources[0].snippet, 'Portal działa poprawnie.');
   assert.equal(result.sources[0].content, '');
 });

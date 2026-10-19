@@ -115,7 +115,7 @@ async function searchGeminiWeb({ apiKey, query, fetchFn = fetch, startIndex = 0,
         content: '',
         score: null,
       }, i);
-    }).filter(s => s.url);
+    }).filter(s => s.url && s.snippet);
     return {
       status: sources.length ? 'grounded_metadata' : (text ? 'text_only' : 'empty'),
       // Text-only grounding is deliberately not exposed as source evidence.
