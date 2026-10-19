@@ -33,13 +33,30 @@ function removeLeadingSourceMetadataNoise(value) {
   return lines.join('\n').trim().replace(/^TREŚĆ:\s*/i, '').trim();
 }
 
+function isEscapedAt(text, index) {
+  let slashes = 0;
+  for (let i = index - 1; i >= 0 && text[i] === '\\'; i--) slashes++;
+  return slashes % 2 === 1;
+}
+
+function escapeUntrustedEvidenceContent(value) {
+  return String(value || '')
+    .replace(/\\/g, '\\\\')
+    .replace(/<<<(END_)?UNTRUSTED_SOURCE_CONTENT>>>/gi, '\\$&');
+}
+
+function unescapeUntrustedEvidenceContent(value) {
+  return String(value || '')
+    .replace(/\\(<<<(?:END_)?UNTRUSTED_SOURCE_CONTENT>>>)/gi, '$1')
+    .replace(/\\\\/g, '\\');
+}
+
 function findEvidenceHeaderMatches(text) {
   const matches = [];
   let offset = 0;
   let insideUntrustedContent = false;
-  // Source-looking lines inside a marked webpage body are untrusted content,
-  // not new top-level evidence blocks. Track the delimiters before accepting
-  // a header so an injected [SOURCE 99] cannot split or relabel the source.
+  // Delimiters embedded in source text must be escaped by the formatter.
+  // Only unescaped markers can change parser state.
   for (const lineWithEnding of text.match(/[^\n]*(?:\n|$)/g) || []) {
     if (!lineWithEnding) continue;
     const line = lineWithEnding.replace(/[\r\n]+$/g, '');
@@ -47,8 +64,19 @@ function findEvidenceHeaderMatches(text) {
       const match = line.match(/^\[(SOURCE \d+|REFERENCE [^\]\r\n]+)\]\s*$/i);
       if (match) matches.push({ index: offset, 0: line, 1: match[1] });
     }
-    if (/<<<UNTRUSTED_SOURCE_CONTENT>>>/i.test(line)) insideUntrustedContent = true;
-    if (/<<<END_UNTRUSTED_SOURCE_CONTENT>>>/i.test(line)) insideUntrustedContent = false;
+    const upper = line.toUpperCase();
+    const openMarker = '<<<UNTRUSTED_SOURCE_CONTENT>>>';
+    const closeMarker = '<<<END_UNTRUSTED_SOURCE_CONTENT>>>';
+    for (let i = 0; i < line.length;) {
+      const openAt = upper.indexOf(openMarker, i);
+      const closeAt = upper.indexOf(closeMarker, i);
+      if (openAt < 0 && closeAt < 0) break;
+      const isOpen = closeAt < 0 || (openAt >= 0 && openAt < closeAt);
+      const at = isOpen ? openAt : closeAt;
+      const marker = isOpen ? openMarker : closeMarker;
+      if (!isEscapedAt(line, at)) insideUntrustedContent = isOpen;
+      i = at + marker.length;
+    }
     offset += lineWithEnding.length;
   }
   return matches;
@@ -63,7 +91,7 @@ function parseEvidenceBlocks(data) {
     const block = text.slice(start, end);
     const markedContent = block.match(/TREŚĆ:\s*<<<UNTRUSTED_SOURCE_CONTENT>>>\s*([\s\S]*?)<<<END_UNTRUSTED_SOURCE_CONTENT>>>/i)?.[1];
     const rawContent = markedContent ?? block;
-    const content = removeLeadingSourceMetadataNoise(rawContent);
+    const content = removeLeadingSourceMetadataNoise(unescapeUntrustedEvidenceContent(rawContent));
     // PROVIDER czytamy tylko z nagłówka (przed treścią), żeby strona nie mogła go podrobić.
     const header = block.split(/TREŚĆ:/i)[0];
     const provider = header.match(/^\s*PROVIDER:\s*([^\r\n]+)/im)?.[1]?.trim();
@@ -353,4 +381,4 @@ function buildQuestionEvidenceContext(question, blocks, allowedSourceIds = null,
   }).join('\n\n');
 }
 
-module.exports = { normalizeEvidenceText, parseEvidenceBlocks, quoteExists, splitEvidenceSentences, classifyClaimType, evidenceRelationSignals, rankEvidenceForClaim, ensureEvidenceSourceId, buildEvidenceCandidatesFromSources, buildEvidenceRepairContext, buildQuestionEvidenceContext, removeLeadingImageFilenameNoise, removeLeadingSourceMetadataNoise };
+module.exports = { escapeUntrustedEvidenceContent, normalizeEvidenceText, parseEvidenceBlocks, quoteExists, splitEvidenceSentences, classifyClaimType, evidenceRelationSignals, rankEvidenceForClaim, ensureEvidenceSourceId, buildEvidenceCandidatesFromSources, buildEvidenceRepairContext, buildQuestionEvidenceContext, removeLeadingImageFilenameNoise, removeLeadingSourceMetadataNoise };
