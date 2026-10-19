@@ -22,7 +22,7 @@
       "question": "W grze Skyrim: Jak pokonać smoka?",
       "expect": { "profile": "gameplay" },
       "evidence": "[SOURCE 1]\nTYP: UNTRUSTED_WEB_DATA\nTYTUŁ: Dragons – Skyrim Wiki\nURL: https://elderscrolls.fandom.com/wiki/Dragon\nTREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>\nUse Dragonrend to force the dragon to land, then attack it with melee weapons or arrows.\n<<<END_UNTRUSTED_SOURCE_CONTENT>>>",
-      "answer": "Użyj Krzyku Dragonrend, aby zmusić smoka do lądowania, a potem atakuj go bronią białą lub łukiem."
+      "answer": "W Skyrim użyj Krzyku Dragonrend, aby zmusić smoka do lądowania, a potem atakuj go bronią białą lub łukiem."
     },
     {
       "id": "when-elden-ring",

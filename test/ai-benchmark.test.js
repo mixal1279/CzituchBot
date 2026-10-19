@@ -22,8 +22,9 @@ const ANSWERS = Object.freeze({
   relationship: 'Ich relacja jest złożona i obejmuje zarówno współpracę, jak i konflikt.',
 });
 
-function answerForCategory(category) {
-  return ANSWERS[category] || 'To odpowiedź zawierająca potwierdzone informacje.';
+function answerForCategory(category, item) {
+  const answer = ANSWERS[category] || 'To odpowiedź zawierająca potwierdzone informacje.';
+  return item?.game ? `${item.game}: ${answer}` : answer;
 }
 
 function hasRequirement(plan, id) {
@@ -42,7 +43,7 @@ function runBenchmark() {
     const unexpectedRequirements = plan.requirements
       .map(item => item.id)
       .filter(id => !item.expected.requirements.includes(id) && id !== 'entity_context');
-    const answer = answerForCategory(item.category);
+    const answer = answerForCategory(item.category, item);
     const completeness = assessAnswerCompleteness(answer, plan);
     const planningOk = missingRequirements.length === 0 && unexpectedRequirements.length === 0;
     const completenessOk = completeness.ok;
