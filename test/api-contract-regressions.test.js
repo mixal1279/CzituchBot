@@ -14,6 +14,17 @@ test('Gemini REST calls keep API keys out of URLs and use the auth header', () =
   assert.equal((source.match(/x-goog-api-key/g) || []).length, 3);
 });
 
+test('answer-completeness repair reapplies deterministic guards before judging', () => {
+  const source = read('czituch_bot.js');
+  const start = source.indexOf('const repairResult = await generujOdpowiedz(');
+  const end = source.indexOf("if (walidacja.status === 'accepted') {\\n              answerJudge = judgeAnswer", start);
+  assert.ok(start >= 0 && end > start, 'answer completeness repair branch should exist');
+  const repairBranch = source.slice(start, end);
+  const validationIndex = repairBranch.indexOf('await validateAI(');
+  const guardIndex = repairBranch.indexOf('zastosujDeterministyczneGuards(');
+  assert.ok(validationIndex >= 0 && guardIndex > validationIndex, 'deterministic guards must run after repair validation');
+});
+
 test('Gemini validator uses GenerateContent JSON schema fields and model-compatible thinking levels', () => {
   const source = read('czituch_bot.js');
   assert.match(source, /systemInstruction:\s*\{\s*parts:/s);

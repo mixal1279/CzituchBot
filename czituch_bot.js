@@ -3783,6 +3783,17 @@ function oczyscOdpowiedzPrzedWalidacja(tekst) {
               aiState,
               metadaneRequestu,
             );
+            if (walidacja.status === 'accepted' || walidacja.status === 'soft_accepted') {
+              walidacja = zastosujDeterministyczneGuards(
+                walidacja,
+                odp,
+                daneDoWalidacji,
+                pytanie,
+                { maxZdania: responseCfg.maxSentences, maxZnakow: 1800 },
+                routingAI,
+                aiPlan.responseProfile,
+              );
+            }
             if (walidacja.status === 'accepted') {
               answerJudge = judgeAnswer(odp, answerPlan);
               console.log(`[AI][${requestId}] answer-judge-after-repair=${JSON.stringify(answerJudge)}`);
