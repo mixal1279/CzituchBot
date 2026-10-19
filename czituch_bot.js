@@ -5698,6 +5698,21 @@ async function pobierzLiveChatId(nazwaKanalu) {
     channelId = znaneId;
     nazwaWyswietlana = nazwaKanalu;
     console.log(`[YouTube] ✅ Kanał (ID na sztywno): "${nazwaWyswietlana}" (${channelId})`);
+  } else if (YT_KANAL_HANDLE[nazwaKanalu]) {
+    const handleRes = await zGoogleRetry(
+      () => youtube.channels.list({
+        part: ['id', 'snippet'],
+        forHandle: YT_KANAL_HANDLE[nazwaKanalu],
+      }),
+      'pobieranie kanału po uchwycie YouTube'
+    );
+    const kanal = handleRes.data.items?.[0];
+    if (!kanal?.id) {
+      throw new Error(`Nie znaleziono kanału "${nazwaKanalu}" dla uchwytu ${YT_KANAL_HANDLE[nazwaKanalu]}.`);
+    }
+    channelId = kanal.id;
+    nazwaWyswietlana = kanal.snippet?.title || nazwaKanalu;
+    console.log(`[YouTube] ✅ Kanał (uchwyt ${YT_KANAL_HANDLE[nazwaKanalu]}): "${nazwaWyswietlana}" (${channelId})`);
   } else {
     const searchRes  = await zGoogleRetry(
       () => youtube.search.list({ part: ['snippet'], q: nazwaKanalu, type: ['channel'], maxResults: 5 }),
@@ -5897,7 +5912,12 @@ const YT_KANAL_ID = {
   'Edzzi':             'UCs8_gHgAnCR6ygeddwZdFVQ',
   'Arbuzik_Minecraft': 'UCAjQ3Z824UPJeTLNzOG6jkQ',
   'Angie28':           'UCRm1ZPlkBz94QfNJlKHTvBA',
-  // 'ArbuzikkYT': '...', // jeśli ten kanał też kiedyś nie znajdzie streamu, dopisz tu jego prawdziwe ID
+};
+
+// Dla kanałów bez wpisanego ID można użyć zweryfikowanego uchwytu YouTube.
+// channels.list(forHandle) zwraca ID kanału bez polegania na niejednoznacznym search.list.
+const YT_KANAL_HANDLE = {
+  'ArbuzikkYT': '@arbuzikinnegry',
 };
 
 async function youtubeWatcher(nazwaKanalu, wyslijFn) {
