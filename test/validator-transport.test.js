@@ -369,6 +369,32 @@ test('Retry-After ma pierwszeństwo przed domyślnym cooldownem przeciążenia',
   assert.equal(quotaCooldownMsFromError({ status: 429, message: 'HTTP 429 overloaded' }), 60000);
 });
 
+test('Gemini Retry-After nie jest wydłużany przez wcześniejszy ogólny cooldown transportu', async () => {
+  resetProviderQuotaCooldowns();
+  hooks.resetValidatorBreakers();
+  hooks.KONFIGURACJA.geminiKey = 'test-gemini-key';
+  hooks.KONFIGURACJA.openrouterKey = '';
+  hooks.KONFIGURACJA.xkiroKey = '';
+  let status = 503;
+  mockFetch(async () => ({
+    ok: false,
+    status,
+    headers: { get: name => name.toLowerCase() === 'retry-after' && status === 429 ? '5' : null },
+    json: async () => ({ error: { message: status === 503 ? 'temporary server error' : 'rate limit exceeded' } }),
+  }));
+
+  const transient = await hooks.walidujOdpowiedzGeminiModel('gemini-3.5-flash-lite', 'generic', QUESTION, ANSWER, EVIDENCE, [], 'test-gemini-transient-before-429');
+  assert.equal(transient.transient, true);
+  assert.equal(hooks.isGeminiValidatorCoolingDown(), true);
+
+  status = 429;
+  const limited = await hooks.walidujOdpowiedzGeminiModel('gemini-3.5-flash-lite', 'generic', QUESTION, ANSWER, EVIDENCE, [], 'test-gemini-short-retry-after');
+  assert.equal(limited.quota, true);
+  assert.equal(hooks.isGeminiValidatorCoolingDown(), false);
+  assert.equal(hooks.isProviderQuotaBlocked('gemini:gemini-3.5-flash-lite', Date.now() + 4_000), true);
+  assert.equal(hooks.isProviderQuotaBlocked('gemini:gemini-3.5-flash-lite', Date.now() + 6_000), false);
+});
+
 test('Gemini i Groq honorują Retry-After dostawcy', async () => {
   resetProviderQuotaCooldowns();
   hooks.KONFIGURACJA.geminiKey = 'test-gemini-key';
