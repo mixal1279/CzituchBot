@@ -1931,7 +1931,7 @@ async function walidujOdpowiedzGroq(persona, pytanie, odpowiedz, dane, requestId
         reserveMs: computeValidatorReserveMs(remainingMs, requestState?.validatory + 1, requestState?.maxValidatorow),
         minTimeoutMs: 2000,
       })
-    : 3500;
+    : 3000;
   if (requestState && timeoutMs === null) {
     return { status: 'unavailable', ok: false, technicalError: true, transient: true, skipped: true, provider: 'groq', model, unsupported_claims: [], reason: 'Groq validator pominięty: zbyt mały pozostały budżet czasu' };
   }
