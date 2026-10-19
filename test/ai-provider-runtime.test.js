@@ -79,6 +79,15 @@ test('generation timeout skips calls that cannot run for long enough while prese
   assert.equal(computeGenerationTimeout(Number.NaN), null);
 });
 
+test('repair generation is capped to 4.5s and reserves 10.5s for final validation', () => {
+  const repairOptions = { maxTimeoutMs: 4500, reserveMs: 10500, minTimeoutMs: 3000 };
+  assert.equal(computeGenerationTimeout(20000, repairOptions), 4500);
+  assert.equal(computeGenerationTimeout(15000, repairOptions), 4500);
+  assert.equal(computeGenerationTimeout(14000, repairOptions), 3500);
+  assert.equal(computeGenerationTimeout(13500, repairOptions), 3000);
+  assert.equal(computeGenerationTimeout(13499, repairOptions), null);
+});
+
 test('provider and validator failures receive distinct categories', () => {
   const cases = [
     ['network transport error: fetch failed', 'transport_error'],
