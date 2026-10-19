@@ -70,6 +70,40 @@ test('Firestore token wins on mismatch while local backup is preserved', async (
   }
 });
 
+test('unreadable Firestore token falls back to the legacy file without overwriting Firestore', async () => {
+  const db = createMockFirestore();
+  const original = createFirestoreState(db, { encryptionKey: TEST_KEY, logger: { info() {}, warn() {} } });
+  const encryptedToken = { access_token: 'firestore-access', refresh_token: 'firestore-refresh' };
+  await original.writeToken('twitch_chat_edlor', encryptedToken);
+
+  const wrongKey = Buffer.alloc(32, 8).toString('base64');
+  const fallback = createFirestoreState(db, { encryptionKey: wrongKey, logger: { info() {}, warn() {} } });
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'czituch-token-fallback-'));
+  const file = path.join(dir, 'token.json');
+  const legacy = { access_token: 'legacy-access', refresh_token: 'legacy-refresh' };
+  await fs.writeFile(file, JSON.stringify(legacy), 'utf8');
+  try {
+    assert.deepEqual(await fallback.migrateTokenFile('twitch_chat_edlor', file), legacy);
+    assert.deepEqual(JSON.parse(await fs.readFile(file, 'utf8')), legacy);
+    assert.deepEqual(await original.readToken('twitch_chat_edlor'), encryptedToken);
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('disabled Firestore state can still load a legacy OAuth token file', async () => {
+  const state = createFirestoreState(null, { logger: { info() {}, warn() {} } });
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'czituch-token-local-'));
+  const file = path.join(dir, 'token.json');
+  const token = { access_token: 'local-access', refresh_token: 'local-refresh' };
+  await fs.writeFile(file, JSON.stringify(token), 'utf8');
+  try {
+    assert.deepEqual(await state.migrateTokenFile('kick', file), token);
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});
+
 test('Firestore write failure preserves legacy token file', async () => {
   const db = {
     collection() {
