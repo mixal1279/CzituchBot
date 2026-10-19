@@ -248,7 +248,7 @@ function shouldOpenQuotaCircuit(error) {
   // OpenRouter's documented retryable in-flight budget 402 is also excluded.
   const text = String(error?.message || error || '');
   if (/openrouter_in_flight_budget/i.test(text) && /retry[- ]after/i.test(text)) return false;
-  return /(?:HTTP\s*402|payment required|insufficient (?:credits?|quota)|credit balance.{0,40}(?:deplet|exhaust|insufficient)|tokens? per day|\bTPD\b|daily (?:token|request|usage) quota|quota exceeded)/i.test(text);
+  return /(?:"status"\s*:\s*402|HTTP\s*402|payment required|insufficient (?:credits?|quota)|credit balance.{0,40}(?:deplet|exhaust|insufficient)|tokens? per day|\bTPD\b|daily (?:token|request|usage) quota|quota exceeded)/i.test(text);
 }
 
 function shouldRetryFailure(failure) {
