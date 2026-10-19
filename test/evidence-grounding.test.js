@@ -241,7 +241,7 @@ test('REFERENCE IDs resolve case-insensitively through local quote verification'
     'TREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>',
     'Portal 2 was released in 2011.',
     '<<<END_UNTRUSTED_SOURCE_CONTENT>>>',
-  ].join('\\n');
+  ].join('\n');
   const result = czyDowodPotwierdzaClaim(data, ['REFERENCE STEAM DB'], 'Portal 2 was released in 2011.', 'Portal 2 was released in 2011.');
   assert.equal(result.ok, true, result.reason);
 });
