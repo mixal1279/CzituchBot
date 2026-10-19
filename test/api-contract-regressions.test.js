@@ -101,6 +101,17 @@ test('TikTok RSS Bridge HTTP errors and non-Atom responses are not mistaken for 
   assert.match(fetcher, /non-Atom response/);
 });
 
+test('IGDB search terms from the model cannot append Apicalypse clauses', () => {
+  const source = read('czituch_bot.js');
+  const start = source.indexOf('async function znajdzGreIGDB(');
+  const end = source.indexOf('// =============================================\n//  HOWLONGTOBEAT', start);
+  assert.ok(start >= 0 && end > start, 'IGDB game lookup should exist');
+  const lookup = source.slice(start, end);
+  assert.match(lookup, /const igdbSearchTerm = nazwaGry\.replace/);
+  assert.match(lookup, /body: `search "\$\{igdbSearchTerm\}"; fields name,genres\.name; limit 5;`/);
+  assert.doesNotMatch(lookup, /body: `search "\$\{nazwaGry\}"/);
+});
+
 test('Open-Meteo geocoding and forecast distinguish HTTP errors from missing weather data', () => {
   const source = read('czituch_bot.js');
   const geoStart = source.indexOf('async function geokodujMiasto(');
