@@ -1692,7 +1692,7 @@ async function walidujOdpowiedzGeminiModel(model, persona, pytanie, odpowiedz, d
           reserveMs: computeValidatorReserveMs(validatorRemainingMs, requestState?.validatory + 1, requestState?.maxValidatorow),
           minTimeoutMs: 2000,
         })
-      : 9000;
+      : 3500;
     if (requestState && validatorTimeoutMs === null) {
       return { status: 'unavailable', ok: false, technicalError: true, transient: true, skipped: true, provider: 'gemini', model, unsupported_claims: [], reason: 'Gemini validator pominięty: zbyt mały pozostały budżet czasu' };
     }
@@ -1824,7 +1824,7 @@ async function walidujOdpowiedzOpenRouter(persona, pytanie, odpowiedz, dane, req
   const controller = new AbortController();
   const remainingMs = requestState
     ? (typeof requestState.remainingMs === 'function' ? requestState.remainingMs() : requestState.maxCzasMs - (Date.now() - requestState.startedAt))
-    : 12000;
+    : 3000;
   const validatorTimeoutMs = requestState
     ? computeValidatorTimeout(remainingMs, {
         maxTimeoutMs: 3000,
@@ -1931,7 +1931,7 @@ async function walidujOdpowiedzGroq(persona, pytanie, odpowiedz, dane, requestId
         reserveMs: computeValidatorReserveMs(remainingMs, requestState?.validatory + 1, requestState?.maxValidatorow),
         minTimeoutMs: 2000,
       })
-    : 9000;
+    : 3500;
   if (requestState && timeoutMs === null) {
     return { status: 'unavailable', ok: false, technicalError: true, transient: true, skipped: true, provider: 'groq', model, unsupported_claims: [], reason: 'Groq validator pominięty: zbyt mały pozostały budżet czasu' };
   }
@@ -2208,7 +2208,7 @@ async function walidujOdpowiedzAIBezCache(persona, pytanie, odpowiedz, dane, his
           reserveMs: computeValidatorReserveMs(remainingMs, requestState.validatory + 1, requestState.maxValidatorow),
           minTimeoutMs: 2000,
         })
-      : 9000;
+      : 3500;
     if (requestState && timeoutMs === null) {
       last = { status: 'unavailable', ok: false, technicalError: true, transient: true, skipped: true, provider: 'gemini', model: models[i], unsupported_claims: [], reason: 'Gemini validator pominięty: zbyt mały pozostały budżet czasu' };
       console.warn(`[AI][${requestId}] Gemini validator pominięty przed rezerwacją slotu; remaining=${remainingMs}ms`);
@@ -2257,7 +2257,7 @@ async function walidujOdpowiedzAIBezCache(persona, pytanie, odpowiedz, dane, his
             reserveMs: computeValidatorReserveMs(groqRemainingMs, requestState.validatory + 1, requestState.maxValidatorow),
             minTimeoutMs: 2000,
           })
-        : 9000;
+        : 3000;
       if (groqTimeoutMs === null) {
         console.warn(`[AI][${requestId}] Groq validator pominięty przed rezerwacją slotu; remaining=${groqRemainingMs}ms`);
       } else if (!zarezerwujSlotWalidatora(requestState, 'validator:groq')) {
@@ -2361,9 +2361,9 @@ async function walidujOdpowiedzAIBezCache(persona, pytanie, odpowiedz, dane, his
       ? requestState.remainingMs()
       : requestState.maxCzasMs - (Date.now() - requestState.startedAt);
     const timeoutMs = computeValidatorTimeout(remainingMs, {
-      maxTimeoutMs: 9000,
+      maxTimeoutMs: 3000,
       reserveMs: computeValidatorReserveMs(remainingMs, requestState.validatory + 1, requestState.maxValidatorow),
-      minTimeoutMs: 4000,
+      minTimeoutMs: 2000,
     });
     if (timeoutMs === null) {
       return lastRejected || { ...(last || {}), status: 'unavailable', ok: false, technicalError: true, transient: true, skipped: true, provider: 'openrouter', model: KONFIGURACJA.openrouterValidatorModel, unsupported_claims: [], reason: 'OpenRouter validator pominięty: zbyt mały pozostały budżet czasu' };
