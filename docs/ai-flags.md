@@ -25,7 +25,7 @@ Domyślny budżet pojedynczego żądania AI jest współdzielony przez generowan
 | Zmienna | Domyślnie | Znaczenie |
 |---|---|---|
 | `AI_ALLOW_PARTIAL_ANSWERS=1` | wyłączona | Pozwala zwrócić wyłącznie claimy z potwierdzonym dowodem po częściowym odrzuceniu odpowiedzi. Nie omija walidacji cytatów, dat/liczb, negacji, ID źródeł ani formatu. Włączaj dopiero po pomiarze fałszywych akceptacji. |
-| `AI_GEMINI_EXTRACT=1` | wyłączona | Używa Gemini Grounding do znalezienia stron, a treść pobiera przez Tavily Extract, by walidować cytaty na tekście źródłowym. |
+| `AI_GEMINI_EXTRACT=1` | wyłączona | Używa Gemini Grounding wyłącznie do znalezienia adresów, a treść pobiera przez Tavily Extract. Bez tej opcji segmenty odpowiedzi Gemini nie są traktowane jako tekst strony ani dowód; wymagane jest inne źródło treści, np. Exa. |
 | `AI_QUALITY_ALL_PROFILES=1` | wyłączona | Uruchamia bramkę jakości także dla profili `simple`, `comparison` i `technical`; może zwiększyć liczbę odrzuceń. |
 | `AI_GROQ_VALIDATOR_MAX_EVIDENCE_CHARS` | `12000` (minimum `8000`) | Ogranicza długość dowodów przekazywanych do walidatora Groq. |
 | `AI_XKIRO_VALIDATOR_TIMEOUT_MS` | `3000` | Maksymalny budżet pojedynczego wywołania walidatora xKiro. |

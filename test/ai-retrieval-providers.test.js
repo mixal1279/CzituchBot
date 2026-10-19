@@ -68,9 +68,11 @@ test('Gemini grounding parser preserves web source URLs', async () => {
     }],
   }), { status: 200, headers: { 'content-type': 'application/json' } });
   const result = await searchGeminiWeb({ apiKey: 'test', query: 'q', fetchFn: fakeFetch });
-  assert.equal(result.status, 'ok');
+  assert.equal(result.status, 'grounded_metadata');
   assert.equal(result.sources[0].url, 'https://example.com/source');
-  assert.match(result.text, /PROVIDER: gemini_google_search/);
+  assert.equal(result.sources[0].content, '', 'generated answer segments must not be used as webpage evidence');
+  assert.match(result.sources[0].snippet, /Answer/);
+  assert.equal(result.text, '', 'metadata-only grounding must not create a source evidence block');
 });
 
 test('Exa parser consumes highlights without requiring full page content', async () => {
@@ -109,6 +111,46 @@ test('secondary retrieval uses the first healthy provider and falls back to the 
   assert.equal(calls, 2);
 });
 
+
+test('Gemini grounding offsets use the provided segment text even with Unicode output', async () => {
+  const fakeFetch = async () => new Response(JSON.stringify({
+    candidates: [{
+      content: { parts: [{ text: 'Łódź: Portal działa poprawnie.' }] },
+      groundingMetadata: {
+        groundingChunks: [{ web: { uri: 'https://example.com/source', title: 'Source' } }],
+        groundingSupports: [{ groundingChunkIndices: [0], segment: { partIndex: 0, startIndex: 7, endIndex: 30, text: 'Portal działa poprawnie.' } }],
+      },
+    }],
+  }), { status: 200, headers: { 'content-type': 'application/json' } });
+  const result = await searchGeminiWeb({ apiKey: 'test', query: 'q', fetchFn: fakeFetch });
+  assert.equal(result.sources[0].snippet, 'Portal działa poprawnie.');
+  assert.equal(result.sources[0].content, '');
+});
+
+test('Gemini grounded metadata falls through to Exa when no page text was extracted', async () => {
+  const previous = process.env.AI_GEMINI_EXTRACT;
+  delete process.env.AI_GEMINI_EXTRACT;
+  try {
+    let calls = 0;
+    const fakeFetch = async url => {
+      calls++;
+      if (url.includes('generativelanguage')) return new Response(JSON.stringify({
+        candidates: [{ content: { parts: [{ text: 'A model-generated answer.' }] }, groundingMetadata: {
+          groundingChunks: [{ web: { uri: 'https://example.com/source', title: 'Source' } }],
+          groundingSupports: [{ groundingChunkIndices: [0], segment: { startIndex: 0, endIndex: 25, text: 'A model-generated answer.' } }],
+        } }],
+      }), { status: 200, headers: { 'content-type': 'application/json' } });
+      return new Response(JSON.stringify({ results: [{ title: 'Exa page', url: 'https://example.com/exa', highlights: ['Verbatim page highlight.'] }] }), { status: 200, headers: { 'content-type': 'application/json' } });
+    };
+    const result = await searchSecondaryProviders({ query: 'q', geminiKey: 'gemini', exaKey: 'exa', fetchFn: fakeFetch });
+    assert.equal(result.status, 'ok');
+    assert.equal(result.sources[0].provider, 'exa');
+    assert.equal(calls, 2);
+  } finally {
+    if (previous === undefined) delete process.env.AI_GEMINI_EXTRACT;
+    else process.env.AI_GEMINI_EXTRACT = previous;
+  }
+});
 
 test('Gemini text-only result is never promoted to source evidence', async () => {
   const fakeFetch = async () => new Response(JSON.stringify({

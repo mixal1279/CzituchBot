@@ -14,7 +14,9 @@ function normalizeSource({ provider, title, url, snippet, content, publishedAt =
     title: sanitizeUntrustedText(cleanText(title || '(brak tytułu)', 300)),
     url: String(url || '').trim(),
     snippet: sanitizeUntrustedText(cleanText(snippet || content, 700)),
-    content: sanitizeUntrustedText(cleanText(content || snippet, 4000)),
+    // An explicit empty string means we have URL metadata but no page text.
+    // Do not promote a model-generated grounding segment to source evidence.
+    content: sanitizeUntrustedText(cleanText(content === '' ? '' : (content || snippet), 4000)),
     publishedAt: publishedAt || null,
     score: typeof score === 'number' ? score : null,
   };
@@ -72,7 +74,8 @@ async function searchGeminiWeb({ apiKey, query, fetchFn = fetch, startIndex = 0,
       Math.max(1000, Math.min(30000, Number(timeoutMs) || 30000))
     );
     const candidate = data?.candidates?.[0];
-    const text = (candidate?.content?.parts || []).map(p => p?.text || '').join(' ').trim();
+    const parts = (candidate?.content?.parts || []).map(p => String(p?.text || ''));
+    const text = parts.join(' ').trim();
     const gm = candidate?.groundingMetadata || data?.groundingMetadata || {};
     const chunks = Array.isArray(gm.groundingChunks) ? gm.groundingChunks : [];
     const supports = Array.isArray(gm.groundingSupports) ? gm.groundingSupports : [];
@@ -82,9 +85,17 @@ async function searchGeminiWeb({ apiKey, query, fetchFn = fetch, startIndex = 0,
         .filter(s => Array.isArray(s?.groundingChunkIndices) && s.groundingChunkIndices.includes(i))
         .map(s => {
           const segment = s?.segment || {};
+          // groundingSupports.segment.text is the model-output span, not text
+          // fetched from the cited webpage. Use it only as metadata/snippet.
+          if (typeof segment.text === 'string' && segment.text.trim()) return segment.text;
+          // The API offsets are UTF-8 byte offsets within segment.partIndex, not
+          // JavaScript UTF-16 offsets into the concatenated response string.
+          const partIndex = Number.isInteger(segment.partIndex) ? segment.partIndex : 0;
+          const partText = parts[partIndex] || '';
           const start = Number.isInteger(segment.startIndex) ? segment.startIndex : null;
           const end = Number.isInteger(segment.endIndex) ? segment.endIndex : null;
-          return start !== null && end !== null ? text.slice(start, end) : '';
+          if (start === null || end === null || start < 0 || end < start) return '';
+          return Buffer.from(partText, 'utf8').subarray(start, end).toString('utf8');
         })
         .filter(Boolean);
       return normalizeSource({
@@ -92,12 +103,12 @@ async function searchGeminiWeb({ apiKey, query, fetchFn = fetch, startIndex = 0,
         title: web.title,
         url: web.uri || web.url,
         snippet: citedSegments.join(' '),
-        content: citedSegments.join(' '),
+        content: '',
         score: null,
       }, i);
-    }).filter(s => s.url && s.content);
+    }).filter(s => s.url);
     return {
-      status: sources.length ? 'ok' : (text ? 'text_only' : 'empty'),
+      status: sources.length ? 'grounded_metadata' : (text ? 'text_only' : 'empty'),
       // Text-only grounding is deliberately not exposed as source evidence.
       answer: text,
       text: formatSources(sources, startIndex),
@@ -176,7 +187,8 @@ async function zastapStreszczeniaTrescia(result, { tavilyKey, fetchFn, timeoutMs
     // Po podmianie to tekst strony, więc provider przestaje być „gemini*” i źródło liczy się normalnie.
     return page ? normalizeSource({ provider: 'tavily_extract', title: source.title, url: source.url, content: page, score: null }, i) : source;
   });
-  return { ...result, sources, text: formatSources(sources, startIndex) };
+  const hasPageText = sources.some(source => source?.url && String(source.content || '').trim());
+  return { ...result, status: hasPageText ? 'ok' : result.status, sources, text: formatSources(sources, startIndex) };
 }
 
 async function searchSecondaryProviders({ query, geminiKey, exaKey, tavilyKey = null, fetchFn = fetch, startIndex = 0, domains = [], prefer = 'gemini', timeoutMs = 15000 }) {
@@ -189,8 +201,14 @@ async function searchSecondaryProviders({ query, geminiKey, exaKey, tavilyKey = 
     const result = provider === 'exa'
       ? await searchExa({ apiKey: key, query, fetchFn, startIndex, domains, timeoutMs })
       : await searchGeminiWeb({ apiKey: key, query, fetchFn, startIndex, timeoutMs });
-    if (result.status === 'ok' && result.sources.length) {
-      return provider === 'gemini' ? zastapStreszczeniaTrescia(result, { tavilyKey, fetchFn, timeoutMs, startIndex }) : result;
+    if (provider === 'gemini' && result.sources.length) {
+      const extracted = await zastapStreszczeniaTrescia(result, { tavilyKey, fetchFn, timeoutMs, startIndex });
+      if (extracted.status === 'ok' && extracted.sources.some(source => source?.url && String(source.content || '').trim())) return extracted;
+      errors.push('gemini: grounding returned URL metadata but no extracted page text');
+      continue;
+    }
+    if (result.status === 'ok' && result.sources.length && result.sources.some(source => source?.url && String(source.content || '').trim())) {
+      return result;
     }
     if (result.error) errors.push(`${provider}: ${result.error}`);
   }
