@@ -39,6 +39,17 @@ function stratifiedCases(all, requested, seed = 0) {
     if (!bucket.length) keys.splice(cursor % keys.length, 1);
     else cursor++;
   }
+  // Każdy live run, również przy ziarnie > 0, musi zawierać co najmniej
+  // jeden niezależny gold case. Bez tego „factual pass” byłby pustą próbą.
+  if (requested > 0 && !selected.some(item => item.expected?.factual?.independentGold === true)) {
+    const goldCases = all.filter(item => item.expected?.factual?.independentGold === true);
+    if (goldCases.length) {
+      const gold = goldCases[offset % goldCases.length];
+      const replacementIndex = selected.findIndex(item => item.category === gold.category);
+      if (replacementIndex >= 0) selected[replacementIndex] = gold;
+      else if (selected.length) selected[selected.length - 1] = gold;
+    }
+  }
   return selected;
 }
 const benchmarkSeed = Math.max(0, Math.floor(Number(process.env.AI_BENCHMARK_SEED)) || 0);
@@ -106,6 +117,57 @@ function writeStdoutAndWait(text, stream = process.stdout) {
 
 async function sleep(ms) {
   if (ms > 0) await new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function buildBenchmarkDiagnostics(results, allCases = benchmark.cases, selectedCases = cases) {
+  const validatorRows = results.flatMap(result => result.validatorResults || []);
+  const validatorProviderCalls = {};
+  const validatorStatusCounts = {};
+  for (const row of validatorRows) {
+    const provider = String(row.provider || 'unknown');
+    const status = String(row.status || 'unknown');
+    validatorProviderCalls[provider] = (validatorProviderCalls[provider] || 0) + 1;
+    validatorStatusCounts[status] = (validatorStatusCounts[status] || 0) + 1;
+  }
+  const generationProviderFailures = [...new Set(results.flatMap(result =>
+    (result.generationAttempts || [])
+      .filter(attempt => attempt.status === 'error')
+      .map(attempt => `${attempt.provider}:${attempt.model}:${attempt.failure || 'unknown'}`)
+  ))];
+  const goldCases = allCases.filter(item => item.expected?.factual?.independentGold === true);
+  const selectedGoldCases = selectedCases.filter(item => item.expected?.factual?.independentGold === true);
+  const categories = [...new Set(allCases.map(item => item.category || 'uncategorized'))].sort();
+  const goldCoverageByCategory = Object.fromEntries(categories.map(category => [
+    category,
+    {
+      total: allCases.filter(item => (item.category || 'uncategorized') === category).length,
+      independentGold: allCases.filter(item => (item.category || 'uncategorized') === category && item.expected?.factual?.independentGold === true).length,
+    },
+  ]));
+  return {
+    validatorRejected: results.filter(result => result.finalStatus === 'rejected').length,
+    validatorInconclusive: results.filter(result => result.finalStatus === 'inconclusive').length,
+    validatorUnavailable: results.filter(result => result.finalStatus === 'unavailable').length,
+    validatorCalls: validatorRows.length,
+    validatorProviderCalls,
+    validatorStatusCounts,
+    validatorTransportFailures: validatorRows
+      .filter(row => row.status === 'unavailable' || row.status === 'error' || row.technicalError === true)
+      .map(row => ({ provider: row.provider || 'unknown', model: row.model || null, status: row.status || 'unknown', reason: row.reason || null })),
+    validatorSecondOpinions: results.reduce((sum, result) =>
+      sum + (result.timingTrace || []).filter(event => event.stage === 'validator_second_opinion').length, 0),
+    repairUsed: results.filter(result => Number(result.generationBudget?.repairUsed || 0) > 0).length,
+    repairSkipped: results.filter(result => Number(result.generationBudget?.repairUsed || 0) === 0 && result.finalStatus === 'rejected').length,
+    avgModelCalls: results.filter(result => Number.isFinite(result.modelCalls)).length
+      ? Number((results.filter(result => Number.isFinite(result.modelCalls)).reduce((sum, result) => sum + result.modelCalls, 0) / results.filter(result => Number.isFinite(result.modelCalls)).length).toFixed(2))
+      : null,
+    // Zachowujemy nazwę historyczną dla kompatybilności raportów; to są błędy generatora.
+    providerFailures: generationProviderFailures,
+    generationProviderFailures,
+    goldCoverageByCategory,
+    independentGoldCasesInBenchmark: goldCases.length,
+    independentGoldCasesInSample: selectedGoldCases.map(item => item.id),
+  };
 }
 
 async function run() {
@@ -209,17 +271,7 @@ async function run() {
   const factualCases = results.filter(x => x.factualPassed !== null);
   const factualPassed = factualCases.filter(x => x.factualPassed).length;
   const factualAverage = factualCases.length ? factualCases.reduce((sum, x) => sum + x.factualScore, 0) / factualCases.length : null;
-  const diagnostic = {
-    validatorRejected: results.filter(x => x.finalStatus === 'rejected').length,
-    validatorInconclusive: results.filter(x => x.finalStatus === 'inconclusive').length,
-    validatorUnavailable: results.filter(x => x.finalStatus === 'unavailable').length,
-    repairUsed: results.filter(x => Number(x.generationBudget?.repairUsed || 0) > 0).length,
-    repairSkipped: results.filter(x => Number(x.generationBudget?.repairUsed || 0) === 0 && x.finalStatus === 'rejected').length,
-    avgModelCalls: results.filter(x => Number.isFinite(x.modelCalls)).length
-      ? Number((results.filter(x => Number.isFinite(x.modelCalls)).reduce((sum, x) => sum + x.modelCalls, 0) / results.filter(x => Number.isFinite(x.modelCalls)).length).toFixed(2))
-      : null,
-    providerFailures: [...new Set(results.flatMap(x => (x.generationAttempts || []).filter(a => a.status === 'error').map(a => `${a.provider}:${a.model}:${a.failure || 'unknown'}`)))],
-  };
+  const diagnostic = buildBenchmarkDiagnostics(results, benchmark.cases, cases);
   // Jeśli Groq nie odpowiedział ani razu (limit dzienny, awaria), wynik mierzy limity, nie kod.
   const groqAttempts = results.flatMap(x => (x.generationAttempts || []).filter(a => /groq/i.test(String(a.provider || ''))));
   const providerOutage = groqAttempts.length > 0 && groqAttempts.every(a => a.status === 'error');
@@ -250,7 +302,7 @@ async function run() {
   }
   if (process.env.AI_BENCHMARK_REQUIRE_PERFECT === '1') {
     // Tylko wybrane przypadki mają gold facts. Przy rotacji ziarnem może ich nie być w próbce.
-    const factualOk = factualCases.length > 0 ? factualPassed === factualCases.length : benchmarkSeed > 0;
+    const factualOk = factualCases.length > 0 && factualPassed === factualCases.length;
     if (answered !== results.length || complete !== results.length || !factualOk) {
       console.error(`[LIVE BENCHMARK] wymagane ${results.length}/${results.length}; odpowiedzi=${answered}/${results.length}, kompletność=${complete}/${results.length}, factual=${factualPassed}/${factualCases.length}`);
       process.exitCode = 1;
@@ -258,7 +310,7 @@ async function run() {
   }
 }
 
-module.exports = { normalizeFactText, scoreGoldenFacts, stratifiedCases, buildQuestionForBot, isFailureText, evaluateBenchmarkAnswer, writeBenchmarkReport, writeStdoutAndWait, run };
+module.exports = { normalizeFactText, scoreGoldenFacts, stratifiedCases, buildQuestionForBot, isFailureText, evaluateBenchmarkAnswer, buildBenchmarkDiagnostics, writeBenchmarkReport, writeStdoutAndWait, run };
 
 if (require.main === module) {
   run().catch(error => {
