@@ -235,6 +235,36 @@ test('newer local recovery cache wins over stale Firestore values', async () => 
   }
 });
 
+test('versioned Tavily cache migration merges entries instead of replacing the envelope', async () => {
+  const db = createMockFirestore();
+  await db.collection('bot_runtime_state').doc('cache__tavily_search').set({
+    value: { version: 2, entries: { shared: { wynik: 'firestore', czas: 10 }, firestoreOnly: { wynik: 'keep', czas: 11 } } },
+    updatedAt: new Date(Date.now() - 60_000).toISOString(),
+    schemaVersion: 1,
+  });
+  const state = createFirestoreState(db, { encryptionKey: TEST_KEY, logger: { info() {}, warn() {} } });
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'czituch-tavily-merge-'));
+  const file = path.join(dir, 'tavily-cache.json');
+  await fs.writeFile(file, JSON.stringify({
+    version: 2,
+    entries: { shared: { wynik: 'local', czas: 12 }, localOnly: { wynik: 'keep', czas: 13 } },
+  }), 'utf8');
+  try {
+    const loaded = await state.loadCache('tavily_search', file);
+    assert.deepEqual(loaded, {
+      version: 2,
+      entries: {
+        shared: { wynik: 'local', czas: 12 },
+        firestoreOnly: { wynik: 'keep', czas: 11 },
+        localOnly: { wynik: 'keep', czas: 13 },
+      },
+    });
+    assert.deepEqual((await db.collection('bot_runtime_state').doc('cache__tavily_search').get()).data().value, loaded);
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});
+
 test('legacy cache is migrated and deleted only after Firestore verification', async () => {
   const db = createMockFirestore();
   const state = createFirestoreState(db, { encryptionKey: TEST_KEY, logger: { info() {}, warn() {} } });

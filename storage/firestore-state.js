@@ -80,6 +80,7 @@ function createFirestoreState(db, options = {}) {
       async write() { throw new Error('Firestore jest wyłączony.'); },
       async readToken() { return null; },
       async writeToken() { throw new Error('Firestore jest wyłączony.'); },
+      parseTokenFile(content) { return parseTokenFile(content, key); },
       async loadCache(cacheName, legacyFile = null) {
         const file = legacyFile || LEGACY_CACHE_FILES[cacheName];
         if (!file) return {};
@@ -154,11 +155,24 @@ function createFirestoreState(db, options = {}) {
     }
 
     const storedIsObject = stored && typeof stored === 'object' && !Array.isArray(stored);
-    // Normally Firestore wins on duplicates. A local file modified after the
+    const isEntriesEnvelope = value => Boolean(
+      value && typeof value === 'object' && !Array.isArray(value)
+      && Number.isInteger(value.version)
+      && value.entries && typeof value.entries === 'object' && !Array.isArray(value.entries)
+    );
+    const storedEnvelope = isEntriesEnvelope(stored);
+    const legacyEnvelope = isEntriesEnvelope(legacy);
+    const mergeTavilyEntries = cacheName.startsWith('tavily_') && (storedEnvelope || legacyEnvelope);
+    const storedEntries = storedEnvelope ? stored.entries : stored;
+    const legacyEntries = legacyEnvelope ? legacy.entries : legacy;
+    // Normally Firestore wins on duplicate keys. A local file modified after the
     // last successful Firestore write is a recovery copy and takes precedence.
-    const merged = storedIsObject
-      ? (localIsNewer ? { ...stored, ...legacy } : { ...legacy, ...stored })
-      : legacy;
+    const mergedEntries = storedIsObject
+      ? (localIsNewer ? { ...storedEntries, ...legacyEntries } : { ...legacyEntries, ...storedEntries })
+      : legacyEntries;
+    const merged = mergeTavilyEntries
+      ? { version: storedEnvelope ? stored.version : legacyEnvelope ? legacy.version : 2, entries: mergedEntries }
+      : mergedEntries;
     const needsWrite = !storedIsObject || JSON.stringify(merged) !== JSON.stringify(stored);
     if (needsWrite) {
       await write('cache', cacheName, merged);
@@ -294,6 +308,7 @@ function createFirestoreState(db, options = {}) {
     write,
     readToken,
     writeToken,
+    parseTokenFile: content => parseTokenFile(content, key),
     loadCache,
     saveCache,
     migrateTokenFile,
