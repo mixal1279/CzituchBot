@@ -16,7 +16,7 @@ function createAIRequestContext(options = {}) {
   const ctx = {
     requestId: String(options.requestId || '-'),
     startedAt: Number.isFinite(options.startedAt) ? options.startedAt : Date.now(),
-    maxCzasMs: clampLimit(options.maxCzasMs, 60000),
+    maxCzasMs: clampLimit(options.maxCzasMs, 25000),
     maxGeneracji: clampLimit(options.maxGeneracji, 6),
     maxInitialGeneracji: clampLimit(options.maxInitialGeneracji, clampLimit(options.maxGeneracji, 6)),
     maxRepairGeneracji: clampLimit(options.maxRepairGeneracji, 0),

@@ -588,9 +588,16 @@ console.log('AI regression tests: OK');
   assert.equal(budget.requestTimeoutMs, 25000);
   assert.equal(budget.maxValidators, 3);
   assert.equal(budget.maxModelCalls, 12);
+  for (let i = 0; i < 12; i++) assert.equal(budget.reserve('modelCalls'), true);
+  assert.equal(budget.reserve('modelCalls'), false, 'default model-call ceiling must remain 12');
   {
     const { createAIRequestContext } = require('../ai/requestContext');
+    const defaultCtx = createAIRequestContext({});
+    assert.equal(defaultCtx.maxCzasMs, 25000, 'chat request context defaults to 25 seconds');
+    const benchmarkCtx = createAIRequestContext({ maxCzasMs: 40000 });
+    assert.equal(benchmarkCtx.maxCzasMs, 40000, 'benchmark can override the deadline to 40 seconds');
     const ctx = createAIRequestContext({ maxModelCalls: 12 });
+    assert.equal(ctx.maxCzasMs, 25000);
     assert.equal(ctx.maxModelCalls, 12);
     assert.equal(ctx.reserveModel('aux-1'), true);
     assert.equal(ctx.reserveModel('aux-2'), true);
