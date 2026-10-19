@@ -570,7 +570,17 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
       const active = inFlight.get(key);
       if (active) {
         onStatus({ status: 'deduped', query: searchQuery });
-        return sformatujWynikWyjsciowyTavily(await active, { sourceStartIndex, returnMeta });
+        // A shared in-flight request may have been started by a caller with a
+        // larger deadline. Bound this caller's wait independently without
+        // aborting the shared transport used by the original caller.
+        const dedupeTimeoutMs = timeoutFromRemaining(15000);
+        const dedupeWait = awaitWithAbortTimeout(
+          active,
+          dedupeTimeoutMs,
+          new AbortController(),
+          'Tavily shared request',
+        );
+        return sformatujWynikWyjsciowyTavily(await dedupeWait, { sourceStartIndex, returnMeta });
       }
 
       const promise = (async () => {
