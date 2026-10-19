@@ -33,16 +33,20 @@ Plan odpowiedzi ma osobne wymagania dotyczące kompletności. Dla pytań o lore 
 | `AI_QUALITY_ALL_PROFILES=1` | wyłączona | Uruchamia bramkę jakości także dla profili `simple`, `comparison` i `technical`; może zwiększyć liczbę odrzuceń. |
 | `AI_GROQ_VALIDATOR_MAX_EVIDENCE_CHARS` | `12000` (minimum `8000`) | Ogranicza długość dowodów przekazywanych do walidatora Groq. |
 | `AI_XKIRO_VALIDATOR_TIMEOUT_MS` | `3000` | Maksymalny budżet pojedynczego wywołania walidatora xKiro. |
-| `AI_PROVIDER_QUOTA_COOLDOWN_MS` | `60000` ms | Domyślny czas przerwy po wykryciu limitu dostawcy; nagłówek `Retry-After` (sekundy lub data HTTP) ma pierwszeństwo, gdy dostawca go zwraca. |
+| `AI_PROVIDER_QUOTA_COOLDOWN_MS` | `60000` ms | Domyślny czas przerwy po wykryciu limitu dostawcy; nagłówek `Retry-After` (sekundy lub data HTTP) ma pierwszeństwo, gdy dostawca go zwraca. Workflow CI ustawia `1800000` ms na czas live benchmarku. |
 | `AI_MAX_FALLBACK_STEPS` | długość łańcucha fallbacków (`6`) | Maksymalna liczba prób fallbacku po odfiltrowaniu niedostępnych endpointów; `0` wyłącza dodatkowe próby. |
-| `AI_120B_GLOBAL_MAX_REQUESTS` | `6` | Limit żądań do 120B w procesie w ruchomym oknie 1 godziny. Rzeczywisty błąd quota otwiera osobny globalny circuit breaker na 1 godzinę; ten bezpiecznik jest niezależny od `Retry-After` i `AI_PROVIDER_QUOTA_COOLDOWN_MS`. |
+| `AI_120B_GLOBAL_MAX_REQUESTS` | `6` | Limit żądań do 120B w procesie w ruchomym oknie 1 godziny. Rzeczywisty błąd quota otwiera osobny globalny circuit breaker na 1 godzinę; ten bezpiecznik jest niezależny od `Retry-After` i `AI_PROVIDER_QUOTA_COOLDOWN_MS`. Workflow CI ustawia `20` dla pięciu próbek. |
 | `AI_CACHE_DIR` | katalog projektu (`__dirname`) | Katalog plikowego cache AI. |
 | `AI_TAVILY_CACHE_FILE` | `AI_CACHE_DIR/tavily_cache.json` | Ścieżka pliku cache Tavily; ta zmienna ma pierwszeństwo przed `AI_CACHE_DIR`. |
 | `TAVILY_MIN_SCORE` | `0.2` | Minimalny score wyniku Tavily; wyniki bez score nie są odrzucane wyłącznie z tego powodu. |
 | `AI_BENCHMARK_SEED` | `0` | Ziarno rotacji pytań live benchmarku; 0 oznacza zestaw stały. |
 | `AI_BENCHMARK_LIMIT` | `10` (skrypt) | Liczba przypadków live benchmarku; workflow CI jawnie ustawia `5`. |
 | `AI_BENCHMARK_DELAY_MS` | `0` ms | Opcjonalna przerwa między przypadkami; workflow CI ustawia `5000` ms. |
-| `AI_BENCHMARK_REQUIRE_PERFECT=1` | wyłączona | Kończy run błędem, jeśli nie wszystkie próbki zostały odpowiedziane i kompletne albo choć jeden gold fact nie przejdzie. Workflow CI włącza tę kontrolę. |
+| `AI_BENCHMARK_REQUIRE_PERFECT=1` | wyłączona | Kończy run błędem, jeśli nie wszystkie próbki zostały odpowiedziane i kompletne albo choć jeden gold fact nie przejdzie. Workflow CI i przykładowy `.env.example` jawnie włączają tę kontrolę. |
+| `PREFLIGHT_TIMEOUT_MS` | `20000` ms | Timeout skryptu `validator-providers-preflight.js`. |
+| `PREFLIGHT_STRICT` | `0` | W trybie `1` błędy preflightu walidatorów kończą skrypt kodem niezerowym; nie zmienia zachowania preflightów Groq/Tavily. |
+
+Skrypt live benchmarku domyślnie wybiera `10` przypadków; workflow CI i przykładowy `.env.example` ustawiają `5`. Workflow dodatkowo ustawia `AI_BENCHMARK_DELAY_MS=5000`, `AI_120B_GLOBAL_MAX_REQUESTS=20` oraz `AI_PROVIDER_QUOTA_COOLDOWN_MS=1800000`.
 
 Live benchmark porównuje kompletność planu odpowiedzi oraz ręcznie przygotowane grupy `mustInclude`/`mustNot`. Wynik gold jest dopasowaniem fraz z ograniczoną obsługą odmian, a nie semantycznym weryfikatorem wszystkich twierdzeń; źródła `independentGoldSources` są referencjami do ręcznej kontroli, nie są pobierane ani oceniane automatycznie. Frazy zabronione obniżają teraz także wynik punktowy. Typowe odmowy po polsku i angielsku są klasyfikowane jako abstencja, a nie odpowiedź kompletna.
 
