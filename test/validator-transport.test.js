@@ -119,7 +119,7 @@ test('wspólny prompt zachowuje claim_en, metadane, pytanie, odpowiedź i źród
   assert.match(prompt.user, /Portal 2 was released on 19 April 2011/);
 });
 
-test('Gemini GenerateContent uses the documented systemInstruction and responseSchema fields', async () => {
+test('Gemini GenerateContent uses the documented systemInstruction and responseFormat schema fields', async () => {
   hooks.KONFIGURACJA.geminiKey = 'test-gemini-key';
   hooks.KONFIGURACJA.openrouterKey = '';
   hooks.KONFIGURACJA.xkiroKey = '';
@@ -361,6 +361,34 @@ test('timeout z mockowanego klienta Groq trafia do circuit breakera bez wywołan
   assert.ok(!slotPurposes.includes('validator:groq'));
 });
 
+
+test('xKiro i OpenRouter honorują 402/429 cooldown i Retry-After bez kolejnych żądań', async () => {
+  for (const provider of ['xkiro', 'openrouter']) {
+    for (const status of [402, 429]) {
+      resetProviderQuotaCooldowns();
+      hooks.KONFIGURACJA.xkiroKey = provider === 'xkiro' ? 'test-xkiro-key' : '';
+      hooks.KONFIGURACJA.openrouterKey = provider === 'openrouter' ? 'test-openrouter-key' : '';
+      hooks.KONFIGURACJA.xkiroModel = 'qwen/qwen3.5-397b-a17b:free';
+      hooks.KONFIGURACJA.openrouterValidatorModel = 'openai/gpt-oss-20b';
+      let calls = 0;
+      mockFetch(async () => {
+        calls += 1;
+        return { ok: false, status, headers: { get: name => name.toLowerCase() === 'retry-after' ? '30' : null }, json: async () => ({ error: { message: status === 402 ? 'insufficient quota' : 'rate limit exceeded', code: status } }) };
+      });
+      const invoke = provider === 'xkiro'
+        ? () => hooks.walidujOdpowiedzXKiro('generic', QUESTION, ANSWER, EVIDENCE, `test-${provider}-${status}`)
+        : () => hooks.walidujOdpowiedzOpenRouter('generic', QUESTION, ANSWER, EVIDENCE, `test-${provider}-${status}`);
+      const first = await invoke();
+      assert.equal(first.status, 'unavailable');
+      assert.equal(first.quota, true);
+      assert.equal(first.transient, status === 429);
+      assert.equal(calls, 1);
+      const second = await invoke();
+      assert.equal(second.skipped, true);
+      assert.equal(calls, 1, `${provider} HTTP ${status} must be cooled down rather than retried on every request`);
+    }
+  }
+});
 
 test('HTTP circuit breakery xKiro i OpenRouter otwierają się po dwóch mockowanych abortach', async () => {
   for (const provider of ['xkiro', 'openrouter']) {
