@@ -6,7 +6,6 @@ const assert = require('node:assert/strict');
 const {
   normalizeSource,
   formatSources,
-  createTavilySearch,
   searchGeminiWeb,
   searchExa,
   searchSecondaryProviders,
@@ -16,7 +15,7 @@ const {
   nextFallbacks,
   classifyFailure,
 } = require('../ai/fallback');
-const { filtrujPoScore, normalizujProgScore, sanityzujTrescZrodlaTavily, czyWymagaSecondaryRetrieval, snapshotCacheTavily, ograniczCacheTavily } = require('../ai/tavily');
+const { createTavilySearch, filtrujPoScore, normalizujProgScore, sanityzujTrescZrodlaTavily, czyWymagaSecondaryRetrieval, snapshotCacheTavily, ograniczCacheTavily } = require('../ai/tavily');
 
 test('retrieval source contract is normalized', () => {
   const source = normalizeSource({
