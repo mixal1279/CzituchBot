@@ -44,8 +44,8 @@ test('wymyślona nazwa nieobecna w dowodzie nadal powoduje odrzucenie', () => wi
 test('produkcyjne aliasy PL/EN normalizują znane encje do jednego kanonicznego identyfikatora', () => {
   assert.ok(KNOWN_ENTITY_ALIAS_PATTERNS.some(entry => entry.canonical === 'wild hunt'));
   assert.ok(KNOWN_ENTITY_ALIAS_PATTERNS.some(entry => entry.canonical === 'bloody baron'));
-  assert.deepEqual(wyodrebnijNazwyWlasne('Geralt spotyka Dzikim Gonem na szlaku.'), ['wild hunt']);
-  assert.deepEqual(wyodrebnijNazwyWlasne('Geralt rozmawia z Krwawym Baronem.'), ['bloody baron']);
+  assert.deepEqual(wyodrebnijNazwyWlasne('Geralt spotyka Dzikim Gonem na szlaku.'), ['wild hunt', 'geralt']);
+  assert.deepEqual(wyodrebnijNazwyWlasne('Geralt rozmawia z Krwawym Baronem.'), ['bloody baron', 'geralt']);
   assert.deepEqual(wyodrebnijNazwyWlasne('Dragonborn używa Smoczej Zguby.'), ['dragonrend']);
 });
 
