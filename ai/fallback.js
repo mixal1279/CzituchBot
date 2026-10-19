@@ -104,6 +104,8 @@ function retryAfterHint(source, now = Date.now()) {
 
 function quotaCooldownMsFromError(error) {
   const message = String(error?.message || error || '');
+  const status = Number(error?.status ?? error?.statusCode ?? error?.response?.status ?? 0);
+  const isPaymentRequired = status === 402 || /(?:HTTP\\s*402|\"status\"\\s*:\\s*402)/i.test(message);
   const isOverload = /(?:high demand|overloaded|temporarily unavailable|capacity exceeded)/i.test(message);
   const configured = Number(process.env.AI_PROVIDER_QUOTA_COOLDOWN_MS) || 60_000;
   let retryAfterMs = null;
@@ -129,6 +131,10 @@ function quotaCooldownMsFromError(error) {
   if (retryAfterMs !== null) {
     return Math.max(isOverload ? 60_000 : 1_000, Math.ceil(retryAfterMs));
   }
+  // HTTP 402 usually means exhausted credits/quota, not a short-lived rate limit.
+  // A Retry-After above is honored when the provider explicitly documents a
+  // recoverable in-flight budget; otherwise avoid hammering it every minute.
+  if (isPaymentRequired) return 24 * 60 * 60 * 1000;
   return isOverload ? 60_000 : configured;
 }
 
