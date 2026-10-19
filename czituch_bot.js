@@ -618,6 +618,7 @@ const KONFIGURACJA = {
 
   // ---- OpenRouter fallback (ostatnia deska ratunku po Gemini) ----
   openrouterKey:      process.env.OPENROUTER_API_KEY,
+  openrouterBaseUrl: String(process.env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1').replace(/\/+$/, ''),
   // Validator musi używać stabilnego modelu; nie używamy openrouter/free,
   // bo jego model może zmieniać się między requestami.
   openrouterValidatorModel: process.env.OPENROUTER_VALIDATOR_MODEL || AI_MODELS.validator,
@@ -628,6 +629,7 @@ const KONFIGURACJA = {
 
   // ---- xKiro (fallback po Groq 20B) ----
   xkiroKey: typeof process.env.XKIRO_API_KEY === 'string' ? process.env.XKIRO_API_KEY.replace(/[\r\n]/g, '').trim() : process.env.XKIRO_API_KEY,
+  xkiroBaseUrl: String(process.env.XKIRO_BASE_URL || 'https://api.xkiro.com/v1').replace(/\/+$/, ''),
   xkiroModel: process.env.XKIRO_MODEL || 'qwen/qwen3.5-397b-a17b:free',
 
   // ---- ITAD ----
@@ -1863,7 +1865,7 @@ async function walidujOdpowiedzOpenRouter(persona, pytanie, odpowiedz, dane, req
   }
   const timer = setTimeout(() => controller.abort(), validatorTimeoutMs);
   try {
-    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    const response = await fetch(`${KONFIGURACJA.openrouterBaseUrl}/chat/completions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${KONFIGURACJA.openrouterKey}`, 'HTTP-Referer': 'https://czituchbot.pl', 'X-Title': 'CzituchBot validator' },
       body: JSON.stringify({
@@ -2101,7 +2103,7 @@ async function walidujOdpowiedzXKiro(persona, pytanie, odpowiedz, dane, requestI
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const response = await fetch('https://api.xkiro.com/v1/chat/completions', {
+    const response = await fetch(`${KONFIGURACJA.xkiroBaseUrl}/chat/completions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${KONFIGURACJA.xkiroKey}` },
       body: JSON.stringify({
@@ -3254,7 +3256,7 @@ Pytanie użytkownika: ${pytanie}`;
     const timeoutMs = timeoutDlaGeneracji();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      const response = await fetch(`${KONFIGURACJA.openrouterBaseUrl}/chat/completions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${KONFIGURACJA.openrouterKey}`, 'HTTP-Referer': 'https://czituchbot.pl', 'X-Title': 'CzituchBot' },
         body: JSON.stringify({ model: KONFIGURACJA.openrouterGeneratorModel, messages, temperature: Math.min(Number(temperature) || 0.2, 0.4), max_tokens: Math.max(300, Math.min(Number(maxTok) || 700, 1200)) }),
@@ -3299,7 +3301,7 @@ Pytanie użytkownika: ${pytanie}`;
       // All providers must use the same bounded prompt contract so the original
       // question survives missing or oversized evidence context.
       const messages = buildMessages(overrideSystemPrompt);
-      const response = await fetch('https://api.xkiro.com/v1/chat/completions', {
+      const response = await fetch(`${KONFIGURACJA.xkiroBaseUrl}/chat/completions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${KONFIGURACJA.xkiroKey}` },
         body: JSON.stringify({

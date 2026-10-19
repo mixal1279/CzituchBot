@@ -58,9 +58,9 @@ Live benchmark porównuje kompletność planu odpowiedzi oraz ręcznie przygotow
 | `GROQ_BASE_URL` | Opcjonalny endpoint zgodny z OpenAI API; domyślnie endpoint Groq. |
 | `GEMINI_API_KEY` | Gemini API. Żądania REST przesyłają klucz w nagłówku `x-goog-api-key`, nie w URL. |
 | `OPENROUTER_API_KEY` | OpenRouter. |
-| `OPENROUTER_BASE_URL` | Opcjonalny endpoint OpenRouter zgodny z OpenAI API. |
+| `OPENROUTER_BASE_URL` | Bazowy endpoint OpenRouter zgodny z OpenAI API; domyślnie `https://openrouter.ai/api/v1`. Używany przez generator i walidator. Końcowe ukośniki są usuwane. |
 | `XKIRO_API_KEY` | xKiro. |
-| `XKIRO_BASE_URL` | Opcjonalny endpoint xKiro zgodny z OpenAI API. |
+| `XKIRO_BASE_URL` | Bazowy endpoint xKiro zgodny z OpenAI API; domyślnie `https://api.xkiro.com/v1`. Używany przez generator i walidator. Końcowe ukośniki są usuwane. |
 | `TAVILY_API_KEY` | Tavily Search/Extract. |
 | `TAVILY_MIN_SCORE` | Próg jakości wyników Tavily. |
 | `EXA_API_KEY` | Exa jako dodatkowe źródło wyszukiwania. |

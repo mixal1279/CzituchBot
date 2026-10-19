@@ -142,8 +142,9 @@ test('Gemini GenerateContent uses the documented systemInstruction and responseF
   assert.equal(Object.hasOwn(call.body.generationConfig, 'responseMimeType'), false);
 });
 
-test('OpenRouter wysyła json_object, reasoning low i domyślny limit 1400; length oznacza ucięty JSON', async () => {
+test('OpenRouter wysyła json_object, reasoning low i honoruje własny endpoint', async () => {
   hooks.KONFIGURACJA.openrouterKey = 'test-openrouter-key';
+  hooks.KONFIGURACJA.openrouterBaseUrl = 'https://openrouter.example/custom/v1';
   hooks.KONFIGURACJA.openrouterValidatorModel = 'openai/gpt-oss-20b';
   let call;
   mockFetch(async (url, options) => {
@@ -155,7 +156,7 @@ test('OpenRouter wysyła json_object, reasoning low i domyślny limit 1400; leng
   });
 
   const result = await hooks.walidujOdpowiedzOpenRouter('generic', QUESTION, ANSWER, EVIDENCE, 'test-or');
-  assert.equal(call.url, 'https://openrouter.ai/api/v1/chat/completions');
+  assert.equal(call.url, 'https://openrouter.example/custom/v1/chat/completions');
   assert.equal(call.body.max_tokens, 1400);
   assert.deepEqual(call.body.response_format, { type: 'json_object' });
   assert.deepEqual(call.body.reasoning, { effort: 'low', exclude: true });
@@ -164,8 +165,9 @@ test('OpenRouter wysyła json_object, reasoning low i domyślny limit 1400; leng
   assert.match(result.reason, /UCIĘTY JSON/);
 });
 
-test('xKiro wysyła limit 1600 i json_object; finish_reason length nie jest zwykłym błędem JSON', async () => {
+test('xKiro wysyła limit 1600 i json_object oraz honoruje własny endpoint', async () => {
   hooks.KONFIGURACJA.xkiroKey = 'test-xkiro-key';
+  hooks.KONFIGURACJA.xkiroBaseUrl = 'https://xkiro.example/custom/v1';
   hooks.KONFIGURACJA.xkiroModel = 'qwen/qwen3.5-397b-a17b:free';
   let call;
   mockFetch(async (url, options) => {
@@ -177,7 +179,7 @@ test('xKiro wysyła limit 1600 i json_object; finish_reason length nie jest zwyk
   });
 
   const result = await hooks.walidujOdpowiedzXKiro('generic', QUESTION, ANSWER, EVIDENCE, 'test-xk');
-  assert.equal(call.url, 'https://api.xkiro.com/v1/chat/completions');
+  assert.equal(call.url, 'https://xkiro.example/custom/v1/chat/completions');
   assert.equal(call.body.max_tokens, 1600);
   assert.deepEqual(call.body.response_format, { type: 'json_object' });
   assert.equal(result.status, 'unavailable');
