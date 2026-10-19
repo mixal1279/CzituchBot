@@ -1167,7 +1167,7 @@ async function znajdzGreIGDB(pytanie, requestState = null) {
     // Model output is untrusted input to the Apicalypse query language.
     // Remove query delimiters and bound the search term so a title cannot
     // append extra IGDB clauses such as another limit/where statement.
-    const igdbSearchTerm = nazwaGry.replace(/[";\\\\\\r\\n]/g, ' ').replace(/\\s+/g, ' ').trim().slice(0, 120);
+    const igdbSearchTerm = nazwaGry.replace(/[";\\]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120);
     if (!igdbSearchTerm) return null;
 
     const token = await pobierzTokenIGDB();
