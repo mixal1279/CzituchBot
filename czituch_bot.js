@@ -1899,19 +1899,40 @@ async function walidujOdpowiedzOpenRouter(persona, pytanie, odpowiedz, dane, req
     if (!response.ok) {
       const status = Number(response.status || 0);
       const retryAfter = retryAfterHint(response);
-      const inFlightBudget = status === 402 && data?.error?.metadata?.limit_source === 'openrouter_in_flight_budget' && Boolean(retryAfter);
-      const quota = status === 402 || status === 429;
+      const metadata = data?.error?.metadata || {};
+      const limitSource = metadata.limit_source || '';
+      const inFlightBudget = status === 402 && limitSource === 'openrouter_in_flight_budget' && Boolean(retryAfter);
+      const requestTooExpensive = status === 402 && limitSource === 'openrouter_credits' && metadata.reason === 'weight_exceeds_budget';
+      const budgetBlocked = status === 403 && ['openrouter_guardrail_budget', 'openrouter_workspace_budget', 'openrouter_key_limit'].includes(limitSource);
+      const quota = status === 402 || status === 429 || budgetBlocked;
       const transient = [408, 409, 425, 429, 500, 502, 503, 504].includes(status) || inFlightBudget;
-      if (quota) {
-        // OpenRouter 402 is retryable only for its documented in-flight budget case.
-        const cooldownMs = status === 402 && !inFlightBudget ? 24 * 60 * 60 * 1000 : quotaCooldownMsFromError({ message: `HTTP ${status} ${retryAfter}` });
-        markProviderQuota(providerKey, cooldownMs);
+      if (quota && !requestTooExpensive) {
+        // OpenRouter's 403 budget limits apply to the key/workspace, not only
+        // this model. Prefer the documented reset instant; use a local 24h
+        // suppression only when the response does not provide one.
+        const resetAt = Date.parse(String(metadata.resets_at || ''));
+        const resetCooldownMs = Number.isFinite(resetAt) && resetAt > Date.now()
+          ? resetAt - Date.now()
+          : 24 * 60 * 60 * 1000;
+        const cooldownMs = budgetBlocked
+          ? resetCooldownMs
+          : status === 402 && !inFlightBudget
+            ? 24 * 60 * 60 * 1000
+            : quotaCooldownMsFromError({ message: `HTTP ${status} ${retryAfter}` });
+        markProviderQuota(budgetBlocked ? 'openrouter:*' : providerKey, cooldownMs);
       }
       const diagnostic = formatProviderError('openrouter', data?.model || KONFIGURACJA.openrouterValidatorModel, null, {
         status, code: data?.error?.code, type: data?.error?.type, param: data?.error?.param,
+        limit_source: limitSource || null, remedy_hint: metadata.remedy_hint || null,
+        resets_at: metadata.resets_at || null,
         retry_after: retryAfter || null, responseData: data,
       });
-      return { status: 'unavailable', ok: false, technicalError: true, transient, quota, provider: 'openrouter', model: data?.model || KONFIGURACJA.openrouterValidatorModel, unsupported_claims: [], reason: quota ? `OpenRouter limit/credit error (HTTP ${status})` : `OpenRouter HTTP error (${status})`, error: diagnostic, diagnostic };
+      const reason = budgetBlocked
+        ? `OpenRouter budget limit (${limitSource}) — blocked until reset`
+        : requestTooExpensive
+          ? 'OpenRouter request exceeds available credit budget; reduce prompt or max_tokens'
+          : quota ? `OpenRouter limit/credit error (HTTP ${status})` : `OpenRouter HTTP error (${status})`;
+      return { status: 'unavailable', ok: false, technicalError: true, transient, quota, provider: 'openrouter', model: data?.model || KONFIGURACJA.openrouterValidatorModel, unsupported_claims: [], reason, error: diagnostic, diagnostic };
     }
     const choice = data?.choices?.[0] || {};
     const message = choice?.message || {};
