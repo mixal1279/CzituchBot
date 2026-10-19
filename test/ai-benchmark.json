@@ -32,7 +32,10 @@
             ]
           ],
           "mustNot": [],
-          "independentGold": true
+          "independentGold": true,
+          "independentGoldSources": [
+            "https://theportalwiki.com/wiki/Portal_2"
+          ]
         }
       }
     },
@@ -65,7 +68,10 @@
             ]
           ],
           "mustNot": [],
-          "independentGold": true
+          "independentGold": true,
+          "independentGoldSources": [
+            "https://witcher.fandom.com/wiki/Family_Matters"
+          ]
         }
       }
     },
@@ -98,7 +104,10 @@
             ]
           ],
           "mustNot": [],
-          "independentGold": true
+          "independentGold": true,
+          "independentGoldSources": [
+            "https://cyberpunk.fandom.com/wiki/Johnny_Silverhand"
+          ]
         }
       }
     },
@@ -131,7 +140,10 @@
             ]
           ],
           "mustNot": [],
-          "independentGold": true
+          "independentGold": true,
+          "independentGoldSources": [
+            "https://skyrim.fandom.com/wiki/Alduin"
+          ]
         }
       }
     },
@@ -164,7 +176,10 @@
             ]
           ],
           "mustNot": [],
-          "independentGold": true
+          "independentGold": true,
+          "independentGoldSources": [
+            "https://bg3.wiki/wiki/Astarion"
+          ]
         }
       }
     },
