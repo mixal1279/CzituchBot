@@ -1656,7 +1656,7 @@ ${dane}
   };
 }
 
-const { GEMINI_VALIDATOR_JSON_SCHEMA, GROQ_VALIDATOR_JSON_SCHEMA, buildGroqValidatorResponseFormat, wytnijJsonWalidatora, normalizujWynikWalidatora, wyodrebnijIdentyfikatoryZrodel } = AI_VALIDATOR;
+const { GEMINI_VALIDATOR_JSON_SCHEMA, buildGroqValidatorResponseFormat, wytnijJsonWalidatora, normalizujWynikWalidatora, wyodrebnijIdentyfikatoryZrodel } = AI_VALIDATOR;
 
 function zarezerwujSlotWalidatora(requestState, purpose) {
   if (!requestState) return true;
