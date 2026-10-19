@@ -131,15 +131,17 @@ function quotaCooldownMsFromError(error) {
     retryAfterMs = Math.max(retryAfterMs || 0, groqRetryAfterMs, 1_000);
   }
 
+  // HTTP 402 normally means exhausted credits/quota, not a transient rate limit.
+  // Honor Retry-After on 402 only when the caller has verified the documented
+  // OpenRouter in-flight-budget exception. Other 402 responses use local policy.
+  if (isPaymentRequired && error?.allowPaymentRequiredRetryAfter !== true) {
+    return 24 * 60 * 60 * 1000;
+  }
   if (retryAfterMs !== null) {
-    // A valid provider Retry-After is authoritative, including short waits on
-    // overload responses. Do not silently extend it to the local 60s default.
+    // A valid provider Retry-After is authoritative for retryable responses.
+    // Do not silently extend a short wait to the local 60s default.
     return Math.max(1_000, Math.ceil(retryAfterMs));
   }
-  // HTTP 402 usually means exhausted credits/quota, not a short-lived rate limit.
-  // A Retry-After above is honored when the provider explicitly documents a
-  // recoverable in-flight budget; otherwise avoid hammering it every minute.
-  if (isPaymentRequired) return 24 * 60 * 60 * 1000;
   return isOverload ? 60_000 : configured;
 }
 
