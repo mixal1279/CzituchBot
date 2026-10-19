@@ -3371,7 +3371,7 @@ Pytanie użytkownika: ${pytanie}`;
         requestBlokada120b = true;
         zablokuj120BGlobalnie(diagnosticWithRetryAfter);
       }
-      return wynikPusty('groq', model, diagnostic);
+      return wynikPusty('groq', model, diagnosticWithRetryAfter);
     }
   }
 
