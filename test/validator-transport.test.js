@@ -188,6 +188,30 @@ test('xKiro wysyła limit 1600 i json_object oraz honoruje własny endpoint', as
   assert.match(result.reason, /UCIĘTY JSON/);
 });
 
+test('xKiro validator wall-clock timeout settles even if fetch ignores AbortSignal', async () => {
+  hooks.KONFIGURACJA.xkiroKey = 'test-xkiro-key';
+  hooks.KONFIGURACJA.xkiroModel = 'qwen/qwen3.5-397b-a17b:free';
+  const previousTimeout = process.env.AI_XKIRO_VALIDATOR_TIMEOUT_MS;
+  process.env.AI_XKIRO_VALIDATOR_TIMEOUT_MS = '30';
+  let capturedSignal;
+  mockFetch(async (_url, options) => {
+    capturedSignal = options.signal;
+    // Simulate a transport/mock that never settles after cancellation.
+    return new Promise(() => {});
+  });
+  const started = Date.now();
+  try {
+    const result = await hooks.walidujOdpowiedzXKiro('generic', QUESTION, ANSWER, EVIDENCE, 'test-xkiro-timeout-race');
+    assert.equal(result.status, 'unavailable');
+    assert.equal(result.timeoutAbort, true);
+    assert.equal(capturedSignal.aborted, true);
+    assert.ok(Date.now() - started < 500, 'wall-clock timeout should not wait for a never-settling fetch');
+  } finally {
+    if (previousTimeout === undefined) delete process.env.AI_XKIRO_VALIDATOR_TIMEOUT_MS;
+    else process.env.AI_XKIRO_VALIDATOR_TIMEOUT_MS = previousTimeout;
+  }
+});
+
 test('Groq używa klienta mockowanego, payload 2200 tokenów po rezerwie reasoning i zwraca accepted', async () => {
   const calls = mockGroq(openAIResponse(VALID_VERDICT));
   const result = await hooks.walidujOdpowiedzGroq('generic', QUESTION, ANSWER, EVIDENCE, 'test-groq');
