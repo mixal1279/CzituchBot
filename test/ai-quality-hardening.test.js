@@ -60,7 +60,14 @@ test('hard-fact response guard canonicalizes equivalent decimal formatting', () 
 
   const metadataOnly = sprawdzTwardeFaktyOdpowiedzi(
     'Wydarzenie miało miejsce w 2011 roku.',
-    '[SOURCE 1]\\nTYTUŁ: Wydarzenie 2011\\nURL: https://example.com/2011\\nTREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>\\nBrak daty w treści źródła.\\n<<<END_UNTRUSTED_SOURCE_CONTENT>>>',
+    [
+      '[SOURCE 1]',
+      'TYTUŁ: Wydarzenie 2011',
+      'URL: https://example.com/2011',
+      'TREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>',
+      'Brak daty w treści źródła.',
+      '<<<END_UNTRUSTED_SOURCE_CONTENT>>>',
+    ].join('\n'),
   );
   assert.equal(metadataOnly.ok, false, 'dates in source titles/URLs must not count as evidence');
 });
