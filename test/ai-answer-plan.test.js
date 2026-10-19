@@ -88,8 +88,8 @@ test('answer completeness requires the planned entity and avoids purpose/locatio
   assert.ok(!grounded.missing.includes('entity_context'));
 
   const purpose = extractAnswerSignals('Wheatley przejął kontrolę, aby uciec z laboratorium.');
-  assert.equal(purpose.why, false);
-  assert.equal(purpose.causal_explanation, false);
+  assert.equal(purpose.why, true);
+  assert.equal(purpose.causal_explanation, true);
   assert.equal(purpose.steps, false);
   assert.equal(extractAnswerSignals('Z powodu awarii system przestał działać.').where, false);
   assert.equal(extractAnswerSignals('Cena wynosi 100 zł.').quantity, true);

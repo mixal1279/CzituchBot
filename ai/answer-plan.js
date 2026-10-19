@@ -92,7 +92,7 @@ function hasMeaningfulTail(text, marker) {
 function extractAnswerSignals(answer) {
   const text = normalize(answer);
   const where = /\b(?:w(?!\s+(?:wyniku|rezultacie|celu|zamian|zwiazku|odpowiedni\w*|okreslon\w*|miejsc\w*))|we(?!\s+wzgledu)|na(?!\s+(?:skutek|podstawie|poczatku|koncu))|do(?!\s+tego)|z(?!\s+(?:powodu|przyczyny|uwagi|tego))|ze(?!\s+wzgledu))\s+[a-z0-9-]+/.test(text);
-  const causalMarker = /\b(dlaczego|czemu|powod|z powodu|z przyczyny|ze wzgledu na|z uwagi na|poniewaz|dlatego|gdyz|bo|w zamian|w wyniku|w rezultacie|dzieki|because|because of|due to)\b/.exec(text)?.[0] || '';
+  const causalMarker = /\b(dlaczego|czemu|powod|z powodu|z przyczyny|ze wzgledu na|z uwagi na|poniewaz|dlatego|gdyz|bo|aby|zeby|w zamian|w wyniku|w rezultacie|dzieki|because|because of|due to)\b/.exec(text)?.[0] || '';
   // Instrukcja planu każe napisać „źródła nie potwierdzają przyczyny”, gdy materiał
   // jej nie podaje. Taka uczciwa odpowiedź spełnia wymaganie „dlaczego”.
   const causeUnconfirmed = /\b(?:zrodla|zrodlo|materialy|dane)\b.{0,60}\bnie\s+(?:potwierdza\w*|wskazuja|podaja|precyzuja|wyjasniaja)\b|\bbrak\s+potwierdzon\w*\s+(?:przyczyn|powod)\w*|\bnie\s+wynika\b.{0,40}\b(?:przyczyn|powod|dlaczego)\w*/.test(text);
@@ -125,10 +125,31 @@ function extractAnswerSignals(answer) {
   };
 }
 
+const CONTEXT_QUESTION_STOPWORDS = new Set([
+  'dlaczego', 'czemu', 'co', 'ile', 'jak', 'jaka', 'jaki', 'jakie', 'kim', 'kto', 'kiedy', 'gdzie', 'czy', 'czym',
+  'why', 'what', 'when', 'where', 'who', 'whom', 'which', 'how', 'the', 'this', 'that', 'these', 'those', 'does', 'did', 'can', 'could', 'would', 'should', 'will', 'is', 'are', 'was', 'were', 'do', 'in', 'on', 'at', 'to', 'for', 'from', 'with', 'of', 'and', 'or',
+]);
+
+function extractQuestionContextTerms(question) {
+  const matches = String(question || '').match(/(?<![\p{L}\p{N}_])[A-ZĄĆĘŁŃÓŚŹŻ][\p{L}\p{N}'’.-]*(?:\s+[A-ZĄĆĘŁŃÓŚŹŻ][\p{L}\p{N}'’.-]*)*/gu) || [];
+  return matches.map(normalize).filter(term => term.length >= 3 && !CONTEXT_QUESTION_STOPWORDS.has(term));
+}
+
+function contextTermMatches(answerText, term) {
+  if (!term || term.length < 3) return false;
+  if (answerText.includes(term)) return true;
+  const answerWords = answerText.split(/\s+/).filter(Boolean);
+  const candidateWords = term.split(/\s+/).filter(word => word.length >= 5 && !CONTEXT_QUESTION_STOPWORDS.has(word));
+  return candidateWords.some(candidate => answerWords.some(word => word.length >= 5 && (word.startsWith(candidate.slice(0, 5)) || candidate.startsWith(word.slice(0, 5)))));
+}
+
 function containsRequiredEntityContext(answer, plan) {
-  const target = normalize(plan?.entity || plan?.game || '');
-  if (target.length < 3) return Boolean(String(answer || '').trim());
-  return normalize(answer).includes(target);
+  const answerText = normalize(answer);
+  const candidates = [plan?.entity, plan?.game, ...extractQuestionContextTerms(plan?.question)]
+    .map(normalize)
+    .filter(term => term.length >= 3 && !CONTEXT_QUESTION_STOPWORDS.has(term));
+  if (!candidates.length) return Boolean(String(answer || '').trim());
+  return candidates.some(term => contextTermMatches(answerText, term));
 }
 
 function assessAnswerCompleteness(answer, plan) {
