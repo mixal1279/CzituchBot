@@ -49,6 +49,18 @@ function classifyFailure(error = '') {
   if (status === 'unavailable' && ![error.message, error.reason, error.error, error.diagnostic].some(Boolean)) {
     return 'provider_unavailable';
   }
+  // xKiro documents stable HTTP status/type/code values. Classify those before
+  // human-readable messages, which may change or omit quota-related wording.
+  const structuredStatus = error && typeof error === 'object'
+    ? Number(error.httpStatus ?? error.statusCode ?? (typeof error.status === 'number' ? error.status : 0))
+    : 0;
+  const rawError = typeof error === 'string' ? error : '';
+  const diagnosticStatus = rawError.match(/"status"\\s*:\\s*(\\d{3})(?!\\d)/);
+  const httpStatus = structuredStatus || (diagnosticStatus ? Number(diagnosticStatus[1]) : 0);
+  if ([402, 429].includes(httpStatus)) return 'quota';
+  if ([400, 422, 404].includes(httpStatus)) return 'invalid_request';
+  if ([401, 403].includes(httpStatus)) return 'auth';
+  if ([408, 500, 502, 503, 504, 529].includes(httpStatus)) return 'transient';
   const text = error && typeof error === 'object'
     ? [error.message, error.reason, error.error, error.diagnostic].filter(Boolean).map(extractErrorCore).join(' ')
     : extractErrorCore(String(error?.message || error || ''));
@@ -149,12 +161,19 @@ function quotaCooldownMsFromError(error) {
     retryAfterMs = Math.max(retryAfterMs || 0, groqRetryAfterMs, 1_000);
   }
 
-  // HTTP 402 normally means exhausted credits/quota, not a transient rate limit.
-  // Honor Retry-After on 402 only when the caller has verified the documented
-  // OpenRouter in-flight-budget exception. Other 402 responses use local policy.
+  // HTTP 402 means credits are exhausted; do not retry it blindly.
+  // Honor Retry-After on 402 only for the documented OpenRouter in-flight-budget
+  // exception. Other 402 responses use a conservative local cooldown.
   if (isPaymentRequired && error?.allowPaymentRequiredRetryAfter !== true) {
     return 24 * 60 * 60 * 1000;
   }
+  // xKiro also returns 429 when a free model's rolling daily token allowance is
+  // exhausted. If the response did not provide an authoritative Retry-After,
+  // suppress repeated calls instead of probing the same exhausted allowance
+  // every minute. Burst/rate-limit 429s retain the short configurable cooldown.
+  const dailyQuota = /(?:tokens?\\s*(?:per|\\/)\\s*day|\\bTPD\\b|daily (?:token|usage|request) (?:allowance|quota|limit)|daily allowance exhausted)/i.test(message)
+    || /(?:quota_exceeded|daily_quota_exceeded|free_tokens_exhausted)/i.test(String(error?.code || error?.type || ''));
+  if (dailyQuota && retryAfterMs === null) return 24 * 60 * 60 * 1000;
   if (retryAfterMs !== null) {
     // A valid provider Retry-After is authoritative for retryable responses.
     // Do not silently extend a short wait to the local 60s default.
