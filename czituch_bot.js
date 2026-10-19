@@ -1838,7 +1838,7 @@ async function walidujOdpowiedzOpenRouter(persona, pytanie, odpowiedz, dane, req
     const timeoutAbort = err?.name === 'TimeoutError'
       || err?.name === 'AbortError'
       || /timeout|timed out|aborted|aborterror/i.test(String(err?.message || ''));
-    const diagnostic = formatProviderError('openrouter', KONFIGURACJA.openrouterValidatorModel, err, { timeoutMs, timeoutAbort });
+    const diagnostic = formatProviderError('openrouter', KONFIGURACJA.openrouterValidatorModel, err, { timeoutMs: validatorTimeoutMs, timeoutAbort });
     console.error(`[AI][${requestId}] OpenRouter validator TRANSPORT_ERROR: ${diagnostic}`);
     return { status: 'unavailable', ok: false, technicalError: true, transient: timeoutAbort, timeoutAbort, provider: 'openrouter', model: KONFIGURACJA.openrouterValidatorModel, unsupported_claims: [], reason: timeoutAbort ? 'OpenRouter validator timeout/abort' : 'fallback validator niedostępny', error: diagnostic, diagnostic };
   } finally { clearTimeout(timer); }
