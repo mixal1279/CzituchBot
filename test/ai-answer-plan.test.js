@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { buildAnswerPlan, extractAnswerSignals } = require('../ai/answer-plan');
+const { buildAnswerPlan, extractAnswerSignals, assessAnswerCompleteness } = require('../ai/answer-plan');
 const { judgeAnswer } = require('../ai/answer-judge');
 
 test('v26 answer plan identifies causal lore requirements', () => {
@@ -76,6 +76,23 @@ test('answer signals handle Polish ł normalization and inflected answer roots',
   assert.equal(extractAnswerSignals('Po tym wydarzeniu bohater został sam.').outcome, true);
   assert.equal(extractAnswerSignals('Ich relacja opierała się na wieloletniej współpracy.').relationship, true);
   assert.equal(extractAnswerSignals('Ten pistolet jest lepszy natomiast tamten ma większą celność.').comparison, true);
+});
+
+test('answer completeness requires the planned entity and avoids purpose/location false positives', () => {
+  const plan = buildAnswerPlan('Dlaczego Wheatley przejął kontrolę nad GLaDOS?', {
+    intent: 'web_fact', is_lore: true, entity: 'Wheatley', game: 'Portal 2',
+  });
+  const unrelated = assessAnswerCompleteness('System zadziałał z powodu awarii.', plan);
+  assert.ok(unrelated.missing.includes('entity_context'));
+  const grounded = assessAnswerCompleteness('Wheatley przejął kontrolę z powodu awarii systemu.', plan);
+  assert.ok(!grounded.missing.includes('entity_context'));
+
+  const purpose = extractAnswerSignals('Wheatley przejął kontrolę, aby uciec z laboratorium.');
+  assert.equal(purpose.why, false);
+  assert.equal(purpose.causal_explanation, false);
+  assert.equal(purpose.steps, false);
+  assert.equal(extractAnswerSignals('Z powodu awarii system przestał działać.').where, false);
+  assert.equal(extractAnswerSignals('Cena wynosi 100 zł.').quantity, true);
 });
 
 test('answer signals recognize procedural and mechanism explanations', () => {
