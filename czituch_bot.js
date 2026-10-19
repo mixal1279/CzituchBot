@@ -6967,11 +6967,11 @@ async function wyslijTwitchHelix(tekst, kanal, config = TWITCH_CONFIG_BILLYBULKA
     }
 
     const message = String(tekst).slice(0, 500);
-    const res = await fetchZTimeout('https://api.twitch.tv/helix/chat/messages', {
+    const wyslij = token => fetchZTimeout('https://api.twitch.tv/helix/chat/messages', {
       method: 'POST',
       headers: {
         'Client-ID': config.clientId,
-        'Authorization': `Bearer ${appToken}`,
+        'Authorization': `Bearer ${String(token || '').replace(/^oauth:/i, '')}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -6981,8 +6981,30 @@ async function wyslijTwitchHelix(tekst, kanal, config = TWITCH_CONFIG_BILLYBULKA
       }),
     }, 10000);
 
+    let res = await wyslij(appToken);
     if (!res.ok) {
-      console.error(`[Twitch Helix] ❌ Send Chat Message HTTP ${res.status} – ${await res.text()}`);
+      const errorText = await res.text().catch(() => '');
+      const authFailure = [401, 403].includes(res.status)
+        && /authori[sz]|scope|token|user:write:chat|user:bot|channel:bot|unauthori/i.test(errorText);
+
+      // App Access Token sam nie ma scope'ów. Send Chat Message działa nim tylko,
+      // gdy bot i broadcaster wcześniej autoryzowali aplikację z wymaganymi scope'ami.
+      // Jeśli ten warunek nie jest spełniony, spróbuj tokena użytkownika z user:write:chat,
+      // aby wiadomość nadal mogła zostać wysłana (bez gwarancji odznaki Chat Bot).
+      if (authFailure) {
+        const userToken = getTwitchChatToken(config.botKey) || config.token;
+        if (userToken && String(userToken).replace(/^oauth:/i, '') !== appToken) {
+          console.warn('[Twitch Helix] ⚠️ App Access Token odrzucony przez autoryzację/scope; próbuję tokena użytkownika. Dla tego fallbacku odznaka Chat Bot nie jest gwarantowana.');
+          res = await wyslij(userToken);
+          if (res.ok) return await res.json();
+          const fallbackError = await res.text().catch(() => '');
+          console.error(`[Twitch Helix] ❌ Fallback user token HTTP ${res.status} – ${fallbackError}. Sprawdź scope user:write:chat oraz czy token należy do sender_id.`);
+          return null;
+        }
+        console.error(`[Twitch Helix] ❌ App Access Token HTTP ${res.status} – ${errorText}. Wymagana wcześniejsza autoryzacja: sender ma user:write:chat + user:bot; broadcaster ma channel:bot, chyba że sender jest moderatorem.`);
+        return null;
+      }
+      console.error(`[Twitch Helix] ❌ Send Chat Message HTTP ${res.status} – ${errorText}`);
       return null;
     }
     return await res.json();
