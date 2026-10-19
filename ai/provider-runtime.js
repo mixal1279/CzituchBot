@@ -13,11 +13,10 @@ const boostedPayloads = new WeakSet();
  */
 function normalizujGroqBaseUrl(value) {
   return String(value || 'https://api.groq.com')
-    .replace(/\\/+$/, '')
-    .replace(/\\/openai\\/v1$/i, '')
-    .replace(/\\/+$/, '');
+    .replace(/\/+$/, '')
+    .replace(/\/openai\/v1$/i, '')
+    .replace(/\/+$/, '');
 }
-
 /**
  * Add reasoning headroom to max_completion_tokens for gpt-oss models.
  * Mutates the payload in place (callers/tests rely on object identity) and is
