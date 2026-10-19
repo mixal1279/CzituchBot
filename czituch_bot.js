@@ -577,6 +577,10 @@ const KONFIGURACJA = {
   youtubeTargetKanal4: 'ArbuzikkYT',
   youtubeTargetKanal5: 'Angie28',
   youtubeTargetKanal6: 'Edzzi',
+  // Zweryfikowane uchwyty dla kanałów bez wpisanego na stałe ID.
+  youtubeChannelHandles: {
+    'ArbuzikkYT': '@arbuzikinnegry',
+  },
   pollInterval:       80000,
   ytTokenFile:        './youtube_token.json',
 
@@ -5698,21 +5702,21 @@ async function pobierzLiveChatId(nazwaKanalu) {
     channelId = znaneId;
     nazwaWyswietlana = nazwaKanalu;
     console.log(`[YouTube] ✅ Kanał (ID na sztywno): "${nazwaWyswietlana}" (${channelId})`);
-  } else if (YT_KANAL_HANDLE[nazwaKanalu]) {
+  } else if (KONFIGURACJA.youtubeChannelHandles[nazwaKanalu]) {
     const handleRes = await zGoogleRetry(
       () => youtube.channels.list({
         part: ['id', 'snippet'],
-        forHandle: YT_KANAL_HANDLE[nazwaKanalu],
+        forHandle: KONFIGURACJA.youtubeChannelHandles[nazwaKanalu],
       }),
       'pobieranie kanału po uchwycie YouTube'
     );
     const kanal = handleRes.data.items?.[0];
     if (!kanal?.id) {
-      throw new Error(`Nie znaleziono kanału "${nazwaKanalu}" dla uchwytu ${YT_KANAL_HANDLE[nazwaKanalu]}.`);
+      throw new Error(`Nie znaleziono kanału "${nazwaKanalu}" dla uchwytu ${KONFIGURACJA.youtubeChannelHandles[nazwaKanalu]}.`);
     }
     channelId = kanal.id;
     nazwaWyswietlana = kanal.snippet?.title || nazwaKanalu;
-    console.log(`[YouTube] ✅ Kanał (uchwyt ${YT_KANAL_HANDLE[nazwaKanalu]}): "${nazwaWyswietlana}" (${channelId})`);
+    console.log(`[YouTube] ✅ Kanał (uchwyt ${KONFIGURACJA.youtubeChannelHandles[nazwaKanalu]}): "${nazwaWyswietlana}" (${channelId})`);
   } else {
     const searchRes  = await zGoogleRetry(
       () => youtube.search.list({ part: ['snippet'], q: nazwaKanalu, type: ['channel'], maxResults: 5 }),
@@ -5914,11 +5918,6 @@ const YT_KANAL_ID = {
   'Angie28':           'UCRm1ZPlkBz94QfNJlKHTvBA',
 };
 
-// Dla kanałów bez wpisanego ID można użyć zweryfikowanego uchwytu YouTube.
-// channels.list(forHandle) zwraca ID kanału bez polegania na niejednoznacznym search.list.
-const YT_KANAL_HANDLE = {
-  'ArbuzikkYT': '@arbuzikinnegry',
-};
 
 async function youtubeWatcher(nazwaKanalu, wyslijFn) {
   const tag = `[YouTube:${nazwaKanalu}]`;
