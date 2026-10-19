@@ -137,7 +137,7 @@ function buildBenchmarkDiagnostics(results, allCases = benchmark.cases, selected
     if (/429|rate.?limit|quota|resource.?exhausted/i.test(detail)) return 'rate_limit';
     if (/timeout|timed out|deadline/i.test(detail) || attempt.timeoutAbort === true) return 'timeout';
     if (/abort|cancelled|canceled/i.test(detail)) return 'abort';
-    if (/5\\d\\d/.test(detail)) return 'http_5xx';
+    if (/5\d\d/.test(detail)) return 'http_5xx';
     return 'unknown';
   };
   const generationProviderFailures = [...new Set(results.flatMap(result =>
