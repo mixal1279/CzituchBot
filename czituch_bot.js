@@ -627,6 +627,7 @@ const KONFIGURACJA = {
 
   // ---- Groq AI ----
   groqKey: process.env.GROQ_API_KEY,
+  groqBaseUrl: String(process.env.GROQ_BASE_URL || 'https://api.groq.com/openai/v1').replace(/\\/+$/, ''),
 
   // ---- xKiro (fallback po Groq 20B) ----
   xkiroKey: typeof process.env.XKIRO_API_KEY === 'string' ? process.env.XKIRO_API_KEY.replace(/[\r\n]/g, '').trim() : process.env.XKIRO_API_KEY,
@@ -4216,7 +4217,7 @@ async function skompresujHistorie(historiaRozmowy) {
 // =============================================
 //  INICJALIZACJA
 // =============================================
-const groq            = KONFIGURACJA.groqKey ? new Groq({ apiKey: KONFIGURACJA.groqKey }) : null;
+const groq            = KONFIGURACJA.groqKey ? new Groq({ apiKey: KONFIGURACJA.groqKey, baseURL: KONFIGURACJA.groqBaseUrl }) : null;
 const szukajTavily = createTavilySearch({
   apiKey: KONFIGURACJA.tavilyKey,
   geminiKey: KONFIGURACJA.geminiKey,
