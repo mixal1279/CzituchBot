@@ -96,7 +96,8 @@ test('TikTok RSS Bridge HTTP errors and non-Atom responses are not mistaken for 
   const end = source.indexOf('const TIKTOK_OKNO_NADRABIANIA_MS', start);
   assert.ok(start >= 0 && end > start, 'TikTok RSS Bridge fetcher should exist');
   const fetcher = source.slice(start, end);
-  assert.match(fetcher, /RSS Bridge HTTP \\$\\{res\\.status\\}/);
+  assert.match(fetcher, /RSS Bridge HTTP/);
+  assert.match(fetcher, /res\.status/);
   assert.match(fetcher, /non-Atom response/);
 });
 
