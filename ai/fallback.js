@@ -271,6 +271,5 @@ module.exports = {
   selectRepairFallbacks,
   filterAvailableFallbacks,
   repairBudgetBlockReason,
-  shouldOpenQuotaCircuit,
   shouldRetryFailure,
 };
