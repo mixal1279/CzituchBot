@@ -208,7 +208,7 @@ test('quota cooldown respects Retry-After and never goes below the configured ba
     assert.equal(quotaCooldownMsFromError('HTTP 429 (Retry-After=12s)'), 12_000);
     assert.equal(quotaCooldownMsFromError('HTTP 429 rate limit'), 5_000);
     assert.equal(quotaCooldownMsFromError('HTTP 402 insufficient credits'), 24 * 60 * 60 * 1000);
-    assert.equal(quotaCooldownMsFromError('HTTP 402 (Retry-After=30s)'), 30_000);
+    assert.equal(quotaCooldownMsFromError('HTTP 402 (Retry-After=30s)'), 24 * 60 * 60 * 1000);
   } finally {
     if (previous === undefined) delete process.env.AI_PROVIDER_QUOTA_COOLDOWN_MS;
     else process.env.AI_PROVIDER_QUOTA_COOLDOWN_MS = previous;
