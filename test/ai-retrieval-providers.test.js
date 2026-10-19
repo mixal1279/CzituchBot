@@ -462,21 +462,6 @@ test('Tavily cache entry limit evicts oldest entries first', () => {
   assert.deepEqual([...cache.keys()], ['b', 'c']);
 });
 
-  const fakeFetch = async () => new Response(JSON.stringify({
-    results: [{
-      title: 'Source',
-      url: 'https://example.com/exa',
-      highlights: ['Relevant highlight'],
-      score: 0.7,
-      publishedDate: '2026-10-01T00:00:00Z',
-    }],
-  }), { status: 200, headers: { 'content-type': 'application/json' } });
-  const result = await searchExa({ apiKey: 'test', query: 'q', fetchFn: fakeFetch });
-  assert.equal(result.status, 'ok');
-  assert.equal(result.sources[0].score, 0.7);
-  assert.match(result.text, /Relevant highlight/);
-});
-
 test('secondary retrieval uses the first healthy provider and falls back to the second', async () => {
   let calls = 0;
   const fakeFetch = async (url) => {
