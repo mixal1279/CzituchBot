@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { normalizujWynikWalidatora, czyDowodPotwierdzaClaim } = require('../ai/validator');
+const { normalizujWynikWalidatora } = require('../ai/validator');
 const { parseEvidenceText } = require('../ai/pipeline');
 const { parseEvidenceBlocks, quoteExists, buildEvidenceRepairContext, buildQuestionEvidenceContext, normalizeEvidenceText, classifyClaimType, evidenceRelationSignals, rankEvidenceForClaim, removeLeadingImageFilenameNoise } = require('../ai/evidence');
 
@@ -242,8 +242,18 @@ test('REFERENCE IDs resolve case-insensitively through local quote verification'
     'Portal 2 was released in 2011.',
     '<<<END_UNTRUSTED_SOURCE_CONTENT>>>',
   ].join('\n');
-  const result = czyDowodPotwierdzaClaim(data, ['REFERENCE STEAM DB'], 'Portal 2 was released in 2011.', 'Portal 2 was released in 2011.');
-  assert.equal(result.ok, true, result.reason);
+  const result = normalizujWynikWalidatora({
+    valid: true,
+    reason: 'ok',
+    unsupported_claims: [],
+    supported: true,
+    relevant: true,
+    complete: true,
+    hallucination: false,
+    confidence: 0.95,
+    claims: [{ claim: 'Portal 2 was released in 2011.', supported: true, source_ids: ['REFERENCE STEAM DB'], evidence_quote: 'Portal 2 was released in 2011.' }],
+  }, 'test-model', 'test', new Set(['REFERENCE STEAM DB']), data);
+  assert.equal(result.status, 'accepted', JSON.stringify(result.diagnostics));
 });
 
 test('question evidence context preserves REFERENCE identifiers', () => {
