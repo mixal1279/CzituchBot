@@ -320,13 +320,7 @@ function rerankujWynikiTavily(results, sourceQuestion, requestedDomains = [], op
 
     const claimCoverage = claimCoverageTavily(result, claimSignals);
     const claimBonus = Math.min(0.16, claimCoverage * 0.16);
-    const requestedBonus = requestedDomains?.length && requestedDomains.some(d => {
-      try {
-        const host = new URL(result?.url).hostname.toLowerCase().replace(/^www\./, '');
-        const clean = String(d).toLowerCase().replace(/^www\./, '');
-        return host === clean || host.endsWith('.' + clean);
-      } catch (_) { return false; }
-    }) ? 0.10 : 0;
+    const requestedBonus = requestedDomains?.length && hostnamePasujeDoDomenyTavily(result?.url, requestedDomains) ? 0.10 : 0;
 
     const base = typeof result?.score === 'number' ? result.score : 0;
     const rerankScore = Math.max(0, Math.min(1.5,
@@ -372,10 +366,7 @@ function rerankujWynikiTavily(results, sourceQuestion, requestedDomains = [], op
 function ocenaZrodlaLokalnie(url, requestedDomains = []) {
   try {
     const host = new URL(url).hostname.toLowerCase().replace(/^www\./, '');
-    const requested = requestedDomains.some(d => {
-      const clean = String(d || '').toLowerCase().replace(/^www\./, '');
-      return clean && (host === clean || host.endsWith('.' + clean));
-    });
+    const requested = hostnamePasujeDoDomenyTavily(url, requestedDomains);
     const official = DOMENY_OFICJALNE
       .some(d => host === d || host.endsWith('.' + d));
     const specialized = DOMENY_WYSPECJALIZOWANE
@@ -398,7 +389,14 @@ function hostnamePasujeDoDomenyTavily(url, domains) {
   try {
     const host = new URL(url).hostname.toLowerCase().replace(/^www\./, '');
     return (domains || []).some(d => {
-      const domain = String(d || '').toLowerCase().replace(/^www\./, '');
+      const domain = String(d || '').trim().toLowerCase().replace(/^www\./, '');
+      if (!domain) return false;
+      // Tavily supports wildcard domains such as "*.example.com".
+      // A wildcard matches subdomains, while a plain domain also matches itself.
+      if (domain.startsWith('*.')) {
+        const suffix = domain.slice(2);
+        return Boolean(suffix) && host.endsWith(`.${suffix}`);
+      }
       return host === domain || host.endsWith(`.${domain}`);
     });
   } catch (_) { return false; }
