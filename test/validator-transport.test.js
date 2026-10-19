@@ -11,7 +11,7 @@ delete process.env.AI_VALIDATOR_BREAKER_MS;
 
 const { __validatorTestHooks: hooks } = require('../czituch_bot');
 const { createAIRequestContext } = require('../ai/requestContext');
-const { resetProviderQuotaCooldowns, quotaCooldownMsFromError } = require('../ai/fallback');
+const { resetProviderQuotaCooldowns, quotaCooldownMsFromError, shouldOpenQuotaCircuit } = require('../ai/fallback');
 const { GROQ_VALIDATOR_JSON_SCHEMA, buildGroqValidatorResponseFormat } = require('../ai/validator');
 
 const EVIDENCE = [
@@ -363,6 +363,13 @@ test('timeout z mockowanego klienta Groq trafia do circuit breakera bez wywołan
   assert.ok(!slotPurposes.includes('validator:groq'));
 });
 
+
+test('tymczasowy HTTP 429 nie otwiera godzinnego circuit breakera 120B, dzienna quota tak', () => {
+  assert.equal(shouldOpenQuotaCircuit('HTTP 429 rate limit exceeded Retry-After=5s'), false);
+  assert.equal(shouldOpenQuotaCircuit('HTTP 429 rate limit exceeded on tokens per day (TPD). Try again in 1h'), true);
+  assert.equal(shouldOpenQuotaCircuit('HTTP 402 Prepay credit balance is depleted'), true);
+  assert.equal(shouldOpenQuotaCircuit('HTTP 402 openrouter_in_flight_budget Retry-After=5s'), false);
+});
 
 test('Retry-After ma pierwszeństwo przed domyślnym cooldownem przeciążenia', () => {
   assert.equal(quotaCooldownMsFromError({ status: 429, message: 'HTTP 429 overloaded Retry-After=5s' }), 5000);
