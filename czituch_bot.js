@@ -3650,8 +3650,8 @@ function oczyscOdpowiedzPrzedWalidacja(tekst) {
       // Dokładnie jeden cykl retry po odrzuceniu walidacji. Fallbacki providerów
       // pozostają wewnątrz jednego cyklu generacji i nie uruchamiamy kolejnego retry.
       const repairRemainingMs = pozostalyCzasMs();
-      // Repair needs at least a 4 s generation window plus 6.5 s reserved for
-      // the final validator. A lower gate would admit a call that cannot finish safely.
+      // Repair needs a 3 s minimum generation window plus 10.5 s reserved for
+      // validation/fallback. A lower gate risks producing an answer we cannot verify.
       const minRepairGenerationBudgetMs = 13_500;
       aiState.recordTiming('repair_generation_decision', {
         remainingMsBeforeRepair: repairRemainingMs,
