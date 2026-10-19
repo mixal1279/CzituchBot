@@ -1,5 +1,7 @@
 'use strict';
 
+const { ENTITY_ALIAS_GROUPS, buildEntityAliasPatterns } = require('./entityAliases');
+
 const NEGATION_RE = /(?<![\p{L}])(?:nie|nigdy|brak|bez|zaden|zadna|zadne|never|no|not|cannot|without|lack\s+of|absence\s+of|unable|neither|nor|fails?\s+to|\p{L}+n['’]t)(?![\p{L}])/iu;
 // Ta sama lista bez gołego „no”: „no damage” to kwantyfikator zerowy, a nie zaprzeczenie czasownika.
 const NEGATION_STRICT_RE = /(?<![\p{L}])(?:nie|nigdy|brak|bez|zaden|zadna|zadne|never|not|cannot|without|lack\s+of|absence\s+of|unable|neither|nor|fails?\s+to|\p{L}+n['’]t)(?![\p{L}])/iu;
@@ -61,6 +63,10 @@ const KNOWN_ENTITY_ALIAS_PATTERNS = [
   { canonical: 'bloody baron', pattern: /\b(?:bloody\s+baron|baron(?:a)?\s+krwaw(?:y|ego|ym)|krwaw(?:y|ego|emu)\s+baron(?:a|em|owi)?)\b/iu },
   { canonical: 'wild hunt', pattern: /\b(?:wild\s+hunt|dziki\s+gon|dzikiego\s+gonu|dzikim\s+gonem)\b/iu },
 ];
+// Aliasy z tabeli danych (ai/entityAliases.js) dołączamy do wbudowanych wzorców.
+for (const entry of buildEntityAliasPatterns(ENTITY_ALIAS_GROUPS)) {
+  if (!KNOWN_ENTITY_ALIAS_PATTERNS.some(existing => existing.canonical === entry.canonical)) KNOWN_ENTITY_ALIAS_PATTERNS.push(entry);
+}
 function normalizujClaim(value) {
   return String(value || '')
     .replace(/\bdoesn['’]t\b/giu, 'does not')
@@ -598,6 +604,12 @@ function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
   if (!pl || !en) return { ok: false, reason: 'brak tłumaczenia claimu' };
   if (en.length > pl.length * 3 + 60) return { ok: false, reason: 'tłumaczenie claimu jest nieproporcjonalnie długie' };
   if (!wyglądaNaAngielski(en)) return { ok: false, reason: 'claim_en nie wygląda na tekst angielski' };
+  // claim_en ma być tłumaczeniem claimu, a nie przepisanym cytatem źródłowym.
+  const quoteNorm = normalizujClaim(options.evidenceQuote || '');
+  const enNorm = normalizujClaim(en);
+  if (quoteNorm.split(' ').length >= 6 && enNorm && (quoteNorm === enNorm || (enNorm.length >= 20 && quoteNorm.includes(enNorm) && enNorm.length >= quoteNorm.length * 0.9))) {
+    return { ok: false, reason: 'claim_en jest kopią evidence_quote, a nie tłumaczeniem claimu' };
+  }
   if (!zbiorRowny(wyodrebnijLiczbyIDaty(pl), wyodrebnijLiczbyIDaty(en))) {
     return { ok: false, reason: 'tłumaczenie claimu zmienia liczby lub daty' };
   }
@@ -613,4 +625,4 @@ function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
   return { ok: true };
 }
 
-module.exports = { CAUSAL_RE, wyglądaNaAngielski, spojnoscTlumaczeniaClaimu, normalizujClaim, tokenyClaim, czyRelacjaPrzyczynowaPokrywaClaim, wyodrebnijLiczbyIDaty, wyodrebnijJednostkoweWartosci, wyodrebnijNazwyWlasne, zbudujWyroczniaNazw, zgodnoscStrukturalna, sprawdzTwardeKonflikty, sprawdzSprzecznosciSemantyczne, dopasowanieSemantyczne, sprawdzPokrycieClaimamiOdpowiedzi, czyDowodSemantyczniePokrywaClaim, tokenyPokrywajaSie };
+module.exports = { KNOWN_ENTITY_ALIAS_PATTERNS, CAUSAL_RE, wyglądaNaAngielski, spojnoscTlumaczeniaClaimu, normalizujClaim, tokenyClaim, czyRelacjaPrzyczynowaPokrywaClaim, wyodrebnijLiczbyIDaty, wyodrebnijJednostkoweWartosci, wyodrebnijNazwyWlasne, zbudujWyroczniaNazw, zgodnoscStrukturalna, sprawdzTwardeKonflikty, sprawdzSprzecznosciSemantyczne, dopasowanieSemantyczne, sprawdzPokrycieClaimamiOdpowiedzi, czyDowodSemantyczniePokrywaClaim, tokenyPokrywajaSie };
