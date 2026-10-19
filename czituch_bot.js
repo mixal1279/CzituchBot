@@ -4925,7 +4925,7 @@ async function ensurePersistentCachesReady() {
   ]).catch(error => {
     persistentCachesReady = null;
     persistentCachesRetryAfter = Date.now() + 60_000;
-    console.error('[Firestore state] Nie udało się wczytać cache — ponowię próbę za 60 s; używam lokalnego fallbacku:', error.message);
+    console.error('[Firestore state] Nie udało się wczytać cache — ponowię próbę za 60 s; pomijam operacje wymagające pełnego stanu:', error.message);
     return false;
   }).finally(() => clearTimeout(timeout));
   return persistentCachesReady;

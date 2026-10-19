@@ -44,24 +44,55 @@ function snapshotCacheTavily(cache, maxBytes = TAVILY_CACHE_MAX_BYTES) {
   return serialized;
 }
 
+function serializedCacheEntryBytes(key, value) {
+  // Size of one JSON object property, excluding the surrounding braces.
+  return Buffer.byteLength(JSON.stringify({ [key]: value }), 'utf8') - 2;
+}
+
 function ograniczCacheRewrite(cache, maxBytes = TAVILY_CACHE_MAX_BYTES) {
-  const serializedSize = () => Buffer.byteLength(JSON.stringify(Object.fromEntries(cache)), 'utf8');
-  while (cache.size > TAVILY_REWRITE_MAX_ENTRIES || (cache.size && serializedSize() > maxBytes)) {
-    cache.delete(cache.keys().next().value);
+  const entrySizes = new Map();
+  let serializedBytes = 2; // "{}"
+  for (const [key, value] of cache) {
+    const bytes = serializedCacheEntryBytes(key, value);
+    entrySizes.set(key, bytes);
+    serializedBytes += bytes;
+  }
+  serializedBytes += Math.max(0, cache.size - 1); // commas between properties
+
+  while (cache.size > TAVILY_REWRITE_MAX_ENTRIES || (cache.size && serializedBytes > maxBytes)) {
+    const oldestKey = cache.keys().next().value;
+    serializedBytes -= entrySizes.get(oldestKey) || 0;
+    if (cache.size > 1) serializedBytes -= 1;
+    cache.delete(oldestKey);
+    entrySizes.delete(oldestKey);
   }
   return Object.fromEntries(cache);
 }
 
 function snapshotCacheRewrite(cache, maxBytes = TAVILY_CACHE_MAX_BYTES) {
   const entries = [...cache.entries()];
-  let snapshot = { version: TAVILY_REWRITE_CACHE_VERSION, entries: Object.fromEntries(entries) };
-  let serialized = JSON.stringify(snapshot);
-  while (entries.length && Buffer.byteLength(serialized, 'utf8') > maxBytes) {
-    entries.shift();
-    snapshot = { version: TAVILY_REWRITE_CACHE_VERSION, entries: Object.fromEntries(entries) };
-    serialized = JSON.stringify(snapshot);
+  const selectedNewestFirst = [];
+  // Account for the versioned envelope once, then add each entry's serialized
+  // size once. Avoid repeatedly stringifying the entire snapshot on the event loop.
+  let serializedBytes = Buffer.byteLength(JSON.stringify({
+    version: TAVILY_REWRITE_CACHE_VERSION,
+    entries: {},
+  }), 'utf8');
+
+  for (let i = entries.length - 1; i >= 0; i--) {
+    const [key, value] = entries[i];
+    const propertyBytes = serializedCacheEntryBytes(key, value);
+    const addedBytes = propertyBytes + (selectedNewestFirst.length ? 1 : 0);
+    if (serializedBytes + addedBytes > maxBytes) continue;
+    selectedNewestFirst.push([key, value]);
+    serializedBytes += addedBytes;
   }
-  return serialized;
+
+  selectedNewestFirst.reverse();
+  return JSON.stringify({
+    version: TAVILY_REWRITE_CACHE_VERSION,
+    entries: Object.fromEntries(selectedNewestFirst),
+  });
 }
 
 function parseRewriteCacheEntries(saved) {
