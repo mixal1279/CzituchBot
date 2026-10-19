@@ -6,7 +6,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { normalizeFactText, scoreGoldenFacts } = require('../ai/benchmark-scorer');
-const { buildQuestionForBot, evaluateBenchmarkAnswer, isFailureText, writeBenchmarkReport, writeStdoutAndWait } = require('../scripts/ai-live-benchmark');
+const { buildQuestionForBot, evaluateBenchmarkAnswer, buildBenchmarkDiagnostics, stratifiedCases, isFailureText, writeBenchmarkReport, writeStdoutAndWait } = require('../scripts/ai-live-benchmark');
 
 test('benchmark factual normalization preserves words with Polish diacritics and collapses whitespace', () => {
   assert.equal(normalizeFactText('Święty Łukasz  —  przejął kontrolę.'), 'swiety lukasz przejal kontrole');
@@ -52,6 +52,43 @@ test('a canned refusal is reported as abstention, not a complete where answer', 
   assert.equal(result.judgeStatus, 'abstained');
   assert.deepEqual(result.missing, ['entity_context', 'where']);
   assert.equal(isFailureText('Wielki Miecz leży na zachód od Caelid.'), false);
+});
+
+test('live benchmark always samples an independent gold case, even with a nonzero seed', () => {
+  const benchmark = JSON.parse(fs.readFileSync(path.join(__dirname, 'ai-benchmark.json'), 'utf8'));
+  for (const seed of [0, 1, 113, 499]) {
+    const selected = stratifiedCases(benchmark.cases, 5, seed);
+    assert.equal(selected.length, 5);
+    assert.ok(
+      selected.some(item => item.expected?.factual?.independentGold === true),
+      `seed ${seed} did not include an independent gold case`,
+    );
+  }
+});
+
+test('live diagnostics distinguish validator failures from generation failures and report gold coverage', () => {
+  const benchmark = JSON.parse(fs.readFileSync(path.join(__dirname, 'ai-benchmark.json'), 'utf8'));
+  const selected = stratifiedCases(benchmark.cases, 5, 113);
+  const diagnostics = buildBenchmarkDiagnostics([{
+    finalStatus: 'rejected',
+    modelCalls: 3,
+    generationAttempts: [{ provider: 'gemini', model: 'gemini-3.8-flash', status: 'error', failure: 'timeout' }],
+    validatorResults: [
+      { provider: 'gemini', model: 'gemini-3.8-flash', status: 'rejected' },
+      { provider: 'groq', model: 'openai/gpt-oss-20b', status: 'unavailable', technicalError: true, reason: 'timeout' },
+    ],
+    timingTrace: [{ stage: 'validator_second_opinion' }],
+  }], benchmark.cases, selected);
+
+  assert.equal(diagnostics.validatorCalls, 2);
+  assert.deepEqual(diagnostics.validatorProviderCalls, { gemini: 1, groq: 1 });
+  assert.equal(diagnostics.validatorStatusCounts.rejected, 1);
+  assert.equal(diagnostics.validatorStatusCounts.unavailable, 1);
+  assert.equal(diagnostics.validatorTransportFailures.length, 1);
+  assert.deepEqual(diagnostics.generationProviderFailures, ['gemini:gemini-3.8-flash:timeout']);
+  assert.equal(diagnostics.validatorSecondOpinions, 1);
+  assert.equal(diagnostics.independentGoldCasesInSample.length, 1);
+  assert.equal(diagnostics.goldCoverageByCategory.how.independentGold, 0);
 });
 
 test('benchmark report is written atomically as valid JSON at the configured path', () => {
