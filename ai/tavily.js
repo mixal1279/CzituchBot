@@ -101,6 +101,17 @@ function normalizujZakresTavily(timeRange) {
   return ['day', 'week', 'month', 'year'].includes(range) ? range : null;
 }
 
+function normalizujDomenyTavily(domains) {
+  const input = Array.isArray(domains)
+    ? domains
+    : (typeof domains === 'string' ? [domains] : []);
+  return [...new Set(input
+    .filter(domain => typeof domain === 'string')
+    .map(domain => domain.trim())
+    .filter(Boolean))]
+    .slice(0, 300);
+}
+
 function ttlDlaZakresu(timeRange) {
   const r = normalizujZakresTavily(timeRange);
   if (!r) return 6 * 60 * 60 * 1000;
@@ -508,7 +519,10 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
 
   return async function szukajTavily(pytanie, options = {}) {
     const original = String(pytanie || '').trim();
-    const { domains, time_range, _skipRewrite = false, returnMeta = false, sourceStartIndex = 0, sourceQuestion = original, remainingMs = 15000, requestState = null, searchDepth = 'basic' } = options;
+    const { domains: rawDomains, time_range, _skipRewrite = false, returnMeta = false, sourceStartIndex = 0, sourceQuestion = original, remainingMs = 15000, requestState = null, searchDepth = 'basic' } = options;
+    // Tavily Search accepts at most 300 include_domains entries. Normalize once
+    // so the outbound request and local post-filter enforce the same domain list.
+    const domains = normalizujDomenyTavily(rawDomains);
     // Tavily Search requires a non-empty query; reject locally instead of spending an API call.
     if (!original) {
       onStatus({ status: 'empty', query: '' });
@@ -850,6 +864,7 @@ module.exports = {
   czyZablokowanyHostTavily,
   ttlDlaZakresu,
   normalizujZakresTavily,
+  normalizujDomenyTavily,
   ograniczCacheTavily,
   przesunSourceIdsTavily,
   sformatujWynikWyjsciowyTavily,
