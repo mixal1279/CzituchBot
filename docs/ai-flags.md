@@ -20,7 +20,7 @@ Wszystkie ustawienia są opcjonalne, chyba że dana integracja jest wymagana prz
 
 ## Limity i cache
 
-Domyślny budżet pojedynczego żądania AI jest współdzielony przez generowanie, walidację i wyszukiwanie: 40 s czasu ściennego, 12 wywołań modeli, maksymalnie 6 generacji łącznie (do 5 początkowych i do 4 naprawczych), 4 sloty walidatora i 3 wyszukiwania Tavily. Limity faz są górnymi granicami, nie sumują się ponad limit 6 generacji. Wywołania Groq nie wykonują ukrytych retry SDK — ponowienia i przełączanie dostawców kontroluje wspólny budżet oraz łańcuch fallbacków.
+Domyślny budżet pojedynczego żądania AI jest współdzielony przez generowanie, walidację i wyszukiwanie: 40 s czasu ściennego, 12 wywołań modeli, maksymalnie 6 generacji łącznie (do 5 początkowych i do 4 naprawczych), 4 sloty walidatora i 3 wyszukiwania Tavily. Limity faz są górnymi granicami, nie sumują się ponad limit 6 generacji. Wywołania Groq nie wykonują ukrytych retry SDK — ponowienia i przełączanie dostawców kontroluje wspólny budżet oraz łańcuch fallbacków. Główne wyszukiwanie Tavily i jego źródła uzupełniające dzielą jeden limit czasu, a przepływ pozostawia 12 s na generowanie i walidację.
 
 | Zmienna | Domyślnie | Znaczenie |
 |---|---|---|
