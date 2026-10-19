@@ -1,23 +1,44 @@
 'use strict';
 
+const { parseEvidenceBlocks, removeLeadingSourceMetadataNoise } = require('./evidence');
+
 function normalizujTokenLiczbowy(token) {
-  return String(token || '')
+  const text = String(token || '')
     .toLocaleLowerCase('pl-PL')
     .replace(/\s+/g, ' ')
     .replace(/,/g, '.')
     .trim();
+  const match = text.match(/^(\d+(?:\.\d+)?)(\s*)(.*)$/u);
+  if (!match) return text;
+  const number = Number(match[1]);
+  return `${Number.isFinite(number) ? String(number) : match[1]}${match[2]}${match[3]}`.trim();
 }
 
 function wyodrebnijTwardeTokeny(tekst) {
   const input = String(tekst || '');
-  return [...new Set(
-    (input.match(/(?:\b(?:19|20)\d{2}\b|\b\d+(?:[.,]\d+)?\s*%|\b\d+(?:[.,]\d+)?\s*(?:zł|pln|usd|eur|gb|mb|tb|hz|fps|°c|stopni|godzin(?:y|ę)?|minut(?:y|ę)?|lat(?:a|)|km|m|kg|g)\b)/giu) || [])
-      .map(normalizujTokenLiczbowy)
-  )];
+  // `\b` jest ASCII-only i nie działa po „ł”/„ę” (np. „100 zł”), dlatego lookaroundy Unicode.
+  const re = /(?:(?<![\p{L}\p{N}_.,])(?:19|20)\d{2}(?![\p{L}\p{N}_])|(?<![\p{L}\p{N}_.,])\d+(?:[.,]\d+)?\s*%|(?<![\p{L}\p{N}_.,])\d+(?:[.,]\d+)?\s*(?:zł|pln|usd|eur|gb|mb|tb|hz|fps|°c|stopni|godzin(?:y|ę|ach)?|minut(?:y|ę|ach)?|lat(?:a|)|km|m|kg|g)(?![\p{L}\p{N}_]))/giu;
+  return [...new Set((input.match(re) || []).map(normalizujTokenLiczbowy))];
+}
+
+// Skróty z kropką („2020 r.”, „ok.”, „m.in.”) nie kończą zdania. Zamieniamy tylko kropkę
+// na znak o tej samej długości, więc indeksy w tekście pozostają zgodne.
+function maskSentenceAbbreviations(text) {
+  return String(text || '')
+    .replace(/(?<![\p{L}])(?:np|itp|itd|tj|tzn)\./giu, m => m.slice(0, -1) + '\u2024')
+    .replace(/(?<![\p{L}])m\.in\./giu, 'm\u2024in\u2024')
+    .replace(/(?<![\p{L}\p{N}])(?:r|ok|tys|mln|mld|godz|tzw|ang|pol|zob|wg|ur|zm|nr|str|ul|im|dr|prof|inż|mgr|św)\.(?=\s+[\p{Ll}\d(„"“])/giu, m => m.slice(0, -1) + '\u2024');
+}
+
+function zawieraTokenTwardy(refs, token) {
+  const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  // Token kończący się literą (jednostka) może się odmieniać; kończący się cyfrą/% wymaga granicy.
+  const tail = /\p{L}$/u.test(token) ? '' : '(?![\\p{L}\\p{N}_])';
+  return new RegExp('(?<![\\p{L}\\p{N}_.])' + escaped + tail, 'u').test(refs);
 }
 
 const KONTEKSTY_GIER_AI = [
-  { name: 'Cyberpunk 2077', patterns: [/\bcyberpunk(?:\s*2077)?\b/i, /\barasaka\b/i, /\bnight\s*city\b/i, /\bjohnny\s+silverhand\b/i, /\brelik|relic\b/i, /\bv\s+(?:z|w)\s+cyberpunk/i] },
+  { name: 'Cyberpunk 2077', patterns: [/\bcyberpunk(?:\s*2077)?\b/i, /\barasaka\b/i, /\bnight\s*city\b/i, /\bjohnny\s+silverhand\b/i, /\brelic\s+(?:chip|malfunction)\b/i, /\bv\s+(?:z|w)\s+cyberpunk/i] },
   { name: 'Red Dead Redemption', patterns: [/\bred\s+dead\b/i, /\brdr2\b/i, /\barthur\s+morgan\b/i, /\bdutch\s+van\s+der\s+linde\b/i, /\bjohn\s+marston\b/i, /\bthomas\s+downes\b/i] },
   { name: 'Portal', patterns: [/\bportal(?:\s*[12])?\b/i, /\bglados\b/i, /\bchell\b/i, /\baperture\s+science\b/i] },
   { name: 'God of War', patterns: [/\bgod\s+of\s+war\b/i, /\bkratos\b/i, /\bzeus\b/i, /\bsparta\b/i] },
@@ -49,13 +70,10 @@ function sprawdzSpojnoscLorePortal2(odpowiedz, pytanie) {
     && /(?:^|[^\p{L}])(?:przejął|przejęła|przejęcie|przej[aą]ł|kontrolę|władzę|wladze)(?=$|[^\p{L}])/iu.test(q);
   if (!pytaOPrzejecie) return { ok: true, unsupported: [] };
 
-  const maMechanizmTransferu = [
-    /transfer(?:ze|u|y)?\s+(?:rdzen(?:ia|i|em)?|rdzeni|ciał(?:a|o|em)?)/i,
-    /transfer(?:ze|u)?[^.!?]{0,120}\bwheatley\b[^.!?]{0,120}\bglados\b/i,
-    /\bwheatley\b[^.!?]{0,180}(?:został|zostaje|została|znalazł|znalazl|znajduje się|znajduje sie)[^.!?]{0,120}(?:w\s+)?ciel(?:e|a|u)?\s+glados\b/i,
-    /\bwheatley\b[^.!?]{0,160}(?:przejął|otrzymał)\s+(?:ciało|body)\s+glados/i,
-    /zamian(?:a|ę|ie)\s+ciał[^.!?]{0,120}\bwheatley\b/i,
-  ].some(re => re.test(a));
+  // Celowo NIE wymagamy tu żadnej treści poprawnej odpowiedzi (wcześniej odpowiedź musiała opisywać
+  // „transfer rdzenia”): taki wymóg był kluczem odpowiedzi do jednego pytania i odrzucał poprawne
+  // odpowiedzi sformułowane inaczej. Ugruntowanie w źródłach sprawdza walidator. Poniższe reguły tylko
+  // odrzucają konkretne, znane fałszywe twierdzenia.
 
   const przyciskJakoBezposredniaPrzyczyna =
     /(?:przejął|przejąć|przej[aą]ł|zdobył|uzyskał|dostał|otrzymał)[^.!?]{0,180}(?:bo|ponieważ|dlatego|dzięki|przez)[^.!?]*(?:przycisk|rozwiązania?\s+(?:sytuacji\s+)?patowej|rozwiązania?\s+impasu)/i.test(a)
@@ -83,13 +101,12 @@ function sprawdzSpojnoscLorePortal2(odpowiedz, pytanie) {
     /(?:przejął|przejąć|przej[aą]ł|kontrolę|władzę)[^.!?]{0,180}(?:bezsensown|bezsensu|osłabić|osłabienie|zmniejsz|obniż)[^.!?]*(?:rdze|inteligenc)/i.test(a);
 
   const twierdziZeGladosBylaWylaczona =
-    /glados[^.!?]{0,100}(?:była|byla|została|zostala)\s+(?:całkowicie\s+)?wyłączon/i.test(a);
+    /glados[^.!?]{0,100}(?:była|byla|została|zostala)\s+całkowicie\s+wyłączon/i.test(a);
 
   const unsupported = [];
   if (przyciskJakoSzansaNaUcieczke) unsupported.push('przycisk rozwiązania impasu błędnie przedstawiono jako szansę Wheatleya na ucieczkę');
   if (gladosJakoProjektantWheatleya) unsupported.push('GLaDOS błędnie przypisano zaprojektowanie lub stworzenie Wheatleya');
   if (celProjektuJakoZmniejszenieGlados) unsupported.push('cel projektu Wheatleya błędnie opisano jako bezpośrednie zmniejszanie inteligencji GLaDOS');
-  if (!maMechanizmTransferu) unsupported.push('brak opisu transferu rdzenia/zamiany ciał jako mechanizmu przejęcia kontroli');
   if (przyciskJakoBezposredniaPrzyczyna || przyciskJakoWylacznaPrzyczyna) unsupported.push('przycisk rozwiązania impasu błędnie przedstawiono jako bezpośrednią przyczynę uzyskania władzy');
   if (przypisujeObnizenieJakoPrzyczyne) unsupported.push('obniżenie inteligencji GLaDOS błędnie przedstawiono jako przyczynę przejęcia kontroli');
   if (rdzenJakoPrzyczynaPrzejecia) unsupported.push('przeznaczenie rdzenia Wheatleya błędnie przedstawiono jako przyczynę przejęcia kontroli');
@@ -101,8 +118,15 @@ function sprawdzSpojnoscLorePortal2(odpowiedz, pytanie) {
 function sprawdzTwardeFaktyOdpowiedzi(odpowiedz, dane, pytanie = '') {
   const questionTokens = new Set(wyodrebnijTwardeTokeny(pytanie));
   const answerTokens = wyodrebnijTwardeTokeny(odpowiedz).filter(token => !questionTokens.has(token));
-  const refs = String(dane || '').toLocaleLowerCase('pl-PL').replace(/,/g, '.');
-  const unsupported = answerTokens.filter(token => !refs.includes(token));
+  const rawEvidence = String(dane || '');
+  const parsedSources = parseEvidenceBlocks(rawEvidence);
+  const referenceText = parsedSources.length
+    ? parsedSources.map(source => source.content).filter(Boolean).join('\n')
+    : removeLeadingSourceMetadataNoise(rawEvidence);
+  const refs = referenceText.toLocaleLowerCase('pl-PL')
+    .replace(/[\u00a0\u2009\u202f]/g, ' ').replace(/\s+/g, ' ').replace(/,/g, '.');
+  const referenceTokens = new Set(wyodrebnijTwardeTokeny(refs));
+  const unsupported = answerTokens.filter(token => !zawieraTokenTwardy(refs, token) && !referenceTokens.has(token));
   const contextCheck = sprawdzZgodnoscKontekstuGry(odpowiedz, pytanie);
   const contextUnsupported = contextCheck.conflicting.map(name => `odpowiedź wprowadza inną grę/uniwersum: ${name}`);
   const loreCheck = sprawdzSpojnoscLorePortal2(odpowiedz, pytanie);
@@ -111,6 +135,11 @@ function sprawdzTwardeFaktyOdpowiedzi(odpowiedz, dane, pytanie = '') {
     unsupported: [...unsupported, ...contextUnsupported, ...loreCheck.unsupported].slice(0, 8),
     checked: answerTokens,
     conflictingGames: contextCheck.conflicting,
+    diagnostics: {
+      hardTokenCheck: { ok: unsupported.length === 0, unsupported, checked: answerTokens },
+      gameContextCheck: { ok: contextCheck.ok, conflicting: contextCheck.conflicting },
+      portal2LoreCheck: { ok: loreCheck.ok, unsupported: loreCheck.unsupported },
+    },
   };
 }
 
@@ -119,13 +148,14 @@ function sprawdzFormatOdpowiedzi(odpowiedz, { maxZdania = 2, maxZnakow = 900 } =
   if (!text) return { ok: false, reason: 'pusta odpowiedź' };
   if (text.length > maxZnakow) return { ok: false, reason: 'odpowiedź jest zbyt długa' };
   if (/https?:\/\//i.test(text)) return { ok: false, reason: 'odpowiedź zawiera URL' };
-  const normalized = text.replace(/\b(?:np|itp|itd|tj|tzn)\./gi, '§');
+  const normalized = maskSentenceAbbreviations(text);
   const sentenceCount = (normalized.match(/[.!?]+(?=\s|$)/g) || []).length;
   if (sentenceCount > maxZdania) return { ok: false, reason: `odpowiedź ma więcej niż ${maxZdania} zdania` };
   return { ok: true, reason: 'format poprawny' };
 }
 
 module.exports = {
+  maskSentenceAbbreviations,
   normalizujTokenLiczbowy,
   wyodrebnijTwardeTokeny,
   sprawdzTwardeFaktyOdpowiedzi,

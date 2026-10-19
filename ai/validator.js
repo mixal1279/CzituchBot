@@ -4,7 +4,7 @@
 const { assessEvidence } = require('./core');
 
 const { sprawdzTwardeFaktyOdpowiedzi } = require('./response');
-const { czyDowodSemantyczniePokrywaClaim, czyRelacjaPrzyczynowaPokrywaClaim, zgodnoscStrukturalna, sprawdzTwardeKonflikty, sprawdzPokrycieClaimamiOdpowiedzi } = require('./claimValidation');
+const { czyDowodSemantyczniePokrywaClaim, czyRelacjaPrzyczynowaPokrywaClaim, zgodnoscStrukturalna, sprawdzTwardeKonflikty, sprawdzSprzecznosciSemantyczne, sprawdzPokrycieClaimamiOdpowiedzi, spojnoscTlumaczeniaClaimu, zbudujWyroczniaNazw, wyglądaNaAngielski, CAUSAL_RE } = require('./claimValidation');
 const { parseEvidenceBlocks, quoteExists, rankEvidenceForClaim, buildEvidenceRepairContext } = require('./evidence');
 
 // Kontrakt walidatora jest celowo mały: generator potrzebuje tylko jasnego
@@ -30,14 +30,60 @@ const GEMINI_VALIDATOR_JSON_SCHEMA = {
           supported: { type: 'boolean' },
           source_ids: { type: 'array', items: { type: 'string' } },
           evidence_quote: { type: 'string' },
+          // Angielskie tłumaczenie claimu; pusty string, gdy evidence_quote nie jest po angielsku.
+          claim_en: { type: 'string' },
           reason: { type: 'string' },
         },
-        required: ['claim', 'supported', 'source_ids', 'evidence_quote', 'reason'],
+        required: ['claim', 'supported', 'source_ids', 'evidence_quote', 'reason', 'claim_en'],
       },
     },
   },
-  required: ['valid', 'reason', 'confidence', 'unsupported_claims', 'claims', 'supported', 'relevant', 'complete', 'hallucination'],
+  required: ['valid', 'reason', 'confidence', 'unsupported_claims', 'claims'],
 };
+
+// Groq Structured Outputs strict mode requires every declared property to be required
+// and every object to reject unknown properties. Keep this separate from Gemini's
+// more permissive schema: both providers still pass through the same local verifier.
+const GROQ_VALIDATOR_JSON_SCHEMA = (() => {
+  const properties = GEMINI_VALIDATOR_JSON_SCHEMA.properties;
+  const claimProperties = properties.claims.items.properties;
+  return {
+    type: 'object',
+    properties: {
+      ...properties,
+      confidence: { type: 'number' },
+      claims: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: claimProperties,
+          required: Object.keys(claimProperties),
+          additionalProperties: false,
+        },
+      },
+    },
+    required: Object.keys(properties),
+    additionalProperties: false,
+  };
+})();
+
+function buildGroqValidatorResponseFormat(model) {
+  const modelId = String(model || '').trim().toLowerCase();
+  // Groq documents strict Structured Outputs only for these model IDs.
+  // Unsupported models must use JSON Object Mode rather than receive a schema
+  // request that is guaranteed to fail with HTTP 400.
+  if (['openai/gpt-oss-20b', 'openai/gpt-oss-120b', 'qwen/qwen3.8-27b', 'meta-models/muse-spark-open'].includes(modelId)) {
+    return {
+      type: 'json_schema',
+      json_schema: {
+        name: 'czituch_validator',
+        strict: true,
+        schema: GROQ_VALIDATOR_JSON_SCHEMA,
+      },
+    };
+  }
+  return { type: 'json_object' };
+}
 
 const VALIDATOR_JSON_SCHEMA = {
   ...GEMINI_VALIDATOR_JSON_SCHEMA,
@@ -114,14 +160,14 @@ function wyodrebnijIdentyfikatoryZrodel(dane) {
 
 function pobierzBlokZrodla(dane, sourceId) {
   const lines = String(dane || '').split(/\r?\n/);
-  const wanted = String(sourceId || '').trim();
+  const wanted = normalizujIdZrodla(sourceId);
   let active = false;
   const body = [];
   for (const line of lines) {
     const header = line.match(/^\[(SOURCE \d+|REFERENCE [^\]\r\n]+)\]\s*$/i);
     if (header) {
       if (active) break;
-      active = header[1].trim() === wanted;
+      active = normalizujIdZrodla(header[1].trim()) === wanted;
       continue;
     }
     if (active) body.push(line);
@@ -129,27 +175,78 @@ function pobierzBlokZrodla(dane, sourceId) {
   return active ? body.join('\n') : null;
 }
 
-function normalizujIdZrodla(value) {
-  const raw = String(value || '').trim();
-  const match = raw.match(/^(?:SOURCE\s*)?(\d+)$/i);
-  return match ? `SOURCE ${match[1]}` : raw;
+function buildBoundedSourceContext(sourceContent, quote, radius = 1) {
+  const source = String(sourceContent || '').replace(/\s+/g, ' ').trim();
+  const wantedQuote = String(quote || '').trim();
+  if (!source || !wantedQuote) return '';
+
+  const sentences = source
+    .split(/(?<=[.!?])\s+(?=[\p{Lu}\d"'“‘(\[])/u)
+    .map(sentence => sentence.trim())
+    .filter(Boolean);
+  if (!sentences.length) return quoteExists(source, wantedQuote) ? source : '';
+
+  // Find the narrowest consecutive sentence window that contains the exact
+  // authorized quote. Include only one adjacent sentence on either side so
+  // pronouns and local causal context can resolve without importing unrelated
+  // facts from the rest of a long page.
+  const maxWidth = Math.min(6, sentences.length);
+  for (let width = 1; width <= maxWidth; width++) {
+    for (let start = 0; start + width <= sentences.length; start++) {
+      const span = sentences.slice(start, start + width).join(' ');
+      if (!quoteExists(span, wantedQuote)) continue;
+      const contextStart = Math.max(0, start - Math.max(0, radius));
+      const contextEnd = Math.min(sentences.length, start + width + Math.max(0, radius));
+      return sentences.slice(contextStart, contextEnd).join(' ');
+    }
+  }
+
+  // quoteExists was already checked against this block by the caller. A quote
+  // that cannot be localized to a bounded sentence window should not authorize
+  // a fallback to the entire source.
+  return '';
 }
 
-function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '') {
+function normalizujIdZrodla(value) {
+  const raw = String(value || '').trim().replace(/^\[|\]$/g, '').trim();
+  const normalized = raw.replace(/\s+/g, ' ').replace(/_/g, ' ').toLocaleUpperCase('en-US');
+  const multiple = normalized.split(/\s*,\s*(?=(?:\[?\s*(?:SOURCE|REFERENCE)\b))/i).filter(Boolean);
+  if (multiple.length > 1) return multiple.map(normalizujIdZrodla);
+  const source = normalized.match(/^(?:\[?\s*)?SOURCE\s*#?\s*(\d+)\s*\]?$/i) || normalized.match(/^(\d+)$/);
+  if (source) return `SOURCE ${source[1]}`;
+  const reference = normalized.match(/^(?:\[?\s*)?REFERENCE\s+(.+?)\s*\]?$/i);
+  if (reference) return `REFERENCE ${reference[1].trim()}`;
+  return raw;
+}
+
+function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '', options = {}) {
+  const blocks = parseEvidenceBlocks(dane);
+  const nameOracle = options.nameOracle instanceof Set ? options.nameOracle : zbudujWyroczniaNazw(blocks);
+  const ignoredSentenceInitialNames = new Set();
+  const collectIgnoredNames = result => {
+    for (const token of result?.ignoredSentenceInitialNames || []) ignoredSentenceInitialNames.add(token);
+  };
+  // Twarde kontrole robimy na angielskim tłumaczeniu claimu tylko wtedy, gdy cytat jest po angielsku,
+  // a tłumaczenie przeszło mechaniczną kontrolę zgodności z polskim oryginałem.
+  if (options.claimEn && typeof evidenceQuote === 'string' && wyglądaNaAngielski(evidenceQuote)) {
+    const consistency = spojnoscTlumaczeniaClaimu(claim, options.claimEn, { nameOracle, evidenceQuote });
+    if (consistency.ok) claim = String(options.claimEn);
+  }
   if (!Array.isArray(sourceIds) || !sourceIds.length || typeof evidenceQuote !== 'string') {
     return { ok: false, reason: 'brak poprawnego source_id lub evidence_quote' };
   }
   const quote = evidenceQuote.trim();
-  if (quote.length < 3 || quote.length > 500) {
+  if (quote.length < 12 || quote.length > 500) {
     return { ok: false, reason: 'evidence_quote ma nieprawidłową długość' };
   }
 
   const claimNorm = String(claim || '').toLocaleLowerCase('pl-PL')
-    .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/ł/g, 'l');
   const quoteNorm = claimNorm ? String(quote).toLocaleLowerCase('pl-PL')
-    .normalize('NFD').replace(/[\u0300-\u036f]/g, '') : '';
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/ł/g, 'l') : '';
 
-  const causalRe = /(?:\b(?:bo|poniewaz|gdyz|dlatego|celem|because|therefore)\b|\bz\s+powodu\b|\bw\s+celu\b|\bzeby\b|\baby\b|\bdzieki\b|\bbecause\s+of\b|\bdue\s+to\b|\bspowodow\w*\b|\bdoprowadz\w*\b|\bumozliw\w*\b)/iu;
+  // Jedna wspólna lista znaczników przyczyny (wcześniej druga kopia tu rozjeżdżała się z claimValidation.js).
+  const causalRe = CAUSAL_RE;
   const claimCausal = causalRe.test(claimNorm);
   const quoteCausal = causalRe.test(quoteNorm);
 
@@ -165,17 +262,15 @@ function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '') {
   if (claimCaptured && quoteKilled && !quoteCaptured) {
     return { ok: false, reason: 'claim zawiera schwytanie/porwanie, a evidence wskazuje zabójstwo' };
   }
-  // Causal claims are not rejected solely because the selected quote is a
-  // non-causal excerpt. The full source block is checked below with
-  // allowDistributedEvidence=true, so a supported synthesis across the source
-  // remains valid while unsupported causal claims still fail semantic checks.
+  // Causal and contextual synthesis must remain within a short sentence window
+  // around the exact quote; do not allow distant text on the same page to support
+  // an otherwise ungrounded claim.
 
-  const blocks = parseEvidenceBlocks(dane);
-  const byId = new Map(blocks.map(block => [block.sourceId, block]));
+  const byId = new Map(blocks.map(block => [normalizujIdZrodla(block.sourceId), block]));
   const reasons = [];
 
   for (const id of sourceIds) {
-    const block = byId.get(id);
+    const block = byId.get(normalizujIdZrodla(id));
     if (!block) {
       reasons.push('source_id nie istnieje w danych referencyjnych: ' + id);
       continue;
@@ -185,43 +280,77 @@ function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '') {
       continue;
     }
 
-    // Causal synthesis is allowed when the full authorized source block
-    // actually contains the causal relation, even if the selected quote is
-    // only the event sentence. It is rejected when neither does.
-    const blockNorm = String(block.content || '').toLocaleLowerCase('pl-PL')
-      .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-    if (claimCausal && !quoteCausal && !causalRe.test(blockNorm)) {
-      reasons.push('claim dodaje relację przyczynową nieobecną w całym źródle: ' + id);
+    const quoteSentenceContext = buildBoundedSourceContext(block.content, quote, 0) || quote;
+    const sourceContext = buildBoundedSourceContext(block.content, quote, 1);
+    const verificationContext = sourceContext || quote;
+
+    // Negation must be checked against the sentence containing the exact quote.
+    // A neighbouring sentence may discuss an unrelated negative fact; using it
+    // for the polarity check caused valid positive claims to be rejected.
+    const quoteNegation = sprawdzTwardeKonflikty(quoteSentenceContext, claim, { checkNegationOnly: true });
+    if (!quoteNegation.ok) {
+      reasons.push(quoteNegation.reason || 'claim i dowód mają inną negację');
       continue;
     }
-    if (claimCausal && !quoteCausal && !czyRelacjaPrzyczynowaPokrywaClaim(block.content, claim)) {
-      reasons.push('źródło zawiera sygnał przyczynowy, ale nie wiąże go bezpośrednio z claimem: ' + id);
+
+    // Adjacent context remains available for dates, quantities and local
+    // anaphora, but it cannot override the quote sentence's polarity.
+    const contextHard = sprawdzTwardeKonflikty(verificationContext, claim, { ignoreNegation: true });
+    if (!contextHard.ok) {
+      reasons.push(contextHard.reason || 'kontekst cytatu zawiera konflikt liczbowy, czasowy lub negację');
+      continue;
+    }
+    const contextConflict = sprawdzSprzecznosciSemantyczne(verificationContext, claim);
+    if (!contextConflict.ok) {
+      reasons.push(contextConflict.reason || 'kontekst cytatu przeczy claimowi');
+      continue;
+    }
+
+    if (claimCausal && !quoteCausal && !causalRe.test(verificationContext)) {
+      reasons.push('claim dodaje relację przyczynową nieobecną w kontekście cytatu: ' + id);
+      continue;
+    }
+    if (claimCausal && !quoteCausal && !czyRelacjaPrzyczynowaPokrywaClaim(verificationContext, claim, { nameOracle })) {
+      reasons.push('kontekst zawiera sygnał przyczynowy, ale nie wiąże go bezpośrednio z claimem: ' + id);
       continue;
     }
 
     const quoteStructural = zgodnoscStrukturalna(quote, claim, {
       allowCrossLanguageExactEvidence: true,
       allowDistributedEvidence: false,
+      nameOracle,
     });
+    collectIgnoredNames(quoteStructural);
     if (quoteStructural.ok) {
-      return { ok: true, sourceId: id, mode: 'exact_quote', reason: 'cytat występuje w źródle i bezpośrednio wspiera claim' };
+      return { ok: true, sourceId: id, mode: 'exact_quote', reason: 'cytat występuje w źródle i bezpośrednio wspiera claim', ignoredSentenceInitialNames: [...ignoredSentenceInitialNames] };
     }
-    const supported = zgodnoscStrukturalna(block.content, claim, {
-      allowCrossLanguageExactEvidence: true,
-      allowDistributedEvidence: true,
-    });
-    if (supported.ok) {
-      return {
-        ok: true,
-        sourceId: id,
-        mode: 'source_context',
-        reason: 'cytat jest rzeczywistym fragmentem źródła, a ten sam source block wspiera claim',
-      };
+
+    // Bounded same-source synthesis supports local anaphora and facts stated in
+    // immediately adjacent sentences without granting the entire page authority
+    // to supply missing entities, dates, or causal relations from far away.
+    if (sourceContext) {
+      const contextStructural = zgodnoscStrukturalna(sourceContext, claim, {
+        allowCrossLanguageExactEvidence: true,
+        allowDistributedEvidence: true,
+        nameOracle,
+      });
+      collectIgnoredNames(contextStructural);
+      if (contextStructural.ok) {
+        return {
+          ok: true,
+          sourceId: id,
+          mode: 'source_context',
+          reason: 'claim jest wsparty przez cytat i jego lokalny kontekst w tym samym źródle',
+          ignoredSentenceInitialNames: [...ignoredSentenceInitialNames],
+        };
+      }
+      reasons.push(contextStructural.reason || quoteStructural.reason || 'kontekst cytatu nie potwierdza claimu');
+    } else {
+      reasons.push(quoteStructural.reason || 'nie udało się ustalić kontekstu cytatu');
     }
-    reasons.push(supported.reason || 'evidence nie potwierdza claimu');
   }
 
-  return { ok: false, reason: reasons[0] || 'brak zweryfikowanego evidence' };
+  return { ok: false, reason: reasons[0] || 'brak zweryfikowanego evidence', ignoredSentenceInitialNames: [...ignoredSentenceInitialNames] };
 }
 
 function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSourceIds = null, dane = '', answer = '') {
@@ -233,9 +362,10 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
   if (typeof wynik.reason !== 'string') return null;
   if (!Array.isArray(wynik.unsupported_claims)) return null;
   if (!Array.isArray(wynik.claims) && !Array.isArray(wynik.claims_list)) return null;
-  for (const key of ['supported', 'relevant', 'complete', 'hallucination']) {
-    if (typeof wynik[key] !== 'boolean') return null;
-  }
+  // Pola agregujące bywają pomijane przez Gemini mimo poprawnego JSON i kompletnego
+  // zestawu claims. Nie traktuj tego jako awarii transportu: niżej lokalny kontrakt
+  // sprawdza każdy claim, cytat, źródło i pokrycie odpowiedzi. Jeśli model zwrócił
+  // komplet pól agregujących, nadal wymagamy ich zgodności z lokalnym werdyktem.
   if (typeof wynik.confidence !== 'number' || !Number.isFinite(wynik.confidence) || wynik.confidence < 0 || wynik.confidence > 1) return null;
 
   const validFromModel = typeof wynik.valid === 'boolean' ? wynik.valid : wynik.ok;
@@ -258,9 +388,10 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
     claim: typeof claim?.claim === 'string' ? claim.claim.trim().slice(0, 500) : '',
     supported: claim?.supported === true,
     source_ids: Array.isArray(claim?.source_ids)
-      ? claim.source_ids.filter(v => typeof v === 'string' && v.trim()).map(normalizujIdZrodla).map(v => v.slice(0, 80)).slice(0, 5)
+      ? claim.source_ids.filter(v => typeof v === 'string' && v.trim()).flatMap(v => { const normalized = normalizujIdZrodla(v); return Array.isArray(normalized) ? normalized : [normalized]; }).map(v => v.slice(0, 80)).slice(0, 5)
       : [],
     evidence_quote: typeof claim?.evidence_quote === 'string' ? claim.evidence_quote.trim().slice(0, 500) : '',
+    claim_en: typeof claim?.claim_en === 'string' ? claim.claim_en.trim().slice(0, 600) : '',
     reason: typeof claim?.reason === 'string' ? claim.reason.trim().slice(0, 240) : '',
   })).filter(c => c.claim);
 
@@ -269,25 +400,49 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
     intent: 'web_fact',
     is_lore: /lore|fabuł|histori|kanon|canon/i.test(String(answer || '')),
   });
-  const unknownSourceClaimIndexes = claims.map((c, index) => c.supported && (!c.source_ids.length || (allowed && c.source_ids.some(id => !allowed.has(id)))) ? index : -1).filter(index => index >= 0);
-  // Canonical evidence binding: the quoted span must resolve to an allowed source.
-  // Semantic support is evaluated against that same source block, while quote integrity
-  // and high-risk causal/action mismatches are checked deterministically.
+  // Canonical evidence binding: prefer an exact match among cited, authorized blocks.
+  // If the model picked the wrong ID, allow a unique exact match in this request's
+  // authorized evidence pool. Every rebound claim still passes local semantic checks.
   const parsedEvidenceBlocks = parseEvidenceBlocks(dane);
+  const nameOracle = zbudujWyroczniaNazw(parsedEvidenceBlocks);
   const allowedBlocks = allowed
-    ? parsedEvidenceBlocks.filter(block => allowed.has(block.sourceId))
+    ? parsedEvidenceBlocks.filter(block => allowed.has(normalizujIdZrodla(block.sourceId)))
     : parsedEvidenceBlocks;
-  // Never silently rebind a validator claim to a different source just because
-  // the same quote happens to occur there. The model must bind each claim to
-  // the explicitly declared, allowed source IDs.
+  for (const claim of claims) {
+    if (!claim.supported || !claim.evidence_quote || !claim.source_ids.length) continue;
+    const citedIds = new Set(claim.source_ids.filter(id => !allowed || allowed.has(id)));
+    const exactMatches = allowedBlocks.filter(block => citedIds.has(normalizujIdZrodla(block.sourceId)) && quoteExists(block.content, claim.evidence_quote));
+    if (exactMatches.length === 1) {
+      claim.source_ids = [normalizujIdZrodla(exactMatches[0].sourceId)];
+      continue;
+    }
+    // If the model chose the wrong ID, a unique exact quote match among the
+    // request's authorized evidence blocks is safe to rebind. The claim is still
+    // subjected to local semantic, numeric, temporal, negation and causal checks.
+    if (exactMatches.length === 0) {
+      const authorizedExactMatches = allowedBlocks.filter(block => quoteExists(block.content, claim.evidence_quote));
+      if (authorizedExactMatches.length === 1) claim.source_ids = [normalizujIdZrodla(authorizedExactMatches[0].sourceId)];
+    }
+  }
+  const unknownSourceClaimIndexes = claims.map((c, index) => c.supported && (!c.source_ids.length || (allowed && c.source_ids.some(id => !allowed.has(normalizujIdZrodla(id))))) ? index : -1).filter(index => index >= 0);
   const effectiveClaimSourceIds = claims.map(c =>
-    Array.isArray(c.source_ids) ? c.source_ids : []
+    Array.isArray(c.source_ids) ? c.source_ids.map(normalizujIdZrodla) : []
   );
 
   const evidenceEvaluations = claims.map((c, index) =>
-    czyDowodPotwierdzaClaim(dane, effectiveClaimSourceIds[index], c.evidence_quote, c.claim)
+    czyDowodPotwierdzaClaim(dane, effectiveClaimSourceIds[index], c.evidence_quote, c.claim, { claimEn: c.claim_en, nameOracle })
   );
-  const evidenceQuoteVerified = evidenceEvaluations.map(result => result.ok);
+  // Rozdzielamy dwie rzeczy, które wcześniej były jedną zmienną: (1) czy cytat w ogóle występuje
+  // dosłownie we wskazanym źródle, (2) czy cały dowód przeszedł lokalne bramki (negacja, nazwy, liczby...).
+  // Dzięki temu `evidence_quote_not_exact` w diagnostyce znaczy dokładnie to, co mówi.
+  // Kontrakt się nie zmienia: pełne wsparcie implikuje istnienie cytatu, więc zbiór (2) zawiera zbiór (1).
+  const blockBySourceId = new Map(parsedEvidenceBlocks.map(block => [normalizujIdZrodla(block.sourceId), block]));
+  const evidenceQuoteVerified = claims.map((c, index) =>
+    Boolean(c.evidence_quote) && effectiveClaimSourceIds[index].some(id => {
+      const block = blockBySourceId.get(id);
+      return block ? quoteExists(block.content, c.evidence_quote) : false;
+    })
+  );
   const claimSourceVerified = evidenceEvaluations.map(result => result.ok);
   const unsupportedEvidenceClaimIndexes = claims
     .map((c, index) => c.supported && !claimSourceVerified[index] ? index : -1)
@@ -322,9 +477,13 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
   ));
 
   const sentenceCount = answerCoverage.totalSentences ?? null;
+  // The generator contract requires atomic factual claims. One broad claim must
+  // not cover several answer sentences just because the answer's average score
+  // passes a coarse sentence-count heuristic.
+  const factualSentenceCount = Number(answerCoverage.checkedSentences || 0);
   const claimGranularityOk = !answer || !sentenceCount || sentenceCount <= 1
     ? true
-    : answerCoverage.ok && claims.length >= Math.min(3, Math.ceil(sentenceCount / 3));
+    : answerCoverage.ok && claims.length >= Math.min(12, factualSentenceCount);
   const evidenceContractOk = !dane || !answer || evidenceAssessment.status !== 'weak' || (claims.length > 0 && unsupportedEvidenceClaimIndexes.length === 0 && unknownSourceClaimIndexes.length === 0 && evidenceAssessment.sourceCount >= 1);
 
   const claimContractOk = claims.length > 0
@@ -417,28 +576,6 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
     && !unknownSourceClaim
     && !unsupportedEvidenceClaim;
 
-  // A quote-binding defect can be repaired safely only when the claim itself
-  // is independently supported by the explicitly declared source block. This
-  // must never cover action/causal contradictions or unsupported synthesis.
-  const softEvidenceOnly = claims.length > 0
-    && unverifiedEvidenceQuoteIndexes.length > 0
-    && claims.every((claim, index) => {
-      if (!claim.supported || !claim.source_ids.length) return false;
-      const sourceBlocks = claim.source_ids
-        .map(id => parsedEvidenceBlocks.find(block => block.sourceId === id))
-        .filter(Boolean);
-      if (!sourceBlocks.length) return false;
-      return sourceBlocks.some(block => zgodnoscStrukturalna(block.content, claim.claim, {
-        allowCrossLanguageExactEvidence: true,
-        allowDistributedEvidence: true,
-      }).ok);
-    });
-
-  const softQuoteBindingOnly = unsupportedEvidenceClaimIndexes.length > 0
-    && unsupportedEvidenceReasons
-      .filter(item => unsupportedEvidenceClaimIndexes.includes(item.claimIndex))
-      .every(item => item.reasons.every(reason => /evidence_quote nie występuje w wskazanym źródle/i.test(reason)));
-
   const localRejectReasons = [];
   if (!rawClaims.length) localRejectReasons.push('claims_missing');
   if (tooManyClaims) localRejectReasons.push('claims_over_limit');
@@ -456,30 +593,19 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
   if (maStarePola && wynik.complete !== true) localRejectReasons.push('model_marked_incomplete');
   if (maStarePola && wynik.hallucination !== false) localRejectReasons.push('model_flagged_hallucination');
 
-  const softEvidenceReasons = new Set(['evidence_quote_not_exact']);
-  const softAcceptanceEnabled = process.env.AI_ENABLE_SOFT_ACCEPT === '1';
-  const softAccepted = softAcceptanceEnabled && validFromModel === true
-    && confidence >= 0.75
-    && wynik.supported === true
-    && wynik.relevant === true
-    && wynik.complete === true
-    && wynik.hallucination === false
-    && unsupported.length === 0
-    && localRejectReasons.length > 0
-    && softEvidenceOnly
-    && softQuoteBindingOnly
-    && localRejectReasons.filter(reason => reason !== 'evidence_not_verified').every(reason => softEvidenceReasons.has(reason));
-
+  // Domyślnie częściowa akceptacja jest wyłączona: każda zaakceptowana odpowiedź musi spełniać
+  // pełny lokalny kontrakt dowodowy. Tryb opt-in (AI_ALLOW_PARTIAL_ANSWERS=1) odpowiada wyłącznie
+  // claimami z lokalnie zweryfikowanym cytatem, z zachowaniem wszystkich progów powyżej
+  // (confidence, liczby/daty, negacje, nieznane źródła, format). Pozostałe twierdzenia są pomijane.
+  const softAccepted = !accepted && process.env.AI_ALLOW_PARTIAL_ANSWERS === '1' && partialAccepted;
   const status = accepted
     ? 'accepted'
-    : (partialAccepted
+    : (softAccepted
       ? 'soft_accepted'
-      : (softAccepted
-        ? 'soft_accepted'
-        : (sprzecznyWerdykt || niekompletnyPozytywnyWerdykt ? 'inconclusive' : 'rejected')));
+      : (sprzecznyWerdykt || niekompletnyPozytywnyWerdykt ? 'inconclusive' : 'rejected'));
   if (!localRejectReasons.length && !accepted) localRejectReasons.push('local_contract_not_satisfied');
   const diagnostics = {
-    contractAccepted: accepted || softAccepted || partialAccepted,
+    contractAccepted: accepted,
     partialAccepted,
     partialClaimCount: verifiedPartialClaims.length,
     modelValid: validFromModel === true,
@@ -510,6 +636,26 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
       mode: evidenceEvaluations[index]?.mode || null,
       reason: evidenceEvaluations[index]?.reason || null,
     })),
+    ...(process.env.AI_LIVE_BENCHMARK === '1' ? {
+      benchmarkTrace: {
+        answer: String(answer || '').slice(0, 2500),
+        claims: claims.map((claim, index) => ({
+          claimIndex: index,
+          claim: String(claim.claim || '').slice(0, 500),
+          // claim_en i wynik mechanicznej kontroli spójności: widać, czy model w ogóle zwraca tłumaczenie
+          // i czy odpada ono na liczbach/negacji/nazwach, zanim trafi do twardych bramek.
+          claimEn: String(claim.claim_en || '').slice(0, 600),
+          claimEnConsistency: claim.claim_en ? spojnoscTlumaczeniaClaimu(claim.claim, claim.claim_en, { nameOracle, evidenceQuote: claim.evidence_quote }) : null,
+          supported: claim.supported === true,
+          sourceIds: Array.isArray(claim.source_ids) ? claim.source_ids : [],
+          evidenceQuote: String(claim.evidence_quote || '').slice(0, 500),
+          quoteVerified: Boolean(evidenceQuoteVerified[index]),
+          supportVerified: Boolean(evidenceEvaluations[index]?.ok),
+          supportReason: evidenceEvaluations[index]?.reason || null,
+          ignoredSentenceInitialNames: evidenceEvaluations[index]?.ignoredSentenceInitialNames || [],
+        })),
+      },
+    } : {}),
     evidenceSourceCount: evidenceAssessment.sourceCount,
     evidenceIndependentHosts: evidenceAssessment.independentHosts,
     localRejectReasons,
@@ -520,22 +666,22 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
 
   return {
     status,
-    ok: accepted || softAccepted || partialAccepted,
-    valid: accepted || softAccepted || partialAccepted,
-    partialAnswer: partialAccepted ? partialAnswerCandidate : null,
+    ok: accepted,
+    valid: accepted,
+    partialAnswer: softAccepted ? partialAnswerCandidate : null,
     technicalError: false,
     provider,
     model,
     supported: typeof wynik.supported === 'boolean' ? wynik.supported : accepted,
     relevant: typeof wynik.relevant === 'boolean' ? wynik.relevant : accepted,
-    complete: partialAccepted ? false : (typeof wynik.complete === 'boolean' ? wynik.complete : accepted),
+    complete: accepted && (typeof wynik.complete === 'boolean' ? wynik.complete : accepted),
     hallucination: typeof wynik.hallucination === 'boolean' ? wynik.hallucination : !accepted,
     confidence,
     claims,
     unsupported_claims: unsupported,
     diagnostics,
     reason: partialAccepted
-      ? 'odpowiedź częściowa: pokazano wyłącznie claimy zweryfikowane przez wskazane źródła'
+      ? 'odpowiedź częściowa nie spełnia pełnego kontraktu walidacji'
       : tooManyClaims
       ? 'validator zwrócił więcej claims niż obsługuje kontrakt'
       : malformedClaims
@@ -555,6 +701,8 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
 module.exports = {
   VALIDATOR_JSON_SCHEMA,
   GEMINI_VALIDATOR_JSON_SCHEMA,
+  GROQ_VALIDATOR_JSON_SCHEMA,
+  buildGroqValidatorResponseFormat,
   wytnijJsonWalidatora,
   normalizujWynikWalidatora,
   wyodrebnijIdentyfikatoryZrodel,

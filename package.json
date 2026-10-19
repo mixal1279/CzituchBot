@@ -7,7 +7,8 @@
   "scripts": {
     "start": "node czituch_bot.js",
     "test": "node --test test/*.test.js",
-    "ai:benchmark:live": "AI_LIVE_BENCHMARK=1 node scripts/ai-live-benchmark.js"
+    "ai:benchmark:live": "AI_LIVE_BENCHMARK=1 node scripts/ai-live-benchmark.js",
+    "benchmark:offline": "node scripts/ai-offline-benchmark.js"
   },
   "dependencies": {
     "@google-cloud/firestore": "^8.6.0",

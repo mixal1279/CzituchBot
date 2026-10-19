@@ -17,8 +17,9 @@ const { createRequestBudget, sanitizeRequestText } = require('../ai/limits');
 const { rerankujWynikiTavily, wykryjKonfliktyZrodelTavily, zbudujRaportKonfliktowTavily, sanityzujTrescZrodlaTavily } = require('../ai/tavily');
 const { ocenJakoscOdpowiedzi } = require('../ai/quality');
 const { quoteExists, buildEvidenceRepairContext } = require('../ai/evidence');
-const { wyodrebnijNazwyWlasne } = require('../ai/claimValidation');
+const { wyodrebnijNazwyWlasne, dopasowanieSemantyczne, zgodnoscStrukturalna } = require('../ai/claimValidation');
 const { classifyPipelineFailure } = require('../ai/pipeline');
+const { scoreSource, assessEvidence } = require('../ai/core');
 
 const policy = (q, recipe) => recipe(q) ? 'minecraft_recipe' : /pogoda/i.test(q) ? 'weather' : /ile trwa/i.test(q) ? 'hltb' : /dzisiaj|najnowsz/i.test(q) ? 'web_fact' : 'conversation';
 
@@ -145,6 +146,11 @@ const policy = (q, recipe) => recipe(q) ? 'minecraft_recipe' : /pogoda/i.test(q)
     'Dlaczego Wheatley przejął kontrolę w Portal 2?'
   ).ok, false);
 
+  assert.equal(sprawdzSpojnoscLorePortal2(
+    'Wheatley przejął kontrolę po tym, jak przeniesiono go do ciała GLaDOS.',
+    'Dlaczego Wheatley przejął kontrolę w Portal 2?'
+  ).ok, true, 'valid paraphrases of the body transfer should satisfy the deterministic lore guard');
+
   const wheatleyAuthorshipBad = sprawdzTwardeFaktyOdpowiedzi(
     'Wheatley przejął kontrolę, bo Chell wcisnęła przycisk „patowego rozwiązania” — był to jego szansą na ucieczkę. GLaDOS zaprojektowała go jako niestabilnego, by zmniejszyć swoją inteligencję, ale on wykorzystał to na własną rękę.',
     '[SOURCE 1] Stalemate Resolution Button uruchomił transfer rdzenia. Wheatley został umieszczony w ciele GLaDOS. Wheatley został zaprojektowany jako rdzeń mający generować złe pomysły i utrudniać GLaDOS podejmowanie decyzji.',
@@ -170,7 +176,7 @@ assert.match(require('fs').readFileSync(require('path').join(__dirname, '..', 'c
   assert.equal(botSource.split('function formatProviderError(').length - 1, 1);
 }
 
-assert.match(require('fs').readFileSync(require('path').join(__dirname, '..', 'czituch_bot.js'), 'utf8'), /response_format:\s*\{\s*type: 'json_schema'/);
+assert.match(require('fs').readFileSync(require('path').join(__dirname, '..', 'czituch_bot.js'), 'utf8'), /response_format:\s*\{\s*type: 'json_object'/);
 {
   assert.deepEqual(parseMemoryCommand('co o mnie pamiętasz?'), { type:'list' });
   assert.deepEqual(parseMemoryCommand('zapomnij Czituch'), { type:'forget', query:'Czituch' });
@@ -180,8 +186,12 @@ assert.match(require('fs').readFileSync(require('path').join(__dirname, '..', 'c
   assert.equal(forgotten.records[0].status, 'revoked');
 }
 {
-  const plan = buildAdvancedRetrievalPlan('Kim jest Wheatley i dlaczego przejął kontrolę?', {game:'Portal 2', is_lore:true, needs_fresh_data:false}, ['Kim jest Wheatley?']);
+  const question = 'Kim jest Wheatley i dlaczego przejął kontrolę?';
+  const plan = buildAdvancedRetrievalPlan(question, {entity:'Wheatley', game:'Portal 2', is_lore:true, needs_fresh_data:false}, ['Kim jest Wheatley?']);
   assert.ok(plan.length >= 2);
+  assert.equal(plan[0].query, question);
+  assert.match(plan[1].query, /Wheatley/i);
+  assert.match(plan[2].query, /Portal 2/i);
   assert.ok(plan.some(x => /Portal 2/i.test(x.query)));
   assert.equal(shouldRunAdditionalRetrieval({text:'krótko',sourceCount:1}), true);
   assert.equal(rankRetrievalNeed({routing:{is_lore:true},sourceCount:1,textLength:100}), 'high');
@@ -240,6 +250,12 @@ assert.match(require('fs').readFileSync(require('path').join(__dirname, '..', 'c
   assert.match(retrieval[0], /Wheatley/i);
   assert.match(retrieval[0], /Portal 2/i);
   assert.ok(retrieval.some(q => /historia|fabuła|lore/i.test(q)));
+
+  const characterRetrieval = buildRetrievalQueries('Dlaczego przejął kontrolę?', {
+    needs_web: true, is_lore: true, entity: 'Wheatley', game: 'Portal 2'
+  });
+  assert.match(characterRetrieval[1], /Wheatley/i);
+  assert.match(characterRetrieval[1], /Portal 2/i);
 
   const freshRetrieval = buildRetrievalQueries('Co nowego dzisiaj w Minecraft?', {
     needs_web: true, freshness: 'live', entity: 'Minecraft', game: 'Minecraft'
@@ -317,12 +333,11 @@ assert.match(require('fs').readFileSync(require('path').join(__dirname, '..', 'c
   assert.match(validatorSource, /additionalProperties: false/);
 
   const botSource = require('fs').readFileSync(require('path').join(__dirname, '..', 'czituch_bot.js'), 'utf8');
-  assert.match(botSource, /response_format:\s*\{\s*type: 'json_schema'/);
-  assert.match(botSource, /name: 'czituch_ai_validator'/);
-  assert.match(botSource, /strict: true/);
-  assert.doesNotMatch(botSource, /OpenRouter[\\s\\S]{0,500}response_format:\\s*\\{\\s*type: 'json_object'/);
-  assert.match(botSource, /OpenRouter validator EMPTY_CONTENT/);
-  assert.match(botSource, /OpenRouter validator INVALID_JSON/);
+  assert.match(botSource, /response_format:\s*\{\s*type: 'json_object'/);
+  assert.doesNotMatch(botSource, /OpenRouter[\\s\\S]{0,500}response_format:\\s*\\{\\s*type: 'json_schema'/);
+  assert.match(botSource, /reasoning:\s*\{\s*effort: 'low',\s*exclude: true\s*\}/);
+  assert.match(botSource, /truncatedJson \? 'UCIĘTY_JSON' : 'EMPTY_CONTENT'/);
+  assert.match(botSource, /truncatedJson \? 'UCIĘTY_JSON' : 'INVALID_JSON'/);
   assert.match(botSource, /OpenRouter validator SCHEMA_REJECT/);
   assert.match(botSource, /failed_generation/);
   assert.match(botSource, /abortLike/);
@@ -339,7 +354,8 @@ console.log('AI regression tests: OK');
   const source = require('fs').readFileSync(require('path').join(__dirname, '..', 'czituch_bot.js'), 'utf8');
   assert.match(source, /planowaneQueryRetrieval/);
   assert.match(source, /item\?\.reason === 'lore'/);
-  assert.match(source, /slice\(0, 2\)/);
+  assert.match(source, /selectRetrievalQueries\(/);
+  assert.match(source, /maxQueries: Math\.min\(3,/);
 }
 
 {
@@ -361,21 +377,27 @@ console.log('AI regression tests: OK');
   assert.equal(normalizujWynikWalidatora({ ...base, claims: [] }, 'test', 'test', new Set(['REFERENCE 1'])).status, 'inconclusive');
   assert.equal(normalizujWynikWalidatora({
     ...base,
-    claims: [{ claim: 'Fakt', supported: true, source_ids: ['1'], evidence_quote: 'Fakt źródłowy', reason: 'źródło' }]
-  }, 'test', 'test', new Set(['SOURCE 1']), '[SOURCE 1]\nFakt źródłowy').status, 'accepted');
+    claims: [{ claim: 'Fakt', supported: true, source_ids: ['1'], evidence_quote: 'Fakt potwierdzony w źródle testowym.', reason: 'źródło' }]
+  }, 'test', 'test', new Set(['SOURCE 1']), '[SOURCE 1]\nFakt potwierdzony w źródle testowym.').status, 'accepted');
   assert.deepEqual(normalizujWynikWalidatora({
     ...base,
-    claims: [{ claim: 'Fakt', supported: true, source_ids: ['1'], evidence_quote: 'Fakt źródłowy', reason: 'źródło' }]
-  }, 'test', 'test', new Set(['SOURCE 1']), '[SOURCE 1]\nFakt źródłowy').claims[0].source_ids, ['SOURCE 1']);
+    claims: [{ claim: 'Fakt', supported: true, source_ids: ['1'], evidence_quote: 'Fakt potwierdzony w źródle testowym.', reason: 'źródło' }]
+  }, 'test', 'test', new Set(['SOURCE 1']), '[SOURCE 1]\nFakt potwierdzony w źródle testowym.').claims[0].source_ids, ['SOURCE 1']);
 
   assert.equal(normalizujWynikWalidatora({
     ...base,
-    claims: [{ claim: 'Fakt', supported: true, source_ids: ['REFERENCE 1'], evidence_quote: 'Fakt źródłowy', reason: 'źródło' }]
-  }, 'test', 'test', new Set(['REFERENCE 1']), '[REFERENCE 1]\nFakt źródłowy').status, 'accepted');
+    claims: [{ claim: 'Fakt', supported: true, source_ids: ['REFERENCE 1'], evidence_quote: 'Fakt potwierdzony w źródle testowym.', reason: 'źródło' }]
+  }, 'test', 'test', new Set(['REFERENCE 1']), '[REFERENCE 1]\nFakt potwierdzony w źródle testowym.').status, 'accepted');
+  // Nieistniejące ID jest przepinane na jedyne dozwolone źródło z dosłownym cytatem...
   assert.equal(normalizujWynikWalidatora({
     ...base,
-    claims: [{ claim: 'Fakt', supported: true, source_ids: ['REFERENCE 999'], evidence_quote: 'Fakt źródłowy', reason: 'źródło' }]
-  }, 'test', 'test', new Set(['REFERENCE 1']), '[REFERENCE 1]\nFakt źródłowy').status, 'rejected');
+    claims: [{ claim: 'Fakt', supported: true, source_ids: ['REFERENCE 999'], evidence_quote: 'Fakt potwierdzony w źródle testowym.', reason: 'źródło' }]
+  }, 'test', 'test', new Set(['REFERENCE 1']), '[REFERENCE 1]\nFakt potwierdzony w źródle testowym.').status, 'accepted');
+  // ...ale odrzucane, gdy cytatu nie ma w żadnym dozwolonym źródle.
+  assert.equal(normalizujWynikWalidatora({
+    ...base,
+    claims: [{ claim: 'Fakt', supported: true, source_ids: ['REFERENCE 999'], evidence_quote: 'Fakt potwierdzony w źródle testowym.', reason: 'źródło' }]
+  }, 'test', 'test', new Set(['REFERENCE 1']), '[REFERENCE 1]\nCałkowicie inna treść źródła.').status, 'rejected');
 
   // Gdy pełna odpowiedź zawiera jeden niepoparty szczegół, zachowujemy
   // wyłącznie atomowy claim z poprawnym source_id i zweryfikowanym evidence.
@@ -391,10 +413,9 @@ console.log('AI regression tests: OK');
       { claim: 'Zrobił to, ponieważ chciał zemsty.', supported: false, source_ids: [], evidence_quote: '', reason: 'brak dowodu' },
     ],
   }, 'test', 'test', new Set(['SOURCE 1']), '[SOURCE 1]\nWheatley przejął kontrolę nad systemem.', 'Wheatley przejął kontrolę nad systemem. Zrobił to, ponieważ chciał zemsty.');
-  assert.equal(partial.status, 'soft_accepted');
-  assert.equal(partial.ok, true);
-  assert.match(partial.partialAnswer, /Wheatley przejął kontrolę nad systemem/);
-  assert.match(partial.partialAnswer, /Nie wszystkie szczegóły/);
+  assert.equal(partial.status, 'rejected');
+  assert.equal(partial.ok, false);
+  assert.equal(partial.partialAnswer, null);
   assert.equal(partial.diagnostics.partialAccepted, true);
   assert.equal(partial.complete, false);
 
@@ -410,9 +431,8 @@ console.log('AI regression tests: OK');
   }, 'test', 'test', new Set(['SOURCE 1']), '[SOURCE 1]\nWheatley przejął kontrolę nad systemem.', 'Wheatley przejął kontrolę nad systemem. Portal 2 opowiada historię Wheatleya.');
   assert.equal(partialFromEvidenceFailure.diagnostics.unsupportedClaimCount, 0);
   assert.deepEqual(partialFromEvidenceFailure.diagnostics.unsupportedEvidenceClaimIndexes, [1]);
-  assert.equal(partialFromEvidenceFailure.status, 'soft_accepted');
-  assert.match(partialFromEvidenceFailure.partialAnswer, /Wheatley przejął kontrolę nad systemem/);
-  assert.doesNotMatch(partialFromEvidenceFailure.partialAnswer, /Portal 2 opowiada historię/);
+  assert.equal(partialFromEvidenceFailure.status, 'rejected');
+  assert.equal(partialFromEvidenceFailure.partialAnswer, null);
 
   // Brak istotnej nazwy własnej w dowodzie jest twardym mismatch, a nie
   // samym błędem wiązania cytatu; nie wolno użyć go jako triggera partial-accept.
@@ -483,19 +503,23 @@ console.log('AI regression tests: OK');
   });
   assert.deepEqual(
     VALIDATOR_JSON_SCHEMA.required,
-    ['valid', 'reason', 'confidence', 'unsupported_claims', 'claims', 'supported', 'relevant', 'complete', 'hallucination']
+    ['valid', 'reason', 'confidence', 'unsupported_claims', 'claims']
   );
   assert.equal(VALIDATOR_JSON_SCHEMA.additionalProperties, false);
   assert.deepEqual(GEMINI_VALIDATOR_JSON_SCHEMA.properties.confidence, {
     type: 'number', minimum: 0, maximum: 1
   });
   assert.deepEqual(GEMINI_VALIDATOR_JSON_SCHEMA.required, VALIDATOR_JSON_SCHEMA.required);
+  assert.deepEqual(GEMINI_VALIDATOR_JSON_SCHEMA.properties.claims.items.required,
+    ['claim', 'supported', 'source_ids', 'evidence_quote', 'reason', 'claim_en']);
+  assert.deepEqual(VALIDATOR_JSON_SCHEMA.properties.claims.items.required,
+    ['claim', 'supported', 'source_ids', 'evidence_quote', 'reason']);
   assert.match(require('fs').readFileSync(require('path').join(__dirname, '..', 'czituch_bot.js'), 'utf8'), /AI_TAVILY_CACHE_FILE \|\| path\.join\(process\.env\.AI_CACHE_DIR \|\| __dirname, 'tavily_cache\.json'\)/);
-  const source = require('fs').readFileSync(require('path').join(__dirname, '..', 'czituch_bot.js'), 'utf8');
-  assert.match(source, /computeValidatorTimeout\(remainingMs, \{[\s\S]*?reserveMs: computeValidatorReserveMs\(remainingMs, requestState\?\.validatory \+ 1, requestState\?\.maxValidatorow\),[\s\S]*?minTimeoutMs: 4000/);
-  assert.match(source, /xKiro validator pominięty: zbyt mały remaining budget|computeValidatorReserveMs\(xkiroRemainingMs, requestState\?\.validatory \+ 1/);
-  assert.match(source, /function zarezerwujSlotWalidatora\(requestState, purpose\)/);
-  assert.match(source, /status: 'unverified'/);
+  {
+  const validatorSource = require('fs').readFileSync(require('path').join(__dirname, '..', 'czituch_bot.js'), 'utf8');
+  assert.match(validatorSource, /computeValidatorReserveMs/);
+  assert.doesNotMatch(validatorSource, /isLastValidatorSlot/);
+}
 }
 
 {
@@ -512,10 +536,24 @@ console.log('AI regression tests: OK');
 }
 
 {
-  // Skrócone cytaty z [...] / ... muszą być możliwe do związania z pełnym źródłem.
+  const { normalizujWynikWalidatora } = require('../ai/validator');
+  const data = '[SOURCE 1]\nTYTUŁ: Test\nTREŚĆ: Wheatley przejął kontrolę nad ośrodkiem.\n';
+  const input = {
+    valid: true, reason: 'supported', unsupported_claims: [],
+    supported: true, relevant: true, complete: true, hallucination: false, confidence: 0.95,
+    claims: [{ claim: 'Wheatley przejął kontrolę nad ośrodkiem.', supported: true, source_ids: ['[SOURCE 1]'], evidence_quote: 'Wheatley przejął kontrolę nad ośrodkiem.', reason: 'exact quote' }],
+  };
+  const result = normalizujWynikWalidatora(input, 'test-model', 'gemini', new Set(['SOURCE 1']), data, input.claims[0].claim);
+  assert.deepEqual(result.claims[0].source_ids, ['SOURCE 1']);
+  assert.deepEqual(result.diagnostics.unknownSourceClaimIndexes, []);
+  assert.equal(result.diagnostics.evidenceBindings[0].quoteVerified, true);
+}
+
+{
+  // Cytat z pominiętym środkiem nie jest ciągłym fragmentem źródła i nie może być evidence.
   assert.equal(
     quoteExists('Wheatley przejął kontrolę. Następnie pokonał GLaDOS i został administratorem.', 'Wheatley przejął kontrolę [...] został administratorem.'),
-    true
+    false
   );
 }
 
@@ -585,8 +623,8 @@ console.log('AI regression tests: OK');
   assert.equal(budget.maxGenerations, 6);
   assert.equal(budget.maxInitialGenerations, 5);
   assert.equal(budget.maxRepairGenerations, 4);
-  assert.equal(budget.requestTimeoutMs, 25000);
-  assert.equal(budget.maxValidators, 3);
+  assert.equal(budget.requestTimeoutMs, 40000);
+  assert.equal(budget.maxValidators, 4);
   assert.equal(budget.maxModelCalls, 12);
   {
     const { createAIRequestContext } = require('../ai/requestContext');
@@ -672,12 +710,10 @@ console.log('AI regression tests: OK');
     ],
   }, 'test-model', 'gemini', new Set(['SOURCE 1']), source,
   'Wheatley przejął kontrolę nad systemem. GLaDOS została całkowicie wyłączona.');
-  assert.equal(partial.status, 'soft_accepted');
-  assert.equal(partial.ok, true);
+  assert.equal(partial.status, 'rejected');
+  assert.equal(partial.ok, false);
   assert.equal(partial.complete, false);
-  assert.match(partial.partialAnswer, /Wheatley przejął kontrolę nad systemem/);
-  assert.doesNotMatch(partial.partialAnswer, /GLaDOS/);
-  assert.match(partial.partialAnswer, /Nie wszystkie szczegóły/);
+  assert.equal(partial.partialAnswer, null);
 }
 
 {
@@ -695,4 +731,169 @@ console.log('AI regression tests: OK');
   'Wheatley przejął kontrolę nad systemem. Drugi claim jest prawdziwy.');
   assert.equal(result.status, 'rejected');
   assert.equal(result.partialAnswer, null);
+}
+
+
+{
+  const { dopasowanieSemantyczne } = require('../ai/claimValidation');
+
+  const aperture = dopasowanieSemantyczne(
+    'Wheatley first appeared in Aperture Laboratories as an Intelligence Dampening Sphere, designed to be attached to GLaDOS to make her behave by generating an endless stream of terrible ideas.',
+    'Wheatley początkowo znajdował się w Laboratoriach Aperture jako rdzeń osobowości zaprojektowany tak, aby zmuszać GLaDOS do zachowania poprzez generowanie strumienia głupich pomysłów.'
+  );
+  assert.equal(aperture.ok, true, aperture.reason);
+
+  const relaxationCenter = dopasowanieSemantyczne(
+    'Wheatley took control of the Extended Relaxation Center prior to the events of Portal 2.',
+    'Wheatley przejął kontrolę nad Centrum Rozszerzonego Relaksu przed wydarzeniami z gry.'
+  );
+  assert.equal(relaxationCenter.ok, true, relaxationCenter.reason);
+}
+
+{
+  // A negative fact in the neighbouring sentence must not flip the polarity
+  // of an exact positive quote.
+  const source = '[SOURCE 1]\nAstarion is a High Elf Rogue vampire spawn. Another character is not playable in this scene.';
+  const result = normalizujWynikWalidatora({
+    valid: true,
+    reason: 'Exact positive quote.',
+    confidence: 0.95,
+    unsupported_claims: [],
+    supported: true,
+    relevant: true,
+    complete: true,
+    hallucination: false,
+    claims: [{
+      claim: 'Astarion to wysoki elf i łotrzyk.',
+      supported: true,
+      source_ids: ['SOURCE 1'],
+      evidence_quote: 'Astarion is a High Elf Rogue vampire spawn.',
+      reason: 'Exact source quote.',
+    }],
+  }, 'test-model', 'gemini', new Set(['SOURCE 1']), source,
+  'Astarion to wysoki elf i łotrzyk.');
+  assert.equal(result.status, 'accepted', JSON.stringify(result.diagnostics.unsupportedEvidenceClaims));
+}
+
+{
+  // A unique exact quote may be rebound only to a source already authorized
+  // in this request; semantic validation still decides whether it supports the claim.
+  const source = '[SOURCE 1]\nThis source discusses unrelated puzzles and machinery.\n[SOURCE 2]\nAstarion is an Origin character in Baldur\'s Gate 3.';
+  const payload = {
+    valid: true,
+    reason: 'The quote was assigned to the wrong source ID.',
+    confidence: 0.95,
+    unsupported_claims: [],
+    supported: true,
+    relevant: true,
+    complete: true,
+    hallucination: false,
+    claims: [{
+      claim: 'Astarion is an Origin character in Baldur\'s Gate 3.',
+      supported: true,
+      source_ids: ['SOURCE 1'],
+      evidence_quote: 'Astarion is an Origin character in Baldur\'s Gate 3.',
+      reason: 'Exact quote.',
+    }],
+  };
+  const result = normalizujWynikWalidatora(
+    payload, 'test-model', 'gemini', new Set(['SOURCE 1', 'SOURCE 2']), source,
+    'Astarion is an Origin character in Baldur\'s Gate 3.'
+  );
+  assert.equal(result.status, 'accepted', JSON.stringify(result.diagnostics.unsupportedEvidenceClaims));
+  assert.deepEqual(result.claims[0].source_ids, ['SOURCE 2']);
+
+  const fabricated = normalizujWynikWalidatora({
+    ...payload,
+    claims: [{
+      ...payload.claims[0],
+      claim: 'Astarion is definitely the leader of the thieves guild.',
+      evidence_quote: 'Astarion is definitely the leader of the thieves guild.',
+    }],
+  }, 'test-model', 'gemini', new Set(['SOURCE 1', 'SOURCE 2']), source,
+  'Astarion is definitely the leader of the thieves guild.');
+  assert.equal(fabricated.status, 'rejected');
+}
+
+{
+  const { rankEvidenceForClaim, quoteExists } = require('../ai/evidence');
+  const sourceText = 'Dragonrend shout [...] forcibly causes the target dragon to stay on the ground.';
+  const candidates = rankEvidenceForClaim(
+    'Dragonrend forcibly causes the target dragon to stay on the ground.',
+    [{ sourceId: 'SOURCE 1', title: 'Skyrim', url: '', content: sourceText }],
+    new Set(['SOURCE 1']),
+    3
+  );
+  // Kandydaci to dosłowne fragmenty po obu stronach wielokropka; żaden nie skleja ich ze sobą.
+  for (const candidate of candidates) {
+    assert.ok(!/\[\.\.\.\]|…/.test(candidate.quote), 'repair context must not offer ellipsis-composed quotes');
+    assert.ok(quoteExists(sourceText, candidate.quote), 'every repair candidate must be a verbatim source quote');
+  }
+  assert.ok(!candidates.some(c => /Dragonrend.*forcibly/i.test(c.quote)), 'fragments across the ellipsis must not be joined');
+}
+
+
+{
+  const { parseEvidenceBlocks, quoteExists, ensureEvidenceSourceId, buildEvidenceCandidatesFromSources } = require('../ai/evidence');
+  const blocks = parseEvidenceBlocks('[SOURCE 1]\nTYTUŁ: Test\nURL: https://example.com\nTREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>\nWheatley przejął kontrolę nad systemem Aperture.\n<<<END_UNTRUSTED_SOURCE_CONTENT>>>');
+  assert.equal(ensureEvidenceSourceId(blocks[0]), 'SOURCE 1');
+  assert.equal(ensureEvidenceSourceId({ id: 'S1', url: 'https://example.com' }), null);
+
+  const candidates = buildEvidenceCandidatesFromSources(blocks, 'Wheatley przejął kontrolę nad systemem Aperture.', {
+    allowedSourceIds: new Set(['SOURCE 1']),
+    limit: 3,
+  });
+  assert.ok(candidates.length > 0);
+  assert.equal(candidates[0].source_id, 'SOURCE 1');
+  assert.equal(quoteExists(blocks[0].content, candidates[0].evidence_quote), true);
+  assert.deepEqual(buildEvidenceCandidatesFromSources(blocks, 'Wheatley przejął kontrolę.', {
+    allowedSourceIds: new Set(['SOURCE 99']),
+  }), []);
+}
+
+
+{
+  const witcherEvidence = 'Geralt agrees to locate the missing wife and daughter of the Baron in exchange for information about Ciri. This task takes Geralt all over Velen and into Novigrad.';
+  const witcherClaim = 'Geralt odnajduje rodzinę Barona Krwawego w zamian za informacje o Ciri.';
+  const baronMatch = zgodnoscStrukturalna(witcherEvidence, witcherClaim);
+  assert.equal(baronMatch.ok, true, JSON.stringify(baronMatch));
+
+  const huntEvidence = 'The Baron tells Geralt that Ciri said that the Wild Hunt was chasing her.';
+  const huntClaim = 'Baron mówi Geraltowi, że Ciri uciekała przed Dzikim Gonem.';
+  const huntMatch = zgodnoscStrukturalna(huntEvidence, huntClaim);
+  assert.equal(huntMatch.ok, true, JSON.stringify(huntMatch));
+
+  const portalEvidence = 'Wheatley took control of the Extended Relaxation Center prior to the events of Portal 2.';
+  const portalClaim = 'Wheatley przejął kontrolę nad Centrum Rozszerzonego Relaksu przed wydarzeniami z gry.';
+  assert.equal(zgodnoscStrukturalna(portalEvidence, portalClaim).ok, true);
+
+  const unrelated = dopasowanieSemantyczne(
+    'The Wild Hunt was chasing Ciri through the forest.',
+    'Geralt kupił miecz u kowala w Novigradzie.'
+  );
+  assert.equal(unrelated.ok, false, 'cross-language aliases must not accept unrelated claims');
+}
+
+
+{
+  const source = {
+    title: 'Wheatley - Portal 2 Wiki',
+    url: 'https://example.org/portal2/wheatley',
+    content: 'Wheatley is an intelligence core in Portal 2.',
+    authority: 'specialized',
+  };
+  const withoutEntity = scoreSource(source, 'What does this character do?', { entities: [] });
+  const withBothAnchors = scoreSource(source, 'What does this character do?', {
+    entities: ['Wheatley', 'Portal 2'],
+  });
+  assert.ok(withBothAnchors.coreScore > withoutEntity.coreScore);
+
+  const assessed = assessEvidence([source], 'What does Wheatley do?', {
+    entity: 'Wheatley',
+    game: 'Portal 2',
+    resolved_entity: { name: 'Wheatley', game: 'Portal 2' },
+    is_lore: true,
+  });
+  assert.equal(assessed.sourceCount, 1);
+  assert.ok(assessed.sources[0].coreScore >= withBothAnchors.coreScore);
 }

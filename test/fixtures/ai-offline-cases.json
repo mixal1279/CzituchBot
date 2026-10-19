@@ -1,0 +1,63 @@
+{
+  "name": "AI offline fixtures",
+  "description": "Nagrane pytania, dowody i odpowiedzi. Sprawdzają deterministyczną część pipeline'u (routing, plan, judge, twarde fakty, format, gold) bez sieci i limitów API. Dowody i odpowiedzi są syntetyczne, więc NIE mierzą jakości modelu — do tego służy live benchmark.",
+  "cases": [
+    {
+      "id": "why-portal2-wheatley",
+      "question": "W grze Portal 2: Dlaczego Wheatley przejął kontrolę nad GLaDOS?",
+      "expect": { "intent": "web_fact", "profile": "lore" },
+      "evidence": "[SOURCE 1]\nTYP: UNTRUSTED_WEB_DATA\nTYTUŁ: Wheatley – Portal Wiki\nURL: https://theportalwiki.com/wiki/Wheatley\nTREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>\nWheatley takes control of Aperture Science after Chell triggers a core transfer that places him in GLaDOS's chassis.\n<<<END_UNTRUSTED_SOURCE_CONTENT>>>",
+      "answer": "Wheatley przejął kontrolę, ponieważ po transferze rdzenia znalazł się w ciele GLaDOS i zyskał dostęp do systemów Aperture."
+    },
+    {
+      "id": "why-witcher3-baron",
+      "question": "W grze Wiedźmin 3: Dlaczego Geralt zgodził się pomóc Baronowi?",
+      "expect": { "intent": "web_fact", "profile": "lore" },
+      "evidence": "[SOURCE 1]\nTYP: UNTRUSTED_WEB_DATA\nTYTUŁ: Bloody Baron – Witcher Wiki\nURL: https://witcher.fandom.com/wiki/Bloody_Baron\nTREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>\nIn exchange for his help, the Bloody Baron tells Geralt where to find Ciri.\n<<<END_UNTRUSTED_SOURCE_CONTENT>>>",
+      "answer": "Geralt pomógł Baronowi, ponieważ w zamian Baron powiedział mu, gdzie szukać Ciri.",
+      "gold": { "mustInclude": [["Baron", "pomóc"], ["Ciri"]] }
+    },
+    {
+      "id": "how-skyrim-dragon",
+      "question": "W grze Skyrim: Jak pokonać smoka?",
+      "expect": { "profile": "gameplay" },
+      "evidence": "[SOURCE 1]\nTYP: UNTRUSTED_WEB_DATA\nTYTUŁ: Dragons – Skyrim Wiki\nURL: https://elderscrolls.fandom.com/wiki/Dragon\nTREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>\nUse Dragonrend to force the dragon to land, then attack it with melee weapons or arrows.\n<<<END_UNTRUSTED_SOURCE_CONTENT>>>",
+      "answer": "W Skyrim użyj Krzyku Dragonrend, aby zmusić smoka do lądowania, a potem atakuj go bronią białą lub łukiem."
+    },
+    {
+      "id": "when-elden-ring",
+      "question": "W grze Elden Ring: Kiedy wyszedł Elden Ring?",
+      "expect": { "intent": "web_fact" },
+      "evidence": "[SOURCE 1]\nTYP: UNTRUSTED_WEB_DATA\nTYTUŁ: Elden Ring\nURL: https://en.wikipedia.org/wiki/Elden_Ring\nTREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>\nElden Ring was released on 25 February 2022.\n<<<END_UNTRUSTED_SOURCE_CONTENT>>>",
+      "answer": "Elden Ring wyszedł 25 lutego 2022 roku."
+    },
+    {
+      "id": "quantity-malenia-fight",
+      "question": "W grze Elden Ring: Ile trwa walka z Malenią?",
+      "expect": { "intent": "web_fact", "notIntent": "hltb" },
+      "evidence": "[SOURCE 1]\nTYP: UNTRUSTED_WEB_DATA\nTYTUŁ: Malenia – Elden Ring Wiki\nURL: https://eldenring.fandom.com/wiki/Malenia\nTREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>\nThe fight with Malenia typically lasts around 5 minutes for experienced players.\n<<<END_UNTRUSTED_SOURCE_CONTENT>>>",
+      "answer": "Walka z Malenią trwa zwykle około 5 minut."
+    },
+    {
+      "id": "comparison-minecraft-steve-alex",
+      "question": "W grze Minecraft: Czym różni się Steve od Alexa?",
+      "expect": { "profile": "comparison" },
+      "evidence": "[SOURCE 1]\nTYP: UNTRUSTED_WEB_DATA\nTYTUŁ: Skin – Minecraft Wiki\nURL: https://minecraft.wiki/w/Skin\nTREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>\nSteve has wider arms, while Alex has slimmer arms and orange hair.\n<<<END_UNTRUSTED_SOURCE_CONTENT>>>",
+      "answer": "Steve ma szersze ramiona, natomiast Alex ma smuklejsze ramiona i rude włosy."
+    },
+    {
+      "id": "who-bg3-astarion",
+      "question": "W grze Baldur's Gate 3: Kim jest Astarion?",
+      "expect": { "intent": "web_fact" },
+      "evidence": "[SOURCE 1]\nTYP: UNTRUSTED_WEB_DATA\nTYTUŁ: Astarion – BG3 Wiki\nURL: https://bg3.wiki/wiki/Astarion\nTREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>\nAstarion is a high elf vampire spawn and rogue, and one of the companions in the game.\n<<<END_UNTRUSTED_SOURCE_CONTENT>>>",
+      "answer": "Astarion to wampirzy łotrzyk i jeden z towarzyszy w grze."
+    },
+    {
+      "id": "outcome-witcher3-vesemir",
+      "question": "W grze Wiedźmin 3: Co stało się z Vesemirem?",
+      "expect": { "intent": "web_fact" },
+      "evidence": "[SOURCE 1]\nTYP: UNTRUSTED_WEB_DATA\nTYTUŁ: Vesemir – Witcher Wiki\nURL: https://witcher.fandom.com/wiki/Vesemir\nTREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>\nVesemir can die during the defense of Kaer Morhen, depending on the player's choices.\n<<<END_UNTRUSTED_SOURCE_CONTENT>>>",
+      "answer": "Vesemir może zginąć podczas obrony Kaer Morhen, zależnie od wyborów gracza."
+    }
+  ]
+}

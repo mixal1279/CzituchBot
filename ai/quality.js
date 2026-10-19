@@ -21,12 +21,22 @@ function tokens(text) {
 function ocenJakoscOdpowiedzi(question, answer, routing = {}, profile = 'simple') {
   const q = String(question || '').trim();
   const a = String(answer || '').replace(/\s+/g, ' ').trim();
-  const wymagajacy = ['lore', 'gameplay', 'timeline', 'web_fact'].includes(profile);
+  // Profil „web_fact” nigdy nie istniał w planerze (profile to simple/comparison/lore/gameplay/timeline/
+  // technical/chat), więc bramka jakości nigdy nie obejmowała zwykłych pytań. Poszerzenie jej o profile
+  // simple/comparison/technical zwiększa liczbę odrzuceń, dlatego jest opt-in:
+  // AI_QUALITY_ALL_PROFILES=1 (włączaj dopiero po zmierzeniu na benchmarku).
+  const wymagajace = ['lore', 'gameplay', 'timeline'];
+  if (process.env.AI_QUALITY_ALL_PROFILES === '1') wymagajace.push('simple', 'comparison', 'technical');
+  const wymagajacy = wymagajace.includes(profile);
   if (!wymagajacy) return { ok: true, score: 1, issues: [] };
 
   const issues = [];
-  if (a.length < (profile === 'lore' || profile === 'gameplay' ? 70 : 35)) issues.push('odpowiedź jest zbyt krótka');
-  if (!/[.!?]$/.test(a)) issues.push('odpowiedź nie kończy się pełnym zdaniem');
+  // Character-count floors reject concise but complete answers. Prefer a minimum
+  // amount of substantive content; sentence completion and intent checks remain separate gates.
+  const minContentTokens = profile === 'lore' || profile === 'gameplay' ? 4 : 2;
+  if (tokens(a).length < minContentTokens) issues.push('odpowiedź jest zbyt krótka');
+  // Zakończenie zdania może po kropce mieć cudzysłów, nawias albo emoji (typowe na czacie).
+  if (!/[.!?…][)\]"”»'’\s]*$|[.!?…][\s)\]"”»'’]*(?:\p{Extended_Pictographic}[\uFE0F\u200D\s]*)+$/u.test(a)) issues.push('odpowiedź nie kończy się pełnym zdaniem');
 
   const qTokens = tokens(q);
   const aNorm = norm(a);
@@ -37,7 +47,7 @@ function ocenJakoscOdpowiedzi(question, answer, routing = {}, profile = 'simple'
     issues.push('odpowiedź nie odnosi się wprost do rozpoznanej encji ani słów kluczowych pytania');
   }
 
-  const refusal = /^(?:nie wiem|nie jestem pewien|nie mam wystarczających danych|nie mogę odpowiedzieć|brakuje danych)\b/i.test(a);
+  const refusal = /^(?:nie wiem|nie jestem pewien|nie mam wystarczających danych|nie mogę odpowiedzieć|brakuje danych)(?![\p{L}\p{N}_])/iu.test(a);
   if (refusal && profile !== 'chat') issues.push('odpowiedź jest ogólną odmową');
 
   const score = Math.max(0, 1 - issues.length * 0.3);

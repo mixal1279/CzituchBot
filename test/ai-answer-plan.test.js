@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { buildAnswerPlan, extractAnswerSignals } = require('../ai/answer-plan');
+const { buildAnswerPlan, extractAnswerSignals, assessAnswerCompleteness } = require('../ai/answer-plan');
 const { judgeAnswer } = require('../ai/answer-judge');
 
 test('v26 answer plan identifies causal lore requirements', () => {
@@ -14,13 +14,27 @@ test('v26 answer plan identifies causal lore requirements', () => {
   assert.ok(plan.requirements.some(x => x.id === 'entity_context'));
 });
 
-test('v26 answer plan detects multiple clauses', () => {
+test('v26 answer plan detects and enforces coverage for multiple clauses', () => {
   const plan = buildAnswerPlan(
     'Dlaczego Wheatley przejął kontrolę nad GLaDOS i co doprowadziło do jego porażki?',
     { intent:'web_fact', is_lore:true, entity:'Wheatley', game:'Portal 2' },
   );
   assert.equal(plan.clauses.length, 2);
   assert.equal(plan.complexity, 'high');
+  assert.ok(plan.requirements.some(x => x.id === 'clause_coverage'));
+
+  const incomplete = judgeAnswer(
+    'Wheatley przejął kontrolę nad GLaDOS, ponieważ został umieszczony w jej systemie.',
+    plan,
+  );
+  assert.equal(incomplete.status, 'repair');
+  assert.ok(incomplete.missing.includes('clause_coverage'));
+
+  const complete = judgeAnswer(
+    'Wheatley przejął kontrolę nad GLaDOS, ponieważ został umieszczony w jej systemie. Jego porażkę spowodowała walka z Chell.',
+    plan,
+  );
+  assert.equal(complete.status, 'accepted', JSON.stringify(complete));
 });
 
 test('v26 judge detects grounded but incomplete causal answer', () => {
@@ -30,6 +44,24 @@ test('v26 judge detects grounded but incomplete causal answer', () => {
   const result = judgeAnswer('Wheatley przejął kontrolę nad GLaDOS w Portal 2.', plan);
   assert.equal(result.status, 'repair');
   assert.ok(result.missing.includes('causal_explanation'));
+});
+
+test('high-score answer is still repaired when one mandatory slot is missing', () => {
+  const plan = {
+    complexity: 'high',
+    requirements: [
+      { id: 'entity_context', required: true },
+      { id: 'why', required: true },
+      { id: 'causal_explanation', required: true },
+      { id: 'relationship', required: true },
+    ],
+  };
+  const answer = 'Wheatley przejął kontrolę, ponieważ wykorzystał wymianę rdzeni.';
+  const result = judgeAnswer(answer, plan);
+  assert.equal(result.score, 0.75);
+  assert.equal(result.status, 'repair');
+  assert.deepEqual(result.missing, ['relationship']);
+  assert.match(result.reason, /relationship/);
 });
 
 test('v26 judge accepts complete causal answer', () => {
@@ -52,10 +84,52 @@ test('v26 judge rejects generic why answer', () => {
   assert.ok(result.missing.includes('causal_explanation'));
 });
 
-test('v26 answer signals reject generic where and procedural answers', () => {
-  const signals = extractAnswerSignals('Znajdziesz to w odpowiednim miejscu. Najpierw wykonaj czynność.');
-  assert.equal(signals.where, false);
-  assert.equal(signals.how, true);
+test('answer signals handle Polish ł normalization and inflected answer roots', () => {
+  assert.equal(extractAnswerSignals('Arthur Morgan był członkiem gangu.').who, true);
+  assert.equal(extractAnswerSignals('W wyniku walki bohater zginął na miejscu.').outcome, true);
+  assert.equal(extractAnswerSignals('Po tym wydarzeniu bohater został sam.').outcome, true);
+  assert.equal(extractAnswerSignals('Ich relacja opierała się na wieloletniej współpracy.').relationship, true);
+  assert.equal(extractAnswerSignals('Ten pistolet jest lepszy natomiast tamten ma większą celność.').comparison, true);
+});
+
+test('answer completeness requires the planned entity and avoids purpose/location false positives', () => {
+  const plan = buildAnswerPlan('Dlaczego Wheatley przejął kontrolę nad GLaDOS?', {
+    intent: 'web_fact', is_lore: true, entity: 'Wheatley', game: 'Portal 2',
+  });
+  const unrelated = assessAnswerCompleteness('System zadziałał z powodu awarii.', plan);
+  assert.ok(unrelated.missing.includes('entity_context'));
+  const grounded = assessAnswerCompleteness('Wheatley przejął kontrolę z powodu awarii systemu.', plan);
+  assert.ok(!grounded.missing.includes('entity_context'));
+
+  const purpose = extractAnswerSignals('Wheatley przejął kontrolę, aby uciec z laboratorium.');
+  assert.equal(purpose.why, true);
+  assert.equal(purpose.causal_explanation, true);
+  assert.equal(purpose.steps, false);
+  assert.equal(extractAnswerSignals('Z powodu awarii system przestał działać.').where, false);
+  assert.equal(extractAnswerSignals('Cena wynosi 100 zł.').quantity, true);
+});
+
+test('answer signals recognize procedural and mechanism explanations', () => {
+  const procedural = extractAnswerSignals('Najpierw wykonaj czynność, a następnie sprawdź wynik.');
+  const mechanism = extractAnswerSignals('System działa dzięki wymianie rdzeni.');
+  const generic = extractAnswerSignals('Znajdziesz to w odpowiednim miejscu.');
+  assert.equal(generic.where, false);
+  assert.equal(procedural.steps, true);
+  assert.equal(procedural.how, true);
+  assert.equal(mechanism.how, true);
+});
+
+test('answer plan does not mistake how-long questions for procedural how questions', () => {
+  const plan = buildAnswerPlan('Jak długo trwa główna fabuła Skyrim?');
+  assert.ok(plan.requirements.some(x => x.id === 'quantity'));
+  assert.ok(!plan.requirements.some(x => x.id === 'how'));
+  assert.ok(!plan.requirements.some(x => x.id === 'steps'));
+});
+
+test('answer plan classifies how-to combat questions as procedural', () => {
+  const plan = buildAnswerPlan('Jak pokonać smoka w Skyrim?', { intent: 'web_fact', is_gameplay: true });
+  assert.ok(plan.requirements.some(x => x.id === 'steps'));
+  assert.ok(plan.requirements.some(x => x.id === 'how'));
 });
 
 test('v26 judge rejects generic relationship answer', () => {

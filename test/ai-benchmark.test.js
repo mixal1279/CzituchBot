@@ -22,8 +22,9 @@ const ANSWERS = Object.freeze({
   relationship: 'Ich relacja jest złożona i obejmuje zarówno współpracę, jak i konflikt.',
 });
 
-function answerForCategory(category) {
-  return ANSWERS[category] || 'To odpowiedź zawierająca potwierdzone informacje.';
+function answerForCategory(category, item) {
+  const answer = ANSWERS[category] || 'To odpowiedź zawierająca potwierdzone informacje.';
+  return item?.game ? `${item.game}: ${answer}` : answer;
 }
 
 function hasRequirement(plan, id) {
@@ -42,7 +43,7 @@ function runBenchmark() {
     const unexpectedRequirements = plan.requirements
       .map(item => item.id)
       .filter(id => !item.expected.requirements.includes(id) && id !== 'entity_context');
-    const answer = answerForCategory(item.category);
+    const answer = answerForCategory(item.category, item);
     const completeness = assessAnswerCompleteness(answer, plan);
     const planningOk = missingRequirements.length === 0 && unexpectedRequirements.length === 0;
     const completenessOk = completeness.ok;
@@ -86,6 +87,19 @@ function runBenchmark() {
 
 test('AI Core v26 benchmark has exactly 500 cases', () => {
   assert.equal(benchmark.cases.length, 500);
+});
+
+test('independent factual gold is source-linked and spans multiple question categories', () => {
+  const gold = benchmark.cases.filter(item => item.expected?.factual?.independentGold === true);
+  const categories = new Set(gold.map(item => item.category));
+  assert.ok(gold.length >= 10, `Expected at least 10 independent gold cases, got ${gold.length}`);
+  for (const category of ['why', 'how', 'where', 'who', 'comparison', 'outcome']) {
+    assert.ok(categories.has(category), `Missing independent gold category: ${category}`);
+  }
+  for (const item of gold) {
+    assert.ok(Array.isArray(item.expected.factual.independentGoldSources));
+    assert.ok(item.expected.factual.independentGoldSources.length > 0, `Gold source missing for ${item.id}`);
+  }
 });
 
 test('AI Core v26 500-case benchmark meets 95% target', () => {

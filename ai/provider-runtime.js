@@ -32,7 +32,9 @@ function createGroqCompletion(groqClient, payload, { signal } = {}) {
     throw new TypeError('Groq chat.completions.create is unavailable');
   }
   withReasoningHeadroom(payload);
-  const requestOptions = signal ? { signal } : {};
+  // The request budget and fallback chain own retries. SDK-level retries would
+  // make one reserved model-call slot issue multiple hidden HTTP requests.
+  const requestOptions = { maxRetries: 0, ...(signal ? { signal } : {}) };
   return groqClient.chat.completions.create(payload, requestOptions);
 }
 
@@ -61,18 +63,13 @@ function awaitWithAbortTimeout(promise, timeoutMs, controller, label = 'provider
 }
 
 /**
- * Choose the reserve for a later validator/fallback based on the remaining
- * deadline and slots. Keep a 2.5s reserve floor; computeValidatorTimeout will
- * skip a call if the remaining time cannot fit both the 4s minimum attempt and
- * this reserve.
+ * Choose a reserve for later validator/fallback slots from the remaining deadline.
+ * Keep at least 2.5s for a final response; skip calls that cannot fit a 4s attempt.
  */
 function computeValidatorReserveMs(remainingMs, currentSlot = 1, maxValidators = 3) {
   const remaining = Number(remainingMs);
   if (!Number.isFinite(remaining) || remaining <= 0) return 0;
-  // Keep a fallback slot only when the current request has enough time for it.
-  // The reserve adapts to both remaining time and the number of validator slots
-  // after the current one, so a late fallback can use the time earlier stages
-  // could not preserve.
+
   const slot = Math.max(1, Math.floor(Number(currentSlot) || 1));
   const maxSlots = Math.max(slot, Math.floor(Number(maxValidators) || 3));
   const futureSlots = maxSlots - slot;
@@ -91,8 +88,9 @@ function computeValidatorReserveMs(remainingMs, currentSlot = 1, maxValidators =
 }
 
 /**
- * Compute a bounded validator timeout, or null when the minimum attempt plus
- * the fallback reserve cannot fit inside the remaining request deadline.
+ * Allocate a validator timeout from the request's remaining wall-clock budget.
+ * Return null when starting the validator would leave too little time for the
+ * next validator/fallback to run.
  */
 function computeValidatorTimeout(remainingMs, {
   maxTimeoutMs = 9000,
@@ -113,7 +111,8 @@ function computeValidatorTimeout(remainingMs, {
  */
 function computeGenerationTimeout(remainingMs, {
   maxTimeoutMs = 12000,
-  reserveMs = 4500,
+  // Keep enough time for the final validator: 4 s minimum plus its 2.5 s reserve.
+  reserveMs = 6500,
   minTimeoutMs = 4000,
 } = {}) {
   const remaining = Number(remainingMs);

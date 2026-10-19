@@ -11,23 +11,44 @@ function normalizeFactText(text) {
     .trim();
 }
 
+// Polska fleksja: „pomóc”/„pomógł”, „Baron”/„Baronowi”. Słowa od 5 znaków
+// porównujemy po rdzeniu (bez maks. 3 ostatnich liter), krótsze dokładnie.
+function wordMatches(textWord, phraseWord) {
+  if (textWord === phraseWord) return true;
+  if (phraseWord.length < 5) return false;
+  const stem = phraseWord.slice(0, Math.max(4, phraseWord.length - 2));
+  // Po rdzeniu może zostać tylko krótka końcówka fleksyjna (do 4 znaków), dzięki
+  // czemu „kontrolowanie” nie pasuje do „kontrolę”.
+  return textWord.startsWith(stem) && textWord.length - stem.length <= 4;
+}
+
+function phraseMatches(text, phrase) {
+  const normalizedPhrase = normalizeFactText(phrase);
+  if (!normalizedPhrase) return false;
+  if (` ${text} `.includes(` ${normalizedPhrase} `)) return true;
+  const phraseWords = normalizedPhrase.split(' ');
+  const textWords = text.split(' ');
+  for (let i = 0; i + phraseWords.length <= textWords.length; i++) {
+    if (phraseWords.every((word, offset) => wordMatches(textWords[i + offset], word))) return true;
+  }
+  return false;
+}
+
 function scoreGoldenFacts(answer, factual) {
   if (!factual?.independentGold) return { applicable: false, score: null, passed: null, missing: [], forbidden: [] };
   const text = normalizeFactText(answer);
   const missing = [];
   for (const group of factual.mustInclude || []) {
-    const ok = group.every(phrase => {
-      const normalizedPhrase = normalizeFactText(phrase);
-      return normalizedPhrase.length > 0 && ` ${text} `.includes(` ${normalizedPhrase} `);
-    });
+    const ok = group.every(phrase => phraseMatches(text, phrase));
     if (!ok) missing.push(group);
   }
-  const forbidden = (factual.mustNot || []).filter(phrase => {
-    const normalizedPhrase = normalizeFactText(phrase);
-    return normalizedPhrase.length > 0 && ` ${text} `.includes(` ${normalizedPhrase} `);
-  });
-  const total = (factual.mustInclude || []).length;
-  const score = total ? (total - missing.length) / total : 1;
+  const forbidden = (factual.mustNot || []).filter(phrase => phraseMatches(text, phrase));
+  const includedTotal = (factual.mustInclude || []).length;
+  const forbiddenTotal = (factual.mustNot || []).length;
+  const total = includedTotal + forbiddenTotal;
+  const score = total
+    ? ((includedTotal - missing.length) + (forbiddenTotal - forbidden.length)) / total
+    : 1;
   return { applicable: true, score, passed: missing.length === 0 && forbidden.length === 0, missing, forbidden };
 }
 

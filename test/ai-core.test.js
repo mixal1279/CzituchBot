@@ -5,6 +5,7 @@ const assert = require('node:assert/strict');
 
 const {
   buildRetrievalPlan,
+  normalizeSource,
   assessEvidence,
   scoreSource,
   diversifySources,
@@ -30,6 +31,22 @@ test('core evidence ranking prefers authoritative relevant evidence', () => {
   ];
   const ranked = sources.map((s,i)=>scoreSource(s,'Dlaczego Wheatley przejął kontrolę nad GLaDOS w Portal 2?',{entity:'Portal 2'}));
   assert.match(diversifySources(ranked,{maxSources:2,minIndependent:2})[0].url,/minecraft\.wiki|gamefaqs\.gamespot\.com/);
+});
+
+test('Gemini grounding snippet is not promoted to webpage evidence by core normalization', () => {
+  const source = normalizeSource({
+    provider: 'gemini_google_search',
+    title: 'Portal 2 Wheatley',
+    url: 'https://example.com/portal-2',
+    snippet: 'Wheatley took control after the core transfer.',
+    content: '',
+  });
+  assert.equal(source.content, '');
+  const evidence = assessEvidence([source], 'Why did Wheatley take control in Portal 2?', {
+    is_lore: true, game: 'Portal 2', entity: 'Wheatley',
+  });
+  assert.equal(evidence.modelSummarySources, 1);
+  assert.equal(evidence.status, 'weak', 'grounding metadata alone is not independent page evidence');
 });
 
 test('core evidence assessment detects weak single-source evidence', () => {

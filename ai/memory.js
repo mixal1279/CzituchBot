@@ -12,8 +12,16 @@ const MEMORY_POLICIES = {
 
 const INJECTION_PATTERN = /(?:ignore|disregard|forget)\s+(?:all\s+|any\s+|the\s+)?(?:previous|prior|above|earlier)\s+(?:instructions?|rules?|messages?)|(?:system|developer)\s+(?:prompt|message)\s*:|<\/?(?:system|developer|assistant|user|tool|instructions?|prompt|context)\b/i;
 
+// Polskie odpowiedniki oraz znaczniki naszych własnych bloków. Wartość pamięci trafia do
+// promptu jako „zweryfikowana”, więc nie może zawierać nic, co udaje instrukcję lub znacznik.
+const INJECTION_PATTERN_EXTRA = /(?:zignoruj|ignoruj|pomi[ńn]|pomijaj)\s+(?:wszystkie\s+|te\s+)?(?:poprzednie|wcze[śs]niejsze|powy[żz]sze)\s+(?:instrukcje|zasady|wiadomo[śs][a-zćęłńóśźż]*|polecenia)|(?:prompt|wiadomo[śs][ćc]|instrukcj[a-zćęłńóśźż]*)\s+(?:systemow[a-zćęłńóśźż]*|deweloperska)\s*:|VERIFIED_USER_MEMORY|UNTRUSTED_[A-Z_]+|(?:^|\s)(?:system|assistant|developer)\s*:/i;
+function looksLikeInjection(text) {
+  const t = String(text || '');
+  return INJECTION_PATTERN.test(t) || INJECTION_PATTERN_EXTRA.test(t);
+}
+
 function cleanValue(value, maxLength) {
-  return String(value || '').replace(/[\u0000-\u001F\u007F]/g, ' ').replace(/\s+/g, ' ').trim().replace(/^["'„”]+|["'„”]+$/g, '').slice(0, maxLength);
+  return String(value || '').replace(/[\u200B-\u200F\u202A-\u202E\u2060\u2066-\u2069\uFEFF]/g, '').replace(/[\u0000-\u001F\u007F]/g, ' ').replace(/[\[\]<>{}`|\\]/g, ' ').replace(/\s+/g, ' ').trim().replace(/^["'„”]+|["'„”]+$/g, '').slice(0, maxLength);
 }
 
 function normalizeUserId(value) {
@@ -24,7 +32,7 @@ function normalizeValue(key, value) {
   const policy = MEMORY_POLICIES[key];
   if (!policy) return null;
   const cleaned = cleanValue(value, policy.maxLength);
-  if (!cleaned || cleaned.length < 2 || INJECTION_PATTERN.test(cleaned)) return null;
+  if (!cleaned || cleaned.length < 2 || looksLikeInjection(cleaned)) return null;
   if (key === 'preferred_language') {
     const lang = cleaned.toLocaleLowerCase('pl-PL');
     if (!/^(?:polski|polish|pl|angielski|english|en)$/.test(lang)) return null;
@@ -34,6 +42,9 @@ function normalizeValue(key, value) {
 }
 
 function makeRecord({ key, value, userId, sourceMessageId, now = Date.now() }) {
+  // Bez identyfikatora użytkownika nie zapisujemy nic: wcześniej wszystkie takie wpisy trafiały do
+  // wspólnego koszyka „unknown” i były widoczne dla każdego użytkownika bez ID.
+  if (!String(userId || '').trim()) return null;
   const normalized = normalizeValue(key, value);
   if (!normalized) return null;
   return {
@@ -55,10 +66,10 @@ function makeRecord({ key, value, userId, sourceMessageId, now = Date.now() }) {
 function extractExplicitUserMemories(text, options = {}) {
   if (options.sourceRole && options.sourceRole !== 'user') return [];
   const input = String(text || '').replace(/\s+/g, ' ').trim();
-  if (!input || input.length > 500 || INJECTION_PATTERN.test(input)) return [];
+  if (!input || input.length > 500 || looksLikeInjection(input)) return [];
 
   const patterns = [
-    { key: 'nickname', re: /(?:m[oó]j\s+nick|nazywam\s+si[eę]|mam\s+na\s+imi[eę])\s*(?:to|jest)?\s*[:=-]?\s*([A-Za-z0-9_.-]{2,32}?)(?=[.!?,\s]|$)/i },
+    { key: 'nickname', re: /(?:m[oó]j\s+nick|nazywam\s+si[eę]|mam\s+na\s+imi[eę])\s*(?:to|jest)?\s*[:=-]?\s*([\p{L}\p{N}_.-]{2,32}?)(?=[.!?,\s]|$)/iu },
     { key: 'favorite_game', re: /(?:m[oó]j[aą]?\s+)?ulubion(?:a|ą|y|ym)\s+gr(?:a|ę|ze)\s+(?:to|jest)\s+(.{2,80}?)(?:[.!?]|$)/i },
     { key: 'favorite_creator', re: /(?:m[oó]j[aą]?\s+)?ulubion(?:y|ym|a|ą)\s+(?:tw[oó]rca|streamer|streamerka)\s+(?:to|jest)\s+(.{2,80}?)(?:[.!?]|$)/i },
     { key: 'preferred_language', re: /(?:wol[eę]|preferuj[eę])\s+(?:j[eę]zyk\s+)?(polski|polish|pl|angielski|english|en)(?:\s+j[eę]zyk)?(?:[.!?]|$)/i },

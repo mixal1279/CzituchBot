@@ -1,5 +1,7 @@
 'use strict';
 
+const { NIE_CZAS_GRY } = require('./patterns');
+
 const WEB_CATEGORIES = new Set(['weather', 'hltb', 'youtube', 'web_fact']);
 const { czyPytanieOLore } = require('./lore');
 const { czyPytanieOGameplay } = require('./gameplay');
@@ -11,8 +13,10 @@ function classifyAIRequest(pytanie, policyCategory, recipeDetector = () => false
   const text = String(pytanie || '').trim();
   const p = text.toLocaleLowerCase('pl-PL');
   const policyResult = policyCategory(text, recipeDetector);
-  const isOpinion = /\b(?:czy warto|co (?:myślisz|myslisz|sądzisz)|co sądzisz|co sadzisz|jaka jest twoja opinia|jak oceniasz|polecasz|jest nadal dobre|jest nadal dobry|opłaca się|oplaca sie)\b/i.test(p);
-  const isHLTB = /\b(?:ile\s+(?:jest\s+)?(?:godzin|czasu)|ile\s+godzin\s+(?:ma|zajmuje)|ile\s+trwa|jak\s+d[łl]ugo(?:\s+trwa)?|czas(?:u)?\s+(?:gry|przejścia|przejscia|ukończenia|ukonczenia)|przejście\s+gry|przejscie\s+gry)\b/i.test(p);
+  const isOpinion = /(?<![\p{L}\p{N}_])(?:czy warto|co (?:myślisz|myslisz|sądzisz)|co sądzisz|co sadzisz|jaka jest twoja opinia|jak oceniasz|polecasz|jest nadal dobre|jest nadal dobry|opłaca się|oplaca sie)(?![\p{L}\p{N}_])/iu.test(p);
+  // "Ile trwa walka/misja/aktualizacja…" to nie czas przejścia gry (HowLongToBeat).
+  const isHLTB = /(?<![\p{L}\p{N}_])(?:ile\s+(?:jest\s+)?(?:godzin|czasu)|ile\s+godzin\s+(?:ma|zajmuje)|ile\s+trwa|jak\s+d[łl]ugo(?:\s+trwa)?|czas(?:u)?\s+(?:gry|przejścia|przejscia|ukończenia|ukonczenia)|przejście\s+gry|przejscie\s+gry)(?![\p{L}\p{N}_])/iu.test(p)
+    && !NIE_CZAS_GRY.test(p);
   const category = isOpinion ? 'conversation' : isHLTB ? 'hltb' : policyResult;
   const resolved = resolveGameEntity(text);
   const entity = resolved?.game || resolved?.name || detectEntity(p) || null;
@@ -46,9 +50,12 @@ function classifyAIRequest(pytanie, policyCategory, recipeDetector = () => false
   };
 }
 function detectFreshness(p) {
-  if (/\b(dzisiaj|dziś|dzis|teraz|obecnie|aktualnie|właśnie|wlasnie|najnowsz\w*|ostatni\w*|news|wiadomoś\w*|wiadomos\w*)\b/i.test(p)) return 'live';
-  if (/\b(wczoraj|yesterday)\b/i.test(p)) return 'recent';
-  if (/\b(?:19\d{2}|20\d{2})\b|\b(?:history|histori|pierwsz|wydan|wydany|wydana|powstał|powstała|założon|wynalaz|prototyp|premier|ukazał|ukazała|wyszedł|wyszła)\b/i.test(p)) return 'historical';
+  const S = '(?<![\\p{L}\\p{N}_])', E = '(?![\\p{L}\\p{N}_])';
+  // Tylko wyraźne "tu i teraz". "ostatni boss/misja" to zwykłe słowa z gier.
+  if (new RegExp(S + '(?:dzisiaj|dziś|dzis|teraz|właśnie|wlasnie|news|wiadomo[śs]\\p{L}*)' + E, 'iu').test(p)) return 'live';
+  if (new RegExp(S + '(?:wczoraj|yesterday|obecnie|aktualnie|ostatnio|najnowsz\\p{L}*)' + E, 'iu').test(p)
+    || new RegExp(S + 'ostatni(?:e|a|ch)\\s+(?:wiadomo\\p{L}*|aktualizacj\\p{L}*|news\\p{L}*|patch\\p{L}*|update\\p{L}*|wydarzeni\\p{L}*)' + E, 'iu').test(p)) return 'recent';
+  if (/\b(?:19\d{2}|20\d{2})\b|(?:^|[^\p{L}])(?:history|histori|pierwsz|wydan|wydany|wydana|powstał|powstała|założon|wynalaz|prototyp|premier|ukazał|ukazała|wyszedł|wyszła)(?![\p{L}])/iu.test(p)) return 'historical';
   return 'evergreen';
 }
 function detectEntity(p) {

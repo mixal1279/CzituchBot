@@ -1,5 +1,7 @@
 'use strict';
 
+const { parseEvidenceBlocks } = require('./evidence');
+
 const {
   buildRetrievalPlan,
   assessEvidence,
@@ -22,7 +24,9 @@ function createRequestId(randomUUID = null) {
 }
 
 function sanitizeQuestion(question, sanitizeFn, maxLength = 500) {
-  const value = String(typeof sanitizeFn === 'function' ? sanitizeFn(question) : question || '').trim();
+  // Sanityzator przycina tekst do limitu, więc dajemy mu zapas (+2): inaczej `> maxLength` nigdy
+  // się nie spełnia, a zbyt długie pytanie jest po cichu ucinane zamiast odrzucone jako too_long.
+  const value = String(typeof sanitizeFn === 'function' ? sanitizeFn(question, maxLength + 2) : question || '').trim();
   if (!value) return { ok: false, reason: 'empty' };
   if (value.length > maxLength) return { ok: false, reason: 'too_long', maxLength };
   return { ok: true, value };
@@ -52,20 +56,13 @@ function planRequest(question, routing, plannerFn, retrievalFn) {
 }
 
 function parseEvidenceText(text) {
-  const value = String(text || '');
-  const re = /^\[(SOURCE \d+|REFERENCE [^\]\r\n]+)\]\s*$/gmi;
-  const matches = [...value.matchAll(re)];
-  return matches.map((m, i) => {
-    const start = m.index + m[0].length;
-    const end = i + 1 < matches.length ? matches[i + 1].index : value.length;
-    const block = value.slice(start, end);
-    return {
-      sourceId: m[1].trim(),
-      title: block.match(/TYTUŁ:\s*([^\r\n]+)/i)?.[1] || m[1],
-      url: block.match(/URL:\s*(https?:\/\/[^\s\r\n]+)/i)?.[1] || '',
-      content: block,
-    };
-  });
+  // Keep evidence parsing and metadata removal identical in the validator and
+  // evidence-policy path. A second parser here previously let page titles/URLs
+  // influence evidence scoring even when the validator correctly stripped them.
+  return parseEvidenceBlocks(text).map(block => ({
+    ...block,
+    title: block.title || block.sourceId,
+  }));
 }
 
 function evaluateEvidence(question, routing, sources) {
@@ -83,7 +80,8 @@ function shouldValidate({ routing = {}, evidencePolicy = {}, hasExternalData = f
 
 function classifyPipelineFailure(status, options = {}) {
   const s = String(status || '').toLowerCase();
-  if (s === 'accepted' || s === 'soft_accepted') return null;
+  if (s === 'accepted') return null;
+  if (s === 'soft_accepted') return 'validator_reject';
   if (s === 'rejected') return 'validator_reject';
   if (s === 'inconclusive') return 'validator_inconclusive';
   if (s === 'unavailable') return options.reason || 'provider_unavailable';
@@ -94,7 +92,13 @@ function classifyPipelineFailure(status, options = {}) {
 function decideValidation(status, options = {}) {
   const s = String(status || '').toLowerCase();
   if (s === STATUS.ACCEPTED) return { finalStatus: STATUS.ACCEPTED, retry: false };
-  if (s === STATUS.SOFT_ACCEPTED) return { finalStatus: STATUS.SOFT_ACCEPTED, retry: false };
+  if (s === STATUS.SOFT_ACCEPTED) {
+    return {
+      finalStatus: STATUS.REJECTED,
+      retry: false,
+      reason: 'soft_acceptance_disabled',
+    };
+  }
   if (s === STATUS.REJECTED) {
     return {
       finalStatus: STATUS.REJECTED,
@@ -117,11 +121,7 @@ function decideValidation(status, options = {}) {
 
 function finalText(text, status, helpers = {}) {
   if (status === STATUS.REJECTED) return helpers.rejectedMessage || 'Nie mam wystarczających danych, żeby odpowiedzieć na to pewnie.';
-  if (status === STATUS.SOFT_ACCEPTED) {
-    let value = String(text || '');
-    if (typeof helpers.sanitizeResponse === 'function') value = helpers.sanitizeResponse(value);
-    return value.trim();
-  }
+  if (status === STATUS.SOFT_ACCEPTED) return helpers.rejectedMessage || 'Nie mam wystarczających danych, żeby odpowiedzieć na to pewnie.';
   if (status === STATUS.INCONCLUSIVE) return helpers.inconclusiveMessage || 'Chwilowo nie mogę wiarygodnie potwierdzić tej informacji, więc nie będę zgadywać.';
   if (status === STATUS.UNAVAILABLE) return helpers.unavailableMessage || 'Chwilowo nie mogę potwierdzić tej informacji, więc nie będę zgadywać.';
   if (status === STATUS.UNVERIFIED) {

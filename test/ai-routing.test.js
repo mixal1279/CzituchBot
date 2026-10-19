@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict');
 const { classifyAIRequest } = require('../ai/router');
 const { planAIRequest } = require('../ai/planner');
+const { okreslKategorieAI } = require('../ai/policy');
 
 const policy = (q, recipe) => {
   if (/czy warto|co myślisz|co sadzisz|opinia/i.test(q)) return 'conversation';
@@ -67,6 +68,16 @@ for (const [question, expectedIntent, expectedEntity, expectedType] of cases) {
 
   if (expectedEntity) assert.equal(routing.entity, expectedEntity, question);
   if (expectedType) assert.equal(routing.entity_type, expectedType, question);
+}
+
+for (const question of [
+  'Ile trwa fight w Elden Ring?',
+  'Ile trwa update Cyberpunka 2077?',
+  'Ile trwa download GTA 5?',
+]) {
+  const routing = classifyAIRequest(question, okreslKategorieAI);
+  assert.notEqual(routing.intent, 'hltb', question);
+  assert.equal(routing.needs_web, true, question);
 }
 
 console.log('AI routing benchmark: OK');

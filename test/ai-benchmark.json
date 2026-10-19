@@ -1,7 +1,7 @@
 {
   "version": 1,
   "name": "AI Core v26 Golden Benchmark",
-  "description": "500 deterministic planning/completeness cases; expectations are authored independently from implementation.",
+  "description": "500 deterministic planning/completeness cases plus independently sourced factual gold checks across lore, identity, comparison, and outcome categories.",
   "cases": [
     {
       "id": "why-001",
@@ -32,7 +32,10 @@
             ]
           ],
           "mustNot": [],
-          "independentGold": true
+          "independentGold": true,
+          "independentGoldSources": [
+            "https://theportalwiki.com/wiki/Portal_2"
+          ]
         }
       }
     },
@@ -60,12 +63,14 @@
               "pomóc"
             ],
             [
-              "Ciri",
-              "nie"
+              "Ciri"
             ]
           ],
           "mustNot": [],
-          "independentGold": true
+          "independentGold": true,
+          "independentGoldSources": [
+            "https://witcher.fandom.com/wiki/Family_Matters"
+          ]
         }
       }
     },
@@ -98,7 +103,10 @@
             ]
           ],
           "mustNot": [],
-          "independentGold": true
+          "independentGold": true,
+          "independentGoldSources": [
+            "https://cyberpunk.fandom.com/wiki/Johnny_Silverhand"
+          ]
         }
       }
     },
@@ -131,7 +139,10 @@
             ]
           ],
           "mustNot": [],
-          "independentGold": true
+          "independentGold": true,
+          "independentGoldSources": [
+            "https://skyrim.fandom.com/wiki/Alduin"
+          ]
         }
       }
     },
@@ -164,7 +175,10 @@
             ]
           ],
           "mustNot": [],
-          "independentGold": true
+          "independentGold": true,
+          "independentGoldSources": [
+            "https://bg3.wiki/wiki/Astarion"
+          ]
         }
       }
     },
@@ -1153,7 +1167,24 @@
           "steps",
           "entity_context"
         ],
-        "must_plan": true
+        "must_plan": true,
+        "factual": {
+          "mustInclude": [
+            [
+              "Dragonrend",
+              "lądowania"
+            ],
+            [
+              "smoka",
+              "atakuj"
+            ]
+          ],
+          "mustNot": [],
+          "independentGold": true,
+          "independentGoldSources": [
+            "https://skyrim.fandom.com/wiki/Dragonrend"
+          ]
+        }
       }
     },
     {
@@ -3224,7 +3255,24 @@
           "where",
           "entity_context"
         ],
-        "must_plan": true
+        "must_plan": true,
+        "factual": {
+          "mustInclude": [
+            [
+              "Caelem Ruins"
+            ],
+            [
+              "Caelid",
+              "wozie"
+            ]
+          ],
+          "mustNot": [],
+          "independentGold": true,
+          "independentGoldSources": [
+            "https://eldenring.fandom.com/wiki/Greatsword",
+            "https://eldenring.fandom.com/wiki/Caelem_Ruins"
+          ]
+        }
       }
     },
     {
@@ -4232,7 +4280,24 @@
           "who",
           "entity_context"
         ],
-        "must_plan": true
+        "must_plan": true,
+        "factual": {
+          "mustInclude": [
+            [
+              "Astarion",
+              "wampirzy pomiot"
+            ],
+            [
+              "Astarion",
+              "towarzysz"
+            ]
+          ],
+          "mustNot": [],
+          "independentGold": true,
+          "independentGoldSources": [
+            "https://bg3.wiki/wiki/Astarion"
+          ]
+        }
       }
     },
     {
@@ -6248,7 +6313,26 @@
           "comparison",
           "entity_context"
         ],
-        "must_plan": true
+        "must_plan": true,
+        "factual": {
+          "mustInclude": [
+            [
+              "Steve",
+              "4 piksel"
+            ],
+            [
+              "Alex",
+              "3 piksel"
+            ]
+          ],
+          "mustNot": [
+            "Steve i Alex mają ramiona o tej samej szerokości"
+          ],
+          "independentGold": true,
+          "independentGoldSources": [
+            "https://minecraftskin.app/guides/slim-vs-classic-arms/"
+          ]
+        }
       }
     },
     {
@@ -7256,7 +7340,27 @@
           "outcome",
           "entity_context"
         ],
-        "must_plan": true
+        "must_plan": true,
+        "factual": {
+          "mustInclude": [
+            [
+              "Vesemir",
+              "ginie"
+            ],
+            [
+              "Imlerith",
+              "Vesemir"
+            ]
+          ],
+          "mustNot": [
+            "Vesemir przeżył bitwę pod Kaer Morhen"
+          ],
+          "independentGold": true,
+          "independentGoldSources": [
+            "https://witcher-games.fandom.com/wiki/Vesemir",
+            "https://witcher-games.fandom.com/wiki/The_Battle_of_Kaer_Morhen"
+          ]
+        }
       }
     },
     {

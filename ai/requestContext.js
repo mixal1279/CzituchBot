@@ -1,5 +1,7 @@
 'use strict';
 
+const { DEFAULTS } = require('./limits');
+
 /**
  * Wspólny budżet pojedynczego żądania AI.
  *
@@ -13,16 +15,28 @@ function clampLimit(value, fallback) {
 }
 
 function createAIRequestContext(options = {}) {
+  const maxGeneracji = clampLimit(options.maxGeneracji, DEFAULTS.maxGenerations);
+  // An explicit total override retains the historical behavior of allowing all
+  // of that total for initial generations unless the caller sets a phase cap.
+  const defaultInitialGeneracji = options.maxGeneracji === undefined
+    ? DEFAULTS.maxInitialGenerations
+    : maxGeneracji;
   const ctx = {
     requestId: String(options.requestId || '-'),
     startedAt: Number.isFinite(options.startedAt) ? options.startedAt : Date.now(),
-    maxCzasMs: clampLimit(options.maxCzasMs, 60000),
-    maxGeneracji: clampLimit(options.maxGeneracji, 6),
-    maxInitialGeneracji: clampLimit(options.maxInitialGeneracji, clampLimit(options.maxGeneracji, 6)),
-    maxRepairGeneracji: clampLimit(options.maxRepairGeneracji, 0),
-    maxModelCalls: clampLimit(options.maxModelCalls, 12),
-    maxValidatorow: clampLimit(options.maxValidatorow, 3),
-    maxWyszukanTavily: clampLimit(options.maxWyszukanTavily, 3),
+    maxCzasMs: clampLimit(options.maxCzasMs, DEFAULTS.requestTimeoutMs),
+    maxGeneracji,
+    maxInitialGeneracji: Math.min(
+      clampLimit(options.maxInitialGeneracji, defaultInitialGeneracji),
+      maxGeneracji,
+    ),
+    maxRepairGeneracji: Math.min(
+      clampLimit(options.maxRepairGeneracji, DEFAULTS.maxRepairGenerations),
+      maxGeneracji,
+    ),
+    maxModelCalls: clampLimit(options.maxModelCalls, DEFAULTS.maxModelCalls),
+    maxValidatorow: clampLimit(options.maxValidatorow, DEFAULTS.maxValidators),
+    maxWyszukanTavily: clampLimit(options.maxWyszukanTavily, DEFAULTS.maxTavilySearches),
 
     generacje: 0,
     initialGeneracje: 0,
@@ -32,6 +46,7 @@ function createAIRequestContext(options = {}) {
     tavilySearches: 0,
     validatorResults: [],
     generationAttempts: [],
+    timingTrace: [],
     generationPhase: 'initial',
     fallbackReasons: [],
     finalStatus: 'unavailable',
@@ -40,6 +55,27 @@ function createAIRequestContext(options = {}) {
   ctx.elapsedMs = () => Math.max(0, Date.now() - ctx.startedAt);
   ctx.remainingMs = () => Math.max(0, ctx.maxCzasMs - ctx.elapsedMs());
   ctx.isExpired = () => ctx.remainingMs() <= 0;
+
+  // Diagnostic-only timeline: records the shared deadline and counters at phase boundaries.
+  // Keep the trace bounded and store only explicitly supplied, JSON-safe metadata.
+  ctx.recordTiming = (stage, details = {}) => {
+    const event = {
+      stage: String(stage || 'unknown').slice(0, 80),
+      elapsedMs: ctx.elapsedMs(),
+      remainingMs: ctx.remainingMs(),
+      generationPhase: ctx.generationPhase,
+      generations: ctx.generacje,
+      initialGenerations: ctx.initialGeneracje,
+      repairGenerations: ctx.repairGeneracje,
+      modelCalls: ctx.modelCalls,
+      validators: ctx.validatory,
+      tavilySearches: ctx.tavilySearches,
+      ...details,
+    };
+    ctx.timingTrace.push(event);
+    if (ctx.timingTrace.length > 100) ctx.timingTrace.shift();
+    return event;
+  };
 
   ctx.reserve = (counter, limit, purpose = counter) => {
     if (ctx.isExpired() || ctx[counter] >= limit) return false;
@@ -50,15 +86,19 @@ function createAIRequestContext(options = {}) {
   ctx.reserveModel = (purpose = 'model') =>
     ctx.reserve('modelCalls', ctx.maxModelCalls, purpose);
 
-  ctx.reserveGeneration = (provider, model, phase = 'initial') => {
-    if (ctx.isExpired() || ctx.generacje >= ctx.maxGeneracji) return false;
+  ctx.canReserveGeneration = (phase = 'initial') => {
+    if (ctx.isExpired() || ctx.generacje >= ctx.maxGeneracji || ctx.modelCalls >= ctx.maxModelCalls) return false;
     const isRepair = phase === 'repair';
-    // A repair attempt needs enough time for the generation timeout policy
-    // (4s minimum generation window + 4.5s reserved for validation/fallback).
-    // Keep this guard here as a final safety net for callers that bypass preflight.
+
     if (isRepair && ctx.remainingMs() < 8500) return false;
     if (isRepair && ctx.repairGeneracje >= ctx.maxRepairGeneracji) return false;
     if (!isRepair && ctx.initialGeneracje >= ctx.maxInitialGeneracji) return false;
+    return true;
+  };
+
+  ctx.reserveGeneration = (provider, model, phase = 'initial') => {
+    if (!ctx.canReserveGeneration(phase)) return false;
+    const isRepair = phase === 'repair';
     if (!ctx.reserveModel(`generation:${phase}:${provider}/${model}`)) return false;
     ctx.generacje++;
     if (isRepair) ctx.repairGeneracje++;
@@ -69,8 +109,7 @@ function createAIRequestContext(options = {}) {
   ctx.reserveValidator = (purpose = 'validator') =>
     ctx.reserve('validatory', ctx.maxValidatorow, purpose);
 
-  // Reserve validator and model budgets atomically: a failed model-budget check
-  // must not consume a validator slot (and vice versa).
+
   ctx.reserveValidatorModel = (purpose = 'validator') => {
     if (ctx.isExpired()
       || ctx.validatory >= ctx.maxValidatorow
@@ -98,10 +137,9 @@ function createAIRequestContext(options = {}) {
     maxValidatorow: ctx.maxValidatorow,
     maxWyszukanTavily: ctx.maxWyszukanTavily,
     generacje: ctx.generacje,
-    initialGeneracje: ctx.initialGeneracje,
-    repairGeneracje: ctx.repairGeneracje,
     generationPhase: ctx.generationPhase,
     generationAttempts: [...ctx.generationAttempts],
+    timingTrace: ctx.timingTrace.map(event => ({ ...event })),
     modelCalls: ctx.modelCalls,
     validatory: ctx.validatory,
     tavilySearches: ctx.tavilySearches,

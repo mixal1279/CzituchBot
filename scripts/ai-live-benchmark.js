@@ -17,7 +17,7 @@ const defaultLimit = Math.min(10, benchmark.cases.length);
 const requestedLimit = Number(process.env.AI_BENCHMARK_LIMIT);
 const limit = Math.max(1, Math.min(benchmark.cases.length, Number.isFinite(requestedLimit) && requestedLimit > 0 ? requestedLimit : defaultLimit));
 const delayMs = Math.max(0, Number(process.env.AI_BENCHMARK_DELAY_MS) || 0);
-function stratifiedCases(all, requested) {
+function stratifiedCases(all, requested, seed = 0) {
   if (requested >= all.length) return [...all];
   const groups = new Map();
   for (const item of all) {
@@ -25,6 +25,10 @@ function stratifiedCases(all, requested) {
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(item);
   }
+  // Ziarno przesuwa start w każdej kategorii, żeby nie testować w kółko tych samych pytań
+  // (stały zestaw zachęca do dopasowania kodu do benchmarku). Ziarno 0 zachowuje stary wybór.
+  const offset = Math.max(0, Math.floor(Number(seed)) || 0);
+  if (offset) for (const bucket of groups.values()) if (bucket.length > 1) bucket.push(...bucket.splice(0, offset % bucket.length));
   const keys = [...groups.keys()];
   const selected = [];
   let cursor = 0;
@@ -35,16 +39,180 @@ function stratifiedCases(all, requested) {
     if (!bucket.length) keys.splice(cursor % keys.length, 1);
     else cursor++;
   }
+  // Każdy live run, również przy ziarnie > 0, musi zawierać co najmniej
+  // jeden niezależny gold case. Bez tego „factual pass” byłby pustą próbą.
+  if (requested > 0 && !selected.some(item => item.expected?.factual?.independentGold === true)) {
+    const goldCases = all.filter(item => item.expected?.factual?.independentGold === true);
+    if (goldCases.length) {
+      // Wybierz gold z kategorii już obecnej w próbce, aby wymóg factual nie
+      // zmieniał stratified sample w zestaw z duplikatami kategorii.
+      const selectedCategories = new Set(selected.map(item => item.category));
+      const eligibleGoldCases = goldCases.filter(item => selectedCategories.has(item.category));
+      const candidates = eligibleGoldCases.length ? eligibleGoldCases : goldCases;
+      const gold = candidates[offset % candidates.length];
+      const replacementIndex = selected.findIndex(item => item.category === gold.category);
+      if (replacementIndex >= 0) selected[replacementIndex] = gold;
+      else if (selected.length) selected[selected.length - 1] = gold;
+    }
+  }
   return selected;
 }
-const cases = stratifiedCases(benchmark.cases, limit);
+const benchmarkSeed = Math.max(0, Math.floor(Number(process.env.AI_BENCHMARK_SEED)) || 0);
+const cases = stratifiedCases(benchmark.cases, limit, benchmarkSeed);
+
+// The gold case's game field is context for the bot, not just the judge.
+// Without passing it to the production pipeline, short prompts like "Jak pokonać smoka?"
+// are ambiguous and the benchmark can accidentally test retrieval for the wrong game.
+function buildQuestionForBot(item) {
+  const question = String(item?.question || '').trim();
+  const game = String(item?.game || '').trim();
+  if (!game || question.toLocaleLowerCase('pl-PL').includes(game.toLocaleLowerCase('pl-PL'))) return question;
+  return `W grze ${game}: ${question}`;
+}
 
 function isFailureText(text) {
-  return /nie mam wystarczających danych|nie mogę wiarygodnie potwierdzić|nie mogę potwierdzić tej informacji|nie będę zgadywać/i.test(String(text || ''));
+  const normalized = normalizeFactText(text);
+  const refusalPatterns = [
+    /^(?:benchmark\s+)?nie mam wystarczajacych danych(?:\s+(?:zeby|aby) odpowiedziec(?: na to)?(?: pewnie)?)?$/i,
+    /^(?:benchmark\s+)?nie moge(?: wiarygodnie)? potwierdzic(?: tej informacji)?(?: wiec nie bede zgadywac)?$/i,
+    /^(?:benchmark\s+)?chwilowo nie moge(?: wiarygodnie)? potwierdzic(?: tej informacji)?(?: wiec nie bede zgadywac)?$/i,
+    /^(?:benchmark\s+)?nie bede zgadywac$/i,
+    /^(?:benchmark\s+)?brakuje danych(?: referencyjnych)?$/i,
+    /^(?:benchmark\s+)?nie jestem pewien(?: tej informacji)?$/i,
+    /^(?:benchmark\s+)?nie wiem$/i,
+    /^(?:benchmark\s+)?i (?:do not|don t) have enough (?:data|information)(?: to answer(?: this)?(?: confidently)?)?$/i,
+    /^(?:benchmark\s+)?i (?:cannot|can t) (?:reliably )?(?:confirm|verify)(?: this information)?(?: so i (?:will not|won t) guess)?$/i,
+    /^(?:benchmark\s+)?i (?:will not|won t) guess$/i,
+    /^(?:benchmark\s+)?i (?:do not|don t) know$/i,
+    /^(?:benchmark\s+)?i cannot answer that confidently$/i,
+    /^(?:benchmark\s+)?insufficient (?:data|information)$/i,
+  ];
+  return refusalPatterns.some(pattern => pattern.test(normalized));
+}
+
+function evaluateBenchmarkAnswer(answer, item) {
+  const text = String(answer || '');
+  const plan = buildAnswerPlan(item.question, { ...item.routing, game: item.game });
+  const judge = judgeAnswer(text, plan);
+  const answered = Boolean(text.trim()) && !isFailureText(text);
+  const abstained = Boolean(text.trim()) && !answered;
+  return {
+    answered,
+    abstained,
+    completeness: answered ? judge.score : 0,
+    judgeStatus: answered ? judge.status : (abstained ? 'abstained' : 'unanswered'),
+    judgeReason: answered ? judge.reason : (abstained ? 'pipeline returned a refusal instead of a substantive answer' : 'pipeline returned no answer'),
+    missing: answered ? judge.missing : plan.requirements.map(requirement => requirement.id),
+    judge,
+  };
+}
+
+function writeBenchmarkReport(report, destination = process.env.AI_BENCHMARK_JSON_PATH) {
+  if (!report || typeof report !== 'object' || Array.isArray(report)) throw new TypeError('benchmark report must be a JSON object');
+  const serialized = `${JSON.stringify(report, null, 2)}\n`;
+  JSON.parse(serialized);
+  if (!destination) return serialized;
+  const outputPath = path.resolve(destination);
+  fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+  const temporaryPath = `${outputPath}.${process.pid}.${Date.now()}.tmp`;
+  try {
+    fs.writeFileSync(temporaryPath, serialized, { encoding: 'utf8', mode: 0o600 });
+    fs.renameSync(temporaryPath, outputPath);
+  } catch (error) {
+    try { fs.unlinkSync(temporaryPath); } catch (_) {}
+    throw error;
+  }
+  return serialized;
+}
+
+function writeStdoutAndWait(text, stream = process.stdout) {
+  return new Promise((resolve, reject) => {
+    try {
+      stream.write(text, error => error ? reject(error) : resolve());
+    } catch (error) {
+      reject(error);
+    }
+  });
 }
 
 async function sleep(ms) {
   if (ms > 0) await new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function buildBenchmarkDiagnostics(results, allCases = benchmark.cases, selectedCases = cases) {
+  const validatorRows = results.flatMap(result => result.validatorResults || []);
+  const validatorProviderCalls = {};
+  const validatorStatusCounts = {};
+  for (const row of validatorRows) {
+    const provider = String(row.provider || 'unknown');
+    const status = String(row.status || 'unknown');
+    validatorProviderCalls[provider] = (validatorProviderCalls[provider] || 0) + 1;
+    validatorStatusCounts[status] = (validatorStatusCounts[status] || 0) + 1;
+  }
+  const classifyGenerationFailure = attempt => {
+    if (attempt.failure && String(attempt.failure).toLowerCase() !== 'unknown') return String(attempt.failure).slice(0, 80);
+    const detail = [attempt.error, attempt.reason, attempt.message, attempt.code, attempt.statusCode]
+      .filter(value => value !== undefined && value !== null)
+      .join(' ');
+    if (/429|rate.?limit|quota|resource.?exhausted/i.test(detail)) return 'rate_limit';
+    if (/timeout|timed out|deadline/i.test(detail) || attempt.timeoutAbort === true) return 'timeout';
+    if (/abort|cancelled|canceled/i.test(detail)) return 'abort';
+    if (/5\d\d/.test(detail)) return 'http_5xx';
+    return 'unknown';
+  };
+  const generationProviderFailures = [...new Set(results.flatMap(result =>
+    (result.generationAttempts || [])
+      .filter(attempt => attempt.status === 'error')
+      .map(attempt => `${attempt.provider}:${attempt.model}:${classifyGenerationFailure(attempt)}`)
+  ))];
+  const tavilyHttpEvents = results.flatMap(result =>
+    (result.timingTrace || []).filter(event => event.stage === 'tavily_http_end')
+  );
+  const generationCycleStarts = results.flatMap(result =>
+    (result.timingTrace || []).filter(event => event.stage === 'generation_cycle_start')
+  );
+  const goldCases = allCases.filter(item => item.expected?.factual?.independentGold === true);
+  const selectedGoldCases = selectedCases.filter(item => item.expected?.factual?.independentGold === true);
+  const categories = [...new Set(allCases.map(item => item.category || 'uncategorized'))].sort();
+  const goldCoverageByCategory = Object.fromEntries(categories.map(category => [
+    category,
+    {
+      total: allCases.filter(item => (item.category || 'uncategorized') === category).length,
+      independentGold: allCases.filter(item => (item.category || 'uncategorized') === category && item.expected?.factual?.independentGold === true).length,
+    },
+  ]));
+  return {
+    validatorRejected: results.filter(result => result.finalStatus === 'rejected').length,
+    validatorInconclusive: results.filter(result => result.finalStatus === 'inconclusive').length,
+    validatorUnavailable: results.filter(result => result.finalStatus === 'unavailable').length,
+    validatorCalls: validatorRows.length,
+    validatorProviderCalls,
+    validatorStatusCounts,
+    validatorTransportFailures: validatorRows
+      .filter(row => row.status === 'unavailable' || row.status === 'error' || row.technicalError === true)
+      .map(row => ({ provider: row.provider || 'unknown', model: row.model || null, status: row.status || 'unknown', reason: row.reason || null })),
+    validatorSecondOpinions: results.reduce((sum, result) =>
+      sum + (result.timingTrace || []).filter(event => event.stage === 'validator_second_opinion').length, 0),
+    tavilyHttpCalls: tavilyHttpEvents.length,
+    tavilyHttpFailures: tavilyHttpEvents.filter(event => event.ok !== true).length,
+    avgTavilyHttpMs: tavilyHttpEvents.length
+      ? Math.round(tavilyHttpEvents.reduce((sum, event) => sum + Math.max(0, Number(event.durationMs) || 0), 0) / tavilyHttpEvents.length)
+      : null,
+    avgElapsedToGenerationCycleMs: generationCycleStarts.length
+      ? Math.round(generationCycleStarts.reduce((sum, event) => sum + Math.max(0, Number(event.elapsedMs) || 0), 0) / generationCycleStarts.length)
+      : null,
+    repairUsed: results.filter(result => Number(result.generationBudget?.repairUsed || 0) > 0).length,
+    repairSkipped: results.filter(result => Number(result.generationBudget?.repairUsed || 0) === 0 && result.finalStatus === 'rejected').length,
+    avgModelCalls: results.filter(result => Number.isFinite(result.modelCalls)).length
+      ? Number((results.filter(result => Number.isFinite(result.modelCalls)).reduce((sum, result) => sum + result.modelCalls, 0) / results.filter(result => Number.isFinite(result.modelCalls)).length).toFixed(2))
+      : null,
+    // Zachowujemy nazwę historyczną dla kompatybilności raportów; to są błędy generatora.
+    providerFailures: generationProviderFailures,
+    generationProviderFailures,
+    goldCoverageByCategory,
+    independentGoldCasesInBenchmark: goldCases.length,
+    independentGoldCasesInSample: selectedGoldCases.map(item => item.id),
+  };
 }
 
 async function run() {
@@ -59,7 +227,7 @@ async function run() {
     try {
       await zapytajAI(
         'benchmark',
-        item.question,
+        buildQuestionForBot(item),
         [],
         'Odpowiadaj rzeczowo po polsku. Korzystaj wyłącznie z potwierdzonych danych referencyjnych i nie zgaduj.',
         async text => { answer = String(text || ''); },
@@ -74,24 +242,25 @@ async function run() {
         },
       );
 
-      const plan = buildAnswerPlan(item.question, { ...item.routing, game: item.game });
-      const judge = judgeAnswer(answer, plan);
+      const evaluation = evaluateBenchmarkAnswer(answer, item);
+      const { judge } = evaluation;
       const factual = scoreGoldenFacts(answer, item.expected?.factual);
       results.push({
         id: item.id,
         category: item.category,
         answer,
-        answered: Boolean(answer.trim()) && !isFailureText(answer),
-        completeness: judge.score,
-        judgeStatus: judge.status,
+        answered: evaluation.answered,
+        abstained: evaluation.abstained,
+        completeness: evaluation.completeness,
+        judgeStatus: evaluation.judgeStatus,
         rejectionReason: [
-          judge.status !== 'accepted' ? judge.reason : null,
+          evaluation.judgeStatus !== 'accepted' ? evaluation.judgeReason : null,
           ...(summary?.validatorResults || [])
             .filter(result => result.status === 'rejected')
             .map(result => [result.reason, ...(result.validationDiagnostics?.localRejectReasons || [])].filter(Boolean).join(': ')),
           ...(summary?.fallbackReasons || []),
         ].filter(Boolean).join(' | ') || null,
-        missing: judge.missing,
+        missing: evaluation.missing,
         factualScore: factual.score,
         factualPassed: factual.passed,
         factualMissing: factual.missing,
@@ -101,6 +270,7 @@ async function run() {
         generationAttempts: summary?.generationAttempts || [],
         generationBudget: summary?.generationBudget || null,
         validatorResults: summary?.validatorResults || [],
+        timingTrace: summary?.timingTrace || [],
         fallbackReasons: summary?.fallbackReasons || [],
         tavilySearches: summary?.tavilySearches ?? null,
         sourceCount: summary?.sourceCount ?? null,
@@ -111,6 +281,7 @@ async function run() {
         category: item.category,
         answer,
         answered: false,
+        abstained: false,
         completeness: 0,
         judgeStatus: 'error',
         rejectionReason: String(error?.message || error),
@@ -124,6 +295,7 @@ async function run() {
         generationAttempts: summary?.generationAttempts || [],
         generationBudget: summary?.generationBudget || null,
         validatorResults: summary?.validatorResults || [],
+        timingTrace: summary?.timingTrace || [],
         fallbackReasons: summary?.fallbackReasons || [],
         tavilySearches: summary?.tavilySearches ?? null,
         sourceCount: summary?.sourceCount ?? null,
@@ -134,7 +306,7 @@ async function run() {
     if ((i + 1) % 10 === 0 || i + 1 === cases.length) {
       const answered = results.filter(x => x.answered).length / results.length;
       const complete = results.filter(x => x.judgeStatus === 'accepted').length / results.length;
-      console.log(`[LIVE BENCHMARK] ${i + 1}/${cases.length} answered=${(answered * 100).toFixed(1)}% complete=${(complete * 100).toFixed(1)}%`);
+      console.error(`[LIVE BENCHMARK] ${i + 1}/${cases.length} answered=${(answered * 100).toFixed(1)}% complete=${(complete * 100).toFixed(1)}%`);
     }
     await sleep(delayMs);
   }
@@ -144,20 +316,16 @@ async function run() {
   const factualCases = results.filter(x => x.factualPassed !== null);
   const factualPassed = factualCases.filter(x => x.factualPassed).length;
   const factualAverage = factualCases.length ? factualCases.reduce((sum, x) => sum + x.factualScore, 0) / factualCases.length : null;
-  const diagnostic = {
-    validatorRejected: results.filter(x => x.finalStatus === 'rejected').length,
-    validatorInconclusive: results.filter(x => x.finalStatus === 'inconclusive').length,
-    validatorUnavailable: results.filter(x => x.finalStatus === 'unavailable').length,
-    repairUsed: results.filter(x => Number(x.generationBudget?.repairUsed || 0) > 0).length,
-    repairSkipped: results.filter(x => Number(x.generationBudget?.repairUsed || 0) === 0 && x.finalStatus === 'rejected').length,
-    avgModelCalls: results.filter(x => Number.isFinite(x.modelCalls)).length
-      ? Number((results.filter(x => Number.isFinite(x.modelCalls)).reduce((sum, x) => sum + x.modelCalls, 0) / results.filter(x => Number.isFinite(x.modelCalls)).length).toFixed(2))
-      : null,
-    providerFailures: [...new Set(results.flatMap(x => (x.generationAttempts || []).filter(a => a.status === 'error').map(a => `${a.provider}:${a.model}:${a.failure || 'unknown'}`)))],
-  };
+  const diagnostic = buildBenchmarkDiagnostics(results, benchmark.cases, cases);
+  // Jeśli Groq nie odpowiedział ani razu (limit dzienny, awaria), wynik mierzy limity, nie kod.
+  const groqAttempts = results.flatMap(x => (x.generationAttempts || []).filter(a => /groq/i.test(String(a.provider || ''))));
+  const providerOutage = groqAttempts.length > 0 && groqAttempts.every(a => a.status === 'error');
+  diagnostic.providerOutage = providerOutage;
   const report = {
     benchmark: benchmark.name,
     mode: 'live',
+    seed: benchmarkSeed,
+    valid: !providerOutage,
     total: results.length,
     answeredAccuracy: Number((answered / results.length).toFixed(4)),
     completenessAccuracy: Number((complete / results.length).toFixed(4)),
@@ -170,17 +338,24 @@ async function run() {
     diagnostics: diagnostic,
     failures: results.filter(x => !x.answered || x.judgeStatus !== 'accepted' || x.factualPassed === false).slice(0, 100),
   };
-  console.log(JSON.stringify(report, null, 2));
+  const serializedReport = writeBenchmarkReport(report);
+  if (!process.env.AI_BENCHMARK_JSON_PATH) await writeStdoutAndWait(serializedReport);
+  if (providerOutage) {
+    console.error('[LIVE BENCHMARK] WYNIK NIEWAŻNY: Groq nie zwrócił żadnej odpowiedzi (limit dzienny lub awaria). Nie oceniaj jakości kodu po tym runie.');
+    process.exitCode = 3;
+    return;
+  }
   if (process.env.AI_BENCHMARK_REQUIRE_PERFECT === '1') {
+    // Tylko wybrane przypadki mają gold facts. Przy rotacji ziarnem może ich nie być w próbce.
     const factualOk = factualCases.length > 0 && factualPassed === factualCases.length;
     if (answered !== results.length || complete !== results.length || !factualOk) {
-      console.error(`[LIVE BENCHMARK] wymagane 10/10; odpowiedzi=${answered}/${results.length}, kompletność=${complete}/${results.length}, factual=${factualPassed}/${factualCases.length}`);
+      console.error(`[LIVE BENCHMARK] wymagane ${results.length}/${results.length}; odpowiedzi=${answered}/${results.length}, kompletność=${complete}/${results.length}, factual=${factualPassed}/${factualCases.length}`);
       process.exitCode = 1;
     }
   }
 }
 
-module.exports = { normalizeFactText, scoreGoldenFacts, stratifiedCases, run };
+module.exports = { normalizeFactText, scoreGoldenFacts, stratifiedCases, buildQuestionForBot, isFailureText, evaluateBenchmarkAnswer, buildBenchmarkDiagnostics, writeBenchmarkReport, writeStdoutAndWait, run };
 
 if (require.main === module) {
   run().catch(error => {

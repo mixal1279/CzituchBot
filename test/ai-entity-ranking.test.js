@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { resolveGameEntity, containsAlias, externalGameCandidateMatchesQuery } = require('../ai/entities');
+const { resolveGameEntity, containsAlias, externalGameCandidateMatchesQuery, normalizujEncje } = require('../ai/entities');
 const { rerankujWynikiTavily, przesunSourceIdsTavily } = require('../ai/tavily');
 
 test('entity resolver still accepts exact and normal Polish inflection matches', () => {
@@ -14,6 +14,10 @@ test('entity resolver still accepts exact and normal Polish inflection matches',
   const character = resolveGameEntity('Co Wheatley robi w Portal 2?');
   assert.equal(character?.name, 'Wheatley');
   assert.equal(character?.game, 'Portal 2');
+});
+
+test('entity normalization preserves words containing Polish ł', () => {
+  assert.equal(normalizujEncje('Wiedźmin miał długi miecz'), 'wiedzmin mial dlugi miecz');
 });
 
 test('entity resolver does not treat arbitrary long prefixes as aliases', () => {

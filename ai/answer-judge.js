@@ -16,11 +16,17 @@ function judgeAnswer(answer, plan, options = {}) {
     };
   }
 
-  if (completeness.score < minScore) {
+  // A score threshold is a lower bound, not permission to omit a required slot.
+  // Every requirement produced by buildAnswerPlan is mandatory; a 3/4 answer
+  // must not be reported as complete merely because 0.75 meets the high threshold.
+  if (completeness.missing.length > 0 || completeness.score < minScore) {
+    const reason = completeness.missing.length > 0
+      ? 'odpowiedź nie pokrywa wymaganych elementów pytania: ' + completeness.missing.join(', ')
+      : 'wynik kompletności odpowiedzi jest poniżej wymaganego progu';
     return {
       status: 'repair', ok: false, score: completeness.score,
       missing: completeness.missing,
-      reason: 'odpowiedź nie pokrywa wymaganych elementów pytania: ' + completeness.missing.join(', '),
+      reason,
       repairable: true,
     };
   }

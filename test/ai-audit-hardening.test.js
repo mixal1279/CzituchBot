@@ -3,12 +3,13 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { searchSecondaryProviders } = require('../ai/webRetrieval');
-const { czyWymagaSecondaryRetrieval } = require('../ai/tavily');
+const { czyWymagaSecondaryRetrieval, filtrujMaterialPoSlowachTavily } = require('../ai/tavily');
 const { normalizujWynikWalidatora } = require('../ai/validator');
-const { wyodrebnijJednostkoweWartosci } = require('../ai/claimValidation');
+const { wyodrebnijJednostkoweWartosci, zgodnoscStrukturalna } = require('../ai/claimValidation');
 const { decomposeQuestion, sourceDiversity, shouldRunAdditionalRetrieval } = require('../ai/retrieval');
 const { createAIRequestContext } = require('../ai/requestContext');
 const { createAIMetrics, recordAIMetric, snapshotAIMetrics } = require('../ai/metrics');
+const { ocenJakoscOdpowiedzi } = require('../ai/quality');
 
 test('secondary provider receives the remaining timeout', async () => {
   let observedSignal = false;
@@ -182,4 +183,55 @@ test('www and apex variants count as one source host', () => {
   ]);
   assert.equal(diversity.hosts, 1);
   assert.equal(diversity.independentHosts, 1);
+});
+
+test('Tavily sentence filtering preserves adjacent causal context with different wording', () => {
+  const source = [
+    'Portal 2 follows Chell through the Aperture facility.',
+    'Wheatley was transferred into GLaDOS body and gained control of Aperture.',
+    'Because the transfer placed him in the central AI system, he could override its commands.',
+    'An unrelated paragraph describes a different game and unrelated characters.',
+    'The page footer contains navigation and copyright text.',
+  ].join(' ');
+  const filtered = filtrujMaterialPoSlowachTavily(source, 'Why did Wheatley gain control of GLaDOS in Portal 2?');
+  assert.match(filtered, /Wheatley was transferred into GLaDOS body/);
+  assert.match(filtered, /Because the transfer placed him in the central AI system/);
+});
+
+test('quality gate accepts a concise complete lore answer but rejects a content-free fragment', () => {
+  const routing = { entity: 'Wheatley', game: 'Portal 2' };
+  const concise = ocenJakoscOdpowiedzi(
+    'Dlaczego Wheatley przejął kontrolę nad GLaDOS?',
+    'Wheatley przejął kontrolę nad systemem Aperture.',
+    routing,
+    'lore',
+  );
+  assert.equal(concise.ok, true, JSON.stringify(concise));
+  const fragment = ocenJakoscOdpowiedzi(
+    'Dlaczego Wheatley przejął kontrolę nad GLaDOS?',
+    'Wheatley wygrał.',
+    routing,
+    'lore',
+  );
+  assert.equal(fragment.ok, false);
+  assert.ok(fragment.issues.includes('odpowiedź jest zbyt krótka'));
+});
+
+
+test('cross-language game evidence recognizes Dragonrend and its Polish name', () => {
+  const result = zgodnoscStrukturalna(
+    'Dragonrend shout you get from the main storyline. It forcibly causes the target dragon to stay on the ground.',
+    'Warto użyć krzyku Smocza Zguba, który zmusza smoka do wylądowania na ziemi.',
+    { allowCrossLanguageExactEvidence: true },
+  );
+  assert.equal(result.ok, true, JSON.stringify(result));
+});
+
+test('cross-language game evidence recognizes recruiting a companion', () => {
+  const result = zgodnoscStrukturalna(
+    'You can play as Astarion to live out his story, or you can choose to create a custom character and recruit him as a companion instead.',
+    'Gracz może sterować tą postacią bezpośrednio lub zrekrutować ją jako towarzysza podróży.',
+    { allowCrossLanguageExactEvidence: true },
+  );
+  assert.equal(result.ok, true, JSON.stringify(result));
 });

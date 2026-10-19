@@ -20,6 +20,20 @@ const STOPWORDS = new Set([
   'a','an','is','are','was','were','what','who','how','why','where','when'
 ]);
 
+const AUTHORITY_ALIASES = {
+  official: 'official',
+  oficjalne: 'official',
+  specialized: 'specialized',
+  wyspecjalizowane: 'specialized',
+  reference: 'reference',
+  guide: 'guide',
+  'guide/referencyjne': 'guide',
+  general: 'general',
+  'zewnętrzne-niezweryfikowane': 'general',
+  unknown: 'unknown',
+  nieznane: 'unknown',
+};
+
 const AUTHORITY = {
   official: 1,
   specialized: 0.92,
@@ -32,6 +46,7 @@ const AUTHORITY = {
 function normalize(value) {
   return String(value || '')
     .toLocaleLowerCase('pl-PL')
+    .replace(/ł/g, 'l')
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .replace(/[^\p{L}\p{N}]+/gu, ' ')
@@ -39,9 +54,13 @@ function normalize(value) {
     .trim();
 }
 
-function tokens(value) {
+// Numery części („Portal 2”, „Wiedźmin 3”) i cyfry rzymskie odróżniają gry z jednej serii,
+// ale w ogólnej trafności zaniżałyby źródła, które liczby nie powtarzają. Dlatego
+// uwzględniamy je tylko na żądanie (dopasowanie encji).
+function tokens(value, options = {}) {
+  const keepNumbers = options.keepNumbers === true;
   return [...new Set(normalize(value).split(' ')
-    .filter(t => t.length >= 3 && !STOPWORDS.has(t)))];
+    .filter(t => (t.length >= 3 || (keepNumbers && (/^\d{1,2}$/.test(t) || /^(?:ii|iii|iv|vi|vii|viii|ix)$/.test(t)))) && !STOPWORDS.has(t)))];
 }
 
 function hostOf(url) {
@@ -49,9 +68,9 @@ function hostOf(url) {
   catch (_) { return ''; }
 }
 
-function tokenOverlap(query, text) {
-  const q = tokens(query);
-  const t = new Set(tokens(text));
+function tokenOverlap(query, text, options = {}) {
+  const q = tokens(query, options);
+  const t = new Set(tokens(text, options));
   if (!q.length || !t.size) return 0;
   return q.filter(x => t.has(x)).length / q.length;
 }
@@ -101,7 +120,11 @@ function sourceKey(source = {}) {
 }
 
 function normalizeSource(source = {}, index = 0) {
-  const content = String(source.content || source.raw_content || source.snippet || '').replace(/\s+/g, ' ').trim();
+  // Gemini grounding snippets are model-output spans tied to a URL, not page text.
+  // webRetrieval deliberately marks them with content: ''; preserve that sentinel
+  // instead of promoting the snippet into evidence during core normalization.
+  const metadataOnlyGemini = /^gemini/i.test(String(source.provider || '')) && source.content === '';
+  const content = String(metadataOnlyGemini ? '' : (source.content || source.raw_content || source.snippet || '')).replace(/\s+/g, ' ').trim();
   const title = String(source.title || '').replace(/\s+/g, ' ').trim();
   return {
     ...source,
@@ -110,13 +133,19 @@ function normalizeSource(source = {}, index = 0) {
     title,
     content,
     host: hostOf(source.url),
-    authority: AUTHORITY[source.authority] ? source.authority : classifyAuthority(source),
+    authority: (() => {
+      const rawAuthority = String(source.authority || '').trim().toLocaleLowerCase('pl-PL');
+      const canonicalAuthority = AUTHORITY_ALIASES[rawAuthority] || rawAuthority;
+      return Object.prototype.hasOwnProperty.call(AUTHORITY, canonicalAuthority)
+        ? canonicalAuthority
+        : classifyAuthority(source);
+    })(),
     key: sourceKey(source),
   };
 }
 
 function scoreSource(source, query, options = {}) {
-  const s = normalizeSource(source);
+  const s = normalizeSource(source, Number(options.index) || 0);
   const q = String(query || '');
   const haystack = [s.title, s.content].join(' ');
   const relevance = Math.min(1, tokenOverlap(q, haystack) * 1.15);
@@ -124,15 +153,19 @@ function scoreSource(source, query, options = {}) {
   const authority = AUTHORITY[s.authority] ?? AUTHORITY.unknown;
 
   let entityBonus = 0;
-  const entity = String(options.entity || '').trim();
-  if (entity) {
+  const entityCandidates = [
+    ...(Array.isArray(options.entities) ? options.entities : []),
+    options.entity,
+  ].map(value => String(value || '').trim()).filter(Boolean);
+  const h = normalize(haystack);
+  for (const entity of new Set(entityCandidates)) {
     const e = normalize(entity);
-    const h = normalize(haystack);
-    if (e && h.includes(e)) entityBonus = 0.18;
-    else {
-      const overlap = tokenOverlap(entity, haystack);
-      if (overlap >= 0.6) entityBonus = 0.10;
+    if (e && h.includes(e)) {
+      entityBonus = Math.max(entityBonus, 0.18);
+      continue;
     }
+    const overlap = tokenOverlap(entity, haystack, { keepNumbers: true });
+    if (overlap >= 0.6) entityBonus = Math.max(entityBonus, 0.10);
   }
 
   let freshnessBonus = 0;
@@ -201,7 +234,7 @@ function buildRetrievalPlan(question, routing = {}, options = {}) {
   const q = String(question || '').replace(/\s+/g, ' ').trim();
   if (!q || routing.needs_web === false) return [];
 
-  const entity = String(routing.game || routing.entity || routing.resolved_entity?.name || '').trim();
+  const entity = String(routing.resolved_entity?.name || routing.entity || routing.game || '').trim();
   const game = String(routing.game || routing.resolved_entity?.game || '').trim();
   const base = [];
   const add = (x, reason = 'primary') => {
@@ -234,11 +267,23 @@ function buildRetrievalPlan(question, routing = {}, options = {}) {
   }));
 }
 
+function czyStreszczenieModelu(source) {
+  return /^gemini/i.test(String(source?.provider || ''));
+}
+
 function assessEvidence(results = [], question, routing = {}) {
   const normalized = (Array.isArray(results) ? results : [])
     .filter(Boolean)
-    .map((s,i) => scoreSource(s, question, {
-      entity: routing.game || routing.entity || routing.resolved_entity?.name,
+    .map((s, index) => scoreSource(s, question, {
+      index,
+      // Score against both the resolved character/item and its parent game.
+      // A game name must not shadow a more specific entity mention.
+      entities: [
+        routing.resolved_entity?.name,
+        routing.entity,
+        routing.game,
+        routing.resolved_entity?.game,
+      ],
       freshness: routing.freshness,
     }));
 
@@ -259,15 +304,25 @@ function assessEvidence(results = [], question, routing = {}) {
   const strong = selected.filter(x => x.coreScore >= 0.55);
   const relevant = selected.filter(x => x.relevance >= 0.35 || x.titleRelevance >= 0.45);
 
+  // Niezależne potwierdzenie musi pochodzić ze źródeł trafnych. Wcześniej nietrafne źródło
+  // z drugiej domeny wystarczało, żeby „weak” zamienić w „usable”/„strong”.
+  // „Źródła” z Gemini grounding to wycinki odpowiedzi modelu z przypisanym URL-em, a nie tekst
+  // strony. Mogą być trafne, ale nie są niezależnym potwierdzeniem.
+  const independent = x => !czyStreszczenieModelu(x);
+  const strongIndependent = strong.filter(independent);
+  const evidenceHosts = new Set([...strongIndependent, ...relevant.filter(independent)].map(x => x.host).filter(Boolean));
+
   let status = 'weak';
-  if (strong.length >= 2 && hosts.size >= 2 && relevant.length >= 2) status = 'strong';
-  else if (strong.length >= 1 && relevant.length >= 1 && hosts.size >= 2) status = 'usable';
+  if (strongIndependent.length >= 2 && evidenceHosts.size >= 2 && relevant.length >= 2) status = 'strong';
+  else if (strongIndependent.length >= 1 && relevant.length >= 1 && evidenceHosts.size >= 2) status = 'usable';
 
   return {
     status,
     sources: selected,
     sourceCount: selected.length,
     independentHosts: hosts.size,
+    relevantHosts: evidenceHosts.size,
+    modelSummarySources: selected.filter(czyStreszczenieModelu).length,
     strongSources: strong.length,
     relevantSources: relevant.length,
     coverageScore: Number(Math.min(1,
@@ -307,6 +362,7 @@ module.exports = {
   hostOf,
   canonicalUrl,
   classifyAuthority,
+  AUTHORITY_ALIASES,
   normalizeSource,
   scoreSource,
   similarity,
