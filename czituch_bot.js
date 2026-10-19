@@ -8201,6 +8201,7 @@ const moduleExports = { zapytajAI, startBot };
 if (process.env.NODE_ENV === 'test') {
   moduleExports.__validatorTestHooks = {
     zbudujPromptWalidatora,
+    walidujOdpowiedzGeminiModel,
     walidujOdpowiedzOpenRouter,
     walidujOdpowiedzXKiro,
     walidujOdpowiedzGroq,
