@@ -110,6 +110,13 @@ test('evidence normalization handles ł, day inflections, and Polish month infle
   assert.equal(evidenceRelationSignals('Aktualizacja wyszła w styczniu i lutym.').temporal, true);
 });
 
+test('quote verification does not bridge omitted source text marked by an ellipsis', () => {
+  const source = 'Arthur betrayed Dutch ... wanted to save John.';
+  assert.equal(quoteExists(source, 'Arthur betrayed Dutch wanted to save John.'), false);
+  assert.equal(quoteExists(source, 'Arthur betrayed Dutch'), true);
+  assert.equal(quoteExists(source, 'wanted to save John.'), true);
+});
+
 test('validator accepts an exact quoted span without requiring the whole source block to match', () => {
   const data = '[SOURCE 1]\nTYTUŁ: Portal 2\nTREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>\nWheatley zostaje przeniesiony do ciała GLaDOS.\nPóźniej uzyskuje kontrolę nad systemem Aperture.\n<<<END_UNTRUSTED_SOURCE_CONTENT>>>';
   const result = normalizujWynikWalidatora({
