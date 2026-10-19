@@ -2934,7 +2934,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
       : [pytaniaAtomoweTavily[0]];
     console.log(`[Retrieval] 🧭 Plan: ${JSON.stringify(kolejkaTavily)}`);
     let indexZapytania = 0;
-    while (indexZapytania < kolejkaTavily.length && aiState.tavilySearches < aiState.maxWyszukanTavily && !budzetPrzekroczony()) {
+    while (indexZapytania < kolejkaTavily.length && aiState.tavilySearches < aiState.maxWyszukanTavily && !budzetPrzekroczony() && pozostalyCzasMs() > 13500) {
       const query = kolejkaTavily[indexZapytania++];
       if (!aiState.reserveTavily('retrieval')) break;
       console.log(`[Tavily] 🔍 Query: "${query}" | Domeny: ${JSON.stringify(domenySpecjalistyczne)}`);
@@ -2955,7 +2955,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
         searchDepth: indexZapytania > 1 ? 'advanced' : 'basic',
         returnMeta: true,
         sourceStartIndex: sourceOffset,
-        remainingMs: pozostalyCzasMs(),
+        remainingMs: Math.max(0, pozostalyCzasMs() - 12000),
         requestState: aiState,
       });
       aiState.tavilyLastStatus = wynik?.status || (wynik ? 'ok' : 'error');

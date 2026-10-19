@@ -41,7 +41,7 @@ function formatSources(sources, startIndex = 0) {
 
 function normalizeTimeoutMs(value, fallback, max) {
   const parsed = Number(value);
-  const timeout = Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+  const timeout = Number.isFinite(parsed) ? Math.max(0, parsed) : fallback;
   return Math.max(1, Math.min(max, timeout));
 }
 
@@ -201,17 +201,25 @@ async function zastapStreszczeniaTrescia(result, { tavilyKey, fetchFn, timeoutMs
 }
 
 async function searchSecondaryProviders({ query, geminiKey, exaKey, tavilyKey = null, fetchFn = fetch, startIndex = 0, domains = [], prefer = 'gemini', timeoutMs = 15000 }) {
+  const budgetMs = Number.isFinite(Number(timeoutMs)) ? Math.max(0, Number(timeoutMs)) : 15000;
+  const startedAt = Date.now();
+  const remainingTimeoutMs = () => Math.max(0, budgetMs - (Date.now() - startedAt));
   const order = prefer === 'exa'
     ? [['exa', exaKey], ['gemini', geminiKey]]
     : [['gemini', geminiKey], ['exa', exaKey]];
   const errors = [];
   for (const [provider, key] of order) {
     if (!key) continue;
+    const providerTimeoutMs = remainingTimeoutMs();
+    if (providerTimeoutMs <= 0) break;
     const result = provider === 'exa'
-      ? await searchExa({ apiKey: key, query, fetchFn, startIndex, domains, timeoutMs })
-      : await searchGeminiWeb({ apiKey: key, query, fetchFn, startIndex, timeoutMs });
+      ? await searchExa({ apiKey: key, query, fetchFn, startIndex, domains, timeoutMs: providerTimeoutMs })
+      : await searchGeminiWeb({ apiKey: key, query, fetchFn, startIndex, timeoutMs: providerTimeoutMs });
     if (provider === 'gemini' && result.sources.length) {
-      const extracted = await zastapStreszczeniaTrescia(result, { tavilyKey, fetchFn, timeoutMs, startIndex });
+      const extractTimeoutMs = remainingTimeoutMs();
+      const extracted = extractTimeoutMs > 0
+        ? await zastapStreszczeniaTrescia(result, { tavilyKey, fetchFn, timeoutMs: extractTimeoutMs, startIndex })
+        : result;
       if (extracted.status === 'ok' && extracted.sources.some(source => source?.url && String(source.content || '').trim())) return extracted;
       errors.push('gemini: grounding returned URL metadata but no extracted page text');
       continue;

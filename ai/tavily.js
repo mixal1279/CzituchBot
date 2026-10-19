@@ -504,10 +504,12 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
   return async function szukajTavily(pytanie, options = {}) {
     const original = String(pytanie || '').trim();
     const { domains, time_range, _skipRewrite = false, returnMeta = false, sourceStartIndex = 0, sourceQuestion = original, remainingMs = 15000, requestState = null, searchDepth = 'basic' } = options;
+    const retrievalStartedAt = Date.now();
+    const retrievalBudgetMs = Number.isFinite(Number(remainingMs)) ? Math.max(0, Number(remainingMs)) : 15000;
     const remainingBudgetMs = () => {
-      const live = typeof requestState?.remainingMs === 'function' ? requestState.remainingMs() : remainingMs;
-      const parsed = Number(live);
-      return Number.isFinite(parsed) ? Math.max(0, parsed) : 15000;
+      const suppliedRemaining = Math.max(0, retrievalBudgetMs - (Date.now() - retrievalStartedAt));
+      const live = typeof requestState?.remainingMs === 'function' ? Number(requestState.remainingMs()) : NaN;
+      return Number.isFinite(live) ? Math.min(suppliedRemaining, Math.max(0, live)) : suppliedRemaining;
     };
     const timeoutFromRemaining = cap => {
       const remaining = remainingBudgetMs();
@@ -585,8 +587,7 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
           }),
         };
         let res;
-        const tavilyTimeoutMs = timeoutFromRemaining(15000);
-        if (tavilyTimeoutMs <= 0) throw new Error('AI request deadline exceeded before Tavily Search');
+        if (timeoutFromRemaining(15000) <= 0) throw new Error('AI request deadline exceeded before Tavily Search');
         const tavilyHttpStartedAt = Date.now();
         requestState?.recordTiming?.('tavily_http_start', {
           provider: 'tavily',
@@ -595,7 +596,9 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
         });
         try {
           for (let probe = 0; probe < 2; probe++) {
-            res = await fetchZTimeout('https://api.tavily.com/search', request, tavilyTimeoutMs);
+            const attemptTimeoutMs = timeoutFromRemaining(15000);
+            if (attemptTimeoutMs <= 0) throw new Error('AI request deadline exceeded during Tavily Search');
+            res = await fetchZTimeout('https://api.tavily.com/search', request, attemptTimeoutMs);
             // 429 = przekroczony limit: ponowienie po 250 ms nic nie da, ponawiamy tylko błędy 5xx.
             if (res.ok || ![500, 502, 503, 504].includes(res.status) || probe === 1) break;
             const delayMs = Math.min(250 * (probe + 1), Math.max(0, remainingBudgetMs() - 1));
