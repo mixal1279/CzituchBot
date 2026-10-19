@@ -53,6 +53,21 @@ test('Gemini generation: kandydat z blokadą SAFETY nie jest używany jako odpow
   assert.equal(result.safetyRatings[0].blocked, true);
 });
 
+test('Gemini generation: pusty kandydat zachowuje finishReason OTHER i finishMessage', () => {
+  const result = parseGeminiGenerationResponse({
+    candidates: [{
+      finishReason: 'OTHER',
+      finishMessage: 'Model stopped without text output',
+      content: { parts: [] },
+    }],
+  });
+
+  assert.equal(result.ok, false);
+  assert.match(result.reason, /finishReason=OTHER/);
+  assert.match(result.reason, /finishMessage=Model stopped without text output/);
+  assert.equal(result.finishReason, 'OTHER');
+});
+
 test('Gemini generation: MAX_TOKENS zachowuje tekst i oznacza odpowiedź jako uciętą', () => {
   const result = parseGeminiGenerationResponse({
     candidates: [{
