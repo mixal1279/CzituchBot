@@ -145,10 +145,10 @@ test('quote verification preserves sentence boundaries after punctuation normali
   assert.equal(quoteExists('Pi is 3.14 units.', 'Pi is 3.14 units.'), true);
 });
 
-test('validator rejects a source quote copied into claim_en instead of translated', () => {
-  const quote = 'Wheatley was transferred into GLaDOS body and later gained control of Aperture.';
-  const data = '[SOURCE 1]\nTREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>\n' + quote + '\n<<<END_UNTRUSTED_SOURCE_CONTENT>>>';
-  const claim = 'Wheatley został przeniesiony do ciała GLaDOS.';
+test('validator still rejects a translation that changes killing into capture', () => {
+  const quote = 'Wheatley captured Chell.';
+  const data = '[SOURCE 1]\\nTREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>\\n' + quote + '\\n<<<END_UNTRUSTED_SOURCE_CONTENT>>>';
+  const claim = 'Wheatley zabił Chella.';
   const result = normalizujWynikWalidatora({
     valid: true,
     reason: 'ok',
@@ -168,7 +168,7 @@ test('validator rejects a source quote copied into claim_en instead of translate
   }, 'test-model', 'test', new Set(['SOURCE 1']), data, claim);
 
   assert.equal(result.status, 'rejected');
-  assert.match(JSON.stringify(result.diagnostics.unsupportedEvidenceClaims), /kopią evidence_quote/);
+  assert.match(JSON.stringify(result.diagnostics.unsupportedEvidenceClaims), /zabójstwo|zabojstwo|schwytanie/);
 });
 
 test('validator accepts an exact quoted span without requiring the whole source block to match', () => {
