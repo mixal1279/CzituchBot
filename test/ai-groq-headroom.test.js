@@ -2,7 +2,7 @@
 
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { createGroqCompletion } = require('../ai/provider-runtime');
+const { createGroqCompletion, normalizeGroqSdkBaseUrl } = require('../ai/provider-runtime');
 
 function fakeClient(sink) {
   return { chat: { completions: { create(payload) { sink.payload = payload; return Promise.resolve({}); } } } };
@@ -41,4 +41,12 @@ test('other models and payloads without reasoning_effort are untouched', async (
   assert.equal(seen.payload.max_completion_tokens, 300);
   await createGroqCompletion(fakeClient(seen), { model: 'openai/gpt-oss-120b', reasoning_effort: 'medium' });
   assert.equal(seen.payload.max_completion_tokens, undefined);
+});
+
+
+test('Groq SDK base URL strips the endpoint prefix already included by the SDK', () => {
+  assert.equal(normalizeGroqSdkBaseUrl('https://api.groq.com/openai/v1'), 'https://api.groq.com');
+  assert.equal(normalizeGroqSdkBaseUrl('https://api.groq.com/openai/v1/'), 'https://api.groq.com');
+  assert.equal(normalizeGroqSdkBaseUrl('https://api.groq.com'), 'https://api.groq.com');
+  assert.equal(normalizeGroqSdkBaseUrl('https://gateway.example/openai/v1'), 'https://gateway.example');
 });
