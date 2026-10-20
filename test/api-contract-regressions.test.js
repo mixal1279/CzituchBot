@@ -31,17 +31,17 @@ test('Gemini validator and generation fallbacks use documented GenerateContent f
   assert.equal((source.match(/systemInstruction:\s*\{\s*parts:\s*\[\{\s*text:\s*overrideSystemPrompt\s*\}\]\s*\}/g) || []).length, 2, 'both Gemini generation fallbacks must send the system instruction');
   assert.doesNotMatch(source, /system_instruction:/);
   assert.match(source, /generationConfig:\s*buildGeminiValidatorGenerationConfig\(model, GEMINI_VALIDATOR_JSON_SCHEMA\)/);
-  assert.doesNotMatch(source, /responseFormat:\s*\{\s*text:\s*\{\s*mimeType:/s);
   const { buildGeminiValidatorGenerationConfig } = require('../ai/gemini-response');
   const schema = { type: 'object', properties: { ok: { type: 'boolean' } }, required: ['ok'] };
   assert.deepEqual(buildGeminiValidatorGenerationConfig('gemini-3.5-flash-lite', schema), {
     maxOutputTokens: 1400,
     responseFormat: {
-      responseMimeType: 'application/json',
-      responseSchema: { type: 'OBJECT', properties: { ok: { type: 'BOOLEAN' } }, required: ['ok'] },
+      text: { mimeType: 'application/json', schema },
     },
     thinkingConfig: { thinkingLevel: 'minimal' },
   });
+  assert.doesNotMatch(source, /responseMimeType:\s*'application\/json'/);
+  assert.doesNotMatch(source, /responseSchema:\s*GEMINI_VALIDATOR_JSON_SCHEMA/);
   assert.deepEqual(buildGeminiValidatorGenerationConfig('gemini-3.8-flash', schema).thinkingConfig, { thinkingLevel: 'low' });
   assert.doesNotMatch(source, /generationConfig:\s*\{\s*temperature:/, 'Gemini 3.x GenerateContent requests must omit deprecated sampling parameters');
   const webRetrieval = read('ai/webRetrieval.js');

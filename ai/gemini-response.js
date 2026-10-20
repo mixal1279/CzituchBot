@@ -94,32 +94,16 @@ function buildGeminiGenerateContentUrl(model) {
   return `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent`;
 }
 
-/**
- * Build the documented GenerateContent generationConfig for the JSON validator.
- * responseMimeType + responseSchema live directly in generationConfig.
- * Nesting them under responseFormat maps to generation_config.response_format,
- * which does not have these fields and caused HTTP 400
- * ("Unknown name responseMimeType at generation_config.response_format").
- */
-function normalizujSchematGeminiREST(schema) {
-  if (Array.isArray(schema)) return schema.map(normalizujSchematGeminiREST);
-  if (!schema || typeof schema !== 'object') return schema;
-  const normalized = {};
-  for (const [key, value] of Object.entries(schema)) {
-    if (key === 'type' && typeof value === 'string') {
-      normalized[key] = value.toUpperCase();
-    } else {
-      normalized[key] = normalizujSchematGeminiREST(value);
-    }
-  }
-  return normalized;
-}
-
+/** Build the documented GenerateContent generationConfig for the JSON validator. */
 function buildGeminiValidatorGenerationConfig(model, schema) {
   return {
     maxOutputTokens: 1400,
-    responseMimeType: 'application/json',
-    responseSchema: normalizujSchematGeminiREST(schema),
+    responseFormat: {
+      text: {
+        mimeType: 'application/json',
+        schema,
+      },
+    },
     ...(model === 'gemini-3.8-flash'
       ? { thinkingConfig: { thinkingLevel: 'low' } }
       : model === 'gemini-3.5-flash-lite'
@@ -132,5 +116,4 @@ module.exports = {
   parseGeminiGenerationResponse,
   buildGeminiGenerateContentUrl,
   buildGeminiValidatorGenerationConfig,
-  normalizujSchematGeminiREST,
 };
