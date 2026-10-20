@@ -116,8 +116,10 @@ function normalizujSchematGeminiREST(schema) {
 function buildGeminiValidatorGenerationConfig(model, schema) {
   return {
     maxOutputTokens: 1400,
-    responseMimeType: 'application/json',
-    responseSchema: normalizujSchematGeminiREST(schema),
+    responseFormat: {
+      responseMimeType: 'application/json',
+      responseSchema: normalizujSchematGeminiREST(schema),
+    },
     ...(model === 'gemini-3.8-flash'
       ? { thinkingConfig: { thinkingLevel: 'low' } }
       : model === 'gemini-3.5-flash-lite'
