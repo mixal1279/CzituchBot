@@ -96,8 +96,10 @@ function buildGeminiGenerateContentUrl(model) {
 
 /**
  * Build the documented GenerateContent generationConfig for the JSON validator.
- * Use responseMimeType + responseSchema: responseFormat.text.mimeType is an
- * enum in the REST contract and "application/json" there caused HTTP 400.
+ * responseMimeType + responseSchema live directly in generationConfig.
+ * Nesting them under responseFormat maps to generation_config.response_format,
+ * which does not have these fields and caused HTTP 400
+ * ("Unknown name responseMimeType at generation_config.response_format").
  */
 function normalizujSchematGeminiREST(schema) {
   if (Array.isArray(schema)) return schema.map(normalizujSchematGeminiREST);
@@ -116,10 +118,8 @@ function normalizujSchematGeminiREST(schema) {
 function buildGeminiValidatorGenerationConfig(model, schema) {
   return {
     maxOutputTokens: 1400,
-    responseFormat: {
-      responseMimeType: 'application/json',
-      responseSchema: normalizujSchematGeminiREST(schema),
-    },
+    responseMimeType: 'application/json',
+    responseSchema: normalizujSchematGeminiREST(schema),
     ...(model === 'gemini-3.8-flash'
       ? { thinkingConfig: { thinkingLevel: 'low' } }
       : model === 'gemini-3.5-flash-lite'
