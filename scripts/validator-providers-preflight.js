@@ -28,7 +28,7 @@ const GROQ_BASE = normalizujGroqBaseUrl(process.env.GROQ_BASE_URL);
 
 // Prawdziwy schemat walidatora (jak w produkcji), jeśli da się go załadować.
 let PROD_SCHEMA = null;
-try { PROD_SCHEMA = require('../ai/validator').VALIDATOR_JSON_SCHEMA || null; } catch (_) { PROD_SCHEMA = null; }
+try { PROD_SCHEMA = require('../ai/validator').GROQ_VALIDATOR_JSON_SCHEMA || null; } catch (_) { PROD_SCHEMA = null; }
 
 // --- Dane testowe: wymyślone, żeby nie zależeć od żadnego realnego źródła ---------------------
 const ANSWER_FULL = 'Lumerię założyła w roku 412 kartografka Ilva Marren. Szukała wtedy szlaku przez Szare Góry. Dwa lata później powstała pierwsza wieża obserwacyjna. Wieża do dziś służy jako latarnia dla karawan.';
@@ -79,15 +79,13 @@ function xkiroProbe(payload, maxTokens) {
     body: { model: XKIRO_MODEL, messages: payload.messages, temperature: 0, max_tokens: maxTokens, reasoning_effort: 'none', response_format: { type: 'json_object' } },
   };
 }
-function openrouterProbe(payload, maxTokens, format) {
-  const response_format = format === 'schema'
-    ? { type: 'json_schema', json_schema: { name: 'czituch_ai_validator', strict: true, schema: PROD_SCHEMA } }
-    : { type: 'json_object' };
+function openrouterProbe(payload, maxTokens) {
+  const response_format = { type: 'json_schema', json_schema: { name: 'czituch_ai_validator', strict: true, schema: PROD_SCHEMA } };
   return {
-    provider: 'OpenRouter', model: OPENROUTER_MODEL, variant: `${payload.label} · ${format === 'schema' ? 'strict json_schema' : 'json_object'} · max_tokens=${maxTokens}`,
+    provider: 'OpenRouter', model: OPENROUTER_MODEL, variant: `${payload.label} · strict json_schema · max_tokens=${maxTokens}`,
     url: `${OPENROUTER_BASE}/chat/completions`,
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${OPENROUTER_KEY}`, 'HTTP-Referer': 'https://czituchbot.pl', 'X-Title': 'CzituchBot preflight' },
-    body: { model: OPENROUTER_MODEL, messages: payload.messages, temperature: 0, max_tokens: maxTokens, reasoning: { effort: 'low', exclude: true }, response_format },
+    body: { model: OPENROUTER_MODEL, messages: payload.messages, temperature: 0, max_tokens: maxTokens, reasoning: { effort: 'low', exclude: true }, provider: { require_parameters: true }, response_format },
   };
 }
 function groqProbe(payload, maxTokens) {
@@ -103,9 +101,8 @@ if (XKIRO_KEY) probes.push(xkiroProbe(SMALL, 900), xkiroProbe(REAL, 900), xkiroP
 else console.log('[preflight] xKiro: pominięty (brak XKIRO_API_KEY)');
 
 if (OPENROUTER_KEY) {
-  if (PROD_SCHEMA) probes.push(openrouterProbe(SMALL, 500, 'schema'), openrouterProbe(REAL, 500, 'schema'));
-  else console.log('[preflight] OpenRouter: brak ../ai/validator (VALIDATOR_JSON_SCHEMA) — pomijam wariant strict json_schema');
-  probes.push(openrouterProbe(REAL, 1400, 'json_object'));
+  if (PROD_SCHEMA) probes.push(openrouterProbe(SMALL, 500), openrouterProbe(REAL, 500));
+  else console.log('[preflight] OpenRouter: brak ../ai/validator (GROQ_VALIDATOR_JSON_SCHEMA) — pomijam wariant strict json_schema');
 } else console.log('[preflight] OpenRouter: pominięty (brak OPENROUTER_API_KEY)');
 
 if (GROQ_KEY) probes.push(groqProbe(REAL, 2200));

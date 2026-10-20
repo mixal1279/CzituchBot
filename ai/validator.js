@@ -86,6 +86,22 @@ function buildGroqValidatorResponseFormat(model) {
   return { type: 'json_object' };
 }
 
+// OpenRouter forwards the OpenAI-compatible response_format to the selected
+// endpoint. Strict mode prevents the provider from returning a semantically
+// plausible but locally incompatible claims shape. The provider routing hint
+// is added by the caller so only endpoints advertising structured_outputs are
+// eligible for this request.
+function buildOpenRouterValidatorResponseFormat() {
+  return {
+    type: 'json_schema',
+    json_schema: {
+      name: 'czituch_validator',
+      strict: true,
+      schema: GROQ_VALIDATOR_JSON_SCHEMA,
+    },
+  };
+}
+
 const VALIDATOR_JSON_SCHEMA = {
   ...GEMINI_VALIDATOR_JSON_SCHEMA,
   additionalProperties: false,
@@ -709,6 +725,7 @@ module.exports = {
   GEMINI_VALIDATOR_JSON_SCHEMA,
   GROQ_VALIDATOR_JSON_SCHEMA,
   buildGroqValidatorResponseFormat,
+  buildOpenRouterValidatorResponseFormat,
   wytnijJsonWalidatora,
   normalizujWynikWalidatora,
   wyodrebnijIdentyfikatoryZrodel,
