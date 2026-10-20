@@ -43,7 +43,7 @@ test('Gemini validator and generation fallbacks use documented GenerateContent f
     },
     thinkingConfig: { thinkingLevel: 'minimal' },
   });
-  assert.match(source, /responseMimeType:\s*'application\/json'/);
+  assert.match(read('ai/gemini-response.js'), /responseMimeType:\s*'application\/json'/);
   assert.match(read('ai/gemini-response.js'), /responseSchema:\s*normalizeGeminiRestSchema\(schema\)/);
   assert.deepEqual(buildGeminiValidatorGenerationConfig('gemini-3.8-flash', schema).thinkingConfig, { thinkingLevel: 'low' });
   assert.doesNotMatch(source, /generationConfig:\s*\{\s*temperature:/, 'Gemini 3.x GenerateContent requests must omit deprecated sampling parameters');
