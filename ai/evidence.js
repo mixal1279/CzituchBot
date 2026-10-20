@@ -186,7 +186,7 @@ function tokenOverlap(a, b) {
 
 function classifyClaimType(claim) {
   const text = normalizeEvidenceText(claim);
-  if (/(?:dlaczego|why|powod\w*|przyczyn\w*|motyw\w*|doprowadz\w*|spowod\w*|zmusz\w*|umożliw\w*|umozliw\w*|poniewa[zż]|dlatego|bo |z powodu|w celu|po tym\s*,?\s*jak|wskutek|w efekcie|przez pomylk\w*|przez przypadek|because|due to|therefore|accidentally|by mistake)/i.test(text)) return 'causal';
+  if (/(?:dlaczego|why|powod\w*|przyczyn\w*|motyw\w*|doprowadz\w*|spowod\w*|zmusz\w*|umożliw\w*|umozliw\w*|poniewa[zż]|dlatego|bo |z powodu|w celu|po tym\s*,?\s*jak|wskutek|w efekcie|przez pomylk\w*|przez przypadek|because|due to|therefore|caus\w*|led to|resulted in|resulting in|so that|accidentally|by mistake)/i.test(text)) return 'causal';
   if (/(?:jak |w jaki sposób|how |sposob\w*|instrukcj\w*|krok\w*|walkthrough|guide)/i.test(text)) return 'procedural';
   if (/(?:kiedy|when |rok\b|data|dzien\w*|today|yesterday|tomorrow)/i.test(text)) return 'temporal';
   if (/(?:gdzie|where |lokacj\w*|miejsce)/i.test(text)) return 'location';
@@ -366,8 +366,7 @@ function buildEvidenceRepairContext(claims, blocks, allowedSourceIds = null, max
     })
       .filter(candidate => Number(candidate.score) >= 0.10)
       .filter(candidate => !claimIsCausal
-        || (candidate.relationMatch && evidenceRelationSignals(candidate.evidence_quote).causal)
-        || Number(candidate.semanticMatches) >= 1)
+        || (candidate.relationMatch && evidenceRelationSignals(candidate.evidence_quote).causal))
 
       .filter(candidate => !claimIsSourceMeta)
       .slice(0, 2);
