@@ -26,6 +26,17 @@ function withReasoningHeadroom(payload) {
   return payload;
 }
 
+/**
+ * groq-sdk 1.6+ includes /openai/v1 in its endpoint path. The SDK base URL
+ * must therefore be the host root, not the REST base path used by raw fetch
+ * preflight requests.
+ */
+function normalizeGroqSdkBaseUrl(baseUrl) {
+  return String(baseUrl || 'https://api.groq.com')
+    .replace(/\/+$/, '')
+    .replace(/\/openai\/v1$/i, '');
+}
+
 /** Call the Groq SDK with transport options separate from the JSON request body. */
 function createGroqCompletion(groqClient, payload, { signal } = {}) {
   if (!groqClient?.chat?.completions?.create) {
@@ -121,4 +132,4 @@ function computeGenerationTimeout(remainingMs, {
   return timeoutMs >= minTimeoutMs ? Math.floor(timeoutMs) : null;
 }
 
-module.exports = { createGroqCompletion, awaitWithAbortTimeout, withReasoningHeadroom, computeValidatorTimeout, computeValidatorReserveMs, computeGenerationTimeout };
+module.exports = { createGroqCompletion, awaitWithAbortTimeout, withReasoningHeadroom, normalizeGroqSdkBaseUrl, computeValidatorTimeout, computeValidatorReserveMs, computeGenerationTimeout };
