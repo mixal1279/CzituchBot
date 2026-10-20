@@ -680,6 +680,10 @@ const KONFIGURACJA = {
   youtubeTargetKanal4: 'ArbuzikkYT',
   youtubeTargetKanal5: 'Angie28',
   youtubeTargetKanal6: 'Edzzi',
+  // Zweryfikowane uchwyty dla kanałów bez wpisanego na stałe ID.
+  youtubeChannelHandles: {
+    'ArbuzikkYT': '@arbuzikinnegry',
+  },
   pollInterval:       80000,
   ytTokenFile:        './youtube_token.json',
 
@@ -6237,8 +6241,8 @@ const youtube = youtubeFactory({ version: 'v3', auth: oauth2Client });
 // Powód: `auth: KONFIGURACJA.googleApiKey` wysyłał klucz API jako bearer token,
 // co Google odrzucał komunikatem "The authenticated user cannot act on behalf
 // of the specified Google account". search.list / videos.list lecą teraz przez
-// OAuth (jak działało miesiąc temu) — wymaga tylko zwykłego scope'youtube.readonly',
-// który już mamy w tokenie konta-menadżera.
+// OAuth. Nowe logowanie prosi o `youtube.force-ssl`, które obsługuje też
+// operacje odczytu oraz wysyłanie wiadomości na czat na żywo.
 
 let liveChatId    = null;
 let nextPageToken = null;
@@ -6283,8 +6287,17 @@ async function wczytajTokenYT() {
 
   try {
     if (!credentials) {
-      const legacyDoc = await db.collection('config').doc('youtube_token').get();
-      if (legacyDoc.exists) {
+      let legacyDoc = null;
+      try {
+        legacyDoc = await db.collection('config').doc('youtube_token').get();
+      } catch (legacyReadError) {
+        // Nie traktuj błędu odczytu Firestore jak braku starego tokenu:
+        // jeśli lokalna kopia też nie będzie dostępna, nie rozpoczynaj nowego OAuth,
+        // bo późniejszy zapis mógłby nadpisać token w niedostępnym magazynie.
+        firestoreReadFailed = true;
+        console.error('[YT Auth] Nie udało się sprawdzić starego dokumentu tokenu; przechodzę do kopii zapasowej bez nadpisywania Firestore:', legacyReadError.message);
+      }
+      if (legacyDoc?.exists) {
         credentials = legacyDoc.data();
         if (!firestoreReadFailed) {
           try {
@@ -6319,14 +6332,30 @@ async function wczytajTokenYT() {
   } catch (err) {
     console.error('[YT Auth] Błąd wczytywania tokenu i kopii zapasowych:', err.message);
   }
+
+  // Jeśli Firestore nie dał się odczytać, brak tokenu w kopii lokalnej nie dowodzi,
+  // że token nie istnieje. Przerwij start zamiast uruchamiać OAuth i ryzykować
+  // nadpisanie tokenu, którego zawartości nie udało się sprawdzić.
+  if (firestoreReadFailed) {
+    throw new Error('[YT Auth] Nie można bezpiecznie ustalić stanu tokenu w Firestore i brak dostępnej kopii. Napraw dostęp do Firestore lub przywróć kopię tokenu przed ponowną autoryzacją.');
+  }
   return false;
 }
 
 async function zalogujYouTube() {
+  // Bind the callback to this authorization attempt and protect the code exchange
+  // with PKCE. Keep the verifier server-side; only the challenge goes to Google.
+  const oauthState = crypto.randomBytes(32).toString('hex');
+  const { codeVerifier, codeChallenge } = await oauth2Client.generateCodeVerifierAsync();
   const authUrl = oauth2Client.generateAuthUrl({
     access_type: 'offline',
-    scope: ['https://www.googleapis.com/auth/youtube', 'https://www.googleapis.com/auth/youtube.force-ssl'],
+    // youtube.force-ssl covers chat read/write operations used by this bot.
+    // Avoid requesting the broader youtube scope unless a feature needs it.
+    scope: ['https://www.googleapis.com/auth/youtube.force-ssl'],
     prompt: 'consent',
+    state: oauthState,
+    code_challenge: codeChallenge,
+    code_challenge_method: 'S256',
   });
   console.log('\n========================================');
   console.log('🔐 LOGOWANIE DO YOUTUBE');
@@ -6340,26 +6369,44 @@ async function zalogujYouTube() {
     const http = require('http');
     const server = http.createServer((req, res) => {
       const url = new URL(req.url, 'http://localhost:3000');
+      const callbackState = url.searchParams.get('state');
+      const oauthError = url.searchParams.get('error');
       const code = url.searchParams.get('code');
-      if (code) {
-        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-        res.end('<h2>✅ Zalogowano! Możesz zamknąć tę kartę i wrócić do terminala.</h2>');
+
+      if (!callbackState || callbackState !== oauthState) {
+        res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' });
+        res.end('Nieprawidłowy parametr state. Autoryzacja została odrzucona.');
         server.close();
-        resolve(code);
-      } else {
-        res.writeHead(400);
+        reject(new Error('Nieprawidłowy parametr state w callbacku OAuth'));
+        return;
+      }
+      if (oauthError) {
+        res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' });
+        res.end('Autoryzacja Google została anulowana lub odrzucona.');
+        server.close();
+        reject(new Error(`Google OAuth zwrócił błąd: ${oauthError}`));
+        return;
+      }
+      if (!code) {
+        res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' });
         res.end('Brak kodu autoryzacji.');
         server.close();
         reject(new Error('Brak kodu w callbacku'));
+        return;
       }
+
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.end('<h2>✅ Zalogowano! Możesz zamknąć tę kartę i wrócić do terminala.</h2>');
+      server.close();
+      resolve(code);
     });
+    server.on('error', reject);
     server.listen(3000, () => {
       console.log('[YT Auth] ⏳ Czekam na autoryzację na porcie 3000...');
     });
-    server.on('error', reject);
   });
 
-  const { tokens } = await oauth2Client.getToken(code);
+  const { tokens } = await oauth2Client.getToken({ code, codeVerifier });
   oauth2Client.setCredentials(tokens);
   try {
     await zapiszTokenYT(tokens);
@@ -6501,6 +6548,21 @@ async function pobierzLiveChatId(nazwaKanalu) {
     channelId = znaneId;
     nazwaWyswietlana = nazwaKanalu;
     console.log(`[YouTube] ✅ Kanał (ID na sztywno): "${nazwaWyswietlana}" (${channelId})`);
+  } else if (KONFIGURACJA.youtubeChannelHandles[nazwaKanalu]) {
+    const handleRes = await zGoogleRetry(
+      () => youtube.channels.list({
+        part: ['id', 'snippet'],
+        forHandle: KONFIGURACJA.youtubeChannelHandles[nazwaKanalu],
+      }),
+      'pobieranie kanału po uchwycie YouTube'
+    );
+    const kanal = handleRes.data.items?.[0];
+    if (!kanal?.id) {
+      throw new Error(`Nie znaleziono kanału "${nazwaKanalu}" dla uchwytu ${KONFIGURACJA.youtubeChannelHandles[nazwaKanalu]}.`);
+    }
+    channelId = kanal.id;
+    nazwaWyswietlana = kanal.snippet?.title || nazwaKanalu;
+    console.log(`[YouTube] ✅ Kanał (uchwyt ${KONFIGURACJA.youtubeChannelHandles[nazwaKanalu]}): "${nazwaWyswietlana}" (${channelId})`);
   } else {
     const searchRes  = await zGoogleRetry(
       () => youtube.search.list({ part: ['snippet'], q: nazwaKanalu, type: ['channel'], maxResults: 5 }),
@@ -6508,10 +6570,16 @@ async function pobierzLiveChatId(nazwaKanalu) {
     );
     const channels   = searchRes.data.items;
     if (!channels?.length) throw new Error(`Nie znaleziono kanału "${nazwaKanalu}".`);
-    const dopasowany = channels.find(c => c.snippet.title.toLowerCase() === nazwaKanalu.toLowerCase()) || channels[0];
+    const dopasowany = channels.find(c =>
+      normalizujNazwe(c.snippet?.title || '') === normalizujNazwe(nazwaKanalu)
+    );
+    if (!dopasowany) {
+      const wyniki = channels.map(c => c.snippet?.title).filter(Boolean).join(', ') || 'brak';
+      throw new Error(`Nie znaleziono dokładnego dopasowania kanału "${nazwaKanalu}" (wyniki: ${wyniki}). Ustaw zweryfikowane ID w YT_KANAL_ID.`);
+    }
     channelId        = dopasowany.snippet.channelId;
     nazwaWyswietlana = dopasowany.snippet.title;
-    console.log(`[YouTube] ✅ Kanał: "${nazwaWyswietlana}" (${channelId})`);
+    console.log(`[YouTube] ✅ Kanał (dokładne dopasowanie): "${nazwaWyswietlana}" (${channelId})`);
   }
 
   const streamRes  = await zGoogleRetry(
@@ -6699,8 +6767,8 @@ const YT_KANAL_ID = {
   'Edzzi':             'UCs8_gHgAnCR6ygeddwZdFVQ',
   'Arbuzik_Minecraft': 'UCAjQ3Z824UPJeTLNzOG6jkQ',
   'Angie28':           'UCRm1ZPlkBz94QfNJlKHTvBA',
-  // 'ArbuzikkYT': '...', // jeśli ten kanał też kiedyś nie znajdzie streamu, dopisz tu jego prawdziwe ID
 };
+
 
 async function youtubeWatcher(nazwaKanalu, wyslijFn) {
   const tag = `[YouTube:${nazwaKanalu}]`;
