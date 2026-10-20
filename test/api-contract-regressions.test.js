@@ -30,14 +30,28 @@ test('Gemini validator and generation fallbacks use documented GenerateContent f
   assert.match(source, /systemInstruction:\s*\{\s*parts:/s);
   assert.equal((source.match(/systemInstruction:\s*\{\s*parts:\s*\[\{\s*text:\s*overrideSystemPrompt\s*\}\]\s*\}/g) || []).length, 2, 'both Gemini generation fallbacks must send the system instruction');
   assert.doesNotMatch(source, /system_instruction:/);
-  assert.match(source, /responseFormat:\s*\{\s*text:\s*\{\s*mimeType:\s*'application\/json',\s*schema:\s*GEMINI_VALIDATOR_JSON_SCHEMA/s);
-  assert.doesNotMatch(source, /responseMimeType:\s*'application\/json'/);
-  assert.doesNotMatch(source, /responseSchema:\s*GEMINI_VALIDATOR_JSON_SCHEMA/);
+  assert.match(source, /generationConfig:\s*buildGeminiValidatorGenerationConfig\(model, GEMINI_VALIDATOR_JSON_SCHEMA\)/);
+  const { buildGeminiValidatorGenerationConfig } = require('../ai/gemini-response');
+  const schema = { type: 'object', properties: { ok: { type: 'boolean' } }, required: ['ok'] };
+  assert.deepEqual(buildGeminiValidatorGenerationConfig('gemini-3.5-flash-lite', schema), {
+    maxOutputTokens: 1400,
+    responseMimeType: 'application/json',
+    responseSchema: {
+      type: 'OBJECT',
+      properties: { ok: { type: 'BOOLEAN' } },
+      required: ['ok'],
+    },
+    thinkingConfig: { thinkingLevel: 'minimal' },
+  });
+  assert.match(read('ai/gemini-response.js'), /responseMimeType:\s*'application\/json'/);
+  assert.match(read('ai/gemini-response.js'), /responseSchema:\s*normalizeGeminiRestSchema\(schema\)/);
+  assert.deepEqual(buildGeminiValidatorGenerationConfig('gemini-3.8-flash', schema).thinkingConfig, { thinkingLevel: 'low' });
   assert.doesNotMatch(source, /generationConfig:\s*\{\s*temperature:/, 'Gemini 3.x GenerateContent requests must omit deprecated sampling parameters');
   const webRetrieval = read('ai/webRetrieval.js');
   assert.doesNotMatch(webRetrieval, /generationConfig:\s*\{\s*temperature:/, 'Gemini web retrieval must omit deprecated sampling parameters');
-  assert.match(source, /model === 'gemini-3\.8-flash'[\s\S]{0,100}\{ thinkingLevel: 'low' \}/);
-  assert.match(source, /model === 'gemini-3\.5-flash-lite'[\s\S]{0,120}\{ thinkingLevel: 'minimal' \}/);
+  const geminiResponse = read('ai/gemini-response.js');
+  assert.match(geminiResponse, /model === 'gemini-3\.8-flash'[\s\S]{0,100}\{ thinkingLevel: 'low' \}/);
+  assert.match(geminiResponse, /model === 'gemini-3\.5-flash-lite'[\s\S]{0,120}\{ thinkingLevel: 'minimal' \}/);
 });
 
 test('answer-completeness repair includes the prior answer and uses real line separators', () => {
@@ -156,11 +170,16 @@ test('Twitch chat auth errors explain required scopes and try user-token fallbac
 });
 
 
-test('Groq SDK and preflight honor GROQ_BASE_URL with the documented default', () => {
+test('Groq SDK and preflight honor normalized GROQ_BASE_URL', () => {
   const source = read('czituch_bot.js');
   const preflight = read('scripts/groq-preflight.js');
-  assert.ok(source.includes('groqBaseUrl: String(process.env.GROQ_BASE_URL'));
+  const runtime = require('../ai/provider-runtime');
+
+  assert.match(source, /groqBaseUrl: normalizujGroqBaseUrl\(process\.env\.GROQ_BASE_URL\)/);
   assert.ok(source.includes('baseURL: KONFIGURACJA.groqBaseUrl'));
-  assert.ok(preflight.includes('process.env.GROQ_BASE_URL'));
-  assert.ok(preflight.includes('/chat/completions'));
+  assert.match(preflight, /normalizujGroqBaseUrl\(process\.env\.GROQ_BASE_URL\)/);
+  assert.ok(preflight.includes('/openai/v1/chat/completions'));
+
+  assert.equal(runtime.normalizujGroqBaseUrl(undefined), 'https://api.groq.com');
+  assert.equal(runtime.normalizujGroqBaseUrl('https://api.groq.com/openai/v1/'), 'https://api.groq.com');
 });
