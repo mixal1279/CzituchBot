@@ -98,12 +98,8 @@ function buildGeminiGenerateContentUrl(model) {
 function buildGeminiValidatorGenerationConfig(model, schema) {
   return {
     maxOutputTokens: 1400,
-    responseFormat: {
-      text: {
-        mimeType: 'application/json',
-        schema,
-      },
-    },
+    responseMimeType: 'application/json',
+    responseSchema: schema,
     ...(model === 'gemini-3.8-flash'
       ? { thinkingConfig: { thinkingLevel: 'low' } }
       : model === 'gemini-3.5-flash-lite'
