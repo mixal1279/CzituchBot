@@ -147,7 +147,7 @@ test('quote verification preserves sentence boundaries after punctuation normali
 
 test('validator still rejects a translation that changes killing into capture', () => {
   const quote = 'Wheatley captured Chell.';
-  const data = '[SOURCE 1]\\nTREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>\\n' + quote + '\\n<<<END_UNTRUSTED_SOURCE_CONTENT>>>';
+  const data = '[SOURCE 1]\nTREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>\n' + quote + '\n<<<END_UNTRUSTED_SOURCE_CONTENT>>>';
   const claim = 'Wheatley zabił Chella.';
   const result = normalizujWynikWalidatora({
     valid: true,
