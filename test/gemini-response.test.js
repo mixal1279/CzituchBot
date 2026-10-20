@@ -125,14 +125,18 @@ test('Gemini generateContent URL follows the configured model ID', () => {
 
 test('Gemini validator: generationConfig używa udokumentowanych pól REST na najwyższym poziomie', () => {
   const schema = {
-    type: 'OBJECT',
-    properties: { valid: { type: 'BOOLEAN' } },
+    type: 'object',
+    properties: { valid: { type: 'boolean' } },
     required: ['valid'],
   };
   const config = buildGeminiValidatorGenerationConfig('gemini-3.8-flash', schema);
 
   assert.equal(config.responseMimeType, 'application/json');
-  assert.deepEqual(config.responseSchema, schema);
+  assert.deepEqual(config.responseSchema, {
+    type: 'OBJECT',
+    properties: { valid: { type: 'BOOLEAN' } },
+    required: ['valid'],
+  });
   assert.equal(Object.hasOwn(config, 'responseFormat'), false);
   assert.deepEqual(config.thinkingConfig, { thinkingLevel: 'low' });
   assert.equal(config.maxOutputTokens, 1400);
