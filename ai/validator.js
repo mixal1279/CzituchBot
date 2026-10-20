@@ -6,6 +6,7 @@ const { assessEvidence } = require('./core');
 const { sprawdzTwardeFaktyOdpowiedzi } = require('./response');
 const { czyDowodSemantyczniePokrywaClaim, czyRelacjaPrzyczynowaPokrywaClaim, zgodnoscStrukturalna, sprawdzTwardeKonflikty, sprawdzSprzecznosciSemantyczne, sprawdzPokrycieClaimamiOdpowiedzi, spojnoscTlumaczeniaClaimu, zbudujWyroczniaNazw, wyglądaNaAngielski, CAUSAL_RE } = require('./claimValidation');
 const { parseEvidenceBlocks, quoteExists, rankEvidenceForClaim, buildEvidenceRepairContext } = require('./evidence');
+const { naprawKsztaltWynikuWalidatora } = require('./validator-shape');
 
 // Kontrakt walidatora jest celowo mały: generator potrzebuje tylko jasnego
 // werdyktu i konkretnej informacji zwrotnej do jednego retry.
@@ -370,6 +371,10 @@ function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '', opt
 }
 
 function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSourceIds = null, dane = '', answer = '') {
+  // Naprawiamy wyłącznie jednoznaczne defekty kształtu (opakowany claim, claims w polu
+  // `supported`, tekstowa pewność). Niczego nie uzupełniamy: reszta kontraktu bez zmian.
+  const shape = naprawKsztaltWynikuWalidatora(wynik);
+  wynik = shape.wynik;
   if (!wynik || typeof wynik !== 'object' || Array.isArray(wynik)) return null;
 
   // Validator produkcyjny ma ścisły kontrakt. Nie akceptujemy już starych,
@@ -675,6 +680,7 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
     evidenceSourceCount: evidenceAssessment.sourceCount,
     evidenceIndependentHosts: evidenceAssessment.independentHosts,
     localRejectReasons,
+    ...(shape.poprawki.length ? { shapeRepairs: shape.poprawki } : {}),
     evidenceRepairContext: unsupportedEvidenceClaimIndexes.length
       ? buildEvidenceRepairContext(unsupportedEvidenceClaimIndexes.map(index => claims[index]), allowedBlocks, allowed, 4)
       : '',

@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { parseGeminiGenerationResponse, buildGeminiGenerateContentUrl } = require('../ai/gemini-response');
+const { parseGeminiGenerationResponse, buildGeminiGenerateContentUrl, buildGeminiValidatorGenerationConfig } = require('../ai/gemini-response');
 
 test('Gemini generation: brak kandydatów zachowuje promptFeedback i safetyRatings', () => {
   const result = parseGeminiGenerationResponse({
@@ -121,4 +121,30 @@ test('Gemini generateContent URL follows the configured model ID', () => {
   );
   assert.throws(() => buildGeminiGenerateContentUrl(''), /Invalid Gemini model ID/);
   assert.throws(() => buildGeminiGenerateContentUrl('models/gemini-3.8-flash'), /Invalid Gemini model ID/);
+});
+
+test('Gemini validator: generationConfig używa udokumentowanych pól REST na najwyższym poziomie', () => {
+  const schema = {
+    type: 'object',
+    properties: { valid: { type: 'boolean' } },
+    required: ['valid'],
+  };
+  const config = buildGeminiValidatorGenerationConfig('gemini-3.8-flash', schema);
+
+  assert.equal(config.responseMimeType, 'application/json');
+  assert.deepEqual(config.responseSchema, {
+    type: 'OBJECT',
+    properties: { valid: { type: 'BOOLEAN' } },
+    required: ['valid'],
+  });
+  assert.equal(Object.hasOwn(config, 'responseFormat'), false);
+  assert.deepEqual(config.thinkingConfig, { thinkingLevel: 'low' });
+  assert.equal(config.maxOutputTokens, 1400);
+});
+
+test('Gemini validator: model Lite zachowuje osobną konfigurację thinking', () => {
+  const config = buildGeminiValidatorGenerationConfig('gemini-3.5-flash-lite', { type: 'OBJECT' });
+
+  assert.equal(config.responseMimeType, 'application/json');
+  assert.deepEqual(config.thinkingConfig, { thinkingLevel: 'minimal' });
 });

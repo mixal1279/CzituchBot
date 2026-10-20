@@ -125,6 +125,21 @@ test('negation mismatch remains a hard failure', () => {
   assert.match(result.reason, /negację/);
 });
 
+test('rhetorical "do not forget" does not invert the polarity of a factual claim', () => {
+  const evidence = 'Nie możemy zapomnieć o naszych wiernych towarzyszach podróży - w akcie pierwszym możemy zrekrutować szóstkę fantastycznych kolegów i koleżanek, w tym Astariona.';
+  const claim = 'Astarion jest jednym z sześciu początkowych towarzyszy.';
+  const result = sprawdzTwardeKonflikty(evidence, claim);
+  assert.equal(result.ok, true, result.reason);
+});
+
+test('lack of stability is a negative noun phrase, not negation of the destruction event', () => {
+  const result = sprawdzTwardeKonflikty(
+    "Wheatley's lack of stability is going to cause the destruction of Aperture Science.",
+    "Wheatley's instability will cause the destruction of Aperture Science.",
+  );
+  assert.equal(result.ok, true, result.reason);
+});
+
 test('English damage vocabulary does not create a false semantic conflict and zero damage still supports reduction', () => {
   const evidence = "You'll take no damage from their breath when blocking. You can kill dragons.";
   const claim = 'Blokowanie redukuje obrażenia od ich oddechu.';
@@ -181,6 +196,14 @@ test('the zero-quantifier exception does not erase an unrelated no-siblings conf
   const result = sprawdzTwardeKonflikty('He has no siblings.', 'Ma rodzeństwo.');
   assert.equal(result.ok, false);
   assert.match(result.reason, /negację/);
+});
+
+test('Polish inflection "spowoduje" is recognized as an explicit causal relation', () => {
+  const result = zgodnoscStrukturalna(
+    'Brak stabilności Wheatleya spowoduje zniszczenie Aperture.',
+    'Brak stabilności Wheatleya doprowadzi do zniszczenia Aperture.',
+  );
+  assert.equal(result.ok, true, result.reason);
 });
 
 test('unsupported causal relation remains a hard failure', () => {

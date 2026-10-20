@@ -2,7 +2,7 @@
 
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { createGroqCompletion } = require('../ai/provider-runtime');
+const { createGroqCompletion, normalizujGroqBaseUrl, groqTpmRetryAfterMs, resetGroqTpmWindow } = require('../ai/provider-runtime');
 
 function fakeClient(sink) {
   return { chat: { completions: { create(payload) { sink.payload = payload; return Promise.resolve({}); } } } };
@@ -41,4 +41,37 @@ test('other models and payloads without reasoning_effort are untouched', async (
   assert.equal(seen.payload.max_completion_tokens, 300);
   await createGroqCompletion(fakeClient(seen), { model: 'openai/gpt-oss-120b', reasoning_effort: 'medium' });
   assert.equal(seen.payload.max_completion_tokens, undefined);
+});
+
+
+test('Groq SDK base URL strips the endpoint prefix already included by the SDK', () => {
+  assert.equal(normalizujGroqBaseUrl('https://api.groq.com/openai/v1'), 'https://api.groq.com');
+  assert.equal(normalizujGroqBaseUrl('https://api.groq.com/openai/v1/'), 'https://api.groq.com');
+  assert.equal(normalizujGroqBaseUrl('https://api.groq.com'), 'https://api.groq.com');
+  assert.equal(normalizujGroqBaseUrl('https://gateway.example/openai/v1'), 'https://gateway.example');
+});
+
+
+test('missing Groq usage never resets TPM accounting to zero', async () => {
+  const previousLimits = process.env.AI_GROQ_TPM_LIMITS;
+  const previousGuard = process.env.AI_GROQ_TPM_GUARD;
+  process.env.AI_GROQ_TPM_GUARD = '1';
+  process.env.AI_GROQ_TPM_LIMITS = JSON.stringify({ 'openai/gpt-oss-20b': 8000 });
+  resetGroqTpmWindow();
+  try {
+    const client = { chat: { completions: { create() { return Promise.resolve({ choices: [] }); } } } };
+    await createGroqCompletion(client, {
+      model: 'openai/gpt-oss-20b',
+      messages: [{ role: 'user', content: 'x'.repeat(100) }],
+      max_completion_tokens: 4500,
+    });
+    assert.ok(groqTpmRetryAfterMs('openai/gpt-oss-20b', 4500) > 0,
+      'conservative estimated usage must remain accounted when response.usage is absent');
+  } finally {
+    resetGroqTpmWindow();
+    if (previousLimits === undefined) delete process.env.AI_GROQ_TPM_LIMITS;
+    else process.env.AI_GROQ_TPM_LIMITS = previousLimits;
+    if (previousGuard === undefined) delete process.env.AI_GROQ_TPM_GUARD;
+    else process.env.AI_GROQ_TPM_GUARD = previousGuard;
+  }
 });

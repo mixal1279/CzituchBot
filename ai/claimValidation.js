@@ -7,7 +7,7 @@ const NEGATION_RE = /(?<![\p{L}])(?:nie|nigdy|brak|bez|zaden|zadna|zadne|never|n
 const NEGATION_STRICT_RE = /(?<![\p{L}])(?:nie|nigdy|brak|bez|zaden|zadna|zadne|never|not|cannot|without|lack\s+of|absence\s+of|unable|neither|nor|fails?\s+to|\p{L}+n['’]t)(?![\p{L}])/iu;
 // Claim o redukcji/ograniczeniu jest zgodny z dowodem „no damage / take no damage” (zero implikuje zmniejszenie).
 const REDUCTION_RE = /(?<![\p{L}])(?:zmniejsz\w*|ogranicz\w*|redukuj\w*|zredukow\w*|oslab\w*|chron\w*|neutralizuj\w*|reduc\w*|mitigat\w*|lower\w*|decreas\w*|protect\w*|prevent\w*|avoid\w*|block\w*|ward\w*|immun\w*|zapobieg\w*|unik\w*|blok\w*|odporn\w*)(?![\p{L}])/iu;
-const CAUSAL_RE = /(?<![\p{L}])(?:bo|poniewaz|gdyz|dlatego|because|therefore|caused|causes|consequently|hence|as\s+a\s+result|led\s+to|leading\s+to|resulted\s+in|resulting\s+in|because\s+of|due\s+to|thereby|thus|allow(?:s|ed|ing)?|enabl(?:e|es|ed|ing)|which\s+(?:let|lets|allowed|allows|enabled|enables)|putting\s+(?:him|her|them|it)\s+in\s+control|so\s+(?:he|she|they|it|we|the)|in\s+exchange(?:\s+for)?|in\s+return(?:\s+for)?|in\s+turn|thanks\s+to|owing\s+to|w\s+zamian(?:\s+za)?|w\s+rewan[zż]u|w\s+wyniku|z\s+powodu|dzieki|spowodow\w*|doprowadz\w*|umozliw\w*)(?![\p{L}])/iu;
+const CAUSAL_RE = /(?<![\p{L}])(?:bo|poniewaz|gdyz|dlatego|because|therefore|caused|causes|consequently|hence|as\s+a\s+result|led\s+to|leading\s+to|resulted\s+in|resulting\s+in|because\s+of|due\s+to|thereby|thus|allow(?:s|ed|ing)?|enabl(?:e|es|ed|ing)|which\s+(?:let|lets|allowed|allows|enabled|enables)|putting\s+(?:him|her|them|it)\s+in\s+control|so\s+(?:he|she|they|it|we|the)|in\s+exchange(?:\s+for)?|in\s+return(?:\s+for)?|in\s+turn|thanks\s+to|owing\s+to|w\s+zamian(?:\s+za)?|w\s+rewan[zż]u|w\s+wyniku|z\s+powodu|dzieki|spowod\w*|doprowadz\w*|umozliw\w*)(?![\p{L}])/iu;
 const TEMPORAL_RE = /(?<![\p{L}])(?:19|20)\d{2}(?![\p{L}])|(?<![\p{L}])(?:styczen|luty|marzec|kwiecien|maj|czerwiec|lipiec|sierpien|wrzesien|pazdziernik|listopad|grudzien|wczoraj|dzisiaj|jutro|today|yesterday|tomorrow)(?![\p{L}])/iu;
 const CROSS_LANGUAGE_CONCEPTS = [
   ['porwanie', /kidnap\w*|abduct\w*|captur\w*|porwan\w*|uprowadz\w*/i],
@@ -256,8 +256,29 @@ function wyodrebnijNazwyWlasne(value, options = {}) {
     .map(item => normalizujNazwe(item.token))
     .filter(name => name.length >= 3))];
 }
+function tekstDoWykrywaniaNegacji(value) {
+  let text = normalizujClaim(value);
+
+  // Frazy metajęzykowe i retoryczne zawierają „nie/not”, ale nie odwracają
+  // polaryzacji opisywanego faktu: „nie możemy zapomnieć o Astarionie” znaczy,
+  // że Astarion jest ważny, a nie że go nie ma.
+  text = text.replace(
+    /(?:^|\b)(?:nie mozemy zapomniec|nie mozna zapomniec|nie zapominajmy|nie zapominaj|do not forget|not to mention)\b/gu,
+    ' ',
+  );
+
+  // „lack/absence of stability” opisuje niestabilność; nie jest negacją
+  // następnego orzeczenia („lack of stability will cause destruction”).
+  // Pozostawiamy „lack/absence of siblings” jako sygnał braku konkretnej encji.
+  text = text.replace(/\b(?:lack|absence) of stability\b/gu, 'instability');
+  return text;
+}
+
 function wyodrebnijMarkery(value, regex) {
-  return regex.test(normalizujClaim(value));
+  const text = (regex === NEGATION_RE || regex === NEGATION_STRICT_RE)
+    ? tekstDoWykrywaniaNegacji(value)
+    : normalizujClaim(value);
+  return regex.test(text);
 }
 function normalizujTokenNazwy(value) {
   return String(value || '')
@@ -620,12 +641,9 @@ function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
   if (!pl || !en) return { ok: false, reason: 'brak tłumaczenia claimu' };
   if (en.length > pl.length * 3 + 60) return { ok: false, reason: 'tłumaczenie claimu jest nieproporcjonalnie długie' };
   if (!wyglądaNaAngielski(en)) return { ok: false, reason: 'claim_en nie wygląda na tekst angielski' };
-  // claim_en ma być tłumaczeniem claimu, a nie przepisanym cytatem źródłowym.
-  const quoteNorm = normalizujClaim(options.evidenceQuote || '');
-  const enNorm = normalizujClaim(en);
-  if (quoteNorm.split(' ').length >= 6 && enNorm && (quoteNorm === enNorm || (enNorm.length >= 20 && quoteNorm.includes(enNorm) && enNorm.length >= quoteNorm.length * 0.9))) {
-    return { ok: false, reason: 'claim_en jest kopią evidence_quote, a nie tłumaczeniem claimu' };
-  }
+  // Zbieżność claim_en z cytatem sama w sobie nie dowodzi błędu: poprawny claim
+  // może być wiernym tłumaczeniem zdania źródłowego. Wierność oceniamy poniżej
+  // przez negację, liczby, encje i relacje, a prompt zabrania kopiowania dodatkowych faktów.
   if (!zbiorRowny(wyodrebnijLiczbyIDaty(pl), wyodrebnijLiczbyIDaty(en))) {
     return { ok: false, reason: 'tłumaczenie claimu zmienia liczby lub daty' };
   }

@@ -49,11 +49,20 @@ test('produkcyjne aliasy PL/EN normalizują znane encje do jednego kanonicznego 
   assert.deepEqual(wyodrebnijNazwyWlasne('Dragonborn używa Smoczej Zguby.'), ['dragonrend', 'dragonborn']);
 });
 
-test('claim_en przepisany z evidence_quote jest odrzucany, prawdziwe tłumaczenie nie', () => {
-  const quote = 'Malenia is an optional boss located in Haligtree Elphael.';
-  const copy = spojnoscTlumaczeniaClaimu('Malenia jest opcjonalnym bossem w Haligtree Elphael.', quote, { evidenceQuote: quote });
-  assert.equal(copy.ok, false);
-  assert.match(copy.reason, /kopią evidence_quote/);
-  const real = spojnoscTlumaczeniaClaimu('Malenia jest opcjonalnym bossem w Haligtree Elphael.', 'Malenia is an optional boss in Haligtree Elphael.', { evidenceQuote: quote });
-  assert.equal(real.ok, true);
+test('claim_en may match source wording when faithful, but cannot turn purpose into cause', () => {
+  const quote = 'Chell and Wheatley forced a core transfer so that Wheatley could take control of Aperture.';
+  const changedRelation = spojnoscTlumaczeniaClaimu(
+    'Chell i Wheatley wymusili transfer rdzenia, ponieważ Wheatley mógł przejąć kontrolę nad Aperture.',
+    quote,
+    { evidenceQuote: quote },
+  );
+  assert.equal(changedRelation.ok, false);
+  assert.match(changedRelation.reason, /przyczynow|zdarzenie|relacj/i);
+
+  const faithful = spojnoscTlumaczeniaClaimu(
+    'Chell i Wheatley wymusili transfer rdzenia, aby Wheatley mógł przejąć kontrolę nad Aperture.',
+    quote,
+    { evidenceQuote: quote },
+  );
+  assert.equal(faithful.ok, true, faithful.reason);
 });
