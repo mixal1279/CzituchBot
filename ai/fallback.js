@@ -1,6 +1,6 @@
 'use strict';
 
-const { groqTpmRetryAfterMs } = require('./provider-runtime');
+const { groqTpmRetryAfterMs, resetGroqTpmWindow } = require('./provider-runtime');
 
 const CLASSIFIERS = Object.freeze({
   quota: /(?:(?<![\d.,])429(?!\d)|quota|rate.?limit|tokens per day|tokens per minute|TPD|TPM|credit|insufficient)/i,
@@ -106,6 +106,8 @@ const quotaBlockedUntil = new Map();
 
 function resetProviderQuotaCooldowns() {
   quotaBlockedUntil.clear();
+  // Lokalny licznik TPM Groqa jest częścią tego samego stanu cooldownów.
+  resetGroqTpmWindow();
 }
 
 function geminiGenerationCooldownMsFromError(error) {
@@ -262,7 +264,7 @@ function isProviderQuotaBlocked(provider, now = Date.now()) {
   }
   if (blockedUntil > now) return true;
   // Groq: lokalny licznik TPM przewiduje, że kolejne żądanie (domyślnie ~4.5k
-  // tokenów) nie zmieści się w oknie 60 s. Pomijamy model z góry, zamiast
+  // tokenów) nie zmieści się w limicie. Pomijamy model z góry, zamiast
   // wysyłać żądanie skazane na 429 i otwierać circuit breaker.
   if (providerName === 'groq') {
     return groqTpmRetryAfterMs(endpoint.slice('groq:'.length), undefined, now) > 0;
