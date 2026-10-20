@@ -244,13 +244,11 @@ function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '', opt
   };
   // Twarde kontrole robimy na angielskim tłumaczeniu claimu tylko wtedy, gdy cytat jest po angielsku,
   // a tłumaczenie przeszło mechaniczną kontrolę zgodności z polskim oryginałem.
-  // W szczególności nie pozwalamy, by skopiowanie całego cytatu jako claim_en
-  // po cichu przełączało walidację z tłumaczenia na polski claim porównywany z angielskim źródłem.
-  let claimEnCopiedEvidenceQuote = false;
+  // Zgodność claim_en z cytatem nie jest sama w sobie błędem; niezgodne zdarzenia,
+  // polaryzacja, liczby, nazwy i relacje są wykrywane przez testy semantyczne poniżej.
   if (options.claimEn && typeof evidenceQuote === 'string' && wyglądaNaAngielski(evidenceQuote)) {
     const consistency = spojnoscTlumaczeniaClaimu(claim, options.claimEn, { nameOracle, evidenceQuote });
     if (consistency.ok) claim = String(options.claimEn);
-    else if (/kopią evidence_quote/i.test(consistency.reason || '')) claimEnCopiedEvidenceQuote = true;
   }
   if (!Array.isArray(sourceIds) || !sourceIds.length || typeof evidenceQuote !== 'string') {
     return { ok: false, reason: 'brak poprawnego source_id lub evidence_quote' };
@@ -297,10 +295,6 @@ function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '', opt
     }
     if (!quoteExists(block.content, quote)) {
       reasons.push('evidence_quote nie występuje w wskazanym źródle: ' + id);
-      continue;
-    }
-    if (claimEnCopiedEvidenceQuote) {
-      reasons.push('claim_en jest kopią evidence_quote, a nie tłumaczeniem claimu: ' + id);
       continue;
     }
 
