@@ -198,6 +198,14 @@ test('the zero-quantifier exception does not erase an unrelated no-siblings conf
   assert.match(result.reason, /negację/);
 });
 
+test('Polish inflection "spowoduje" is recognized as an explicit causal relation', () => {
+  const result = zgodnoscStrukturalna(
+    'Brak stabilności Wheatleya spowoduje zniszczenie Aperture.',
+    'Brak stabilności Wheatleya doprowadzi do zniszczenia Aperture.',
+  );
+  assert.equal(result.ok, true, result.reason);
+});
+
 test('unsupported causal relation remains a hard failure', () => {
   const result = zgodnoscStrukturalna(
     'Wheatley przejął kontrolę nad systemem.',
