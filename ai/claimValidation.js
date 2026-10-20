@@ -256,8 +256,29 @@ function wyodrebnijNazwyWlasne(value, options = {}) {
     .map(item => normalizujNazwe(item.token))
     .filter(name => name.length >= 3))];
 }
+function tekstDoWykrywaniaNegacji(value) {
+  let text = normalizujClaim(value);
+
+  // Frazy metajęzykowe i retoryczne zawierają „nie/not”, ale nie odwracają
+  // polaryzacji opisywanego faktu: „nie możemy zapomnieć o Astarionie” znaczy,
+  // że Astarion jest ważny, a nie że go nie ma.
+  text = text.replace(
+    /(?:^|\\b)(?:nie mozemy zapomniec|nie mozna zapomniec|nie zapominajmy|nie zapominaj|do not forget|not to mention)\\b/gu,
+    ' ',
+  );
+
+  // „lack/absence of stability” opisuje niestabilność; nie jest negacją
+  // następnego orzeczenia („lack of stability will cause destruction”).
+  // Pozostawiamy „lack/absence of siblings” jako sygnał braku konkretnej encji.
+  text = text.replace(/\\b(?:lack|absence) of stability\\b/gu, 'instability');
+  return text;
+}
+
 function wyodrebnijMarkery(value, regex) {
-  return regex.test(normalizujClaim(value));
+  const text = (regex === NEGATION_RE || regex === NEGATION_STRICT_RE)
+    ? tekstDoWykrywaniaNegacji(value)
+    : normalizujClaim(value);
+  return regex.test(text);
 }
 function normalizujTokenNazwy(value) {
   return String(value || '')
