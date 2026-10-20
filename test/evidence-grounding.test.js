@@ -99,6 +99,29 @@ test('unmarked evidence blocks do not treat Polish title or URL metadata as sour
   );
 });
 
+test('causal repair excludes semantically related quotes without an explicit causal relation', () => {
+  const unrelated = {
+    sourceId: 'SOURCE 1',
+    title: 'Portal 2 unrelated detail',
+    url: 'https://example.test/unrelated',
+    content: 'Wheatley was unstable. He took control of Aperture.',
+  };
+  const supported = {
+    sourceId: 'SOURCE 2',
+    title: 'Portal 2 causal detail',
+    url: 'https://example.test/causal',
+    content: "Wheatley's instability caused the destruction of Aperture.",
+  };
+  const repair = buildEvidenceRepairContext(
+    [{ claim: "Wheatley's instability caused the destruction of Aperture." }],
+    [unrelated, supported],
+    new Set(['SOURCE 1', 'SOURCE 2']),
+  );
+  assert.match(repair, /SOURCE 2/);
+  assert.match(repair, /caused the destruction of Aperture/);
+  assert.doesNotMatch(repair, /SOURCE 1|He took control of Aperture/);
+});
+
 test('evidence ranking strips leading image filenames but preserves verbatim source quotes', () => {
   const content = 'BG3 Astarion.png BG3 Astarion.png Astarion is an Origin character in Baldur’s Gate 3. You can play as Astarion or recruit him as a companion.';
   const blocks = parseEvidenceBlocks(`[SOURCE 1]
