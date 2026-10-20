@@ -31,9 +31,9 @@ test('Gemini validator and generation fallbacks use documented GenerateContent f
   assert.equal((source.match(/systemInstruction:\s*\{\s*parts:\s*\[\{\s*text:\s*overrideSystemPrompt\s*\}\]\s*\}/g) || []).length, 2, 'both Gemini generation fallbacks must send the system instruction');
   assert.doesNotMatch(source, /system_instruction:/);
   assert.match(source, /generationConfig:\s*buildGeminiValidatorGenerationConfig\(model, GEMINI_VALIDATOR_JSON_SCHEMA\)/);
-  assert.doesNotMatch(source, /responseFormat:\s*\{\s*text:\s*\{\s*mimeType:\s*'application\\/json'/s);
+  assert.doesNotMatch(source, /responseFormat:\s*\{\s*text:\s*\{\s*mimeType:/s);
   const { buildGeminiValidatorGenerationConfig } = require('../ai/gemini-response');
-  const schema = { type: 'OBJECT', properties: { ok: { type: 'BOOLEAN' } }, required: ['ok'] };
+  const schema = { type: 'object', properties: { ok: { type: 'boolean' } }, required: ['ok'] };
   assert.deepEqual(buildGeminiValidatorGenerationConfig('gemini-3.5-flash-lite', schema), {
     maxOutputTokens: 1400,
     responseMimeType: 'application/json',
