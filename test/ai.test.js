@@ -176,7 +176,7 @@ assert.match(require('fs').readFileSync(require('path').join(__dirname, '..', 'c
   assert.equal(botSource.split('function formatProviderError(').length - 1, 1);
 }
 
-assert.match(require('fs').readFileSync(require('path').join(__dirname, '..', 'czituch_bot.js'), 'utf8'), /response_format:\s*\{\s*type: 'json_object'/);
+assert.match(require('fs').readFileSync(require('path').join(__dirname, '..', 'czituch_bot.js'), 'utf8'), /response_format:\s*buildOpenRouterValidatorResponseFormat\(\)/);
 {
   assert.deepEqual(parseMemoryCommand('co o mnie pamiętasz?'), { type:'list' });
   assert.deepEqual(parseMemoryCommand('zapomnij Czituch'), { type:'forget', query:'Czituch' });
@@ -333,8 +333,8 @@ assert.match(require('fs').readFileSync(require('path').join(__dirname, '..', 'c
   assert.match(validatorSource, /additionalProperties: false/);
 
   const botSource = require('fs').readFileSync(require('path').join(__dirname, '..', 'czituch_bot.js'), 'utf8');
-  assert.match(botSource, /response_format:\s*\{\s*type: 'json_object'/);
-  assert.doesNotMatch(botSource, /OpenRouter[\\s\\S]{0,500}response_format:\\s*\\{\\s*type: 'json_schema'/);
+  assert.match(botSource, /response_format:\s*buildOpenRouterValidatorResponseFormat\(\)/);
+  assert.match(botSource, /provider:\s*\{\s*require_parameters: true\s*\}/);
   assert.match(botSource, /reasoning:\s*\{\s*effort: 'low',\s*exclude: true\s*\}/);
   assert.match(botSource, /truncatedJson \? 'UCIĘTY_JSON' : 'EMPTY_CONTENT'/);
   assert.match(botSource, /truncatedJson \? 'UCIĘTY_JSON' : 'INVALID_JSON'/);
@@ -344,7 +344,7 @@ assert.match(require('fs').readFileSync(require('path').join(__dirname, '..', 'c
   assert.match(botSource, /Object\.getOwnPropertyNames\(value\)/);
   assert.match(botSource, /requestContract: \{/);
   assert.match(botSource, /async function walidujOdpowiedzXKiro\(/);
-  assert.match(botSource, /response_format: \{ type: 'json_object' \}/);
+  assert.match(botSource, /response_format:\s*buildOpenRouterValidatorResponseFormat\(\)/);
   assert.match(botSource, /validator:xkiro/);
 }
 

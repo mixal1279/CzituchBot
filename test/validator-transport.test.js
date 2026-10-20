@@ -12,7 +12,7 @@ delete process.env.AI_VALIDATOR_BREAKER_MS;
 const { __validatorTestHooks: hooks } = require('../czituch_bot');
 const { createAIRequestContext } = require('../ai/requestContext');
 const { resetProviderQuotaCooldowns, quotaCooldownMsFromError, shouldOpenQuotaCircuit } = require('../ai/fallback');
-const { GROQ_VALIDATOR_JSON_SCHEMA, buildGroqValidatorResponseFormat } = require('../ai/validator');
+const { GROQ_VALIDATOR_JSON_SCHEMA, buildGroqValidatorResponseFormat, buildOpenRouterValidatorResponseFormat } = require('../ai/validator');
 
 const EVIDENCE = [
   '[SOURCE 1]',
@@ -229,7 +229,7 @@ test('Gemini oznacza niekompletny JSON jako ucięty, gdy finishReason to MAX_TOK
   assert.match(result.reason, /finishReason=MAX_TOKENS/);
 });
 
-test('OpenRouter wysyła json_object, reasoning low i honoruje własny endpoint', async () => {
+test('OpenRouter wysyła strict json_schema, wymaga obsługi parametrów i honoruje własny endpoint', async () => {
   hooks.KONFIGURACJA.openrouterKey = 'test-openrouter-key';
   hooks.KONFIGURACJA.openrouterBaseUrl = 'https://openrouter.example/custom/v1';
   hooks.KONFIGURACJA.openrouterValidatorModel = 'openai/gpt-oss-20b';
@@ -245,7 +245,8 @@ test('OpenRouter wysyła json_object, reasoning low i honoruje własny endpoint'
   const result = await hooks.walidujOdpowiedzOpenRouter('generic', QUESTION, ANSWER, EVIDENCE, 'test-or');
   assert.equal(call.url, 'https://openrouter.example/custom/v1/chat/completions');
   assert.equal(call.body.max_tokens, 1400);
-  assert.deepEqual(call.body.response_format, { type: 'json_object' });
+  assert.deepEqual(call.body.response_format, buildOpenRouterValidatorResponseFormat());
+  assert.deepEqual(call.body.provider, { require_parameters: true });
   assert.deepEqual(call.body.reasoning, { effort: 'low', exclude: true });
   assert.equal(result.status, 'unavailable');
   assert.equal(result.truncatedJson, true);

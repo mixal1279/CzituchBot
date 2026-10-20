@@ -1629,7 +1629,7 @@ ${dane}
   };
 }
 
-const { GEMINI_VALIDATOR_JSON_SCHEMA, buildGroqValidatorResponseFormat, wytnijJsonWalidatora, normalizujWynikWalidatora, wyodrebnijIdentyfikatoryZrodel } = AI_VALIDATOR;
+const { GEMINI_VALIDATOR_JSON_SCHEMA, buildGroqValidatorResponseFormat, buildOpenRouterValidatorResponseFormat, wytnijJsonWalidatora, normalizujWynikWalidatora, wyodrebnijIdentyfikatoryZrodel } = AI_VALIDATOR;
 
 function zarezerwujSlotWalidatora(requestState, purpose) {
   if (!requestState) return true;
@@ -1964,7 +1964,10 @@ async function walidujOdpowiedzOpenRouter(persona, pytanie, odpowiedz, dane, req
         temperature: 0,
         max_tokens: AI_VALIDATOR_MAX_TOKENS_OPENROUTER,
         reasoning: { effort: 'low', exclude: true },
-        response_format: { type: 'json_object' },
+        // OpenRouter documents structured outputs as endpoint-dependent.
+        // Require the parameter so routing cannot silently ignore the schema.
+        provider: { require_parameters: true },
+        response_format: buildOpenRouterValidatorResponseFormat(),
       }), signal: controller.signal,
     });
     const data = await response.json().catch(() => ({}));
