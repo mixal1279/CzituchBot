@@ -145,6 +145,32 @@ test('quote verification preserves sentence boundaries after punctuation normali
   assert.equal(quoteExists('Pi is 3.14 units.', 'Pi is 3.14 units.'), true);
 });
 
+test('validator rejects a source quote copied into claim_en instead of translated', () => {
+  const quote = 'Wheatley was transferred into GLaDOS body and later gained control of Aperture.';
+  const data = '[SOURCE 1]\\nTREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>\\n' + quote + '\\n<<<END_UNTRUSTED_SOURCE_CONTENT>>>';
+  const claim = 'Wheatley został przeniesiony do ciała GLaDOS.';
+  const result = normalizujWynikWalidatora({
+    valid: true,
+    reason: 'ok',
+    unsupported_claims: [],
+    supported: true,
+    relevant: true,
+    complete: true,
+    hallucination: false,
+    confidence: 0.95,
+    claims: [{
+      claim,
+      claim_en: quote,
+      supported: true,
+      source_ids: ['SOURCE 1'],
+      evidence_quote: quote,
+    }],
+  }, 'test-model', 'test', new Set(['SOURCE 1']), data, claim);
+
+  assert.equal(result.status, 'rejected');
+  assert.match(JSON.stringify(result.diagnostics.unsupportedEvidenceClaims), /kopią evidence_quote/);
+});
+
 test('validator accepts an exact quoted span without requiring the whole source block to match', () => {
   const data = '[SOURCE 1]\nTYTUŁ: Portal 2\nTREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>\nWheatley zostaje przeniesiony do ciała GLaDOS.\nPóźniej uzyskuje kontrolę nad systemem Aperture.\n<<<END_UNTRUSTED_SOURCE_CONTENT>>>';
   const result = normalizujWynikWalidatora({
