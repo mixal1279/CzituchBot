@@ -94,4 +94,26 @@ function buildGeminiGenerateContentUrl(model) {
   return `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent`;
 }
 
-module.exports = { parseGeminiGenerationResponse, buildGeminiGenerateContentUrl };
+/**
+ * Build the documented GenerateContent generationConfig for the JSON validator.
+ * Use responseMimeType + responseSchema: responseFormat.text.mimeType is an
+ * enum in the REST contract and "application/json" there caused HTTP 400.
+ */
+function buildGeminiValidatorGenerationConfig(model, schema) {
+  return {
+    maxOutputTokens: 1400,
+    responseMimeType: 'application/json',
+    responseSchema: schema,
+    ...(model === 'gemini-3.8-flash'
+      ? { thinkingConfig: { thinkingLevel: 'low' } }
+      : model === 'gemini-3.5-flash-lite'
+        ? { thinkingConfig: { thinkingLevel: 'minimal' } }
+        : {}),
+  };
+}
+
+module.exports = {
+  parseGeminiGenerationResponse,
+  buildGeminiGenerateContentUrl,
+  buildGeminiValidatorGenerationConfig,
+};
