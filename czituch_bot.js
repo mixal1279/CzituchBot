@@ -1699,7 +1699,11 @@ async function walidujOdpowiedzGeminiModel(model, persona, pytanie, odpowiedz, d
           contents: [{ role: 'user', parts: [{ text: user }] }],
           generationConfig: {
             maxOutputTokens: 1400,
-            responseFormat: { text: { mimeType: 'application/json', schema: GEMINI_VALIDATOR_JSON_SCHEMA } },
+            // Gemini v1beta TextResponseFormat.MimeType jest polem enum; wymaga
+            // wartości w formacie UPPER_SNAKE_CASE: "APPLICATION_JSON" zamiast
+            // "application/json". Mała litera powoduje HTTP 400:
+            // Invalid value at 'generation_config.response_format.text.mime_type'
+            responseFormat: { text: { mimeType: 'APPLICATION_JSON', schema: GEMINI_VALIDATOR_JSON_SCHEMA } },
             ...(model === 'gemini-3.8-flash'
               ? { thinkingConfig: { thinkingLevel: 'low' } }
               : model === 'gemini-3.5-flash-lite'

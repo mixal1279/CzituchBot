@@ -30,9 +30,11 @@ test('Gemini validator and generation fallbacks use documented GenerateContent f
   assert.match(source, /systemInstruction:\s*\{\s*parts:/s);
   assert.equal((source.match(/systemInstruction:\s*\{\s*parts:\s*\[\{\s*text:\s*overrideSystemPrompt\s*\}\]\s*\}/g) || []).length, 2, 'both Gemini generation fallbacks must send the system instruction');
   assert.doesNotMatch(source, /system_instruction:/);
-  assert.match(source, /responseFormat:\s*\{\s*text:\s*\{\s*mimeType:\s*'application\/json',\s*schema:\s*GEMINI_VALIDATOR_JSON_SCHEMA/s);
+  // Gemini v1beta TextResponseFormat.MimeType jest polem enum (UPPER_SNAKE_CASE)
+  assert.match(source, /responseFormat:\s*\{\s*text:\s*\{\s*mimeType:\s*'APPLICATION_JSON',\s*schema:\s*GEMINI_VALIDATOR_JSON_SCHEMA/s);
   assert.doesNotMatch(source, /responseMimeType:\s*'application\/json'/);
   assert.doesNotMatch(source, /responseSchema:\s*GEMINI_VALIDATOR_JSON_SCHEMA/);
+  assert.doesNotMatch(source, /mimeType:\s*'application\/json'/);  // enum wymaga wielkich liter
   assert.doesNotMatch(source, /generationConfig:\s*\{\s*temperature:/, 'Gemini 3.x GenerateContent requests must omit deprecated sampling parameters');
   const webRetrieval = read('ai/webRetrieval.js');
   assert.doesNotMatch(webRetrieval, /generationConfig:\s*\{\s*temperature:/, 'Gemini web retrieval must omit deprecated sampling parameters');
