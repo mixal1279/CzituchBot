@@ -43,7 +43,15 @@ function buildAnswerPlan(question, routing = {}) {
     }
   }
   if (routing.is_lore) slots.add('entity_context');
-  if (routing.is_gameplay) slots.add('steps');
+  // Pytanie o gameplay nie zawsze wymaga kroków: czysto lokalizacyjne pytania
+  // typu „gdzie znaleźć X”, „gdzie jest X” wymagają tylko lokalizacji (where),
+  // a nie procedury. Wymaganie steps/how dla nich powoduje, że poprawna
+  // odpowiedź „znajduje się w Y” zostaje odrzucona przez answer-judge
+  // jako „brakujące kroki” (np. Elden Ring Wielki Miecz).
+  const isLocationOnlyGameplay = routing.is_gameplay && slots.has('where')
+    && !slots.has('why') && !/jak\s+(?:przej|zrobi|pokona|zdoby|odblokowa|rozwiąza|ukoncz|uzyc|użyc|aktywow|napraw)/i.test(q)
+    && !/\b(?:walkthrough|solucj|poradnik|boss|quest|misj)\b/i.test(q);
+  if (routing.is_gameplay && !isLocationOnlyGameplay) slots.add('steps');
   // Procedural questions satisfy the broad how-intent as well as the steps slot.
   if (slots.has('steps')) slots.add('how');
   if (slots.has('why')) {

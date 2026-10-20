@@ -18,6 +18,14 @@ function czyPytanieOGameplay(pytanie, domeny = null) {
 function dodajGameFAQsDomenę(domeny) {
   const lista = Array.isArray(domeny) ? [...domeny] : [];
   if (!lista.includes(GAMEFAQS_DOMAIN)) lista.unshift(GAMEFAQS_DOMAIN);
+  // GameFAQs często nie indeksuje się dobrze w Tavily (w live benchmarku
+  // Skyrim "jak pokonać smoka" zwróciło 0 wyników z gamefaqs i 1 niezależny host
+  // z exa, co wywindowało współczynnik odrzuceń). Dodajemy dodatkowe domeny
+  // z gameplay wiki jako fallback, żeby retrieval miał z czego czerpać, nawet
+  // gdy gamefaqs zwraca mało trafnych wyników.
+  for (const fallback of ['fandom.com', 'ign.com', 'gamespot.com', 'pcgamer.com', 'youtube.com']) {
+    if (!lista.includes(fallback)) lista.push(fallback);
+  }
   return lista;
 }
 

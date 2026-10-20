@@ -1680,9 +1680,11 @@ async function walidujOdpowiedzGeminiModel(model, persona, pytanie, odpowiedz, d
     // Use the same adaptive reserve policy as the preflight check. The helper
     // always preserves at least 2.5s; computeValidatorTimeout skips the attempt
     // when less than 4s + that reserve remains.
+    // Gemini flash-lite/flash bywa wolniejszy pod obciążeniem (8-11 s w live benchmarku),
+    // więc podnosimy max do 12 s. ReserveMs chroni budżet kolejnych validatorów.
     const validatorTimeoutMs = requestState
       ? computeValidatorTimeout(validatorRemainingMs, {
-          maxTimeoutMs: 9000,
+          maxTimeoutMs: 12000,
           reserveMs: computeValidatorReserveMs(validatorRemainingMs, requestState?.validatory + 1, requestState?.maxValidatorow),
           minTimeoutMs: 4000,
         })
@@ -1859,7 +1861,11 @@ async function walidujOdpowiedzGeminiModel(model, persona, pytanie, odpowiedz, d
         geminiValidatorCooldownUntil = 0;
       }
     } else if (transient) {
-      geminiValidatorCooldownUntil = Date.now() + 60_000;
+      // Przejściowy błąd transportu/timeout nie blokuje Gemini na całą minutę
+      // — stary próg 60 s wyłączał Gemini z kolejnych benchmarkowych requestów
+      // po jednym timeoutie (np. Witcher 3 → Skyrim), chociaż to najdokładniejszy
+      // validator. Obniżamy do 8 s, wystarczy na krótkie odciążenie endpointu.
+      geminiValidatorCooldownUntil = Date.now() + 8_000;
     }
     return {
       status: 'unavailable',
@@ -1881,7 +1887,13 @@ let geminiValidatorCooldownUntil = 0;
 let geminiAccountQuotaCooldownUntil = 0;
 
 let groqValidatorClientOverride = null;
-const AI_VALIDATOR_BREAKER_MS = dodatniaLiczbaEnv('AI_VALIDATOR_BREAKER_MS', 300000);
+// Dwa kolejne timeouty u dostawcy zwykle oznaczają chwilowe przeciążenie,
+// nie awarię na 5 minut. Stary próg 300 s (5 min) blokował całego dostawcę
+// na cały live benchmark po dwóch aborach z ciasnego timeoutu (np. Gemini
+// w requestach #1 i #5), co zmuszało do użycia słabszych fallbacków.
+// Skracamy do 15 s — wystarczy na krótkie odciążenie providera, ale nie
+// wyłącza go z całego benchmarku.
+const AI_VALIDATOR_BREAKER_MS = dodatniaLiczbaEnv('AI_VALIDATOR_BREAKER_MS', 15000);
 const validatorTransportBreakers = new Map();
 
 function validatorBreakerIsOpen(provider, now = Date.now()) {
