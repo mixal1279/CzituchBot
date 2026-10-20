@@ -219,7 +219,7 @@ test('validator tolerates one source typo in an otherwise strongly supported par
 
 test('validator accepts the supported Polish causal inflection spowoduje in the evidence context', () => {
   const quote = 'Mówi też, że jego niestabilność spowoduje zniszczenie Aperture, zabijając wszystkich i wszystko, co znajduje się w obiekcie.';
-  const data = '[SOURCE 1]\\nTYTUŁ: Portal 2\\nTREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>\\nGLaDOS informuje Chell, że Wheatley jest niestabilny.\\n' + quote + '\\n<<<END_UNTRUSTED_SOURCE_CONTENT>>>';
+  const data = '[SOURCE 1]\nTYTUŁ: Portal 2\nTREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>\nGLaDOS informuje Chell, że Wheatley jest niestabilny.\n' + quote + '\n<<<END_UNTRUSTED_SOURCE_CONTENT>>>';
   const claim = 'GLaDOS ostrzega, że niestabilność Wheatleya doprowadzi do zniszczenia Aperture.';
   const result = normalizujWynikWalidatora({
     valid: true,
