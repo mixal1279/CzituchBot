@@ -217,6 +217,31 @@ test('validator tolerates one source typo in an otherwise strongly supported par
   assert.ok(['exact_quote', 'source_context'].includes(result.diagnostics.evidenceBindings[0].mode));
 });
 
+test('validator accepts the supported Polish causal inflection spowoduje in the evidence context', () => {
+  const quote = 'Mówi też, że jego niestabilność spowoduje zniszczenie Aperture, zabijając wszystkich i wszystko, co znajduje się w obiekcie.';
+  const data = '[SOURCE 1]\\nTYTUŁ: Portal 2\\nTREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>\\nGLaDOS informuje Chell, że Wheatley jest niestabilny.\\n' + quote + '\\n<<<END_UNTRUSTED_SOURCE_CONTENT>>>';
+  const claim = 'GLaDOS ostrzega, że niestabilność Wheatleya doprowadzi do zniszczenia Aperture.';
+  const result = normalizujWynikWalidatora({
+    valid: true,
+    reason: 'ok',
+    unsupported_claims: [],
+    supported: true,
+    relevant: true,
+    complete: true,
+    hallucination: false,
+    confidence: 0.95,
+    claims: [{
+      claim,
+      supported: true,
+      source_ids: ['SOURCE 1'],
+      evidence_quote: quote,
+    }],
+  }, 'test-model', 'test', new Set(['SOURCE 1']), data, claim);
+
+  assert.equal(result.status, 'accepted', JSON.stringify(result.diagnostics));
+  assert.equal(result.diagnostics.evidenceBindings[0].supportVerified, true);
+});
+
 test('validator rejects a real quote when the claim adds an unsupported causal relationship', () => {
   const data = '[SOURCE 1]\nTYTUŁ: RDR2\nTREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>\nArthur zdradził Dutcha podczas wydarzeń w obozie.\n<<<END_UNTRUSTED_SOURCE_CONTENT>>>';
   const result = normalizujWynikWalidatora({
