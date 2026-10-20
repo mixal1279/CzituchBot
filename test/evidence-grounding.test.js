@@ -147,7 +147,7 @@ test('quote verification preserves sentence boundaries after punctuation normali
 
 test('validator rejects a source quote copied into claim_en instead of translated', () => {
   const quote = 'Wheatley was transferred into GLaDOS body and later gained control of Aperture.';
-  const data = '[SOURCE 1]\\nTREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>\\n' + quote + '\\n<<<END_UNTRUSTED_SOURCE_CONTENT>>>';
+  const data = '[SOURCE 1]\nTREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>\n' + quote + '\n<<<END_UNTRUSTED_SOURCE_CONTENT>>>';
   const claim = 'Wheatley został przeniesiony do ciała GLaDOS.';
   const result = normalizujWynikWalidatora({
     valid: true,
