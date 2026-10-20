@@ -7,6 +7,99 @@ const REASONING_MIN_ANSWER_TOKENS = 300;
 const REASONING_TOKEN_CEILING = 4000;
 const boostedPayloads = new WeakSet();
 
+// --- Lokalny licznik TPM dla Groq -------------------------------------------
+// Walidator i generator naprawczy współdzielą model gpt-oss-20b, a jego limit
+// on_demand to 8000 tokenów/min. Pojedyncze żądanie to ~4-5k tokenów (prompt +
+// max_completion_tokens), więc drugie żądanie w tej samej minucie dostawało 429
+// i otwierało circuit breaker. Liczymy zużycie w oknie 60 s i pozwalamy
+// wołającym pominąć model z góry, zamiast wysyłać żądanie skazane na 429.
+// Limity innych modeli są wyłączone, dopóki nie podasz ich w AI_GROQ_TPM_LIMITS
+// (JSON, np. {"openai/gpt-oss-120b":8000}). AI_GROQ_TPM_GUARD=0 wyłącza licznik.
+const GROQ_TPM_WINDOW_MS = 60_000;
+const GROQ_TPM_DEFAULT_LIMITS = { 'openai/gpt-oss-20b': 8000 };
+const GROQ_TPM_SAFETY = 0.95;
+const GROQ_TPM_DEFAULT_ESTIMATE = 4500;
+const groqTpmEvents = new Map();
+
+function groqTpmLimitFor(model) {
+  if (process.env.AI_GROQ_TPM_GUARD === '0') return null;
+  let overrides = {};
+  try { overrides = JSON.parse(process.env.AI_GROQ_TPM_LIMITS || '{}') || {}; } catch (_) { overrides = {}; }
+  const limit = Number(overrides[model] ?? GROQ_TPM_DEFAULT_LIMITS[model]);
+  return Number.isFinite(limit) && limit > 0 ? limit : null;
+}
+
+/** Konserwatywne oszacowanie tokenów żądania: znaki promptu / 3 + max_completion_tokens. */
+function estimateGroqRequestTokens(payload) {
+  const messages = Array.isArray(payload?.messages) ? payload.messages : [];
+  const chars = messages.reduce((sum, message) => {
+    const content = message?.content;
+    if (typeof content === 'string') return sum + content.length;
+    if (Array.isArray(content)) {
+      return sum + content.reduce((inner, part) => inner + String(typeof part === 'string' ? part : (part?.text || '')).length, 0);
+    }
+    return sum;
+  }, 0);
+  const completion = Number(payload?.max_completion_tokens ?? payload?.max_tokens) || 0;
+  return Math.ceil(chars / 3) + completion;
+}
+
+function activeGroqTpmEvents(model, now) {
+  const events = (groqTpmEvents.get(model) || []).filter(event => (
+    now - event.at < (event.pending ? GROQ_TPM_WINDOW_MS * 2 : GROQ_TPM_WINDOW_MS)
+  ));
+  groqTpmEvents.set(model, events);
+  return events;
+}
+
+/**
+ * Ile ms trzeba odczekać, aby żądanie o danym rozmiarze zmieściło się w limicie TPM modelu.
+ * 0 = zmieści się teraz albo model nie ma lokalnego limitu.
+ */
+function groqTpmRetryAfterMs(model, estimatedTokens, now = Date.now()) {
+  const limit = groqTpmLimitFor(String(model || ''));
+  if (!limit) return 0;
+  const budget = limit * GROQ_TPM_SAFETY;
+  const estimate = Number(estimatedTokens) > 0 ? Number(estimatedTokens) : GROQ_TPM_DEFAULT_ESTIMATE;
+  // Pojedyncze żądanie większe niż limit i tak nie przejdzie; niech zdecyduje API.
+  if (estimate > budget) return 0;
+  const events = activeGroqTpmEvents(String(model), now);
+  let used = events.reduce((sum, event) => sum + event.tokens, 0);
+  if (used + estimate <= budget) return 0;
+  const byAge = [...events].sort((a, b) => a.at - b.at);
+  for (const event of byAge) {
+    used -= event.tokens;
+    if (used + estimate <= budget) return Math.max(0, event.at + GROQ_TPM_WINDOW_MS - now);
+  }
+  return GROQ_TPM_WINDOW_MS;
+}
+
+function resetGroqTpmWindow() {
+  groqTpmEvents.clear();
+}
+
+function trackGroqRequest(payload, result) {
+  const model = String(payload?.model || '');
+  if (!groqTpmLimitFor(model)) return;
+  const entry = { at: Date.now(), tokens: estimateGroqRequestTokens(payload), pending: true };
+  const events = groqTpmEvents.get(model) || [];
+  events.push(entry);
+  groqTpmEvents.set(model, events);
+  const settleOk = (data) => {
+    entry.pending = false;
+    const used = Number(data?.usage?.total_tokens);
+    if (Number.isFinite(used) && used > 0) entry.tokens = used;
+  };
+  const settleError = (error) => {
+    entry.pending = false;
+    const status = Number(error?.status ?? error?.statusCode ?? 0);
+    // Odrzucone żądanie (429/400/401/403) nie zużywa tokenów; timeout/abort może już je zużyć.
+    if ([400, 401, 403, 429].includes(status)) entry.tokens = 0;
+  };
+  if (result && typeof result.then === 'function') result.then(settleOk, settleError);
+  else settleOk(result);
+}
+
 /**
  * Normalizuje bazowy URL dla oficjalnego groq-sdk.
  * Surowe fetch musi osobno dodać /openai/v1/chat/completions.
@@ -45,7 +138,11 @@ function createGroqCompletion(groqClient, payload, { signal } = {}) {
   // The request budget and fallback chain own retries. SDK-level retries would
   // make one reserved model-call slot issue multiple hidden HTTP requests.
   const requestOptions = { maxRetries: 0, ...(signal ? { signal } : {}) };
-  return groqClient.chat.completions.create(payload, requestOptions);
+  const result = groqClient.chat.completions.create(payload, requestOptions);
+  // Zwracamy oryginalny wynik (tożsamość obiektu/promise bez zmian); licznik TPM
+  // dopina się obok i nigdy nie zmienia ani nie połyka błędu wołającego.
+  try { trackGroqRequest(payload, result); } catch (_) { /* licznik jest best-effort */ }
+  return result;
 }
 
 /**
@@ -131,4 +228,15 @@ function computeGenerationTimeout(remainingMs, {
   return timeoutMs >= minTimeoutMs ? Math.floor(timeoutMs) : null;
 }
 
-module.exports = { createGroqCompletion, awaitWithAbortTimeout, withReasoningHeadroom, computeValidatorTimeout, computeValidatorReserveMs, computeGenerationTimeout, normalizujGroqBaseUrl };
+module.exports = {
+  createGroqCompletion,
+  awaitWithAbortTimeout,
+  withReasoningHeadroom,
+  computeValidatorTimeout,
+  computeValidatorReserveMs,
+  computeGenerationTimeout,
+  normalizujGroqBaseUrl,
+  estimateGroqRequestTokens,
+  groqTpmRetryAfterMs,
+  resetGroqTpmWindow,
+};
