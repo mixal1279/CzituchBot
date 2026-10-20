@@ -479,6 +479,9 @@ test('circuit breaker dla Groq, xKiro i OpenRouter otwiera się po dwóch timeou
 });
 
 test('timeout z mockowanego klienta Groq trafia do circuit breakera bez wywołania sieci', async () => {
+  const previousTpmGuard = process.env.AI_GROQ_TPM_GUARD;
+  process.env.AI_GROQ_TPM_GUARD = '0'; // testuje circuit breaker, nie lokalny TPM guard
+  try {
   hooks.KONFIGURACJA.geminiKey = '';
   hooks.KONFIGURACJA.xkiroKey = '';
   hooks.KONFIGURACJA.openrouterKey = '';
@@ -506,6 +509,10 @@ test('timeout z mockowanego klienta Groq trafia do circuit breakera bez wywołan
   };
   const result = await hooks.walidujOdpowiedzAIBezCache('generic', QUESTION, ANSWER, EVIDENCE, [], 'test-groq-breaker-open', requestState, {});
   assert.ok(!slotPurposes.includes('validator:groq'));
+  } finally {
+    if (previousTpmGuard === undefined) delete process.env.AI_GROQ_TPM_GUARD;
+    else process.env.AI_GROQ_TPM_GUARD = previousTpmGuard;
+  }
 });
 
 
