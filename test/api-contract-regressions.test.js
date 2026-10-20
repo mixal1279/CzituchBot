@@ -35,13 +35,16 @@ test('Gemini validator and generation fallbacks use documented GenerateContent f
   const schema = { type: 'object', properties: { ok: { type: 'boolean' } }, required: ['ok'] };
   assert.deepEqual(buildGeminiValidatorGenerationConfig('gemini-3.5-flash-lite', schema), {
     maxOutputTokens: 1400,
-    responseFormat: {
-      text: { mimeType: 'application/json', schema },
+    responseMimeType: 'application/json',
+    responseSchema: {
+      type: 'OBJECT',
+      properties: { ok: { type: 'BOOLEAN' } },
+      required: ['ok'],
     },
     thinkingConfig: { thinkingLevel: 'minimal' },
   });
-  assert.doesNotMatch(source, /responseMimeType:\s*'application\/json'/);
-  assert.doesNotMatch(source, /responseSchema:\s*GEMINI_VALIDATOR_JSON_SCHEMA/);
+  assert.match(source, /responseMimeType:\s*'application\/json'/);
+  assert.match(source, /responseSchema:\s*normalizeGeminiRestSchema\(schema\)/);
   assert.deepEqual(buildGeminiValidatorGenerationConfig('gemini-3.8-flash', schema).thinkingConfig, { thinkingLevel: 'low' });
   assert.doesNotMatch(source, /generationConfig:\s*\{\s*temperature:/, 'Gemini 3.x GenerateContent requests must omit deprecated sampling parameters');
   const webRetrieval = read('ai/webRetrieval.js');
