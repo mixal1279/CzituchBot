@@ -160,7 +160,9 @@ test('Groq SDK and preflight honor GROQ_BASE_URL with the documented default', (
   const source = read('czituch_bot.js');
   const preflight = read('scripts/groq-preflight.js');
   assert.ok(source.includes('groqBaseUrl: String(process.env.GROQ_BASE_URL'));
-  assert.ok(source.includes('baseURL: KONFIGURACJA.groqBaseUrl'));
+  assert.ok(source.includes('baseURL: normalizeGroqSdkBaseUrl(KONFIGURACJA.groqBaseUrl)'));
+  const runtime = read('ai/provider-runtime.js');
+  assert.ok(runtime.includes(".replace(/\\/openai\\/v1$/i, '')"), 'SDK base URL strips /openai/v1 to avoid a duplicated endpoint path');
   assert.ok(preflight.includes('process.env.GROQ_BASE_URL'));
   assert.ok(preflight.includes('/chat/completions'));
 });
