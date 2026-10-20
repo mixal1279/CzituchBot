@@ -36,8 +36,10 @@ test('Gemini validator and generation fallbacks use documented GenerateContent f
   const schema = { type: 'object', properties: { ok: { type: 'boolean' } }, required: ['ok'] };
   assert.deepEqual(buildGeminiValidatorGenerationConfig('gemini-3.5-flash-lite', schema), {
     maxOutputTokens: 1400,
-    responseMimeType: 'application/json',
-    responseSchema: { type: 'OBJECT', properties: { ok: { type: 'BOOLEAN' } }, required: ['ok'] },
+    responseFormat: {
+      responseMimeType: 'application/json',
+      responseSchema: { type: 'OBJECT', properties: { ok: { type: 'BOOLEAN' } }, required: ['ok'] },
+    },
     thinkingConfig: { thinkingLevel: 'minimal' },
   });
   assert.deepEqual(buildGeminiValidatorGenerationConfig('gemini-3.8-flash', schema).thinkingConfig, { thinkingLevel: 'low' });
