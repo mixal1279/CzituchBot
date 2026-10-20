@@ -37,7 +37,7 @@ test('Gemini validator and generation fallbacks use documented GenerateContent f
   assert.deepEqual(buildGeminiValidatorGenerationConfig('gemini-3.5-flash-lite', schema), {
     maxOutputTokens: 1400,
     responseMimeType: 'application/json',
-    responseSchema: schema,
+    responseSchema: { type: 'OBJECT', properties: { ok: { type: 'BOOLEAN' } }, required: ['ok'] },
     thinkingConfig: { thinkingLevel: 'minimal' },
   });
   assert.deepEqual(buildGeminiValidatorGenerationConfig('gemini-3.8-flash', schema).thinkingConfig, { thinkingLevel: 'low' });
@@ -45,8 +45,8 @@ test('Gemini validator and generation fallbacks use documented GenerateContent f
   const webRetrieval = read('ai/webRetrieval.js');
   assert.doesNotMatch(webRetrieval, /generationConfig:\s*\{\s*temperature:/, 'Gemini web retrieval must omit deprecated sampling parameters');
   const geminiResponse = read('ai/gemini-response.js');
-  assert.match(geminiResponse, /model === 'gemini-3\\.8-flash'[\\s\\S]{0,100}\\{ thinkingLevel: 'low' \\}/);
-  assert.match(geminiResponse, /model === 'gemini-3\\.5-flash-lite'[\\s\\S]{0,120}\\{ thinkingLevel: 'minimal' \\}/);
+  assert.match(geminiResponse, /model === 'gemini-3\.8-flash'[\s\S]{0,100}\{ thinkingLevel: 'low' \}/);
+  assert.match(geminiResponse, /model === 'gemini-3\.5-flash-lite'[\s\S]{0,120}\{ thinkingLevel: 'minimal' \}/);
 });
 
 test('answer-completeness repair includes the prior answer and uses real line separators', () => {
