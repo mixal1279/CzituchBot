@@ -46,9 +46,9 @@ test('other models and payloads without reasoning_effort are untouched', async (
 
 test('Groq SDK base URL strips the endpoint prefix already included by the SDK', () => {
   assert.equal(normalizujGroqBaseUrl('https://api.groq.com/openai/v1'), 'https://api.groq.com');
-  assert.equal(normalizeGroqSdkBaseUrl('https://api.groq.com/openai/v1/'), 'https://api.groq.com');
-  assert.equal(normalizeGroqSdkBaseUrl('https://api.groq.com'), 'https://api.groq.com');
-  assert.equal(normalizeGroqSdkBaseUrl('https://gateway.example/openai/v1'), 'https://gateway.example');
+  assert.equal(normalizujGroqBaseUrl('https://api.groq.com/openai/v1/'), 'https://api.groq.com');
+  assert.equal(normalizujGroqBaseUrl('https://api.groq.com'), 'https://api.groq.com');
+  assert.equal(normalizujGroqBaseUrl('https://gateway.example/openai/v1'), 'https://gateway.example');
 });
 
 
