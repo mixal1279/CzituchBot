@@ -136,10 +136,11 @@ test('Gemini GenerateContent uses the documented systemInstruction and responseF
   assert.ok(call.body.systemInstruction?.parts?.[0]?.text);
   assert.equal(Object.hasOwn(call.body, 'system_instruction'), false);
   assert.equal(Object.hasOwn(call.body.generationConfig, 'temperature'), false);
-  assert.equal(call.body.generationConfig.responseMimeType, 'application/json');
-  assert.equal(call.body.generationConfig.responseSchema.type, 'OBJECT');
-  assert.ok(call.body.generationConfig.responseSchema.properties.claims.items.properties.claim_en);
-  assert.equal(Object.hasOwn(call.body.generationConfig, 'responseFormat'), false);
+  assert.equal(call.body.generationConfig.responseFormat.responseMimeType, 'application/json');
+  assert.equal(call.body.generationConfig.responseFormat.responseSchema.type, 'OBJECT');
+  assert.ok(call.body.generationConfig.responseFormat.responseSchema.properties.claims.items.properties.claim_en);
+  assert.equal(Object.hasOwn(call.body.generationConfig, 'responseSchema'), false);
+  assert.equal(Object.hasOwn(call.body.generationConfig, 'responseMimeType'), false);
 });
 
 test('Gemini zachowuje promptFeedback, gdy prompt jest zablokowany i nie ma kandydatów', async () => {
