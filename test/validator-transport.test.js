@@ -119,7 +119,7 @@ test('wspólny prompt zachowuje claim_en, metadane, pytanie, odpowiedź i źród
   assert.match(prompt.user, /Portal 2 was released on 19 April 2011/);
 });
 
-test('Gemini GenerateContent uses the documented systemInstruction and responseFormat schema fields', async () => {
+test('Gemini GenerateContent uses the documented systemInstruction and REST responseSchema fields', async () => {
   hooks.KONFIGURACJA.geminiKey = 'test-gemini-key';
   hooks.KONFIGURACJA.openrouterKey = '';
   hooks.KONFIGURACJA.xkiroKey = '';
@@ -136,11 +136,11 @@ test('Gemini GenerateContent uses the documented systemInstruction and responseF
   assert.ok(call.body.systemInstruction?.parts?.[0]?.text);
   assert.equal(Object.hasOwn(call.body, 'system_instruction'), false);
   assert.equal(Object.hasOwn(call.body.generationConfig, 'temperature'), false);
-  assert.equal(call.body.generationConfig.responseFormat.text.mimeType, 'application/json');
-  assert.equal(call.body.generationConfig.responseFormat.text.schema.type, 'object');
-  assert.ok(call.body.generationConfig.responseFormat.text.schema.properties.claims.items.properties.claim_en);
-  assert.equal(Object.hasOwn(call.body.generationConfig, 'responseSchema'), false);
-  assert.equal(Object.hasOwn(call.body.generationConfig, 'responseMimeType'), false);
+  assert.equal(call.body.generationConfig.responseMimeType, 'application/json');
+  assert.equal(call.body.generationConfig.responseSchema.type, 'OBJECT');
+  assert.equal(call.body.generationConfig.responseSchema.properties.claims.items.type, 'OBJECT');
+  assert.ok(call.body.generationConfig.responseSchema.properties.claims.items.properties.claim_en);
+  assert.equal(Object.hasOwn(call.body.generationConfig, 'responseFormat'), false);
 });
 
 test('Gemini zachowuje promptFeedback, gdy prompt jest zablokowany i nie ma kandydatów', async () => {
