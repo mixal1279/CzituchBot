@@ -102,10 +102,29 @@ function normalizujClaim(value) {
 function tokenyClaim(value) {
   return [...new Set(normalizujClaim(value).split(' ').filter(t => t.length >= 4))];
 }
+function rzymskieNaArabskie(s) {
+  // Konwertuje poprawną liczbę rzymską na arabską. Zwraca null gdy nie jest
+  // to poprawna liczba rzymska (używane do odfiltrowania zwykłych słów jak „Ciri”,
+  // „Mix”, „Liv”, „mi” itp., które składają się z liter rzymskich).
+  const map = { I: 1, V: 5, X: 10, L: 50, C: 100, D: 500, M: 1000 };
+  const valid = /^M{0,4}(CM|CD|D?C{0,3})(XC|XL|L?X{0,3})(IX|IV|V?I{0,3})$/;
+  if (!/^[IVXLCDM]+$/.test(s)) return null;
+  if (s.length === 1 && !/^(I|V|X|L|C|D|M)$/.test(s)) return null;
+  const up = s.toUpperCase();
+  if (!valid.test(up)) return null;
+  let result = 0;
+  for (let i = 0; i < up.length; i++) {
+    const cur = map[up[i]];
+    const next = map[up[i + 1]] || 0;
+    result += cur < next ? -cur : cur;
+  }
+  return result >= 1 && result <= 3999 ? result : null;
+}
 function wyodrebnijLiczbyIDaty(value) {
   // Keep decimal separators until numeric extraction; normalizujClaim intentionally
   // removes punctuation and would turn 2.50 into two unrelated integers (2 and 50).
-  const text = String(value || '').toLocaleLowerCase('pl-PL').replace(/,/g, '.');
+  const raw = String(value || '');
+  const text = raw.toLocaleLowerCase('pl-PL').replace(/,/g, '.');
   const matches = text.match(/\b(?:19|20)\d{2}\b|\b\d+(?:\.\d+)?%?\b/g) || [];
   const canonical = matches.map(value => {
     const percent = value.endsWith('%');
@@ -113,6 +132,17 @@ function wyodrebnijLiczbyIDaty(value) {
     if (!Number.isFinite(numeric)) return value;
     return `${String(numeric)}${percent ? '%' : ''}`;
   });
+  // Dodajemy konwersję rzymskich cyfr (np. III → 3, IV → 4), oznaczających
+  // numery części gier, żeby np. dowód „Baldur's Gate III” pokrywał claim
+  // „Baldur's Gate 3”. Dopasowujemy WRAŻLIWIE NA WIELKOŚĆ LITER (bez flagi 'i'),
+  // żeby pominąć zwykłe słowa, w których przypadkowo występują litery rzymskie
+  // (np. „mix”, „id”, „civic”, „civil”, „Liv”, „mill”, „Mili”). Poprawne
+  // rzymskie cyfry w tytułach gier są pisane wielkimi literami (III, IV, IX).
+  const romanMatches = raw.match(/\b(?:II|III|IV|IX|VI|VII|VIII|XIV|XIX|XX|XI|XII|XV|XL|XC|LI|LV|LX|CD|CM|DC|MC|MCM|MM|MMX[IVX]|[IVXLCDM]{3,})\b/g) || [];
+  for (const r of romanMatches) {
+    const n = rzymskieNaArabskie(r);
+    if (n !== null) canonical.push(String(n));
+  }
   return [...new Set(canonical)];
 }
 const UNIT_ALIASES = new Map([
@@ -257,7 +287,21 @@ function wyodrebnijNazwyWlasne(value, options = {}) {
     .filter(name => name.length >= 3))];
 }
 function tekstDoWykrywaniaNegacji(value) {
-  let text = normalizujClaim(value);
+  // Konstrukcje warunkowe „if/when not X, Y”, „unless X, Y”, „jeśli/jeżeli/gdy/kiedy
+  // nie X, to Y” oraz „chyba że X, Y” zawierają negację w protazie, ale nie
+  // odwracają polaryzacji faktycznego claimu w apodozie. Na przykład:
+  //   „If not chosen as the player character, Astarion may be encountered …”
+  // to nie twierdzenie o tym, że Astarion NIE występuje w grze. Usuwamy taką
+  // wprowadzającą frazę PRZED normalizacją, bo normalizacja zamienia przecinki
+  // na spacje i rozmywa granicę zdania podrzędnego.
+  let cleaned = String(value || '');
+  cleaned = cleaned.replace(/\b(?:if|when)\s+not\s+[^,.!?;:]*?\s*[,;:]/giu, ' ');
+  cleaned = cleaned.replace(/\bunless\s+[^,.!?;:]*?\s*[,;:]/giu, ' ');
+  cleaned = cleaned.replace(/\b(?:jesli|jeśli|jezeli|jeżeli|gdy|kiedy)\s+nie\s+[^,.!?;:]*?\s*(?:[,;:]|\sto\s)/giu, ' ');
+  cleaned = cleaned.replace(/\bchyba\s*że\s+[^,.!?;:]*?\s*[,;:]/giu, ' ');
+  cleaned = cleaned.replace(/\bchyba\s*ze\s+[^,.!?;:]*?\s*[,;:]/giu, ' ');
+
+  let text = normalizujClaim(cleaned);
 
   // Frazy metajęzykowe i retoryczne zawierają „nie/not”, ale nie odwracają
   // polaryzacji opisywanego faktu: „nie możemy zapomnieć o Astarionie” znaczy,

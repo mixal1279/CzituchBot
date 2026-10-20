@@ -3900,9 +3900,11 @@ function oczyscOdpowiedzPrzedWalidacja(tekst) {
       // Dokładnie jeden cykl retry po odrzuceniu walidacji. Fallbacki providerów
       // pozostają wewnątrz jednego cyklu generacji i nie uruchamiamy kolejnego retry.
       const repairRemainingMs = pozostalyCzasMs();
-      // Repair needs a 3 s minimum generation window plus 10.5 s reserved for
-      // validation/fallback. A lower gate risks producing an answer we cannot verify.
-      const minRepairGenerationBudgetMs = 13_500;
+      // Repair needs a generation window plus time for validation/fallbacks.
+      // Poprzednio próg 13.5 s powodował pomijanie repair przy 13.2 s (Portal 2 — o 283 ms),
+      // po czym pipeline i tak wykonywałby cały cykl repair + walidację mieszcząc się w budżecie.
+      // Obniżamy do 10 s (generacja ~1.5 s + 2 validatory po 3 s + rezerwa 2.5 s).
+      const minRepairGenerationBudgetMs = 10_000;
       aiState.recordTiming('repair_generation_decision', {
         remainingMsBeforeRepair: repairRemainingMs,
         willAttempt: Number.isFinite(repairRemainingMs) && repairRemainingMs >= minRepairGenerationBudgetMs,
