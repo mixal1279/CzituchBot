@@ -641,12 +641,9 @@ function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
   if (!pl || !en) return { ok: false, reason: 'brak tłumaczenia claimu' };
   if (en.length > pl.length * 3 + 60) return { ok: false, reason: 'tłumaczenie claimu jest nieproporcjonalnie długie' };
   if (!wyglądaNaAngielski(en)) return { ok: false, reason: 'claim_en nie wygląda na tekst angielski' };
-  // claim_en ma być tłumaczeniem claimu, a nie przepisanym cytatem źródłowym.
-  const quoteNorm = normalizujClaim(options.evidenceQuote || '');
-  const enNorm = normalizujClaim(en);
-  if (quoteNorm.split(' ').length >= 6 && enNorm && (quoteNorm === enNorm || (enNorm.length >= 20 && quoteNorm.includes(enNorm) && enNorm.length >= quoteNorm.length * 0.9))) {
-    return { ok: false, reason: 'claim_en jest kopią evidence_quote, a nie tłumaczeniem claimu' };
-  }
+  // Zbieżność claim_en z cytatem sama w sobie nie dowodzi błędu: poprawny claim
+  // może być wiernym tłumaczeniem zdania źródłowego. Wierność oceniamy poniżej
+  // przez negację, liczby, encje i relacje, a prompt zabrania kopiowania dodatkowych faktów.
   if (!zbiorRowny(wyodrebnijLiczbyIDaty(pl), wyodrebnijLiczbyIDaty(en))) {
     return { ok: false, reason: 'tłumaczenie claimu zmienia liczby lub daty' };
   }
