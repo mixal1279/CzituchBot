@@ -99,11 +99,25 @@ function buildGeminiGenerateContentUrl(model) {
  * Use responseMimeType + responseSchema: responseFormat.text.mimeType is an
  * enum in the REST contract and "application/json" there caused HTTP 400.
  */
+function normalizujSchematGeminiREST(schema) {
+  if (Array.isArray(schema)) return schema.map(normalizujSchematGeminiREST);
+  if (!schema || typeof schema !== 'object') return schema;
+  const normalized = {};
+  for (const [key, value] of Object.entries(schema)) {
+    if (key === 'type' && typeof value === 'string') {
+      normalized[key] = value.toUpperCase();
+    } else {
+      normalized[key] = normalizujSchematGeminiREST(value);
+    }
+  }
+  return normalized;
+}
+
 function buildGeminiValidatorGenerationConfig(model, schema) {
   return {
     maxOutputTokens: 1400,
     responseMimeType: 'application/json',
-    responseSchema: schema,
+    responseSchema: normalizujSchematGeminiREST(schema),
     ...(model === 'gemini-3.8-flash'
       ? { thinkingConfig: { thinkingLevel: 'low' } }
       : model === 'gemini-3.5-flash-lite'
@@ -116,4 +130,5 @@ module.exports = {
   parseGeminiGenerationResponse,
   buildGeminiGenerateContentUrl,
   buildGeminiValidatorGenerationConfig,
+  normalizujSchematGeminiREST,
 };
