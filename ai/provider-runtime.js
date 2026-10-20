@@ -56,7 +56,7 @@ function actualGroqTokens(data) {
   const prompt = Number(usage?.prompt_tokens);
   const completion = Number(usage?.completion_tokens);
   if (Number.isFinite(prompt) && Number.isFinite(completion) && prompt + completion > 0) return prompt + completion;
-  return 0;
+  return null;
 }
 
 // Odczyt nie mutuje stanu (wołający mogą podać `now` z przyszłości); czyszczenie
@@ -115,12 +115,16 @@ function trackGroqRequest(payload, result) {
   const settleOk = (data) => {
     entry.pending = false;
     entry.at = Date.now();
-    entry.tokens = actualGroqTokens(data);
+    const actual = actualGroqTokens(data);
+    // Brak usage nie oznacza zerowego zużycia. Zachowujemy konserwatywny szacunek,
+    // aby nie przepuszczać kolejnych zapytań ponad lokalny limit TPM.
+    if (actual !== null) entry.tokens = actual;
   };
-  // Nieudane żądanie (429/400/timeout) nie zużywa tokenów, więc go nie liczymy.
+  // Przy błędzie również nie znamy faktycznego zużycia (timeout nie dowodzi,
+  // że serwer nie przetworzył żądania). Zachowujemy szacunek do końca okna TPM.
   const settleError = () => {
     entry.pending = false;
-    entry.tokens = 0;
+    entry.at = Date.now();
   };
   if (result && typeof result.then === 'function') result.then(settleOk, settleError);
   else settleOk(result);
