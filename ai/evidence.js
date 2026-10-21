@@ -349,6 +349,34 @@ function buildEvidenceCandidatesFromSources(sources, question = '', options = {}
     }));
 }
 
+function causalRelationAnchorsMatch(claim, quote) {
+  const normalizedClaim = normalizeEvidenceText(claim);
+  const normalizedQuote = normalizeEvidenceText(quote);
+  const marker = /\b(?:because of|because|due to|therefore|as a result|caused? by|caus\w*|led to|resulted in|poniewaz|bo|dlatego|spowod\w*|doprowadz\w*|dzieki temu|w wyniku|co umozliw\w*)\b/u;
+  const match = marker.exec(normalizedClaim);
+  if (!match) return false;
+  let claimLeft = '';
+  let claimRight = '';
+  if (/^(?:because|because of|due to|poniewaz|bo)\b/u.test(normalizedClaim)) {
+    const parts = normalizedClaim.split(/,|;|\bthen\b|\bto\b/u, 2);
+    claimLeft = parts[0].replace(marker, ' ');
+    claimRight = parts[1] || '';
+  } else {
+    claimLeft = normalizedClaim.slice(0, match.index);
+    claimRight = normalizedClaim.slice(match.index + match[0].length);
+  }
+  const stop = new Set(['that','this','with','from','into','then','than','when','what','which','were','was','have','has','had','the','and','for','but','not','because','wheatley','aperture']);
+  const tokens = value => [...new Set(normalizeEvidenceText(value).split(' ').filter(token => token.length >= 4 && !stop.has(token)))];
+  const left = tokens(claimLeft);
+  const right = tokens(claimRight);
+  const quoteTokens = new Set(tokens(normalizedQuote));
+  const leftMatches = left.filter(token => quoteTokens.has(token));
+  const rightMatches = right.filter(token => quoteTokens.has(token));
+  // Require at least one anchor from each side and two material anchors total;
+  // a nearby but unrelated "because..." sentence cannot borrow the claim's nouns.
+  return leftMatches.length > 0 && rightMatches.length > 0 && leftMatches.length + rightMatches.length >= 3;
+}
+
 function buildEvidenceRepairContext(claims, blocks, allowedSourceIds = null, maxClaims = 4) {
   const rows = [];
   for (const claim of (Array.isArray(claims) ? claims : []).slice(0, maxClaims)) {
@@ -366,7 +394,9 @@ function buildEvidenceRepairContext(claims, blocks, allowedSourceIds = null, max
     })
       .filter(candidate => Number(candidate.score) >= 0.10)
       .filter(candidate => !claimIsCausal
-        || (candidate.relationMatch === true && evidenceRelationSignals(candidate.evidence_quote).causal))
+        || (candidate.relationMatch === true
+          && evidenceRelationSignals(candidate.evidence_quote).causal
+          && causalRelationAnchorsMatch(claimText, candidate.evidence_quote)))
 
       .filter(candidate => !claimIsSourceMeta)
       .slice(0, 2);
