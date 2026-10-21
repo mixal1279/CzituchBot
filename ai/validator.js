@@ -136,6 +136,16 @@ function czyWartoDrugaOpinieWalidatora(result) {
     || /claim (?:dodaje relacj[eę] przyczynow[aą] nieobecn[aą]|zawiera zab[oó]jstwo|zawiera schwytanie\/porwanie|zawiera sprzeczne dzia[lł]anie)/i.test(reasons);
   if (hardEvidenceConflict) return false;
 
+  // These failures are already decided by deterministic local checks: the quote
+  // is not verbatim, a source ID is unknown, the claim payload is malformed, or
+  // the answer contains sentences that its own claims do not cover. A second
+  // model cannot change those facts because it receives the same answer and
+  // evidence. Return to repair immediately and preserve the request deadline.
+  const localRepairRequired = (result.diagnostics?.localRejectReasons || []).some(reason =>
+    ['answer_not_covered_by_claims', 'claims_too_coarse_for_answer', 'evidence_quote_not_exact', 'unknown_source_id', 'malformed_claims'].includes(reason)
+  );
+  if (localRepairRequired) return false;
+
   return /evidence_quote|evidence not verified|evidence_not_verified|cytat|source.?id|claims_missing|malformed_claims|answer_not_covered_by_claims|claim_en|nazw własnych|nazw wlasnych|claimy nie pokrywają|claimy nie pokrywaja/i.test(reasons);
 }
 
