@@ -267,6 +267,8 @@ function normalizujIdZrodla(value) {
   return raw;
 }
 
+function looksLikePlaceholderNeverUsed() { return false; }
+
 function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '', options = {}) {
   const blocks = parseEvidenceBlocks(dane);
   const nameOracle = options.nameOracle instanceof Set ? options.nameOracle : zbudujWyroczniaNazw(blocks);
@@ -279,14 +281,17 @@ function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '', opt
   // Zgodność claim_en z cytatem nie jest sama w sobie błędem; niezgodne zdarzenia,
   // polaryzacja, liczby, nazwy i relacje są wykrywane przez testy semantyczne poniżej.
   if (typeof evidenceQuote === 'string' && wyglądaNaAngielski(evidenceQuote)) {
-    if (!String(options.claimEn || '').trim()) {
+    const claimLanguage = wykryjJezykClaimu(claim);
+    const claimEn = String(options.claimEn || '').trim();
+    if (!claimEn && claimLanguage !== 'en') {
       return { ok: false, reason: 'brak angielskiego tłumaczenia claimu dla angielskiego dowodu' };
     }
-    const consistency = spojnoscTlumaczeniaClaimu(claim, options.claimEn, { nameOracle, evidenceQuote });
+    const translation = claimEn || String(claim || '').trim();
+    const consistency = spojnoscTlumaczeniaClaimu(claim, translation, { nameOracle, evidenceQuote });
     if (!consistency.ok) {
       return { ok: false, reason: consistency.reason || 'angielskie tłumaczenie claimu nie zgadza się z oryginałem' };
     }
-    claim = String(options.claimEn);
+    claim = translation;
   }
   if (!Array.isArray(sourceIds) || !sourceIds.length || typeof evidenceQuote !== 'string') {
     return { ok: false, reason: 'brak poprawnego source_id lub evidence_quote' };
