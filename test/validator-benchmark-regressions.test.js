@@ -208,3 +208,39 @@ test('claim_en still fails when a source-backed name is dropped from the transla
   assert.equal(result.ok, false);
   assert.match(result.reason, /nazwy własne/);
 });
+
+test('Polish claims cannot bypass cross-language checks when English evidence has no claim_en', () => {
+  const claim = 'Wheatley przejął kontrolę nad Aperture.';
+  const quote = 'Wheatley took control of Aperture.';
+  const model = wynikModelu(claim, quote);
+  const result = normalizujWynikWalidatora(
+    model,
+    'test-model',
+    'groq',
+    new Set(['SOURCE 1']),
+    dane(quote),
+    claim,
+  );
+
+  assert.notEqual(result.status, 'accepted');
+  assert.ok(result.diagnostics.localRejectReasons.includes('claim_translation_missing'));
+});
+
+test('an inconsistent claim_en is rejected instead of silently ignored', () => {
+  const claim = 'Wheatley przejął kontrolę nad Aperture.';
+  const quote = 'Wheatley took control of Aperture.';
+  const model = wynikModelu(claim, quote);
+  model.claims[0].claim_en = 'Wheatley destroyed Aperture.';
+  const result = normalizujWynikWalidatora(
+    model,
+    'test-model',
+    'groq',
+    new Set(['SOURCE 1']),
+    dane(quote),
+    claim,
+  );
+
+  assert.notEqual(result.status, 'accepted');
+  assert.ok(result.diagnostics.localRejectReasons.includes('evidence_not_verified'));
+});
+
