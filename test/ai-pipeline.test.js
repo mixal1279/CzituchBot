@@ -4,6 +4,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const { parseEvidenceText, evaluateEvidence, sanitizeQuestion, decideValidation, finalText, STATUS } = require('../ai/pipeline');
+const { buildAnswerPlan, assessAnswerCompleteness } = require('../ai/answer-plan');
+const { sprawdzPokrycieClaimamiOdpowiedzi } = require('../ai/claimValidation');
 
 test('pipeline parser reads SOURCE blocks with metadata', () => {
   const parsed = parseEvidenceText([
@@ -108,6 +110,14 @@ test('pipeline input and validation decisions are deterministic', () => {
     reason: 'validator_unavailable_but_deterministic_gates_passed',
   });
   assert.equal(decideValidation('unexpected').finalStatus, STATUS.UNAVAILABLE);
+});
+
+test('a source-scoped missing-date caveat is a valid temporal fallback without bypassing factual claim coverage', () => {
+  const answer = 'Źródła potwierdzają, że Geralt przybywa do Novigradu, ale nie podają konkretnej daty ani momentu w czasie gry.';
+  const plan = buildAnswerPlan('Kiedy Geralt przybywa do Novigradu?', { intent: 'web_fact', game: 'The Witcher 3' });
+  assert.equal(assessAnswerCompleteness(answer, plan).missing.includes('when'), false);
+  const coverage = sprawdzPokrycieClaimamiOdpowiedzi(answer, [{ claim: 'Geralt przybywa do Novigradu' }]);
+  assert.equal(coverage.ok, true, JSON.stringify(coverage));
 });
 
 test('pipeline finalText replaces terminal failure output and sanitizes accepted output', () => {
