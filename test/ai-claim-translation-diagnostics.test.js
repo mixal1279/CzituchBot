@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 
-const { dopasowanieSemantyczne, czyOgraniczenieDowodowe } = require('../ai/claimValidation');
+const { dopasowanieSemantyczne, czyOgraniczenieDowodowe, spojnoscTlumaczeniaClaimu, czyNazwaWlasnaWystepuje } = require('../ai/claimValidation');
 
 test('brak tłumaczenia claimu jest wskazywany wprost, a nie jako brak nazw własnych', () => {
   const withoutTranslation = dopasowanieSemantyczne(
@@ -28,6 +28,18 @@ test('zastrzeżenie o braku danych jest rozpoznawane jako zdanie bez twierdzenia
   assert.equal(czyOgraniczenieDowodowe('Źródła nie podają dokładnej daty ani momentu, w którym Geralt przybywa do Novigradu.'), true);
   assert.equal(czyOgraniczenieDowodowe('Geralt przybywa do Novigradu.'), false);
   assert.equal(czyOgraniczenieDowodowe('W grze The Witcher 3: Wild Hunt: Kiedy Geralt przybywa do Novigradu?'), false);
+});
+
+test('polski zwrot „dając mu władzę” odpowiada angielskiemu „giving him control”', () => {
+  const result = spojnoscTlumaczeniaClaimu(
+    'Transfer ten przeniósł rdzeń GLaDOS do ciała Wheatleya, dając mu władzę nad obiektem.',
+    "This transfer moved GLaDOS' core into Wheatley's body, giving him control of the facility.",
+  );
+  assert.equal(result.ok, true, JSON.stringify(result));
+});
+
+test('Wieczny Ogień i Eternal Fire są rozpoznawane jako ta sama nazwa własna', () => {
+  assert.equal(czyNazwaWlasnaWystepuje('eternal fire', 'The Eternal Fire protects the city.'), true);
 });
 
 test('alias rozszerzony o parafrazę angielską', () => {
