@@ -354,7 +354,7 @@ function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '', opt
     // A matching field value from another character/page section is not enough.
     if (quote.length < 12) {
       const subject = String(claim || '').match(/^\s*([\p{Lu}][\p{L}\p{N}'’.-]*(?:\s+[\p{Lu}][\p{L}\p{N}'’.-]*){0,2})\s+(?:is|was|are|were|jest|był|była|są|należy|belongs)\b/iu)?.[1];
-      if (subject && !normalizujClaim(verificationContext).includes(normalizujClaim(subject))) {
+      if (!subject || !normalizujClaim(verificationContext).includes(normalizujClaim(subject))) {
         reasons.push('krótki cytat z infoboksu nie wiąże pola z encją claimu: ' + id);
         continue;
       }
@@ -671,6 +671,7 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
   const verifiedPartialClaims = claims.filter((claim, index) =>
     claim.supported === true
     && evidenceEvaluations[index]?.ok === true
+    && !hardOverclaimIndexes.has(index)
     && claim.source_ids.length > 0
     && !/[.!?].+\S/u.test(claim.claim)
   );
