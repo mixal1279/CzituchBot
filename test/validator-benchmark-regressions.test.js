@@ -44,6 +44,21 @@ test('short two-word infobox quotes are accepted when the entity and concept che
   assert.equal(result.diagnostics.evidenceBindings[0].quoteVerified, true);
 });
 
+test('short infobox quote must be bound to the claimed entity', () => {
+  const claim = 'Astarion is a Rogue.';
+  const quote = 'Class Rogue';
+  const unrelated = normalizujWynikWalidatora(
+    wynikModelu(claim, quote),
+    'test-model',
+    'test',
+    new Set(['SOURCE 1']),
+    dane('Geralt Gender Male Class Rogue Race Human'),
+    claim,
+  );
+  assert.equal(unrelated.status, 'rejected');
+  assert.match(unrelated.reason, /krótki cytat z infoboksu nie wiąże pola/);
+});
+
 test('single-word and very short quotes are still rejected as evidence', () => {
   const claim = 'Astarion is a Rogue.';
   for (const quote of ['Rogue', 'a Rogue']) {
