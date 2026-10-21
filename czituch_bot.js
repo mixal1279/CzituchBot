@@ -3839,6 +3839,7 @@ Pytanie użytkownika: ${pytanie}`;
   // finalizacja odpowiedzi jest poza nim.
   let odpowiedzCzesciowa = null;
   if (maWalidowac) {
+    aiState.validationPass = 1;
     aiState.recordTiming('validator_start', { pass: 1, answerChars: odp.length });
     let walidacja = await validateAI(aiProfile === 'billy' ? 'billy' : aiProfile === 'edzzi' ? 'edzzi' : aiProfile === 'angie' ? 'angie' : 'generic', pytanie, odp, daneDoWalidacji, historiaRozmowy, requestId, aiState, metadaneRequestu);
     aiState.recordTiming('validator_end', { pass: 1, status: walidacja.status, provider: walidacja.provider || null, model: walidacja.model || null, reason: String(walidacja.reason || '').slice(0, 220) });
@@ -3942,6 +3943,7 @@ Pytanie użytkownika: ${pytanie}`;
         const nowaOdp = usunMarkeryWewnetrzneAI(filtrBezpieczenstwa(retry.tekst));
         if (nowaOdp) {
           odp = oczyscOdpowiedzPrzedWalidacja(nowaOdp);
+          aiState.validationPass = 2;
           aiState.recordTiming('validator_start', { pass: 2, answerChars: odp.length, trigger: 'generation_retry' });
           walidacja = await validateAI(aiProfile === 'billy' ? 'billy' : aiProfile === 'edzzi' ? 'edzzi' : aiProfile === 'angie' ? 'angie' : 'generic', pytanie, odp, daneDoWalidacji, historiaRozmowy, requestId, aiState, metadaneRequestu);
           aiState.recordTiming('validator_end', { pass: 2, status: walidacja.status, provider: walidacja.provider || null, model: walidacja.model || null, reason: String(walidacja.reason || '').slice(0, 220) });
@@ -3977,36 +3979,107 @@ Pytanie użytkownika: ${pytanie}`;
         }
       }
     } else if (walidacja.status === 'unavailable') {
-      // Provider outage is not a semantic rejection. Keep the generated answer
-      // only when reference material exists and deterministic fact, format, and
-      // completeness gates all pass; label it explicitly as unverified.
-      const localFacts = daneDoWalidacji
-        ? sprawdzTwardeFaktyOdpowiedzi(odp, daneDoWalidacji, pytanie)
-        : { ok: false, unsupported: ['brak danych referencyjnych'] };
-      const localFormat = sprawdzFormatOdpowiedzi(odp, { maxZdania: responseCfg.maxSentences, maxZnakow: 1800 });
-      const localCompleteness = judgeAnswer(odp, answerPlan);
-      const canReturnUnverified = Boolean(
-        daneDoWalidacji
-        && localFacts.ok
-        && localFormat.ok
-        && localCompleteness.status === 'accepted'
-        && !AI_POLICY.czyOdpowiedzToJednoznacznaOdmowa(odp)
-      );
-      if (canReturnUnverified) {
-        walidacja = {
-          ...walidacja,
-          status: 'unverified',
-          ok: false,
-          valid: false,
-          verified: false,
-          complete: true,
-          reason: 'validator unavailable; deterministic fact/format/completeness gates passed',
-          diagnostics: { ...(walidacja.diagnostics || {}), localFacts, localFormat, localCompleteness },
-        };
-        console.warn(`[AI][${requestId}] validator unavailable; answer returned UNVERIFIED after deterministic gates`);
-      } else {
-        console.warn(`[AI][${requestId}] validator unavailable and local gates insufficient — refusing answer; facts=${JSON.stringify(localFacts.unsupported || [])} format=${localFormat.reason || localFormat.ok} completeness=${localCompleteness.status}`);
-        odp = 'Chwilowo nie mogę potwierdzić tej informacji, więc nie będę zgadywać.';
+      // Preserve one bounded repair opportunity when every validator transport
+      // is unavailable. The first validation pass reserves this time explicitly;
+      // repaired output still needs a normal validator verdict or all local gates.
+      const remainingBeforeUnavailableRepair = pozostalyCzasMs();
+      aiState.recordTiming('unavailable_repair_decision', {
+        remainingMs: remainingBeforeUnavailableRepair,
+        willAttempt: Boolean(daneDoWalidacji && remainingBeforeUnavailableRepair >= 18000 && !aiState.unavailableRepairAttempted),
+      });
+      if (daneDoWalidacji && remainingBeforeUnavailableRepair >= 18000 && !aiState.unavailableRepairAttempted) {
+        aiState.unavailableRepairAttempted = true;
+        const unavailableFeedback = [
+          'Poprzednia odpowiedź nie mogła zostać rozstrzygnięta, ponieważ transporty walidatora były niedostępne.',
+          `PYTANIE ORYGINALNE: ${String(pytanie || '').slice(0, 1500)}`,
+          `POPRZEDNIA ODPOWIEDŹ: ${String(odp || '').slice(0, 3000)}`,
+          'Odpowiedz krótko i bezpośrednio na pytanie, używając wyłącznie DANYCH REFERENCYJNYCH.',
+          'Jedno zdanie ma zawierać najwyżej jeden niezależnie sprawdzalny fakt. Nie łącz kilku twierdzeń spójnikami i nie dodawaj meta-komentarzy o tym, czego źródła nie mówią, jeśli nie jest to konieczne do odpowiedzi.',
+          'Nie dopowiadaj lokalizacji, dat, przyczyn ani skutków, których nie potwierdza materiał. Jeśli źródła nie wystarczają do odpowiedzi, powiedz to krótko zamiast zgadywać.',
+          answerPlan.instruction,
+        ].join('\\n');
+        const unavailableRepair = await generujOdpowiedz(
+          max_tokens,
+          `${systemPrompt}\\n\\n[VALIDATOR OUTAGE REPAIR]\\n${unavailableFeedback}`,
+          'validator unavailable repair',
+          false,
+        );
+        wynikGeneracji = unavailableRepair;
+        if (unavailableRepair.tekst) {
+          const repairedAnswer = oczyscOdpowiedzPrzedWalidacja(
+            ograniczDoPelnychZdanAI(
+              usunEtykietyEvidenceCandidate(usunMarkeryWewnetrzneAI(filtrBezpieczenstwa(unavailableRepair.tekst))),
+              responseCfg.maxSentences,
+              1800,
+              responseCfg.maxWords,
+            ),
+          );
+          if (repairedAnswer) {
+            odp = repairedAnswer;
+            aiState.validationPass = 2;
+            aiState.recordTiming('validator_start', { pass: 2, answerChars: odp.length, trigger: 'validator_unavailable_repair' });
+            walidacja = await validateAI(
+              aiProfile === 'billy' ? 'billy' : aiProfile === 'edzzi' ? 'edzzi' : aiProfile === 'angie' ? 'angie' : 'generic',
+              pytanie,
+              odp,
+              daneDoWalidacji,
+              historiaRozmowy,
+              requestId,
+              aiState,
+              metadaneRequestu,
+            );
+            aiState.recordTiming('validator_end', { pass: 2, status: walidacja.status, provider: walidacja.provider || null, model: walidacja.model || null, reason: String(walidacja.reason || '').slice(0, 220), trigger: 'validator_unavailable_repair' });
+            if (walidacja.status === 'soft_accepted' && walidacja.partialAnswer) {
+              odp = walidacja.partialAnswer;
+              odpowiedzCzesciowa = walidacja.partialAnswer;
+            } else {
+              odpowiedzCzesciowa = null;
+            }
+            if (walidacja.status === 'accepted' || walidacja.status === 'soft_accepted') {
+              walidacja = zastosujDeterministyczneGuards(
+                walidacja,
+                odp,
+                daneDoWalidacji,
+                pytanie,
+                { maxZdania: responseCfg.maxSentences, maxZnakow: 1800 },
+                routingAI,
+                aiPlan.responseProfile,
+              );
+            }
+          }
+        }
+      }
+      if (walidacja.status === 'unavailable') {
+        // Provider outage is not a semantic rejection. Keep generated text only
+        // when reference material and deterministic fact/format/completeness gates pass.
+        const localFacts = daneDoWalidacji
+          ? sprawdzTwardeFaktyOdpowiedzi(odp, daneDoWalidacji, pytanie)
+          : { ok: false, unsupported: ['brak danych referencyjnych'] };
+        const localFormat = sprawdzFormatOdpowiedzi(odp, { maxZdania: responseCfg.maxSentences, maxZnakow: 1800 });
+        const localCompleteness = judgeAnswer(odp, answerPlan);
+        const canReturnUnverified = Boolean(
+          daneDoWalidacji
+          && localFacts.ok
+          && localFormat.ok
+          && localCompleteness.status === 'accepted'
+          && !AI_POLICY.czyOdpowiedzToJednoznacznaOdmowa(odp)
+        );
+        if (canReturnUnverified) {
+          walidacja = {
+            ...walidacja,
+            status: 'unverified',
+            ok: false,
+            valid: false,
+            verified: false,
+            complete: true,
+            reason: 'validator unavailable; deterministic fact/format/completeness gates passed',
+            diagnostics: { ...(walidacja.diagnostics || {}), localFacts, localFormat, localCompleteness },
+          };
+          console.warn(`[AI][${requestId}] validator unavailable; answer returned UNVERIFIED after deterministic gates`);
+        } else {
+          console.warn(`[AI][${requestId}] validator unavailable and local gates insufficient — refusing answer; facts=${JSON.stringify(localFacts.unsupported || [])} format=${localFormat.reason || localFormat.ok} completeness=${localCompleteness.status}`);
+          odp = 'Chwilowo nie mogę potwierdzić tej informacji, więc nie będę zgadywać.';
+        }
       }
     }
     // v26: niezależny kontrakt kompletności odpowiedzi. Validator potwierdza
