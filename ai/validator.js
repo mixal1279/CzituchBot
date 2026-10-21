@@ -563,10 +563,12 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
     }
     return claim.evidence_quote || '';
   });
+  const evidenceQuotes = claims.map(claim => String(claim.evidence_quote || ''));
   const claimSupportAudit = buildClaimSupportAudit({
     claims,
     evidenceEvaluations,
     evidenceQuoteVerified,
+    evidenceQuotes,
     evidenceContexts,
   });
   const hardOverclaimClaimIndexes = claimSupportAudit.records
