@@ -25,7 +25,7 @@ test('claim twierdzący pojęcie nieobecne w cytacie nie przechodzi', () => {
   // claim twierdzi „niszczy”, a cytat mówi tylko o przejęciu kontroli.
   // Jedno wspólne pojęcie (kontrola) nie może usprawiedliwiać braku „destrukcja”.
   const wynik = spojnoscTlumaczeniaClaimu(
-    'Wheatley przejmuje kontrolę i zniszczy Katedry Smoczej Komunii.',
+    'Wheatley przejmuje kontrolę i zniszczy Katedrę Smoczej Komunii.',
     CYTAT,
     { evidenceQuote: CYTAT },
   );
@@ -36,7 +36,7 @@ test('claim twierdzący pojęcie nieobecne w cytacie nie przechodzi', () => {
 test('cytat zawierający pojęcie nieobecne w claimie nie przechodzi', () => {
   const cytat = 'Wheatley takes control of the Cathedral of Dragon Communion and destroys it.';
   const wynik = spojnoscTlumaczeniaClaimu(
-    'Wheatley przejmuje kontrolę nad Katedry Smoczej Komunii.',
+    'Wheatley przejmuje kontrolę nad Katedrą Smoczej Komunii.',
     cytat,
     { evidenceQuote: cytat },
   );
@@ -46,7 +46,7 @@ test('cytat zawierający pojęcie nieobecne w claimie nie przechodzi', () => {
 
 test('poprawny claim z przetłumaczoną nazwą przechodzi, gdy claim_en kopiuje cytat', () => {
   const wynik = spojnoscTlumaczeniaClaimu(
-    'Wheatley przejmuje kontrolę nad Katedry Smoczej Komunii.',
+    'Wheatley przejmuje kontrolę nad Katedrą Smoczej Komunii.',
     CYTAT,
     { evidenceQuote: CYTAT },
   );
@@ -55,7 +55,7 @@ test('poprawny claim z przetłumaczoną nazwą przechodzi, gdy claim_en kopiuje 
 
 test('ten sam claim z wiernym tłumaczeniem (nie kopią cytatu) też przechodzi', () => {
   const wynik = spojnoscTlumaczeniaClaimu(
-    'Wheatley przejmuje kontrolę nad Katedry Smoczej Komunii.',
+    'Wheatley przejmuje kontrolę nad Katedrą Smoczej Komunii.',
     'Wheatley takes control of the Cathedral of Dragon Communion.',
     { evidenceQuote: CYTAT },
   );
