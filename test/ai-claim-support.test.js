@@ -70,6 +70,13 @@ test('a source hedge does not reject an ordinary declarative claim by itself', (
   ), []);
 });
 
+test('a Polish declarative sentence is not absolute merely because it says jest', () => {
+  assert.deepEqual(detectOverclaimTypes(
+    'Metoda jest skuteczna.',
+    'Metoda może poprawić szansę powodzenia.',
+  ), []);
+});
+
 test('date ranges do not trigger the dropped upper-bound guard', () => {
   assert.ok(!detectOverclaimTypes(
     'The game was released in 2015.',
