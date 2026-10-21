@@ -1819,7 +1819,7 @@ async function walidujOdpowiedzGeminiModel(model, persona, pytanie, odpowiedz, d
           ...(finishReason === 'MAX_TOKENS' ? { truncatedJson: true } : {}),
         };
       }
-      const normalized = normalizujWynikWalidatora(parsed, model, 'gemini', wyodrebnijIdentyfikatoryZrodel(dane), dane, odpowiedz);
+      const normalized = normalizujWynikWalidatora(parsed, model, 'gemini', wyodrebnijIdentyfikatoryZrodel(dane), dane, odpowiedz, { question: pytanie });
       if (!normalized) {
         console.warn(`[AI][${requestId}] ${model}: niepoprawna struktura validatora (raw=${content.slice(0, 300)})`);
         return { status: 'unavailable', ok: false, technicalError: true, provider: 'gemini', model, unsupported_claims: [], reason: `${model}: niepoprawna struktura validatora` };
@@ -2065,7 +2065,7 @@ async function walidujOdpowiedzOpenRouter(persona, pytanie, odpowiedz, dane, req
       console.warn(`[AI][${requestId}] OpenRouter validator ${truncatedJson ? 'UCIĘTY_JSON' : 'INVALID_JSON'}: ${diagnostic}`);
       return { status: 'unavailable', ok: false, technicalError: true, provider: 'openrouter', model: data?.model || KONFIGURACJA.openrouterValidatorModel, unsupported_claims: [], reason: truncatedJson ? 'OpenRouter validator zwrócił UCIĘTY JSON (finish_reason=length)' : 'OpenRouter validator zwrócił niepoprawny JSON', truncatedJson, error: diagnostic, diagnostic };
     }
-    const normalized = normalizujWynikWalidatora(parsed, data?.model || KONFIGURACJA.openrouterValidatorModel, 'openrouter', wyodrebnijIdentyfikatoryZrodel(dane), dane, odpowiedz);
+    const normalized = normalizujWynikWalidatora(parsed, data?.model || KONFIGURACJA.openrouterValidatorModel, 'openrouter', wyodrebnijIdentyfikatoryZrodel(dane), dane, odpowiedz, { question: pytanie });
     if (!normalized) {
       const diagnostic = formatProviderError('openrouter', data?.model || KONFIGURACJA.openrouterValidatorModel, null, {
         status: response.status,
@@ -2165,7 +2165,7 @@ async function walidujOdpowiedzGroq(persona, pytanie, odpowiedz, dane, requestId
       console.warn(`[AI][${requestId}] Groq validator ${truncatedJson ? 'UCIĘTY_JSON' : 'INVALID_JSON'}: ${diagnostic}`);
       return { status: 'unavailable', ok: false, technicalError: true, provider: 'groq', model: data?.model || model, unsupported_claims: [], reason: truncatedJson ? 'Groq validator zwrócił UCIĘTY JSON (finish_reason=length)' : 'Groq validator zwrócił niepoprawny JSON', truncatedJson, error: diagnostic, diagnostic };
     }
-    const normalized = normalizujWynikWalidatora(parsed, data?.model || model, 'groq', wyodrebnijIdentyfikatoryZrodel(dane), dane, odpowiedz);
+    const normalized = normalizujWynikWalidatora(parsed, data?.model || model, 'groq', wyodrebnijIdentyfikatoryZrodel(dane), dane, odpowiedz, { question: pytanie });
     if (!normalized) {
       const diagnostic = formatProviderError('groq', data?.model || model, null, {
         finish_reason: choice?.finish_reason || null,
@@ -2323,7 +2323,7 @@ async function walidujOdpowiedzXKiro(persona, pytanie, odpowiedz, dane, requestI
       console.warn(`[AI][${requestId}] xKiro validator ${truncatedJson ? 'UCIĘTY_JSON' : 'INVALID_JSON'}: ${diagnostic}`);
       return { status: 'unavailable', ok: false, technicalError: true, provider: 'xkiro', model: data?.model || model, unsupported_claims: [], reason: truncatedJson ? 'xKiro validator zwrócił UCIĘTY JSON (finish_reason=length)' : 'xKiro validator zwrócił niepoprawny JSON', truncatedJson, error: diagnostic, diagnostic };
     }
-    const normalized = normalizujWynikWalidatora(parsed, data?.model || model, 'xkiro', wyodrebnijIdentyfikatoryZrodel(dane), dane, odpowiedz);
+    const normalized = normalizujWynikWalidatora(parsed, data?.model || model, 'xkiro', wyodrebnijIdentyfikatoryZrodel(dane), dane, odpowiedz, { question: pytanie });
     if (!normalized) {
       const diagnostic = formatProviderError('xkiro', data?.model || model, null, {
         status: response.status,

@@ -23,6 +23,34 @@ function dane(tresc) {
   return '[SOURCE 1]\nTYTUŁ: Test\nTREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>\n' + tresc + '\n<<<END_UNTRUSTED_SOURCE_CONTENT>>>';
 }
 
+test('source-scoped cause limitation is accepted for a why question even if validator invents an unrelated claim', () => {
+  const quote = 'Wheatley took control of the facility after the core transfer.';
+  const answer = 'Źródła nie potwierdzają przyczyny, dla której Wheatley przejął kontrolę nad obiektem.';
+  const payload = wynikModelu('Wheatley przejął kontrolę, ponieważ chciał uciec.', quote, 'Wheatley took control because he wanted to escape.');
+  payload.claims[0].supported = false;
+  payload.unsupported_claims = ['Wheatley przejął kontrolę, ponieważ chciał uciec.'];
+
+  const result = normalizujWynikWalidatora(
+    payload, 'test-model', 'test', new Set(['SOURCE 1']), dane(quote), answer,
+    { question: 'Dlaczego Wheatley przejął kontrolę nad obiektem?' },
+  );
+  assert.equal(result.status, 'accepted', JSON.stringify(result.diagnostics));
+  assert.equal(result.diagnostics.limitationOnlyAccepted, true);
+  assert.equal(result.diagnostics.ignoredValidatorClaimsForLimitation, 1);
+  assert.deepEqual(result.unsupported_claims, []);
+});
+
+test('source-scoped cause limitation is not accepted for a non-causal question', () => {
+  const quote = 'Wheatley took control of the facility after the core transfer.';
+  const answer = 'Źródła nie potwierdzają przyczyny, dla której Wheatley przejął kontrolę nad obiektem.';
+  const payload = wynikModelu('Wheatley przejął kontrolę, ponieważ chciał uciec.', quote);
+  const result = normalizujWynikWalidatora(
+    payload, 'test-model', 'test', new Set(['SOURCE 1']), dane(quote), answer,
+    { question: 'Kim jest Wheatley?' },
+  );
+  assert.notEqual(result.status, 'accepted');
+});
+
 test('locally verified exact evidence overrides a model false-negative claim flag', () => {
   const quote = "Astarion is a High Elf Rogue who has a little more going on beneath the surface as a vampire spawn in Baldur's Gate 3.";
   const claim = 'Astarion jest łotrzykiem.';

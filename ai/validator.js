@@ -514,7 +514,7 @@ function isAtomicPartialClaimText(value) {
   return true;
 }
 
-function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSourceIds = null, dane = '', answer = '') {
+function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSourceIds = null, dane = '', answer = '', options = {}) {
   if (!wynik || typeof wynik !== 'object' || Array.isArray(wynik)) return null;
 
   // Validator produkcyjny ma ścisły kontrakt. Nie akceptujemy już starych,
@@ -744,7 +744,25 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
     && hardOverclaimClaimIndexes.length === 0
     && unsupported.length === 0;
 
-  const accepted = validFromModel === true
+  const questionText = normalizujClaim(options.question || '');
+  const causalQuestion = /\\b(?:dlaczego|czemu|z jakiego powodu|jaka byla przyczyna|co spowodowalo|why|how come|what caused|what was the reason)\\b/u.test(questionText);
+  const causalLimitation = /\\b(?:przyczyn\\w*|powod\\w*|cause\\w*|reason\\w*)\\b/u.test(normalizujClaim(answer));
+  // A source-scoped limitation is a valid answer to an explicitly causal question
+  // when the retrieved evidence does not establish the cause. In this case the
+  // answer contains no factual assertion to bind to claims; ignore contradictory
+  // validator-generated claims rather than rejecting the honest limitation.
+  const limitationOnlyAccepted = validFromModel === true
+    && confidence >= 0.75
+    && causalQuestion
+    && causalLimitation
+    && answerLimitation.only
+    && evidenceAssessment.sourceCount > 0
+    && (!maStarePola || (
+      wynik.relevant === true
+      && wynik.complete === true
+      && wynik.hallucination === false
+    ));
+  const acceptedByClaimContract = validFromModel === true
     && confidence >= 0.75
     && claimContractOk
     && (!maStarePola || (
@@ -753,6 +771,7 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
       && wynik.complete === true
       && wynik.hallucination === false
     ));
+  const accepted = acceptedByClaimContract || limitationOnlyAccepted;
 
   // Częściowa odpowiedź jest dopuszczalna tylko z atomowych claimów, których
   // source_id, cytat i semantyczne wsparcie przeszły lokalną weryfikację.
@@ -835,7 +854,10 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
     && !unsupportedEvidenceClaim;
 
   const localRejectReasons = [];
-  if (!rawClaims.length) localRejectReasons.push('claims_missing');
+  if (limitationOnlyAccepted) {
+    localRejectReasons.push('source_scoped_causal_limitation');
+  } else {
+    if (!rawClaims.length) localRejectReasons.push('claims_missing');
   if (tooManyClaims) localRejectReasons.push('claims_over_limit');
   if (malformedClaims) localRejectReasons.push('malformed_claims');
   if (unknownSourceClaim) localRejectReasons.push('unknown_source_id');
@@ -858,6 +880,7 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
   if (maStarePola && wynik.relevant !== true) localRejectReasons.push('model_not_relevant');
   if (maStarePola && wynik.complete !== true) localRejectReasons.push('model_marked_incomplete');
   if (maStarePola && wynik.hallucination !== false) localRejectReasons.push('model_flagged_hallucination');
+  }
 
   // Częściowa odpowiedź pozostaje opt-in: zawiera wyłącznie atomowe claimy
   // z lokalnie zweryfikowanym źródłem i cytatem. Każdy claim z konfliktem
@@ -871,6 +894,8 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
   if (!localRejectReasons.length && !accepted) localRejectReasons.push('local_contract_not_satisfied');
   const diagnostics = {
     contractAccepted: accepted,
+    limitationOnlyAccepted,
+    ignoredValidatorClaimsForLimitation: limitationOnlyAccepted ? claims.length : 0,
     partialAccepted,
     partialClaimCount: verifiedPartialClaims.length,
     modelValid: validFromModel === true,
@@ -947,9 +972,11 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
     hallucination: typeof wynik.hallucination === 'boolean' ? wynik.hallucination : !accepted,
     confidence,
     claims,
-    unsupported_claims: unsupported,
+    unsupported_claims: limitationOnlyAccepted ? [] : unsupported,
     diagnostics,
-    reason: partialAccepted
+    reason: limitationOnlyAccepted
+      ? 'źródła nie potwierdzają przyczyny; odpowiedź ograniczona do dostępnych dowodów'
+      : partialAccepted
       ? 'odpowiedź częściowa nie spełnia pełnego kontraktu walidacji'
       : tooManyClaims
       ? 'validator zwrócił więcej claims niż obsługuje kontrakt'
