@@ -31,9 +31,9 @@ test('wzorzec aliasu rozpoznaje wszystkie nazwy swojej grupy', () => {
 test('nazwa z grupy aliasowej jest wyciągana jako nazwa kanoniczna', () => {
   // Wyciąganie nazwy ma zwracać formę kanoniczną — inaczej rozstrzyganie
   // „tłumaczone czy wymyślone” nie działałoby dla nazw przetłumaczonych.
-  const extracted = wyodrebnijNazwyWlasne('Wheatley przejmuje kontrolę nad Kościoła Palącego się.');
+  const extracted = wyodrebnijNazwyWlasne('Wheatley przejmuje kontrolę nad Katedry Smoczej Komunii.');
   assert.ok(
-    extracted.some(name => name === 'smoldering church'),
+    extracted.some(name => name === 'cathedral of dragon communion'),
     `oczekiwano nazwy kanonicznej, otrzymano: ${JSON.stringify(extracted)}`,
   );
 });
