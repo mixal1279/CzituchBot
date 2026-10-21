@@ -23,6 +23,26 @@ function dane(tresc) {
   return '[SOURCE 1]\nTYTUŁ: Test\nTREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>\n' + tresc + '\n<<<END_UNTRUSTED_SOURCE_CONTENT>>>';
 }
 
+test('locally verified exact evidence overrides a model false-negative claim flag', () => {
+  const quote = "Astarion is a High Elf Rogue who has a little more going on beneath the surface as a vampire spawn in Baldur's Gate 3.";
+  const claim = 'Astarion jest łotrzykiem.';
+  const payload = wynikModelu(claim, quote, 'Astarion is a rogue.');
+  payload.claims[0].supported = false;
+  payload.unsupported_claims = [claim];
+
+  const result = normalizujWynikWalidatora(
+    payload,
+    'test-model',
+    'test',
+    new Set(['SOURCE 1']),
+    dane(quote),
+    claim,
+  );
+  assert.equal(result.status, 'accepted', JSON.stringify(result.diagnostics));
+  assert.deepEqual(result.diagnostics.locallyVerifiedModelFalseClaimIndexes, [0]);
+  assert.equal(result.diagnostics.evidenceBindings[0].supportVerified, true);
+});
+
 test('Roman numeral extraction ignores common abbreviations but keeps game sequel numerals', () => {
   assert.deepEqual(wyodrebnijLiczbyIDaty('Astarion gra w MC, a tekst zawiera CD, MM i MIX.'), []);
   assert.deepEqual(wyodrebnijLiczbyIDaty("Baldur's Gate III"), ['3']);

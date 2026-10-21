@@ -640,6 +640,20 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
   const hardOverclaimClaimIndexes = claimSupportAudit.records
     .filter(record => record.overclaimTypes.some(type => HARD_OVERCLAIM_TYPES.has(type)))
     .map(record => record.claimIndex);
+
+  // The model's per-claim supported=false is not authoritative when the exact
+  // quote, source binding, and deterministic semantic checks independently prove
+  // the claim. Resolve only that narrow contradiction; hard overclaims and
+  // unverified/unauthorized evidence are never eligible for this override.
+  const locallyVerifiedModelFalseClaimIndexes = [];
+  for (let index = 0; index < claims.length; index++) {
+    const claim = claims[index];
+    if (claim.supported || evidenceEvaluations[index]?.ok !== true || !evidenceQuoteVerified[index]) continue;
+    if (hardOverclaimClaimIndexes.includes(index) || !claim.source_ids.length) continue;
+    if (allowed && claim.source_ids.some(id => !allowed.has(normalizujIdZrodla(id)))) continue;
+    claim.supported = true;
+    locallyVerifiedModelFalseClaimIndexes.push(index);
+  }
   const claimSourceVerified = evidenceEvaluations.map(result => result.ok);
   const unsupportedEvidenceClaimIndexes = claims
     .map((c, index) => c.supported && !claimSourceVerified[index] ? index : -1)
@@ -687,6 +701,11 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
     ...unsupportedFromClaims,
     ...wynik.unsupported_claims
       .filter(v => typeof v === 'string' && v.trim())
+      // Drop a model-reported unsupported string only when it exactly names a
+      // claim rescued by the local quote verifier. Unrelated warnings remain.
+      .filter(value => !locallyVerifiedModelFalseClaimIndexes.some(index =>
+        normalizujClaim(value) === normalizujClaim(claims[index]?.claim)
+      ))
       .map(v => v.trim().slice(0, 500)),
   ])].slice(0, 8);
 
@@ -877,6 +896,7 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
     evidenceStatus: evidenceAssessment.status,
     claimSupport: claimSupportAudit,
     hardOverclaimClaimIndexes,
+    locallyVerifiedModelFalseClaimIndexes,
     evidenceBindings: claims.map((c, index) => ({
       claimIndex: index,
       sourceIds: c.source_ids,
