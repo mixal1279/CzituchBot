@@ -56,6 +56,24 @@ test('claim_en passes when a Polish-localized name is absent from both the Engli
   assert.equal(result.ok, true, result.reason);
 });
 
+test('claim_en copied from the evidence quote must still agree with the Polish claim', () => {
+  const quote = 'Wheatley took control of Aperture.';
+  const mismatch = spojnoscTlumaczeniaClaimu(
+    'Wheatley zniszczył Aperture.',
+    quote,
+    { evidenceQuote: quote },
+  );
+  assert.equal(mismatch.ok, false, JSON.stringify(mismatch));
+  assert.match(mismatch.reason, /nie odpowiada treści claimu/);
+
+  const faithful = spojnoscTlumaczeniaClaimu(
+    'Wheatley przejął kontrolę nad Aperture.',
+    quote,
+    { evidenceQuote: quote },
+  );
+  assert.equal(faithful.ok, true, JSON.stringify(faithful));
+});
+
 test('claim_en still fails when a source-backed name is dropped from the translation', () => {
   const nameOracle = zbudujWyroczniaNazw([{ content: 'Later, Wheatley took control of the facility.' }]);
   const result = spojnoscTlumaczeniaClaimu('Wheatley przejął kontrolę nad obiektem.', 'He took control of the facility.', { nameOracle });
