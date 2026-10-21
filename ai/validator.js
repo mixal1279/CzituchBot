@@ -746,7 +746,7 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
     && !/[.!?].+\S/u.test(claim.claim)
     && isAtomicPartialClaimText(claim.claim)
   );
-  const partialBody = verifiedPartialClaims.slice(0, 4)
+  const partialBody = verifiedPartialClaims.slice(0, 5)
     .map(claim => claim.claim.trim().replace(/[.!?]+$/u, ''))
     .filter(Boolean)
     .join('; ');
