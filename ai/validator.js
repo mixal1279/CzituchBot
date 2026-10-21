@@ -6,6 +6,7 @@ const { assessEvidence } = require('./core');
 const { sprawdzTwardeFaktyOdpowiedzi } = require('./response');
 const { czyDowodSemantyczniePokrywaClaim, czyRelacjaPrzyczynowaPokrywaClaim, zgodnoscStrukturalna, sprawdzTwardeKonflikty, sprawdzSprzecznosciSemantyczne, sprawdzPokrycieClaimamiOdpowiedzi, spojnoscTlumaczeniaClaimu, zbudujWyroczniaNazw, wyglądaNaAngielski, CAUSAL_RE, CAUSAL_EVIDENCE_RE } = require('./claimValidation');
 const { parseEvidenceBlocks, quoteExists, rankEvidenceForClaim, buildEvidenceRepairContext } = require('./evidence');
+const { buildClaimSupportAudit, HARD_OVERCLAIM_TYPES } = require('./claim-support');
 
 // Kontrakt walidatora jest celowo mały: generator potrzebuje tylko jasnego
 // werdyktu i konkretnej informacji zwrotnej do jednego retry.
@@ -537,6 +538,23 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
       return block ? quoteExists(block.content, c.evidence_quote) : false;
     })
   );
+  const evidenceContexts = claims.map((claim, index) => {
+    for (const id of effectiveClaimSourceIds[index]) {
+      const block = blockBySourceId.get(id);
+      if (!block || !quoteExists(block.content, claim.evidence_quote)) continue;
+      return buildBoundedSourceContext(block.content, claim.evidence_quote, 1) || claim.evidence_quote;
+    }
+    return claim.evidence_quote || '';
+  });
+  const claimSupportAudit = buildClaimSupportAudit({
+    claims,
+    evidenceEvaluations,
+    evidenceQuoteVerified,
+    evidenceContexts,
+  });
+  const hardOverclaimClaimIndexes = claimSupportAudit.records
+    .filter(record => record.overclaimTypes.some(type => HARD_OVERCLAIM_TYPES.has(type)))
+    .map(record => record.claimIndex);
   const claimSourceVerified = evidenceEvaluations.map(result => result.ok);
   const unsupportedEvidenceClaimIndexes = claims
     .map((c, index) => c.supported && !claimSourceVerified[index] ? index : -1)
@@ -592,6 +610,7 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
     && answerCoverage.ok
     && claimGranularityOk
     && evidenceContractOk
+    && hardOverclaimClaimIndexes.length === 0
     && unsupported.length === 0;
 
   const accepted = validFromModel === true
@@ -680,6 +699,7 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
   if (malformedClaims) localRejectReasons.push('malformed_claims');
   if (unknownSourceClaim) localRejectReasons.push('unknown_source_id');
   if (unsupportedEvidenceClaim) localRejectReasons.push('evidence_not_verified');
+  if (hardOverclaimClaimIndexes.length) localRejectReasons.push('claim_support_overclaim');
   if (unverifiedEvidenceQuoteIndexes.length) localRejectReasons.push('evidence_quote_not_exact');
   if (claims.some(c => !c.supported) || wynik.unsupported_claims.some(v => typeof v === 'string' && v.trim())) localRejectReasons.push('unsupported_claims_reported');
   if (claimLanguageMismatchIndexes.length) localRejectReasons.push('claims_language_mismatch');
@@ -728,6 +748,8 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
       uncoveredSentenceIndexes: answerCoverage.uncoveredSentenceIndexes || [],
     },
     evidenceStatus: evidenceAssessment.status,
+    claimSupport: claimSupportAudit,
+    hardOverclaimClaimIndexes,
     evidenceBindings: claims.map((c, index) => ({
       claimIndex: index,
       sourceIds: c.source_ids,
