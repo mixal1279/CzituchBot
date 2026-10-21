@@ -424,8 +424,14 @@ function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '', opt
       }
       return false;
     });
+    // Pronoun-led quotes ("He is a High Elf") can establish an attribute but
+    // cannot independently bind it to the named character in the claim. Require
+    // the bounded same-source context to resolve that anaphora.
+    const quoteHasAnaphoricSubject = /^(?:he|she|it|they|his|her|their)\b/iu.test(quote.trim());
+    const translatedClaimStartsWithEntity = /^[A-Z][\p{L}\p{N}'’.-]*(?:\s+[A-Z][\p{L}\p{N}'’.-]*)*\s+/u.test(String(options.claimEn || '').trim())
+      && !/^(?:The|A|An|This|That|It|He|She|They|His|Her|Their)\b/u.test(String(options.claimEn || '').trim());
 
-    if (quoteStructural.ok && quoteContainsClaimEntities) {
+    if (quoteStructural.ok && quoteContainsClaimEntities && !(quoteHasAnaphoricSubject && translatedClaimStartsWithEntity)) {
       return { ok: true, sourceId: id, mode: 'exact_quote', reason: 'cytat występuje w źródle i bezpośrednio wspiera claim', ignoredSentenceInitialNames: [...ignoredSentenceInitialNames] };
     }
 
