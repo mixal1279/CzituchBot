@@ -39,6 +39,21 @@ test('English "so that" in the source supports a Polish causal claim', () => {
   assert.equal(result.diagnostics.evidenceBindings[0].mode, 'exact_quote');
 });
 
+test('causal control relation is recognized in quoted evidence', () => {
+  const quote = "Via Core Transfer, GLaDOS' core is removed from her body and replaced with Wheatley's, giving him control of the facility.";
+  const claim = 'Wheatley przejął kontrolę nad placówką w wyniku transferu rdzenia.';
+  const claimEn = 'Wheatley took control of the facility as a result of the core transfer.';
+  const result = normalizujWynikWalidatora(
+    wynikModelu(claim, quote, claimEn),
+    'test-model',
+    'test',
+    new Set(['SOURCE 1']),
+    dane(quote),
+    claim,
+  );
+  assert.equal(result.status, 'accepted', JSON.stringify(result.diagnostics));
+});
+
 test('a purpose clause cannot prove that the intended outcome actually occurred', () => {
   const quote = 'Chell pushed the button so that Wheatley could take control.';
   const claim = 'Wheatley took control because Chell pushed the button.';
