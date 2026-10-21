@@ -34,7 +34,7 @@ test('gold facts accept grounded alternative landmarks and Polish cart inflectio
     independentGold: true,
     mustInclude: [['Caelid']],
     mustIncludeAny: [
-      ['Caelem Ruins', 'Cathedral of Dragon Communion'],
+      ['Caelem Ruins', 'Cathedral of Dragon Communion', 'Katedra Komunii Smoka', 'Katedry Komunii Smoka'],
       ['wozie', 'wózkiem', 'wózku', 'wóz'],
     ],
     mustNot: [],
