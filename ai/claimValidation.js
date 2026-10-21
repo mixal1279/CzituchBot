@@ -54,7 +54,7 @@ const CROSS_LANGUAGE_CONCEPTS = [
   ['okrzyk', /\b(?:shout\w*|okrzyk\w*)\b/i],
   ['ostroznosc', /cautious\w*|approach cautiously|ostrozn\w*|ostrozne podejscie/i],
   ['zagrozenie', /lethal|dangerous|deadly|niebezpiecz\w*|zabojcz\w*/i],
-  ['grywalnosc_postaci', /play as|playable character|control\w*|sterow\w*|mozna nim grac|nim grac/i],
+  ['grywalnosc_postaci', /\bplay as\b|\bplayable character\b|\bcontrol (?:the|a|your) character\b|sterow\w*|mozna nim grac|nim grac/i],
   ['smok_na_ziemi', /stay on the ground|on the ground|land(?:s|ed|ing)? on the ground|\blands?\b|\blanding\b|\blanded\b|dragonrend|wyladow\w*|pozostac na ziemi|na ziemi/i],
   ['odpornosc_zywiolowa', /resistan\w*|ward\w*|spellbreaker|odpornosc\w*|wardy|tarcze?\w*/i],
 ];
