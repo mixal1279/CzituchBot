@@ -21,14 +21,17 @@ function normalizeText(value) {
     .trim();
 }
 
-function detectOverclaimTypes(claim, evidence) {
+function detectOverclaimTypes(claim, evidence, options = {}) {
   const c = normalizeText(claim);
   const e = normalizeText(evidence);
+  const context = normalizeText(options.context || '');
   const types = [];
   if (!c || !e) return types;
 
   const causalClaim = /\b(?:because|therefore|caused? by|caus\w*|leads? to|resulted? in|as a result|dzieki temu|z powodu|poniewaz|dlatego|spowod\w*|doprowadz\w*|umozliw\w*)\b/u.test(c);
-  const causalEvidence = /\b(?:because|therefore|caused? by|caus\w*|leads? to|resulted? in|as a result|due to|so that|in order to|dzieki temu|z powodu|poniewaz|dlatego|spowod\w*|doprowadz\w*|umozliw\w*|w wyniku)\b/u.test(e);
+  const causalEvidencePattern = /\b(?:because|therefore|caused? by|caus\w*|leads? to|resulted? in|as a result|due to|so that|in order to|dzieki temu|z powodu|poniewaz|dlatego|spowod\w*|doprowadz\w*|umozliw\w*|w wyniku|w ten sposob|przez co)\b/u;
+  const causalEvidence = causalEvidencePattern.test(e)
+    || (options.allowContextForCausality === true && causalEvidencePattern.test(context));
   if (causalClaim && !causalEvidence) types.push('correlation_to_causation');
 
   const sourceHedged = /\b(?:may|might|could|possibly|potentially|suggests?|appears? to|limited evidence|small study|moze|mozliwe|prawdopodobnie|sugeruje|wstepne dane|niewielkim badaniu)\b/u.test(e);
@@ -57,7 +60,7 @@ function detectOverclaimTypes(claim, evidence) {
   if (sourceUpTo && claimHasNumber && !claimPreservesUpperBound) types.push('up_to_qualifier_dropped');
 
   const quantifierPatterns = [
-    ['all', /\b(?:all|every|everyone|entirely|wszyscy|wszystkie|kazdy|kazda|calosc)\b/u],
+    ['all', /\b(?:all|every|each|everyone|entirely|wszyscy|wszystkie|kazdy|kazda|calosc)\b/u],
     ['most', /\b(?:most|majority|predominantly|wiekszosc|przewaznie|zdecydowana wiekszosc)\b/u],
     ['only', /\b(?:only|solely|exclusively|wylacznie|jedynie|tylko)\b/u],
     ['always', /\b(?:always|never|zawsze|nigdy)\b/u],
@@ -88,7 +91,13 @@ function buildClaimSupportAudit({ claims = [], evidenceEvaluations = [], evidenc
     // A nearby hedge or qualifier about another fact must not change this claim's verdict.
     const evidence = String(evidenceQuotes[index] || claim?.evidence_quote || '');
     const evidenceContext = String(evidenceContexts[index] || evidence);
-    const overclaimTypes = detectOverclaimTypes(claim?.claim, evidence);
+    const overclaimTypes = detectOverclaimTypes(claim?.claim, evidence, {
+      context: evidenceContext,
+      // Same-source bounded context may resolve a causal relation only when the
+      // structural verifier already accepted that exact claim as source_context.
+      // Never let neighbouring text rescue an exact-quote overclaim.
+      allowContextForCausality: evaluation.ok === true && evaluation.mode === 'source_context',
+    });
     const hardOverclaims = overclaimTypes.filter(type => HARD_OVERCLAIM_TYPES.has(type));
     const reason = String(evaluation.reason || claim?.reason || '').slice(0, 500);
 
