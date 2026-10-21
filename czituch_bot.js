@@ -2233,15 +2233,16 @@ async function walidujOdpowiedzXKiro(persona, pytanie, odpowiedz, dane, requestI
   // OpenRouter remains the next fallback after xKiro, so xKiro must always
   // leave enough time for that final validator. The validator counter alone
   // does not mean xKiro is the last provider in the fallback chain.
-  // xKiro ma wysoką latencję. Przy krótkim budżecie jego slot odbiera czas
-  // ostatniemu fallbackowi OpenRouter, więc poniżej 14,5 s pomijamy xKiro.
+  // xKiro ma wysoką latencję. Poprzedni limit 3 s regularnie kończył się dokładnie
+  // timeoutem w benchmarku; 4,5 s daje modelowi realną szansę, a limit pozostałego
+  // czasu i rezerwa nadal chronią ostatni fallback OpenRouter. Poniżej 14,5 s pomijamy xKiro.
   const timeoutMs = requestState
     ? (remainingMs < 14500 ? null : computeValidatorTimeout(remainingMs, {
-        maxTimeoutMs: Number(process.env.AI_XKIRO_VALIDATOR_TIMEOUT_MS) || 3000,
+        maxTimeoutMs: Number(process.env.AI_XKIRO_VALIDATOR_TIMEOUT_MS) || 4500,
         reserveMs: computeValidatorReserveMs(remainingMs, requestState.validatory + 1, requestState.maxValidatorow),
         minTimeoutMs: 1200,
       }))
-    : (Number(process.env.AI_XKIRO_VALIDATOR_TIMEOUT_MS) || 3000);
+    : (Number(process.env.AI_XKIRO_VALIDATOR_TIMEOUT_MS) || 4500);
   if (requestState && timeoutMs === null) {
     return { status: 'unavailable', ok: false, technicalError: true, transient: true, skipped: true, provider: 'xkiro', model, unsupported_claims: [], reason: 'xKiro validator pominięty: zbyt mały pozostały budżet czasu' };
   }
@@ -2508,7 +2509,7 @@ async function walidujOdpowiedzAIBezCache(persona, pytanie, odpowiedz, dane, his
       ? (typeof requestState.remainingMs === 'function' ? requestState.remainingMs() : requestState.maxCzasMs - (Date.now() - requestState.startedAt))
       : 6000;
     const xkiroTimeoutMs = xkiroRemainingMs < 14500 ? null : computeValidatorTimeout(xkiroRemainingMs, {
-      maxTimeoutMs: Number(process.env.AI_XKIRO_VALIDATOR_TIMEOUT_MS) || 3000,
+      maxTimeoutMs: Number(process.env.AI_XKIRO_VALIDATOR_TIMEOUT_MS) || 4500,
       reserveMs: computeValidatorReserveMs(xkiroRemainingMs, requestState?.validatory + 1, requestState?.maxValidatorow),
       minTimeoutMs: 1200,
     });
