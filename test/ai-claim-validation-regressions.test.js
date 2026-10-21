@@ -6,6 +6,7 @@ const {
   CAUSAL_RE,
   normalizujClaim,
   spojnoscTlumaczeniaClaimu,
+  wyodrebnijNazwyWlasne,
 } = require('../ai/claimValidation');
 
 test('causal translation accepts Polish spowodowała and English triggered as equivalent signals', () => {
@@ -34,4 +35,13 @@ test('English resistance and Polish odporność use the same protection signal',
     'You can try increasing your Frost, Fire or magic resistance.',
   );
   assert.equal(result.ok, true, result.reason);
+});
+
+test('sentence-initial Polish adjectives are not misclassified as proper names', () => {
+  assert.deepEqual(wyodrebnijNazwyWlasne(
+    'Alternatywnymi metodami walki są unieruchamianie smoka lub przyzwanie minionów.',
+  ), []);
+  assert.deepEqual(wyodrebnijNazwyWlasne(
+    'Możesz również zwiększyć odporność na ogień, mróz lub magię.',
+  ), []);
 });
