@@ -50,6 +50,18 @@ test('a purpose clause cannot prove that the intended outcome actually occurred'
   );
   assert.equal(result.status, 'rejected');
   assert.match(result.reason, /cel lub możliwość.*skutek jako dokonany/);
+
+  const escapeQuote = 'Chell opened the door so that Wheatley could escape.';
+  const escapeClaim = 'Wheatley escaped because Chell opened the door.';
+  const escapeResult = normalizujWynikWalidatora(
+    wynikModelu(escapeClaim, escapeQuote),
+    'test-model',
+    'test',
+    new Set(['SOURCE 1']),
+    dane(escapeQuote),
+    escapeClaim,
+  );
+  assert.equal(escapeResult.status, 'rejected');
 });
 
 test('short two-word infobox quotes are accepted when the entity and concept checks pass', () => {
