@@ -112,6 +112,19 @@ test('pipeline input and validation decisions are deterministic', () => {
   assert.equal(decideValidation('unexpected').finalStatus, STATUS.UNAVAILABLE);
 });
 
+test('answer plans preserve source-backed role/location details and prohibit guessed dates', () => {
+  const who = buildAnswerPlan('Kim jest Astarion?', { intent: 'web_fact', is_lore: true });
+  assert.match(who.instruction, /istotną rolę lub relację/);
+  assert.match(who.instruction, /towarzysz/);
+
+  const where = buildAnswerPlan('Gdzie znaleźć Wielki Miecz?', { intent: 'web_fact', game: 'Elden Ring', is_gameplay: true });
+  assert.match(where.instruction, /nazwane miejsce lub region/);
+  assert.match(where.instruction, /punkt orientacyjny/);
+
+  const when = buildAnswerPlan('Kiedy Geralt przybywa do Novigradu?', { intent: 'web_fact', game: 'The Witcher 3' });
+  assert.match(when.instruction, /nie zgaduj daty/);
+});
+
 test('a source-scoped missing-date caveat is a valid temporal fallback without bypassing factual claim coverage', () => {
   const answer = 'Źródła potwierdzają, że Geralt przybywa do Novigradu, ale nie podają konkretnej daty ani momentu w czasie gry.';
   const plan = buildAnswerPlan('Kiedy Geralt przybywa do Novigradu?', { intent: 'web_fact', game: 'The Witcher 3' });
