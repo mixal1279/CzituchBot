@@ -36,6 +36,16 @@ test('v26 answer plan identifies causal lore requirements', () => {
   assert.match(plan.instruction, /nie zastępuj go domniemaną przyczyną/);
 });
 
+test('a stated motive phrased as "miało na celu" satisfies a why answer plan', () => {
+  const plan = buildAnswerPlan('Dlaczego Wheatley przejął kontrolę nad GLaDOS?', {
+    intent:'web_fact', is_lore:true, entity:'Wheatley', game:'Portal 2',
+  });
+  const answer = 'Wheatley przeniósł rdzeń GLaDOS do układu z baterią ziemniaczaną, co miało na celu upokorzenie jej.';
+  const result = judgeAnswer(answer, plan);
+  assert.equal(result.status, 'accepted', JSON.stringify(result));
+  assert.deepEqual(result.missing, []);
+});
+
 test('who-answer guidance prioritizes the source-defined identity over secondary traits', () => {
   const plan = buildAnswerPlan('Kim jest Astarion?', {
     intent:'web_fact', entity:'Astarion', game:"Baldur's Gate 3",
