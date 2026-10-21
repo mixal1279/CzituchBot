@@ -377,8 +377,8 @@ function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '', opt
   return { ok: false, reason: reasons[0] || 'brak zweryfikowanego evidence', ignoredSentenceInitialNames: [...ignoredSentenceInitialNames] };
 }
 
-const POLISH_CLAIM_LANGUAGE_CUES = /(?<![\\p{L}])(?:jest|są|sa|się|sie|nie|że|ze|przez|oraz|który|która|które|jego|jej|ich|dla|gdy|bo|był|była|było|ponieważ|poniewaz|dzięki|dzieki|może|mogą|moga|można|mozna|aby|żeby|zeby|został|została|zostal|zostala|będzie|bedzie|wtedy|potem|dlatego|więc|wiec)(?![\\p{L}])/giu;
-const ENGLISH_CLAIM_LANGUAGE_CUES = /(?<![\\p{L}])(?:the|of|and|is|was|were|are|to|in|for|with|that|he|she|his|her|by|on|as|at|it|its|from|after|before|during|has|had|have|an|this|these|those|their|be|been|not|which|who|can|will|may|only|also|than|then|but|or|if|when|where|took|takes|does|did|there|into|because)(?![\\p{L}])/giu;
+const POLISH_CLAIM_LANGUAGE_CUES = /(?<![\p{L}])(?:jest|są|sa|się|sie|nie|że|ze|przez|oraz|który|która|które|jego|jej|ich|dla|gdy|bo|był|była|było|ponieważ|poniewaz|dzięki|dzieki|może|mogą|moga|można|mozna|aby|żeby|zeby|został|została|zostal|zostala|będzie|bedzie|wtedy|potem|dlatego|więc|wiec)(?![\p{L}])/giu;
+const ENGLISH_CLAIM_LANGUAGE_CUES = /(?<![\p{L}])(?:the|of|and|is|was|were|are|to|in|for|with|that|he|she|his|her|by|on|as|at|it|its|from|after|before|during|has|had|have|an|this|these|those|their|be|been|not|which|who|can|will|may|only|also|than|then|but|or|if|when|where|took|takes|does|did|there|into|because)(?![\p{L}])/giu;
 
 function countLanguageCues(value, pattern) {
   const flags = pattern.flags.includes('g') ? pattern.flags : pattern.flags + 'g';
