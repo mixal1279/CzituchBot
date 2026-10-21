@@ -40,6 +40,18 @@ test('source-scoped cause limitation is accepted for a why question even if vali
   assert.deepEqual(result.unsupported_claims, []);
 });
 
+test('cause limitation is not accepted when retrieved evidence states the causal relation', () => {
+  const quote = 'GLaDOS is removed from her body and Wheatley is put in her place, putting him in control of the facility.';
+  const answer = 'Źródła nie potwierdzają przyczyny, dla której Wheatley przejął kontrolę nad obiektem.';
+  const payload = wynikModelu('Wheatley przejął kontrolę, ponieważ chciał uciec.', quote);
+  const result = normalizujWynikWalidatora(
+    payload, 'test-model', 'test', new Set(['SOURCE 1']), dane(quote), answer,
+    { question: 'Dlaczego Wheatley przejął kontrolę nad obiektem?' },
+  );
+  assert.notEqual(result.status, 'accepted');
+  assert.equal(result.diagnostics.retrievedEvidenceHasCausalSignal, true);
+});
+
 test('source-scoped cause limitation is not accepted for a non-causal question', () => {
   const quote = 'Wheatley took control of the facility after the core transfer.';
   const answer = 'Źródła nie potwierdzają przyczyny, dla której Wheatley przejął kontrolę nad obiektem.';
