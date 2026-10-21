@@ -305,6 +305,12 @@ function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '', opt
   const causalRe = CAUSAL_RE;
   const claimCausal = causalRe.test(claimNorm);
   const quoteCausal = CAUSAL_EVIDENCE_RE.test(quoteNorm);
+  const quoteStatesPurpose = /\b(?:so that|in order to|so as to|aby|zeby|w celu)\b/i.test(quoteNorm)
+    && /\b(?:can|could|may|might|will|would|moze|mogl|mogla|mogli|mogly|bedzie|beda)\b/i.test(quoteNorm);
+  const claimStatesCompletedControl = /\b(?:przejal kontrol[eę]|przejela kontrol[eę]|przejeli kontrol[eę]|took control|takes control|took over|has taken control|regained control|obj[aą][łl] kontrol[eę]|przej[aą][łl] w[lł]adz[eę])\b/i.test(claimNorm);
+  if (quoteStatesPurpose && claimStatesCompletedControl) {
+    return { ok: false, reason: 'dowód opisuje cel lub możliwość, a claim przedstawia skutek jako dokonany' };
+  }
 
   const quoteCaptured = /captur\w*|kidnapp\w*|abduct\w*|porwan\w*|schwyt\w*/i.test(quoteNorm);
   const quoteKilled = /kill\w*|murder\w*|zabij\w*|zabil\w*|zabila\w*|zabita\w*|zabite\w*|zabici\w*|zabity\w*|zabicie\w*|smier\w*/i.test(quoteNorm);
