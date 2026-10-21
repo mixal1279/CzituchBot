@@ -493,7 +493,7 @@ function sprawdzTwardeKonflikty(evidence, claim, options = {}) {
   // to reject a positive claim about X because an unrelated subordinate clause
   // contained “never”. Keep the hard gate for negation of the actual event.
   const evidenceForNegation = e.replace(
-    /\\b(?:although|though|while)\\s+(?:it|this|that)\\s+(?:was|is|has been)\\s+never\\s+explained\\b[,;:]?\\s*/giu,
+    /\b(?:although|though|while)\s+(?:it|this|that)\s+(?:was|is|has been)\s+never\s+explained\b[,;:]?\s*/giu,
     ' ',
   );
   const evidenceNegated = wyodrebnijMarkery(evidenceForNegation, NEGATION_RE);
