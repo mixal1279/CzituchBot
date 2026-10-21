@@ -139,6 +139,26 @@ async function sleep(ms) {
   if (ms > 0) await new Promise(resolve => setTimeout(resolve, ms));
 }
 
+function classifyBenchmarkOutcome(result = {}) {
+  const attempts = Array.isArray(result.generationAttempts) ? result.generationAttempts : [];
+  const validatorResults = Array.isArray(result.validatorResults) ? result.validatorResults : [];
+  const details = [
+    result.rejectionReason,
+    ...(Array.isArray(result.fallbackReasons) ? result.fallbackReasons : []),
+    ...attempts.flatMap(attempt => [attempt.failure, attempt.error, attempt.reason]),
+    ...validatorResults.flatMap(row => [row.status, row.reason, row.error]),
+  ].filter(Boolean).join(' ').toLowerCase();
+  if (result.judgeStatus === 'accepted' && result.factualPassed !== false) return 'accepted';
+  if (/(?:quota|rate.?limit|resource.?exhausted|tokens? per (?:day|minute)|\b429\b|\b402\b)/i.test(details)) return 'provider_quota';
+  if (/(?:timeout|timed.?out|deadline|abort(?:ed)?|etimedout)/i.test(details)) return 'provider_timeout';
+  if (/(?:budget_exhausted|budget|budżet|no_healthy_provider|request_deadline|model_calls_exhausted|generation_budget_exhausted)/i.test(details)) return 'no_fallback_budget';
+  if (/(?:evidence|quote|claim|unsupported|unverified|validator_reject|semantic|coverage|coarse)/i.test(details)
+      || result.finalStatus === 'rejected'
+      || result.judgeStatus === 'abstained'
+      || result.judgeStatus === 'error') return 'evidence_rejection';
+  return 'semantic_rejection';
+}
+
 function buildBenchmarkDiagnostics(results, allCases = benchmark.cases, selectedCases = cases) {
   const validatorRows = results.flatMap(result => result.validatorResults || []);
   const validatorProviderCalls = {};
@@ -181,6 +201,11 @@ function buildBenchmarkDiagnostics(results, allCases = benchmark.cases, selected
       independentGold: allCases.filter(item => (item.category || 'uncategorized') === category && item.expected?.factual?.independentGold === true).length,
     },
   ]));
+  const outcomeCounts = {};
+  for (const result of results) {
+    const outcome = classifyBenchmarkOutcome(result);
+    outcomeCounts[outcome] = (outcomeCounts[outcome] || 0) + 1;
+  }
   return {
     validatorRejected: results.filter(result => result.finalStatus === 'rejected').length,
     validatorInconclusive: results.filter(result => result.finalStatus === 'inconclusive').length,
@@ -209,6 +234,7 @@ function buildBenchmarkDiagnostics(results, allCases = benchmark.cases, selected
     // Zachowujemy nazwę historyczną dla kompatybilności raportów; to są błędy generatora.
     providerFailures: generationProviderFailures,
     generationProviderFailures,
+    outcomeCounts,
     goldCoverageByCategory,
     independentGoldCasesInBenchmark: goldCases.length,
     independentGoldCasesInSample: selectedGoldCases.map(item => item.id),
@@ -355,7 +381,7 @@ async function run() {
   }
 }
 
-module.exports = { normalizeFactText, scoreGoldenFacts, stratifiedCases, buildQuestionForBot, isFailureText, evaluateBenchmarkAnswer, buildBenchmarkDiagnostics, writeBenchmarkReport, writeStdoutAndWait, run };
+module.exports = { normalizeFactText, scoreGoldenFacts, stratifiedCases, buildQuestionForBot, isFailureText, evaluateBenchmarkAnswer, classifyBenchmarkOutcome, buildBenchmarkDiagnostics, writeBenchmarkReport, writeStdoutAndWait, run };
 
 if (require.main === module) {
   run().catch(error => {

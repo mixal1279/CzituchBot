@@ -6,7 +6,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { normalizeFactText, scoreGoldenFacts } = require('../ai/benchmark-scorer');
-const { buildQuestionForBot, evaluateBenchmarkAnswer, buildBenchmarkDiagnostics, stratifiedCases, isFailureText, writeBenchmarkReport, writeStdoutAndWait } = require('../scripts/ai-live-benchmark');
+const { buildQuestionForBot, evaluateBenchmarkAnswer, classifyBenchmarkOutcome, buildBenchmarkDiagnostics, stratifiedCases, isFailureText, writeBenchmarkReport, writeStdoutAndWait } = require('../scripts/ai-live-benchmark');
 
 test('benchmark factual normalization preserves words with Polish diacritics and collapses whitespace', () => {
   assert.equal(normalizeFactText('Święty Łukasz  —  przejął kontrolę.'), 'swiety lukasz przejal kontrole');
@@ -114,6 +114,26 @@ test('live diagnostics distinguish validator failures from generation failures a
   assert.equal(diagnostics.avgElapsedToGenerationCycleMs, 24200);
   assert.equal(diagnostics.independentGoldCasesInSample.length, 1);
   assert.equal(diagnostics.goldCoverageByCategory.how.independentGold, 1);
+});
+
+test('live diagnostics separate provider quota, timeout, budget and evidence rejection', () => {
+  assert.equal(classifyBenchmarkOutcome({ judgeStatus: 'accepted', factualPassed: true }), 'accepted');
+  assert.equal(classifyBenchmarkOutcome({ finalStatus: 'unavailable', fallbackReasons: ['quota'] }), 'provider_quota');
+  assert.equal(classifyBenchmarkOutcome({ finalStatus: 'unavailable', generationAttempts: [{ failure: 'timeout' }] }), 'provider_timeout');
+  assert.equal(classifyBenchmarkOutcome({ finalStatus: 'rejected', fallbackReasons: ['budget_exhausted'] }), 'no_fallback_budget');
+  assert.equal(classifyBenchmarkOutcome({ finalStatus: 'rejected', rejectionReason: 'evidence_quote nie istnieje w źródle' }), 'evidence_rejection');
+  const diagnostics = buildBenchmarkDiagnostics([
+    { judgeStatus: 'accepted', factualPassed: true },
+    { finalStatus: 'unavailable', fallbackReasons: ['quota'] },
+    { finalStatus: 'unavailable', generationAttempts: [{ failure: 'timeout' }] },
+    { finalStatus: 'rejected', fallbackReasons: ['budget_exhausted'] },
+  ], [], []);
+  assert.deepEqual(diagnostics.outcomeCounts, {
+    accepted: 1,
+    provider_quota: 1,
+    provider_timeout: 1,
+    no_fallback_budget: 1,
+  });
 });
 
 test('benchmark report is written atomically as valid JSON at the configured path', () => {

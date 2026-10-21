@@ -80,6 +80,7 @@ jobs:
               "- odpowiedzi: " + r.answeredAccuracy + ", kompletność: " + r.completenessAccuracy + ", factual: " + r.factualAccuracy,
               "- błędy providerów: " + ((d.providerFailures || []).join(", ") || "brak"),
               "- odrzucone przez walidator: " + d.validatorRejected + ", niejednoznaczne: " + d.validatorInconclusive,
+              "- klasy wyników: " + Object.entries(d.outcomeCounts || {}).map(([k, v]) => k + "=" + v).join(", "),
               "",
               "| przypadek | odpowiedź | judge | status końcowy |",
               "|---|---|---|---|",

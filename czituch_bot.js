@@ -3889,6 +3889,8 @@ Pytanie użytkownika: ${pytanie}`;
         unsupported.length ? `Niepotwierdzone twierdzenia: ${unsupported.join(' | ')}` : 'Validator nie wskazał konkretnego twierdzenia.',
         evidenceRepairContext ? '[EVIDENCE REPAIR MAP]\n' + evidenceRepairContext : '[EVIDENCE REPAIR MAP] Brak bezpiecznego fragmentu do ponownego użycia.',
         'Każdy fakt przepisz jako osobny, atomowy claim oparty na jednym konkretnym fragmencie. Nie łącz faktu, przyczyny i skutku w jedno zdanie, jeśli dowód nie zawiera całej relacji.',
+        'Każde zdanie odpowiedzi ma przekazywać najwyżej jeden niezależnie sprawdzalny fakt; gdy poprzednie zdanie zawiera kilka faktów, rozdziel je albo usuń te bez osobnego dowodu.',
+        'Nie używaj spójników „i”, „oraz” ani „a następnie” do łączenia niezależnych faktów bez osobnych dowodów. Dla każdego zachowanego faktu validator musi móc wskazać jeden ciągły cytat źródłowy.',
         'Używaj EVIDENCE REPAIR MAP wyłącznie wtedy, gdy konkretny candidate rzeczywiście potwierdza cały claim. Samo wspólne słowo, podobny temat albo następstwo wydarzeń NIE jest dowodem.',
         'Jeżeli candidate nie potwierdza claimu bezpośrednio, USUŃ ten claim z odpowiedzi zamiast go rekonstruować, uzupełniać lub zgadywać.',
         'Nie twórz claimów typu „źródła nie potwierdzają...”, „brak danych wskazuje...”, ani innych meta-wniosków o źródłach. Odpowiedź ma zawierać wyłącznie fakty, które można bezpośrednio związać z dowodem.',
@@ -4001,6 +4003,8 @@ Pytanie użytkownika: ${pytanie}`;
           'Zwróć CAŁĄ poprawioną odpowiedź od początku do końca, a nie tylko dopisane zdania. Zachowaj poprzednie twierdzenia, które są już zweryfikowane, i uzupełnij wyłącznie brakujące elementy.',
           'Uzupełniaj wyłącznie na podstawie zweryfikowanego evidence oraz DANYCH REFERENCYJNYCH. Nie dodawaj niepotwierdzonych faktów.',
           'Każde zdanie musi być bezpośrednio wspierane przez jeden zweryfikowany claim/evidence. Nie twórz nowych relacji przyczynowych przez łączenie osobnych faktów.',
+          'Zachowaj atomiczność także tutaj: jedno zdanie = jeden niezależnie sprawdzalny fakt. Jeśli brakujący element wymaga innego dowodu, dodaj osobne zdanie; nie sklejaj go z istniejącym przez „i”.',
+          'Nie używaj wielokropków, nawiasów typu [...] ani parafrazy jako dowodu. Odpowiedź ma zawierać tylko fakty, które można powiązać z jednym ciągłym fragmentem evidence.',
           answerPlan.instruction,
         ].join('\n');
         const repairResult = await generujOdpowiedz(
