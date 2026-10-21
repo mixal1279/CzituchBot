@@ -505,6 +505,17 @@ function wykryjNiezgodnyJezykClaimow(answer, claims) {
   }).filter(index => index >= 0);
 }
 
+
+function isAtomicPartialClaimText(value) {
+  const claim = String(value || '').trim();
+  if (!claim || /[;—–]/u.test(claim)) return false;
+  if (/\b(?:because|therefore|as a result|w wyniku|z powodu|poniewaz|dzieki temu|co spowodow\w*|which caused|leading to|resulting in)\b/iu.test(claim)) return false;
+  if (/,\s*(?:co|ktory|ktora|ktore|which|who|that)\b/iu.test(claim)) return false;
+  if (/^\s*(?:i|oraz|and|but|co|which|ktory|ktora|ktore)\b/iu.test(claim)) return false;
+  if (/\b(?:and|oraz|as well as|a takze|jak rowniez)\b/iu.test(claim)) return false;
+  return true;
+}
+
 function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSourceIds = null, dane = '', answer = '') {
   if (!wynik || typeof wynik !== 'object' || Array.isArray(wynik)) return null;
 
@@ -735,8 +746,9 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
     && !hardOverclaimIndexes.has(index)
     && claim.source_ids.length > 0
     && !/[.!?].+\S/u.test(claim.claim)
+    && isAtomicPartialClaimText(claim.claim)
   );
-  const partialBody = verifiedPartialClaims.slice(0, 2)
+  const partialBody = verifiedPartialClaims.slice(0, 4)
     .map(claim => claim.claim.trim().replace(/[.!?]+$/u, ''))
     .filter(Boolean)
     .join('; ');
