@@ -164,9 +164,15 @@ test('pipeline delivers a soft-accepted answer, but never an ordinary rejected o
     reason: 'partial_answer_delivered',
   });
   const partial = 'Malenia jest opcjonalnym bossem w Elden Ring. Nie wszystkie szczegóły da się potwierdzić w dostępnych źródłach.';
-  assert.equal(finalText(partial, STATUS.SOFT_ACCEPTED), partial);
+  assert.equal(finalText(partial, STATUS.SOFT_ACCEPTED, { partialAnswer: partial }), partial);
   // Pusta odpowiedź częściowa nie może wyprodukować pustej wiadomości.
-  assert.equal(finalText('', STATUS.SOFT_ACCEPTED), 'Nie mam wystarczających danych, żeby odpowiedzieć na to pewnie.');
+  assert.equal(finalText('', STATUS.SOFT_ACCEPTED, { partialAnswer: '' }), 'Nie mam wystarczających danych, żeby odpowiedzieć na to pewnie.');
+  // Bez zweryfikowanego partialAnswer nie wydajemy pełnej odpowiedzi — nawet
+  // jeśli caller ją przekazał. To gwarancja strukturalna, nie konwencja.
+  assert.equal(
+    finalText('Malenia jest opcjonalnym bossem w Elden Ring.', STATUS.SOFT_ACCEPTED),
+    'Nie mam wystarczających danych, żeby odpowiedzieć na to pewnie.',
+  );
   // Odpowiedź zwykła odrzucona nadal jest zamieniana na odmowę — to jest granica,
   // której nie wolno przekroczyć: odrzucona treść może zawierać fakty spoza źródła.
   assert.equal(finalText('odpowiedź z niepotwierdzonym faktem', STATUS.REJECTED), 'Nie mam wystarczających danych, żeby odpowiedzieć na to pewnie.');

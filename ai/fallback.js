@@ -98,10 +98,20 @@ const GENERATION_FALLBACK_CHAIN = [
 //
 // Kolejność ma tu znaczenie wykonawcze: na cykl repairu mieści się JEDNA próba
 // dostawcy (próg 13,5 s = 3 s na próbę + 10,5 s rezerwy na walidator), więc
-// pierwszy kandydat musi być tym, który faktycznie odpowiada. W live benchmarku
-// (2026-10-21) Gemini zajął 12 s i nie zwrócił werdyktu w 5/5 przypadków,
-// a xKiro nigdy nie zdążył — obaj stali na początku listy, a model, który
-// odpowiadał w 0,6–1,5 s, był dopiero czwarty.
+// pierwszy kandydat musi być tym, który faktycznie odpowiada.
+//
+// UWAGA: to hipoteza oparta na JEDNYM przebiegu live benchmarku (2026-10-21,
+// 5 przypadków), a nie zmierzony ranking. W tym przebiegu Gemini nie zwrócił
+// żadnego werdyktu (5× „unavailable”, 3× błąd; wywołania 5,0–29,5 s), xKiro
+// również (3× błąd, 1× „unavailable”; 4,5–29,5 s), a jedynym dostawcą, który
+// odpowiadał, był Groq (5× sukces). Liczby te pochodzą z logu tego przebiegu;
+// nie należy do nich odnosić „12 s”, które było SKONFIGUROWANYM limitem
+// Gemini, a nie zmierzonym czasem.
+//
+// Właściwym zabezpieczeniem jest circuit breaker (Gemini raportuje teraz wynik
+// do breakera), a nie sama kolejność. Kolejność porządkuje jedynie to, który
+// kandydat dostanie szansę w pierwszej próbie — po awarii providera breaker
+// przeskakuje go niezależnie od pozycji na liście.
 const REPAIR_FALLBACK_PREFERENCE = [
   'groq:openai/gpt-oss-20b',
   'groq:openai/gpt-oss-120b',

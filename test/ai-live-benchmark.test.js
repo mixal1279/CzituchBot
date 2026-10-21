@@ -6,7 +6,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { normalizeFactText, scoreGoldenFacts } = require('../ai/benchmark-scorer');
-const { buildQuestionForBot, evaluateBenchmarkAnswer, classifyBenchmarkOutcome, buildBenchmarkDiagnostics, stratifiedCases, isFailureText, writeBenchmarkReport, writeStdoutAndWait } = require('../scripts/ai-live-benchmark');
+const { buildQuestionForBot, evaluateBenchmarkAnswer, classifyBenchmarkOutcome, buildBenchmarkDiagnostics, stratifiedCases, isFailureText, writeBenchmarkReport, writeStdoutAndWait, wybierzOdrzuconaOdpowiedz } = require('../scripts/ai-live-benchmark');
 
 test('benchmark factual normalization preserves words with Polish diacritics and collapses whitespace', () => {
   assert.equal(normalizeFactText('Święty Łukasz  —  przejął kontrolę.'), 'swiety lukasz przejal kontrole');
@@ -230,4 +230,29 @@ test('benchmark stdout writer waits until the stream flushes', async () => {
   await writeStdoutAndWait('{"ok":true}\n', stream);
   assert.equal(completed, true);
   assert.equal(written, '{"ok":true}\n');
+});
+
+test('odrzucona odpowiedź pochodzi z ostatniego werdyktu walidatora, nie z pierwszego', () => {
+  // Bot (czituch_bot.js) bierze ostatni wynik walidatora — cykl naprawczy może
+  // przepisać odpowiedź, a to, co pipeline wyrzucił, pochodzi z ostatniego
+  // werdyktu. Benchmark musi liczyć fałszywe odrzucenia na tym samym tekście.
+  const summary = {
+    validatorResults: [
+      { validationDiagnostics: { benchmarkTrace: { answer: 'pierwsza wersja odpowiedzi' } } },
+      { validationDiagnostics: { benchmarkTrace: { answer: 'ostateczna wersja odpowiedzi' } } },
+    ],
+  };
+  assert.equal(wybierzOdrzuconaOdpowiedz(summary, false), 'ostateczna wersja odpowiedzi');
+  // Odpowiedź, która została wydana, nie ma treści odrzuconej.
+  assert.equal(wybierzOdrzuconaOdpowiedz(summary, true), null);
+  // Brak śladu walidatora → brak odrzuconej treści.
+  assert.equal(wybierzOdrzuconaOdpowiedz({}, false), null);
+  // Pusta treść w ostatnim wyniku nie może zasłonić wcześniejszego.
+  const zPustym = {
+    validatorResults: [
+      { validationDiagnostics: { benchmarkTrace: { answer: 'wczesniejsza odpowiedź' } } },
+      { validationDiagnostics: { benchmarkTrace: { answer: '   ' } } },
+    ],
+  };
+  assert.equal(wybierzOdrzuconaOdpowiedz(zPustym, false), 'wczesniejsza odpowiedź');
 });

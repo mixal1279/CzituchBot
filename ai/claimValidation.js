@@ -240,7 +240,7 @@ function wyodrebnijNazwyWlasne(value, options = {}) {
     // Przysłówki i okoliczniki na początku zdania były zliczane jako encje,
     // przez co tłumaczenie poprawnej nazwy wyglądało jak utrata encji
     // („Najłatwiej dotrzeć do wózka…” → „The easiest way to get there…”).
-    'najlatwiej', 'najprościej', 'najszybciej', 'najczesciej', 'zazwyczaj', 'przede wszystkim',
+    'najlatwiej', 'najprościej', 'najszybciej', 'najczesciej', 'zazwyczaj', 'przede',
     // Liczba mnoga rzeczownika pospolitego: „postać” była na liście, „postacie” nie.
     'postacie', 'postaci', 'bohaterzy', 'bohaterowie'
   ].map(normalizujClaim));
@@ -739,7 +739,7 @@ function sprawdzPokrycieClaimamiOdpowiedzi(answer, claims) {
         if (!previous || czyOgraniczenieDowodowe(previous)) continue;
         const previousEntities = wyodrebnijNazwyWlasne(previous);
         if (!previousEntities.length) continue;
-        if (ANAPHORA.test(previous) || /^\s*(?:jest|są|był|była|było|byli|miał|miała|ma|ma)\b/iu.test(previous)) continue;
+        if (ANAPHORA.test(previous) || /^\s*(?:jest|są|był|była|było|byli|miał|miała|ma)\b/iu.test(previous)) continue;
         sentenceEntities = previousEntities;
         break;
       }
@@ -840,6 +840,35 @@ function zbiorRowny(a, b) {
   return sa.size === sb.size && [...sa].every(x => sb.has(x));
 }
 
+// Wycina z tekstu wzmianki o encjach należących do tej samej grupy aliasowej.
+// Encje tłumaczone („Kościoła Palącego się” → „Smoldering Church”) nie mają
+// wspólnych tokenów, więc porównanie treści z ich udziałem zawsze dawałoby
+// fałszywy negatyw. Wycinamy grupę po obu stronach, żeby porównać resztę.
+function wycinAliasowaneEncje(text, names) {
+  let out = String(text || '');
+  const wzorce = [];
+  for (const name of names) {
+    const surowa = String(name || '').trim();
+    if (!surowa) continue;
+    const alias = KNOWN_ENTITY_ALIAS_PATTERNS.find(item => {
+      for (const probe of [surowa, normalizujClaim(surowa)]) {
+        if (!probe) continue;
+        try {
+          if (new RegExp(item.pattern.source, 'iu').test(probe)) return true;
+        } catch (_) { /* wzorzec niedozwolony — pomijamy */ }
+      }
+      return false;
+    });
+    if (alias && !wzorce.includes(alias)) wzorce.push(alias);
+  }
+  for (const alias of wzorce) {
+    try {
+      out = out.replace(new RegExp(alias.pattern.source, 'giu'), ' ');
+    } catch (_) { /* pomijamy wzorzec, którego nie da się zastosować */ }
+  }
+  return out.replace(/\s+/g, ' ').trim();
+}
+
 function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
   const pl = String(claimPl || '').trim();
   const en = String(claimEn || '').trim();
@@ -853,8 +882,18 @@ function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
   const quoteNorm = normalizujClaim(options.evidenceQuote || '');
   const copiedQuote = Boolean(quoteNorm) && normalizujClaim(en) === quoteNorm;
   if (copiedQuote) {
-    const polishConcepts = pojeciaCrossLanguage(pl);
-    const englishConcepts = pojeciaCrossLanguage(en);
+    // Wycinamy aliasowane encje z obu stron i porównujemy RESZTĘ treści.
+    // Bez tego kopiowanie cytatu czyniło weryfikację tautologiczną: claim_en
+    // jest wtedy cytatem, więc „dowód zgodny z claim_en” niczego nie dowodzi,
+    // a jedynym strażnikiem zostaje słownik pojęć (z lukami).
+    const aliasowaneEncje = [...new Set([
+      ...wyodrebnijNazwyWlasne(pl, options),
+      ...wyodrebnijNazwyWlasne(pl),
+    ])];
+    const plBezEncji = wycinAliasowaneEncje(pl, aliasowaneEncje);
+    const enBezEncji = wycinAliasowaneEncje(en, aliasowaneEncje);
+    const polishConcepts = pojeciaCrossLanguage(plBezEncji);
+    const englishConcepts = pojeciaCrossLanguage(enBezEncji);
     const sharedConcepts = [...polishConcepts].filter(concept => englishConcepts.has(concept));
     // Entity/name overlap alone is not positive evidence that the action agrees:
     // „zniszczył Aperture” must not pass against „took control of Aperture”.
@@ -868,11 +907,21 @@ function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
     if (addedConcepts.length) {
       return { ok: false, reason: 'claim_en kopiuje cytat, ale nie odpowiada treści claimu' };
     }
+    // Po wycięciu encji pojęcia muszą zgodzić się w OBIE strony. Wcześniej
+    // sprawdzano tylko, że cytat nie dodaje pojęcia, którego nie ma w claimie —
+    // claim mógł więc twierdzić pojęcia nieobecnego w cytacie („zniszczył”
+    // wobec „took control”) i przechodzić, bo jedno wspólne pojęcie to
+    // usprawiedliwiało resztę.
+    const missingConcepts = [...polishConcepts].filter(concept => !englishConcepts.has(concept));
+    if (missingConcepts.length) {
+      return { ok: false, reason: 'claim_en kopiuje cytat, ale nie odpowiada treści claimu' };
+    }
     // Zgodności leksykalnej PL↔EN tutaj nie wymagamy: nazwy własne są w tych
     // językach tłumaczone („Kościoła Palącego się” → „Smoldering Church”), więc
     // wymaganie ich pokrycia w drugim tekście jest strukturalnie niespełnialne
     // i odrzucało każde poprawne tłumaczenie. Rozstrzygają zamiast tego:
-    //   • zbiory pojęć powyżej (claim_en nie dodaje i nie podmienia pojęcia),
+    //   • zbiory pojęć powyżej (claim_en nie dodaje, nie podmienia i nie pomija
+    //     pojęcia po wycięciu encji),
     //   • twarde kontrole liczb, jednostek, negacji i przyczyny poniżej,
     //   • kontrola dowodu wykonywana na claim_en w języku źródła
     //     (ai/validator.js: claim_en służy do sprawdzenia dowodu w języku źródła).

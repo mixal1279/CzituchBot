@@ -21,8 +21,24 @@ test('odpowiedź częściowa jest dostarczana, a odrzucona nadal jest odrzucana'
     reason: 'partial_answer_delivered',
   });
   const partial = 'Malenia jest opcjonalnym bossem w Elden Ring. Nie wszystkie szczegóły da się potwierdzić w dostępnych źródłach.';
-  assert.equal(finalText(partial, STATUS.SOFT_ACCEPTED), partial);
+  assert.equal(finalText(partial, STATUS.SOFT_ACCEPTED, { partialAnswer: partial }), partial);
   assert.equal(finalText('fakt spoza źródła', STATUS.REJECTED), 'Nie mam wystarczających danych, żeby odpowiedzieć na to pewnie.');
+});
+
+test('pełna odpowiedź nie jest wydawana, gdy zabrakło zweryfikowanego partialAnswer', () => {
+  // Gwarancja strukturalna: przy statusie soft_accepted publikujemy wyłącznie
+  // partialAnswer z walidatora. Sam tekst przekazany do finalText nie jest
+  // źródłem prawdy — bez partialAnswer wychodzi odmowa, nigdy pełna odpowiedź.
+  const pelnaOdpowiedz = 'Malenia jest opcjonalnym bossem w Elden Ring. W dodatku zabija smoka.';
+  assert.equal(
+    finalText(pelnaOdpowiedz, STATUS.SOFT_ACCEPTED),
+    'Nie mam wystarczających danych, żeby odpowiedzieć na to pewnie.',
+  );
+  const partial = 'Malenia jest opcjonalnym bossem w Elden Ring.';
+  assert.equal(
+    finalText(pelnaOdpowiedz, STATUS.SOFT_ACCEPTED, { partialAnswer: partial }),
+    partial,
+  );
 });
 
 // --- 2. Nazwa przetłumaczona nie jest utratą encji ----------------------------------

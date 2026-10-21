@@ -125,12 +125,15 @@ function decideValidation(status, options = {}) {
 function finalText(text, status, helpers = {}) {
   if (status === STATUS.REJECTED) return helpers.rejectedMessage || 'Nie mam wystarczających danych, żeby odpowiedzieć na to pewnie.';
   if (status === STATUS.SOFT_ACCEPTED) {
-    // Tekst przekazany tutaj to partialAnswer z walidatora: zawiera wyłącznie
-    // claimy potwierdzone cytatem w źródle i jest zakończony zastrzeżeniem
-    // „Nie wszystkie szczegóły da się potwierdzić…". Nie jest to odpowiedź
-    // odrzucona (tę nadal zastępuje odmowa powyżej) — to odpowiedź zweryfikowana
-    // częściowo, więc publikujemy ją razem z jej zastrzeżeniem.
-    let value = String(text || '');
+    // NIE ufamy tekstowi przekazanyemu z zewnątrz. Jedynym źródłem prawdy jest
+    // partialAnswer zbudowany przez walidator wyłącznie z claimów, których cytat
+    // przeszedł kontrolę dowodową; jest zakończony zastrzeżeniem „Nie wszystkie
+    // szczegóły da się potwierdzić…". To odpowiedź zweryfikowana częściowo —
+    // nie odrzucona (tę nadal zastępuje odmowa powyżej).
+    //
+    // Gdy caller nie poda partialAnswer, publikujemy odmowę: brak partialAnswer
+    // nigdy nie może oznaczać „wypuść pełną, niezweryfikowaną odpowiedź”.
+    let value = String(helpers.partialAnswer || '');
     if (typeof helpers.sanitizeResponse === 'function') value = helpers.sanitizeResponse(value);
     value = value.trim();
     return value || (helpers.rejectedMessage || 'Nie mam wystarczających danych, żeby odpowiedzieć na to pewnie.');

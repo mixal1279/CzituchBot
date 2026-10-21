@@ -13,9 +13,11 @@ const ENTITY_ALIAS_GROUPS = Object.freeze([
   { canonical: 'bloody baron', names: ['Bloody Baron', 'Krwawy Baron', 'Baron Krwawy'] },
   { canonical: 'dragonrend', names: ['Dragonrend', 'Smocza Zguba'] },
   { canonical: 'cathedral of dragon communion', names: ['Cathedral of Dragon Communion', 'Katedra Smoczej Komunii', 'Katedra Komunii Smoka'] },
-  // Para PL/EN potwierdzona wewnętrznie przez ten sam przebieg walidatora:
-  // polski claim „Najłatwiej dotrzeć … od Kościoła Palącego się” i jego claim_en
-  // „…starting at the Smoldering Church” wskazują tę samą lokalizację.
+  // Para PL/EN. UWAGA: pochodzi z przebiegu walidatora (polski claim i jego
+  // claim_en wskazywały tę samą lokalizację), a więc zgłoszenie jest tu
+  // kołowe — potwierdza je sam walidator, nie źródło. Przed użyciem produkcyjnym
+  // para powinna zostać potwierdzona w angielskim źródle; do czasu tego traktujemy
+  // ją jako założenie, które łamie strażnika utraty encji tylko dla tej nazwy.
   { canonical: 'smoldering church', names: ['Smoldering Church', 'Kościoła Palącego się'] },
 ]);
 

@@ -91,6 +91,21 @@ function isFailureText(text) {
   return refusalPatterns.some(pattern => pattern.test(normalized));
 }
 
+// Odrzucona treść: to, co pipeline wyrzucił w zamian za odmowę.
+// Ostatni wynik walidatora, nie pierwszy — cykl naprawczy może przepisać
+// odpowiedź, a to, co pipeline faktycznie wyrzucił, pochodzi z ostatniego
+// werdyktu. Bot (czituch_bot.js) iteruje wstecz; benchmark musi tak samo,
+// inaczej fałszywe odrzucenia byłyby liczone na innym tekście niż odrzucony.
+function wybierzOdrzuconaOdpowiedz(summary, answered) {
+  if (answered) return null;
+  const rows = summary?.validatorResults || [];
+  for (let i = rows.length - 1; i >= 0; i--) {
+    const candidate = rows[i]?.validationDiagnostics?.benchmarkTrace?.answer;
+    if (typeof candidate === 'string' && candidate.trim()) return candidate;
+  }
+  return null;
+}
+
 function evaluateBenchmarkAnswer(answer, item) {
   const text = String(answer || '');
   const plan = buildAnswerPlan(item.question, { ...item.routing, game: item.game });
@@ -309,14 +324,7 @@ async function run() {
       // odpowiedź tę nadal mamy w diagnostyce walidatora. Oceniamy ją tym samym
       // sędzią — to jedyna podstawa, żeby policzyć FALSSZYWE odrzucenia
       // (wcześniej licznik był martwy, bo nic go nie wypełniało).
-      const discardedAnswer = (() => {
-        if (evaluation.answered) return null;
-        for (const row of summary?.validatorResults || []) {
-          const candidate = row?.validationDiagnostics?.benchmarkTrace?.answer;
-          if (typeof candidate === 'string' && candidate.trim()) return candidate;
-        }
-        return null;
-      })();
+      const discardedAnswer = wybierzOdrzuconaOdpowiedz(summary, evaluation.answered);
       const discardedEvaluation = discardedAnswer
         ? evaluateBenchmarkAnswer(discardedAnswer, item)
         : null;
@@ -451,7 +459,8 @@ async function run() {
   }
 }
 
-module.exports = { normalizeFactText, scoreGoldenFacts, stratifiedCases, buildQuestionForBot, isFailureText, evaluateBenchmarkAnswer, extractClaimSupportAudit, classifyBenchmarkOutcome, buildBenchmarkDiagnostics, writeBenchmarkReport, writeStdoutAndWait, run };
+module.exports = {
+  wybierzOdrzuconaOdpowiedz, normalizeFactText, scoreGoldenFacts, stratifiedCases, buildQuestionForBot, isFailureText, evaluateBenchmarkAnswer, extractClaimSupportAudit, classifyBenchmarkOutcome, buildBenchmarkDiagnostics, writeBenchmarkReport, writeStdoutAndWait, run };
 
 if (require.main === module) {
   run().catch(error => {

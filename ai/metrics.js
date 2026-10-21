@@ -42,14 +42,17 @@ function recordAIMetric(metrics, event = {}) {
   // Odrzucona treść: pipeline wyrzucił odpowiedź w zamian za odmowę.
   if (event.discardedAnswer) m.discardedAnswers++;
   if (typeof event.discardedAnswerText === 'string' && event.discardedAnswerText.trim()) m.discardedAnswerSamples++;
-  if (Number.isFinite(Number(event.claimCoverage))) {
+  // Number(null) === 0, a Number.isFinite(0) === true — brak wartości byłby więc
+  // liczony jako 0, czyli „jakość tylko dla wydanych odpowiedzi” nie działałoby:
+  // brak jakości zaniżałby średnią tak samo jak odpowiedź o jakości zero.
+  if (event.claimCoverage != null && Number.isFinite(Number(event.claimCoverage))) {
     m.claimCoverageSum += Math.max(0, Math.min(1, Number(event.claimCoverage)));
     m.claimCoverageSamples++;
   }
-  if (Number.isFinite(Number(event.answerQuality))) { m.answerQualitySum += Math.max(0, Math.min(1, Number(event.answerQuality))); m.qualitySamples++; }
+  if (event.answerQuality != null && Number.isFinite(Number(event.answerQuality))) { m.answerQualitySum += Math.max(0, Math.min(1, Number(event.answerQuality))); m.qualitySamples++; }
   // Confidence walidatora to osobna wielkość niż jakość odpowiedzi: opisuje
   // werdykt, a nie to, co trafiło do użytkownika.
-  if (Number.isFinite(Number(event.validatorConfidence))) { m.validatorConfidenceSum += Math.max(0, Math.min(1, Number(event.validatorConfidence))); m.validatorConfidenceSamples++; }
+  if (event.validatorConfidence != null && Number.isFinite(Number(event.validatorConfidence))) { m.validatorConfidenceSum += Math.max(0, Math.min(1, Number(event.validatorConfidence))); m.validatorConfidenceSamples++; }
 
   for (const provider of Array.isArray(event.providers) ? event.providers : []) boundedIncrement(m.providerCalls, provider);
   for (const reason of Array.isArray(event.fallbackReasons) ? event.fallbackReasons : []) boundedIncrement(m.fallbackReasons, reason);
@@ -76,8 +79,8 @@ function recordAIMetric(metrics, event = {}) {
     fallbackReasons: Array.isArray(event.fallbackReasons) ? event.fallbackReasons.slice(0, 8) : [],
     validatorStatuses: Array.isArray(event.validatorStatuses) ? event.validatorStatuses.slice(0, 8) : [],
     retrievalStatuses: Array.isArray(event.retrievalStatuses) ? event.retrievalStatuses.slice(0, 8) : [],
-    claimCoverage: Number.isFinite(Number(event.claimCoverage)) ? Number(event.claimCoverage) : null,
-    answerQuality: Number.isFinite(Number(event.answerQuality)) ? Number(event.answerQuality) : null,
+    claimCoverage: event.claimCoverage != null && Number.isFinite(Number(event.claimCoverage)) ? Number(event.claimCoverage) : null,
+    answerQuality: event.answerQuality != null && Number.isFinite(Number(event.answerQuality)) ? Number(event.answerQuality) : null,
     generationAttempts: Array.isArray(event.generationAttempts) ? event.generationAttempts.slice(-20) : [],
   });
   if (m.recent.length > MAX_RECENT) m.recent.splice(0, m.recent.length - MAX_RECENT);
