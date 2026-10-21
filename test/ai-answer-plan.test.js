@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { buildAnswerPlan, extractAnswerSignals, assessAnswerCompleteness } = require('../ai/answer-plan');
-const { buildRetrievalQueries } = require('../ai/planner');
+const { buildRetrievalQueries, responseContract } = require('../ai/planner');
 const { judgeAnswer } = require('../ai/answer-judge');
 
 test('v26 answer plan identifies causal lore requirements', () => {
@@ -142,6 +142,12 @@ test('v26 judge rejects generic relationship answer', () => {
   assert.ok(result.missing.includes('relationship'));
 });
 
+
+test('response contract forbids redundant source narration that creates uncovered sentences', () => {
+  const contract = responseContract('lore');
+  assert.match(contract, /Nie dodawaj metakomentarzy.*źródło potwierdza/s);
+  assert.match(contract, /nie dopisuj końcowego podsumowania/s);
+});
 
 test('retrieval planner adds location-specific queries for landmark answers', () => {
   const queries = buildRetrievalQueries('Gdzie znaleźć Wielki Miecz?', {
