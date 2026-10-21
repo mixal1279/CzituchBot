@@ -643,8 +643,22 @@ function tokenyPokrywajaSie(a, b) {
   if (i < a.length || j < b.length) edits++;
   return edits === 1;
 }
+function czyOgraniczenieDowodowe(sentence) {
+  const text = normalizujClaim(sentence);
+  const limitation = /\b(?:nie\s+(?:potwierdza\w*|podaje\w*|precyzuje\w*|okresla\w*|wskazuje\w*|zawiera\w*|znalazl\w*|znaleziono)|brak\s+(?:dokladn\w*\s+)?(?:dat\w*|moment\w*|czas\w*|potwierdzon\w*\s+(?:przyczyn\w*|powod\w*)))\b/u.test(text);
+  const scopedTopic = /\b(?:dat\w*|moment\w*|czas\w*|rok\w*|przyczyn\w*|powod\w*)\b/u.test(text);
+  const sourceMention = /\b(?:zrodla?\w*|materialy|dane|sources?|evidence)\b/u.test(text);
+  const inheritedSourceScope = /^\s*(?:ale|jednak)?\s*nie\b/u.test(text);
+  return limitation && scopedTopic && (sourceMention || inheritedSourceScope);
+}
+
 function sprawdzPokrycieClaimamiOdpowiedzi(answer, claims) {
-  const sentences = String(answer || '').split(/(?<=[.!?])\s+|\n+/).map(x => x.trim()).filter(Boolean);
+  const sourceSentences = String(answer || '').split(/(?<=[.!?])\s+|\n+/).map(x => x.trim()).filter(Boolean);
+  const sentences = sourceSentences.flatMap(sentence => {
+    const match = sentence.match(/^(.*?)[,;]?\s+(?:ale|jednak)\s+(.+)$/iu);
+    if (match && czyOgraniczenieDowodowe(match[2])) return [match[1].trim(), match[2].trim()].filter(Boolean);
+    return [sentence];
+  });
   const claimRows = (Array.isArray(claims) ? claims : [])
     .map(c => ({
       tokens: tokenyPokrycia(c?.claim || ''),
@@ -657,6 +671,9 @@ function sprawdzPokrycieClaimamiOdpowiedzi(answer, claims) {
   let checkedSentences = 0;
 
   for (const [sentenceIndex, sentence] of sentences.entries()) {
+    // Retrieval-scoped uncertainty is not a world fact and does not need to be
+    // forced into a fabricated claim/citation. Keep factual clauses checked.
+    if (czyOgraniczenieDowodowe(sentence)) continue;
     const tokens = tokenyPokrycia(sentence);
     if (tokens.length < 2) continue;
     checkedSentences++;
