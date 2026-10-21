@@ -759,21 +759,24 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
   const partialFormat = partialAnswerCandidate
     ? sprawdzKompletnoscOdpowiedzi(partialAnswerCandidate)
     : { ok: false };
-  // A failed claim may trigger a partial response only when another claim has
-  // independent local support. The failed claim itself is never emitted: entity,
-  // negation, numeric, temporal, action, and causal mismatches fail its own
-  // evidence evaluation and are filtered from verifiedPartialClaims.
+  // Partial acceptance is allowed for quote-binding/quote-length defects or
+  // answer coverage/granularity failures only when no hard semantic evidence
+  // mismatch is present. Entity, negation, numeric, temporal, action, and causal
+  // mismatches must reject the whole answer, even if another claim is supported.
   const partialEligibleEvidenceFailureIndexes = unsupportedEvidenceClaimIndexes.filter(index => {
     const reasons = unsupportedEvidenceReasons.find(item => item.claimIndex === index)?.reasons || [];
     return reasons.length > 0 && reasons.every(reason =>
       /evidence_quote nie występuje w wskazanym źródle|evidence_quote ma nieprawidłową długość/i.test(reason)
     );
   });
-  const hasPartialFailureTrigger = unsupported.length > 0
-    || unsupportedEvidenceClaimIndexes.length > 0
+  const allEvidenceFailuresArePartialEligible = unsupportedEvidenceClaimIndexes.length === 0
+    || partialEligibleEvidenceFailureIndexes.length === unsupportedEvidenceClaimIndexes.length;
+  const hasPartialFailureTrigger = allEvidenceFailuresArePartialEligible && (
+    unsupported.length > 0
     || partialEligibleEvidenceFailureIndexes.length > 0
     || !answerCoverage.ok
-    || !claimGranularityOk;
+    || !claimGranularityOk
+  );
 
   const partialAccepted = !accepted
     // Globalny werdykt może odrzucić całą odpowiedź przez jeden zły claim.
