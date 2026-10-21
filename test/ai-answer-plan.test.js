@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { buildAnswerPlan, extractAnswerSignals, assessAnswerCompleteness } = require('../ai/answer-plan');
+const { buildAnswerPlan, buildRetrievalQueries, extractAnswerSignals, assessAnswerCompleteness } = require('../ai/answer-plan');
 const { judgeAnswer } = require('../ai/answer-judge');
 
 test('v26 answer plan identifies causal lore requirements', () => {
@@ -139,4 +139,34 @@ test('v26 judge rejects generic relationship answer', () => {
   const result = judgeAnswer('Ich relacja jest złożona.', plan);
   assert.equal(result.status, 'repair');
   assert.ok(result.missing.includes('relationship'));
+});
+
+
+test('retrieval planner adds location-specific queries for landmark answers', () => {
+  const queries = buildRetrievalQueries('Gdzie znaleźć Wielki Miecz?', {
+    intent: 'web_fact', entity: 'Greatsword', game: 'Elden Ring', needs_web: true,
+  });
+  assert.ok(queries.some(q => /exact location landmark nearby map/i.test(q)), JSON.stringify(queries));
+  assert.ok(queries.some(q => /Elden Ring/i.test(q)), JSON.stringify(queries));
+});
+
+test('retrieval planner adds timeline and quest-order queries for when questions', () => {
+  const queries = buildRetrievalQueries('Kiedy Geralt przybywa do Novigradu?', {
+    intent: 'web_fact', entity: 'Geralt', game: 'The Witcher 3', needs_web: true,
+  });
+  assert.ok(queries.some(q => /story timeline quest order arrival/i.test(q)), JSON.stringify(queries));
+});
+
+test('retrieval planner targets character identity for who questions', () => {
+  const queries = buildRetrievalQueries('Kim jest Astarion?', {
+    intent: 'web_fact', is_lore: true, entity: 'Astarion', game: "Baldur's Gate 3", needs_web: true,
+  });
+  assert.ok(queries.some(q => /character identity background role companion/i.test(q)), JSON.stringify(queries));
+});
+
+test('retrieval planner targets cause and motivation for why questions', () => {
+  const queries = buildRetrievalQueries('Dlaczego Wheatley przejął kontrolę nad GLaDOS?', {
+    intent: 'web_fact', is_lore: true, entity: 'Wheatley', game: 'Portal 2', needs_web: true,
+  });
+  assert.ok(queries.some(q => /cause reason motivation event core transfer/i.test(q)), JSON.stringify(queries));
 });
