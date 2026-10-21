@@ -252,3 +252,17 @@ test('purpose clauses are not misclassified as unsupported causal relations', ()
     assert.equal(result.ok, true, result.reason);
   }
 });
+
+
+test('ordinary sentence-initial "Źródła" is not extracted as a proper name', () => {
+  assert.equal(wyodrebnijNazwyWlasne('Źródła potwierdzają, że Geralt przybywa do Novigradu.').includes('zrodla'), false);
+  assert.equal(wyodrebnijNazwyWlasne('Sources confirm that Geralt arrives in Novigrad.').includes('sources'), false);
+});
+
+test('Polish zmusza and English forces are treated as equivalent in claim translation', () => {
+  const result = spojnoscTlumaczeniaClaimu(
+    'Dragonrend zmusza smoka do lądowania.',
+    'Dragonrend forces the dragon to land.',
+  );
+  assert.equal(result.ok, true, result.reason);
+});

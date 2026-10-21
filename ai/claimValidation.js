@@ -250,7 +250,7 @@ function wyodrebnijNazwyWlasne(value, options = {}) {
     // („Najłatwiej dotrzeć do wózka…” → „The easiest way to get there…”).
     'najlatwiej', 'najprościej', 'najszybciej', 'najczesciej', 'zazwyczaj', 'przede',
     // Liczba mnoga rzeczownika pospolitego: „postać” była na liście, „postacie” nie.
-    'postacie', 'postaci', 'bohaterzy', 'bohaterowie'
+    'postacie', 'postaci', 'bohaterzy', 'bohaterowie', 'źródła', 'zrodla', 'sources'
   ].map(normalizujClaim));
   const candidates = [];
   const aliasSpans = [];
@@ -998,7 +998,15 @@ function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
   // przeciwstawnych pojęć w sprawdzSprzecznosciSemantyczne; tu nie ma wyjątków dla konkretnych fraz.
   const semanticConflict = sprawdzSprzecznosciSemantyczne(pl, en);
   if (!semanticConflict.ok) return { ok: false, reason: 'tłumaczenie claimu zmienia zdarzenie lub relację' };
-  if (wyodrebnijMarkery(pl, CAUSAL_RE) !== wyodrebnijMarkery(en, CAUSAL_RE)) {
+  const plCausal = wyodrebnijMarkery(pl, CAUSAL_RE);
+  const enCausal = wyodrebnijMarkery(en, CAUSAL_RE);
+  // Cross-language equivalence: Polish "zmusza" and English "forces" express
+  // compulsion. Do not add force* to CAUSAL_RE globally: "forced a transfer"
+  // can describe an action and must not become a generic causal-evidence signal.
+  const plCompulsion = /(?<![\\p{L}])zmusz\\w*(?![\\p{L}])/iu.test(normalizujClaim(pl));
+  const enCompulsion = /(?<![\\p{L}])forc(?:e|es|ed|ing)(?![\\p{L}])/iu.test(normalizujClaim(en));
+  const equivalentCompulsion = plCompulsion && enCompulsion;
+  if (plCausal !== enCausal && !equivalentCompulsion) {
     return { ok: false, reason: 'tłumaczenie claimu zmienia relację przyczynową' };
   }
   if (wyodrebnijMarkery(pl, REDUCTION_RE) !== wyodrebnijMarkery(en, REDUCTION_RE)) {
