@@ -93,10 +93,13 @@ function decideValidation(status, options = {}) {
   const s = String(status || '').toLowerCase();
   if (s === STATUS.ACCEPTED) return { finalStatus: STATUS.ACCEPTED, retry: false };
   if (s === STATUS.SOFT_ACCEPTED) {
+    // Odpowiedź częściowa jest już zweryfikowana lokalnie: walidator buduje ją
+    // wyłącznie z claimów, których cytat przeszedł kontrolę dowodową (partialAnswer).
+    // Nie wolno jej zamieniać na odmowę — zamiana niszczyła poprawne odpowiedzi.
     return {
-      finalStatus: STATUS.REJECTED,
+      finalStatus: STATUS.SOFT_ACCEPTED,
       retry: false,
-      reason: 'soft_acceptance_disabled',
+      reason: 'partial_answer_delivered',
     };
   }
   if (s === STATUS.REJECTED) {
@@ -121,7 +124,17 @@ function decideValidation(status, options = {}) {
 
 function finalText(text, status, helpers = {}) {
   if (status === STATUS.REJECTED) return helpers.rejectedMessage || 'Nie mam wystarczających danych, żeby odpowiedzieć na to pewnie.';
-  if (status === STATUS.SOFT_ACCEPTED) return helpers.rejectedMessage || 'Nie mam wystarczających danych, żeby odpowiedzieć na to pewnie.';
+  if (status === STATUS.SOFT_ACCEPTED) {
+    // Tekst przekazany tutaj to partialAnswer z walidatora: zawiera wyłącznie
+    // claimy potwierdzone cytatem w źródle i jest zakończony zastrzeżeniem
+    // „Nie wszystkie szczegóły da się potwierdzić…". Nie jest to odpowiedź
+    // odrzucona (tę nadal zastępuje odmowa powyżej) — to odpowiedź zweryfikowana
+    // częściowo, więc publikujemy ją razem z jej zastrzeżeniem.
+    let value = String(text || '');
+    if (typeof helpers.sanitizeResponse === 'function') value = helpers.sanitizeResponse(value);
+    value = value.trim();
+    return value || (helpers.rejectedMessage || 'Nie mam wystarczających danych, żeby odpowiedzieć na to pewnie.');
+  }
   if (status === STATUS.INCONCLUSIVE) return helpers.inconclusiveMessage || 'Chwilowo nie mogę wiarygodnie potwierdzić tej informacji, więc nie będę zgadywać.';
   if (status === STATUS.UNAVAILABLE) return helpers.unavailableMessage || 'Chwilowo nie mogę potwierdzić tej informacji, więc nie będę zgadywać.';
   if (status === STATUS.UNVERIFIED) {

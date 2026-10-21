@@ -153,11 +153,21 @@ test('pipeline finalText replaces terminal failure output and sanitizes accepted
 });
 
 
-test('pipeline never promotes a soft-accepted answer to a final user response', () => {
+test('pipeline delivers a soft-accepted answer, but never an ordinary rejected one', () => {
+  // Odpowiedź częściowa to nie jest odpowiedź odrzucona: walidator buduje ją
+  // wyłącznie z claimów, których cytat przeszedł lokalną kontrolę dowodową
+  // (partialAnswer), i dołącza zastrzeżenie o niepotwierdzonych szczegółach.
+  // Zamiana jej na odmowę niszczyła poprawne odpowiedzi.
   assert.deepEqual(decideValidation(STATUS.SOFT_ACCEPTED), {
-    finalStatus: STATUS.REJECTED,
+    finalStatus: STATUS.SOFT_ACCEPTED,
     retry: false,
-    reason: 'soft_acceptance_disabled',
+    reason: 'partial_answer_delivered',
   });
-  assert.equal(finalText('partial unsupported answer', STATUS.SOFT_ACCEPTED), 'Nie mam wystarczających danych, żeby odpowiedzieć na to pewnie.');
+  const partial = 'Malenia jest opcjonalnym bossem w Elden Ring. Nie wszystkie szczegóły da się potwierdzić w dostępnych źródłach.';
+  assert.equal(finalText(partial, STATUS.SOFT_ACCEPTED), partial);
+  // Pusta odpowiedź częściowa nie może wyprodukować pustej wiadomości.
+  assert.equal(finalText('', STATUS.SOFT_ACCEPTED), 'Nie mam wystarczających danych, żeby odpowiedzieć na to pewnie.');
+  // Odpowiedź zwykła odrzucona nadal jest zamieniana na odmowę — to jest granica,
+  // której nie wolno przekroczyć: odrzucona treść może zawierać fakty spoza źródła.
+  assert.equal(finalText('odpowiedź z niepotwierdzonym faktem', STATUS.REJECTED), 'Nie mam wystarczających danych, żeby odpowiedzieć na to pewnie.');
 });

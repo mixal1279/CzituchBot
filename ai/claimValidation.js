@@ -228,7 +228,13 @@ function wyodrebnijNazwyWlasne(value, options = {}) {
     'rowniez', 'takze', 'zatem', 'wiec', 'natomiast', 'lecz', 'jezeli', 'skoro', 'pomimo', 'trzeba', 'smok',
     'zrobil', 'zrobila', 'zrobili', 'strzelaj', 'atakuj', 'unikaj', 'zaatakuj', 'skorzystaj', 'wykorzystaj', 'pamietaj', 'sprobuj',
     'zacznij', 'pokonaj', 'zabij', 'walcz', 'trzymaj', 'zwieksz',
-    'najpierw', 'jednoczesnie', 'takie', 'kontynuuj', 'zastosuj', 'miecz', 'wozek', 'wozka'
+    'najpierw', 'jednoczesnie', 'takie', 'kontynuuj', 'zastosuj', 'miecz', 'wozek', 'wozka',
+    // Przysłówki i okoliczniki na początku zdania były zliczane jako encje,
+    // przez co tłumaczenie poprawnej nazwy wyglądało jak utrata encji
+    // („Najłatwiej dotrzeć do wózka…” → „The easiest way to get there…”).
+    'najlatwiej', 'najprościej', 'najszybciej', 'najczesciej', 'zazwyczaj', 'przede wszystkim',
+    // Liczba mnoga rzeczownika pospolitego: „postać” była na liście, „postacie” nie.
+    'postacie', 'postaci', 'bohaterzy', 'bohaterowie'
   ].map(normalizujClaim));
   const candidates = [];
   const aliasSpans = [];
@@ -663,9 +669,18 @@ function czyOgraniczenieDowodowe(sentence) {
 function sprawdzPokrycieClaimamiOdpowiedzi(answer, claims) {
   const sourceSentences = String(answer || '').split(/(?<=[.!?])\s+|\n+/).map(x => x.trim()).filter(Boolean);
   const sentences = sourceSentences.flatMap(sentence => {
-    const match = sentence.match(/^(.*?)[,;]?\s+(?:ale|jednak)\s+(.+)$/iu);
+    // Wskazanie źródła w nawiasie („(Źródło: opis lokalizacji…)”) to metadane,
+    // nie twierdzenie o świecie. Bez tego zdanie nigdy nie ma pokrycia, bo
+    // żaden claim nie opisuje metadanych.
+    // Usuwamy WYŁĄCZNIE sam nawias ze źródłem (razem z zamykającym nawiasem), a nie
+    // ogon zdania — inaczej treść po „(Źródło: …)” uciekałaby spod kontroli pokrycia.
+    const withoutSource = sentence.replace(/\s*[([{]\s*(?:źród(?:a|ła|ło|em|ami)?|source(?:s)?)\s*:[^)\]}]*[)\]}]/giu, '').trim();
+    // Zdanie bez liter i cyfr po usunięciu źródła (np. sama kropka) nie jest twierdzeniem.
+    if (!/[\p{L}\p{N}]/u.test(withoutSource)) return [];
+    const base = withoutSource;
+    const match = base.match(/^(.*?)[,;]?\s+(?:ale|jednak)\s+(.+)$/iu);
     if (match && czyOgraniczenieDowodowe(match[2])) return [match[1].trim(), match[2].trim()].filter(Boolean);
-    return [sentence];
+    return [base];
   });
   const claimRows = (Array.isArray(claims) ? claims : [])
     .map(c => ({
@@ -678,6 +693,13 @@ function sprawdzPokrycieClaimamiOdpowiedzi(answer, claims) {
   const uncovered = [];
   let checkedSentences = 0;
 
+  // Zdanie zaczynające się zaimieniem („Jego historia…”) nie nazywa podmiotu,
+  // więc nie da się go dopasować do claimu po nazwie. Podmiot dziedziczy po
+  // poprzednim zdaniu, a z nim także encje — bez tego zdanie nigdy nie ma pokrycia.
+  // Demonstratywy („to”, „te”, „ten”, „ta”) celowo NIE są tu anaforą: wskazują
+  // rzeczownik w tym samym zdaniu („Te ziemie…”), a nie podmiot poprzedniego.
+  const ANAPHORA = /^\s*(?:jego|jej|ich|oni|on|ona|one|he|she|they|it|his|her|their|its)\b/iu;
+
   for (const [sentenceIndex, sentence] of sentences.entries()) {
     // Retrieval-scoped uncertainty is not a world fact and does not need to be
     // forced into a fabricated claim/citation. Keep factual clauses checked.
@@ -687,7 +709,23 @@ function sprawdzPokrycieClaimamiOdpowiedzi(answer, claims) {
     checkedSentences++;
 
     const sentenceConcepts = pojeciaCrossLanguage(sentence);
-    const sentenceEntities = wyodrebnijNazwyWlasne(sentence);
+    let sentenceEntities = wyodrebnijNazwyWlasne(sentence);
+    let anaphoric = false;
+    if (!sentenceEntities.length && ANAPHORA.test(sentence)) {
+      anaphoric = true;
+      // Podmiot dziedziczymy z najbliższego poprzedniego zdania, które podmiot
+      // nazywa wprost. Zdania też zaimiennicze („Jest postacią Origin…”) podmiotu
+      // nie wskazują, więc je pomijamy i szukamy dalej.
+      for (let back = sentenceIndex - 1; back >= 0; back--) {
+        const previous = sentences[back];
+        if (!previous || czyOgraniczenieDowodowe(previous)) continue;
+        const previousEntities = wyodrebnijNazwyWlasne(previous);
+        if (!previousEntities.length) continue;
+        if (ANAPHORA.test(previous) || /^\s*(?:jest|są|był|była|było|byli|miał|miała|ma|ma)\b/iu.test(previous)) continue;
+        sentenceEntities = previousEntities;
+        break;
+      }
+    }
 
     // Keep ownership: a claim may contribute coverage only when it has a
     // meaningful lexical connection to this sentence and shares a semantic
@@ -700,8 +738,14 @@ function sprawdzPokrycieClaimamiOdpowiedzi(answer, claims) {
       const tokenCoverage = matchedTokens.length / Math.max(tokens.length, 1);
       const sharedConcepts = [...sentenceConcepts].filter(concept => row.concepts.has(concept));
       const sharedEntities = sentenceEntities.filter(entity => row.entities.includes(entity));
-      const coherent = tokenCoverage >= 0.30
-        && (sharedConcepts.length > 0 || sharedEntities.length > 0 || tokenCoverage >= 0.65);
+      const coherent = anaphoric
+        // Zdanie anaforyczne („Jego historia…”) nie powtarza podmiotu, więc
+        // jego pokrycie leksykalne z definicji jest niskie. Kotwicą jest rozwiązana
+        // encja: jeśli claim o tej samej encji potwierdza treść zdania, zdanie jest
+        // pokryte. Próg tokenowy jest tu niższy, bo encja weryfikuje tożsamość.
+        ? tokenCoverage >= 0.15 && (sharedEntities.length > 0 || sharedConcepts.length > 0)
+        : tokenCoverage >= 0.30
+          && (sharedConcepts.length > 0 || sharedEntities.length > 0 || tokenCoverage >= 0.65);
       return { row, matchedTokens, tokenCoverage, sharedConcepts, sharedEntities, coherent };
     }).filter(item => item.coherent);
 
@@ -728,11 +772,18 @@ function sprawdzPokrycieClaimamiOdpowiedzi(answer, claims) {
     // A sentence containing a material concept that no coherent claim owns is
     // not covered merely because names and common words inflate lexical overlap.
     const hasUncoveredConcept = sentenceConcepts.size > 0 && conceptCoverage < 0.8;
+    // Zdanie anaforyczne kotwiczy się w rozwiązanej encji: gdy istnieje spójny
+    // claim o tej samej encji, zdanie jest pokryte mimo niskiego pokrycia
+    // leksykalnego (podmiot nie jest powtórzony w tekście). Liczymy encję
+    // wspólną z tym claimem, nie cały odziedziczony zbiór.
+    const hasAnaphoricEntityCoverage = anaphoric
+      && coherentRows.some(item => item.sharedEntities.length > 0)
+      && tokenCoverage >= 0.15;
     const coverage = hasUncoveredConcept
       ? Math.min(tokenCoverage, 0.54)
       : (tokenCoverage >= 0.55
         ? tokenCoverage
-        : (hasStrongSemanticCoverage || hasStrongEntityCoverage ? 0.56 : tokenCoverage));
+        : (hasStrongSemanticCoverage || hasStrongEntityCoverage || hasAnaphoricEntityCoverage ? 0.56 : tokenCoverage));
 
     if (coverage < 0.55) uncovered.push({ index: sentenceIndex, text: sentence.slice(0, 180) });
   }
@@ -799,8 +850,15 @@ function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
     if (addedConcepts.length) {
       return { ok: false, reason: 'claim_en kopiuje cytat, ale nie odpowiada treści claimu' };
     }
-    const agreement = dopasowanieSemantyczne(en, pl, options);
-    if (!agreement.ok) return { ok: false, reason: 'claim_en kopiuje cytat, ale nie odpowiada treści claimu' };
+    // Zgodności leksykalnej PL↔EN tutaj nie wymagamy: nazwy własne są w tych
+    // językach tłumaczone („Kościoła Palącego się” → „Smoldering Church”), więc
+    // wymaganie ich pokrycia w drugim tekście jest strukturalnie niespełnialne
+    // i odrzucało każde poprawne tłumaczenie. Rozstrzygają zamiast tego:
+    //   • zbiory pojęć powyżej (claim_en nie dodaje i nie podmienia pojęcia),
+    //   • twarde kontrole liczb, jednostek, negacji i przyczyny poniżej,
+    //   • kontrola dowodu wykonywana na claim_en w języku źródła
+    //     (ai/validator.js: claim_en służy do sprawdzenia dowodu w języku źródła).
+    // Bez tego warunku claim_en nigdy nie byłoby użyteczne dla nazw tłumaczonych.
   }
   if (!zbiorRowny(wyodrebnijLiczbyIDaty(pl), wyodrebnijLiczbyIDaty(en))) {
     return { ok: false, reason: 'tłumaczenie claimu zmienia liczby lub daty' };
@@ -826,6 +884,12 @@ function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
     // noun cannot be silently omitted from the English claim translation.
     ...wyodrebnijNazwyWlasne(pl),
   ])];
+  // Twarda kontrola: polska nazwa własna musi wystąpić w angielskim tłumaczeniu.
+  // Dla nazwy przetłumaczonej rozstrzyga tabela aliasów — czyNazwaWlasnaWystepuje
+  // sprawdza w niej wzorzec (PL i EN w jednym wyrażeniu), więc „Kościoła Palącego
+  // się” → „Smoldering Church” przechodzi, a podmiana encji („Malenia” → „Radahn”)
+  // i utrata encji („Wheatley” → „He”) nadal padają. Te dwie ostatnie własności
+  // są pilnawcami podmiany podmiotu, więc nie mogą zostać rozluźnione.
   const missing = claimNames
     .filter(name => !czyNazwaWlasnaWystepuje(name, enNormalized));
   if (missing.length) return { ok: false, reason: 'tłumaczenie claimu gubi nazwy własne: ' + missing.slice(0, 3).join(', ') };
