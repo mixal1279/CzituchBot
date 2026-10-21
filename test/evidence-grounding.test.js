@@ -349,7 +349,7 @@ test('validator rejects a real quote when the claim adds an unsupported causal r
 });
 
 test('validator recognizes an English so-that source relation for a Polish Portal 2 causal claim', () => {
-  const quote = 'Chell and Wheatley force a core transfer on GLaDOS so that Wheatley can take control of the facility so they can both escape.';
+  const quote = "Chell and Wheatley force a core transfer on GLaDOS so that Wheatley can take control of the facility so they can both escape. GLaDOS' head is removed from her body and Wheatley is put in its place, putting him in control of the facility.";
   const data = `[SOURCE 15]\nTYTUŁ: Portal 2 walkthrough\nTREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>\n${quote}\n<<<END_UNTRUSTED_SOURCE_CONTENT>>>`;
   const claim = 'Chell i Wheatley wymusili transfer rdzenia z GLaDOS, co umożliwiło Wheatleyowi przejęcie kontroli nad całym ośrodkiem.';
   const result = normalizujWynikWalidatora({
