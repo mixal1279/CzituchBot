@@ -91,7 +91,7 @@ const { AI_MODELS } = require('./ai/modelConfig');
 const { parsujStrukturalnePodsumowanie } = require('./ai/history');
 const { createRequestId, sanitizeQuestion, planRequest, evaluateEvidence, shouldValidate, decideValidation, finalText: finalizeAIPipelineText } = require('./ai/pipeline');
 const { buildAnswerPlan } = require('./ai/answer-plan');
-const { judgeAnswer } = require('./ai/answer-judge');
+const { judgeAnswer, partialAnswerPreservesCoreIntent } = require('./ai/answer-judge');
 const { parseEvidenceBlocks, buildQuestionEvidenceContext, escapeUntrustedEvidenceContent } = require('./ai/evidence');
 const { buildBoundedEvidencePrompt } = require('./ai/prompt-context');
 const { buildRequestMessages, buildOpenRouterMessages: formatOpenRouterMessages } = require('./ai/request-messages');
@@ -4185,6 +4185,26 @@ Pytanie użytkownika: ${pytanie}`;
         complete: false,
         reason: 'odpowiedź pozostaje niekompletna po wyczerpaniu możliwości naprawy',
       };
+    }
+    if (walidacja.status === 'soft_accepted') {
+      const partialJudge = judgeAnswer(odp, answerPlan);
+      if (!partialAnswerPreservesCoreIntent(partialJudge)) {
+        const coreMissing = (partialJudge.missing || []).filter(requirement => requirement !== 'entity_context');
+        walidacja = {
+          ...walidacja,
+          status: 'rejected',
+          ok: false,
+          valid: false,
+          complete: false,
+          reason: 'częściowa odpowiedź nie odpowiada na główną część pytania: ' + coreMissing.join(', '),
+          unsupported_claims: [
+            ...(walidacja.unsupported_claims || []),
+            ...coreMissing.map(requirement => 'częściowa odpowiedź pomija wymagany element: ' + requirement),
+          ].slice(0, 8),
+        };
+        odpowiedzCzesciowa = null;
+        console.warn(`[AI][${requestId}] soft-accepted partial answer rejected by core-intent gate: ${coreMissing.join(', ')}`);
+      }
     }
     const validationDecision = decideValidation(walidacja.status, { allowRetry: false });
     aiState.finalStatus = validationDecision.finalStatus;
