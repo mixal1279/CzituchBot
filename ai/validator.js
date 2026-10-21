@@ -749,9 +749,10 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
   const partialFormat = partialAnswerCandidate
     ? sprawdzKompletnoscOdpowiedzi(partialAnswerCandidate)
     : { ok: false };
-  // Evidence failures are not interchangeable: quote-binding/format defects
-  // may be omitted safely, but entity, negation, numeric, temporal, action, or
-  // causal mismatches must not become a partial-acceptance trigger.
+  // An evidence mismatch by itself is not a partial-acceptance trigger. However,
+  // a whole-answer coverage/granularity failure may still return independently
+  // verified claims; claims with entity, negation, numeric, temporal, action, or
+  // causal mismatches remain excluded by the per-claim evidence checks above.
   const partialEligibleEvidenceFailureIndexes = unsupportedEvidenceClaimIndexes.filter(index => {
     const reasons = unsupportedEvidenceReasons.find(item => item.claimIndex === index)?.reasons || [];
     return reasons.length > 0 && reasons.every(reason =>
@@ -759,7 +760,9 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
     );
   });
   const hasPartialFailureTrigger = unsupported.length > 0
-    || partialEligibleEvidenceFailureIndexes.length > 0;
+    || partialEligibleEvidenceFailureIndexes.length > 0
+    || !answerCoverage.ok
+    || !claimGranularityOk;
 
   const partialAccepted = !accepted
     // Globalny werdykt może odrzucić całą odpowiedź przez jeden zły claim.
