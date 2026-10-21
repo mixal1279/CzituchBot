@@ -365,7 +365,7 @@ function causalRelationAnchorsMatch(claim, quote) {
     claimLeft = normalizedClaim.slice(0, match.index);
     claimRight = normalizedClaim.slice(match.index + match[0].length);
   }
-  const stop = new Set(['that','this','with','from','into','then','than','when','what','which','were','was','have','has','had','the','and','for','but','not','because','wheatley','aperture']);
+  const stop = new Set(['that','this','with','from','into','then','than','when','what','which','were','was','have','has','had','the','and','for','but','not','because']);
   const tokens = value => [...new Set(normalizeEvidenceText(value).split(' ').filter(token => token.length >= 4 && !stop.has(token)))];
   const left = tokens(claimLeft);
   const right = tokens(claimRight);
