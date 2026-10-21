@@ -143,7 +143,7 @@ function czyWartoDrugaOpinieWalidatora(result) {
   // model cannot change those facts because it receives the same answer and
   // evidence. Return to repair immediately and preserve the request deadline.
   const localRepairRequired = (result.diagnostics?.localRejectReasons || []).some(reason =>
-    ['answer_not_covered_by_claims', 'claims_too_coarse_for_answer', 'evidence_quote_not_exact', 'unknown_source_id', 'malformed_claims'].includes(reason)
+    ['answer_not_covered_by_claims', 'claims_too_coarse_for_answer', 'evidence_quote_not_exact', 'unknown_source_id', 'malformed_claims', 'claims_language_mismatch'].includes(reason)
   );
   if (localRepairRequired) return false;
 
