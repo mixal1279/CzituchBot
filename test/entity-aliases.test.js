@@ -49,7 +49,12 @@ test('produkcyjne aliasy PL/EN normalizują znane encje do jednego kanonicznego 
   assert.deepEqual(wyodrebnijNazwyWlasne('Dragonborn używa Smoczej Zguby.'), ['dragonrend', 'dragonborn']);
 });
 
-test('production alias table excludes unverified Smoldering Church translation', () => {\n  assert.equal(ENTITY_ALIAS_GROUPS.some(entry => entry.canonical === 'smoldering church'), false);\n  assert.equal(KNOWN_ENTITY_ALIAS_PATTERNS.some(entry => entry.canonical === 'smoldering church'), false);\n});\n\ntest('claim_en may match source wording when faithful, but cannot turn purpose into cause', () => {
+test('production alias table excludes unverified Smoldering Church translation', () => {
+  assert.equal(ENTITY_ALIAS_GROUPS.some(entry => entry.canonical === 'smoldering church'), false);
+  assert.equal(KNOWN_ENTITY_ALIAS_PATTERNS.some(entry => entry.canonical === 'smoldering church'), false);
+});
+
+test('claim_en may match source wording when faithful, but cannot turn purpose into cause', () => {
   const quote = 'Chell and Wheatley forced a core transfer so that Wheatley could take control of Aperture.';
   const changedRelation = spojnoscTlumaczeniaClaimu(
     'Chell i Wheatley wymusili transfer rdzenia, ponieważ Wheatley mógł przejąć kontrolę nad Aperture.',
