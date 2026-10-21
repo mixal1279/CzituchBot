@@ -3900,7 +3900,7 @@ Pytanie użytkownika: ${pytanie}`;
         'Jeżeli candidate nie potwierdza claimu bezpośrednio, USUŃ ten claim z odpowiedzi zamiast go rekonstruować, uzupełniać lub zgadywać.',
         'Nie twórz claimów typu „źródła nie potwierdzają...”, „brak danych wskazuje...”, ani innych meta-wniosków o źródłach. Odpowiedź ma zawierać wyłącznie fakty, które można bezpośrednio związać z dowodem.',
         'Nie wymyślaj source_id ani cytatów. Nie dodawaj szczegółu, którego źródło nie potwierdza. Nie parafrazuj cytatu jako evidence_quote.',
-        'Pole claim_en musi być wiernym tłumaczeniem claimu na angielski, a nie kopią evidence_quote. Nie dopisuj do claim_en nazw, relacji, negacji ani skutków, których nie ma w polskim claimie.',
+        'Pole claim_en musi być wiernym tłumaczeniem claimu na angielski, a nie kopią evidence_quote. Nie dopisuj do claim_en nazw, relacji, negacji, atrybutów ani skutków, których nie ma w polskim claimie. Zachowaj zakres twierdzenia źródła: nie zamieniaj ogólnego „fire attacks” na bardziej szczegółowy „dragon breath”, jeśli cytat nie potwierdza takiej identyfikacji.',
         'Przy pytaniu „dlaczego” nie wolno wyprowadzać przyczyny z samej kolejności wydarzeń. Jeśli candidate nie zawiera relacji przyczyna → skutek, pomiń przyczynowe twierdzenie.',
         'Jeżeli źródło opisuje cel („so that”, „in order to”), zachowaj relację celu w polskiej odpowiedzi („aby/żeby”), zamiast zmieniać ją w przyczynę („ponieważ/because”); nie formułuj claimu jako przyczynowego, jeśli źródło mówi tylko o celu.',
         'Popraw odpowiedź, korzystając WYŁĄCZNIE z DANYCH REFERENCYJNYCH i zweryfikowanych candidate evidence. Nie zgaduj brakujących informacji.',
