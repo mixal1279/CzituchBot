@@ -118,6 +118,27 @@ const VALIDATOR_JSON_SCHEMA = {
 };
 
 
+function czyWartoDrugaOpinieWalidatora(result) {
+  if (result?.status !== 'rejected') return false;
+  const reasons = [
+    result.reason,
+    ...(result.diagnostics?.localRejectReasons || []),
+    ...(result.diagnostics?.unsupportedEvidenceClaims || []).flatMap(item => item.reasons || []),
+  ].filter(Boolean).join(' ').toLocaleLowerCase('pl-PL');
+
+  // Deterministic contradictions must go straight to repair. Asking more
+  // providers to re-judge the same negation, numeric, temporal, or causal
+  // conflict cannot make the cited evidence support the claim and consumes
+  // the deadline needed to repair and re-validate the answer.
+  const hardEvidenceConflict =
+    /claim i dow[oó]d maj[aą] inn[aą] negacj[eę]/i.test(reasons)
+    || /claim zawiera (?:liczb[eę]\/dat[eę] nieobecn[aą] w dowodzie|warto[sś][cć] liczbow[aą].*niepotwierdzon[aą] jednostk|sygna[lł] czasowy nieobecny w dowodzie)/i.test(reasons)
+    || /claim (?:dodaje relacj[eę] przyczynow[aą] nieobecn[aą]|zawiera zab[oó]jstwo|zawiera schwytanie\/porwanie|zawiera sprzeczne dzia[lł]anie)/i.test(reasons);
+  if (hardEvidenceConflict) return false;
+
+  return /evidence_quote|evidence not verified|evidence_not_verified|cytat|source.?id|claims_missing|malformed_claims|answer_not_covered_by_claims|claim_en|nazw własnych|nazw wlasnych|claimy nie pokrywają|claimy nie pokrywaja/i.test(reasons);
+}
+
 function sprawdzKompletnoscOdpowiedzi(odpowiedz) {
   const text = String(odpowiedz || '').trim();
   if (!text) return { ok: false, reason: 'pusta odpowiedź' };
@@ -776,6 +797,7 @@ module.exports = {
   buildGroqValidatorResponseFormat,
   buildOpenRouterValidatorResponseFormat,
   wytnijJsonWalidatora,
+  czyWartoDrugaOpinieWalidatora,
   normalizujWynikWalidatora,
   wyodrebnijIdentyfikatoryZrodel,
   sprawdzTwardeFaktyOdpowiedzi,
