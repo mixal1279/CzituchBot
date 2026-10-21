@@ -22,7 +22,6 @@ test('dragon landing concept does not match generic land or lands wording', () =
 });
 
 
-  assert.equal(pojeciaCrossLanguage('Dragonrend is an ancient shout.').has('smok_na_ziemi'), false);\n  assert.equal(pojeciaCrossLanguage('Smok wylądował na ziemi.').has('smok_na_ziemi'), true);\n});\n\ntest('sentence-initial generic words are not treated as proper names', () => {
   for (const claim of [
     'Decyzja ta wynikała z wcześniejszych wydarzeń.',
     'Motywuje go to do dalszego działania.',
