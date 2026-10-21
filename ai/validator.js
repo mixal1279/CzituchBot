@@ -411,11 +411,15 @@ function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '', opt
     // named subject/object or location supplied by a neighbouring sentence.
     // Do not label that as direct entailment: the bounded same-source context
     // must bind every extracted claim entity before the claim can pass.
-    const quoteNormalizedForEntities = normalizujClaim(quote);
+    const quoteEntityTokens = normalizujClaim(quote).split(' ').filter(Boolean);
     const claimEntitiesForQuote = wyodrebnijNazwyWlasne(claim, { nameOracle });
     const quoteContainsClaimEntities = claimEntitiesForQuote.every(entity => {
-      const normalizedEntity = normalizujClaim(entity);
-      return normalizedEntity && quoteNormalizedForEntities.includes(normalizedEntity);
+      const entityTokens = normalizujClaim(entity).split(' ').filter(Boolean);
+      if (!entityTokens.length || entityTokens.length > quoteEntityTokens.length) return false;
+      for (let start = 0; start <= quoteEntityTokens.length - entityTokens.length; start++) {
+        if (entityTokens.every((token, offset) => quoteEntityTokens[start + offset] === token)) return true;
+      }
+      return false;
     });
 
     if (quoteStructural.ok && quoteContainsClaimEntities) {
