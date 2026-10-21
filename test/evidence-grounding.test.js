@@ -38,7 +38,7 @@ test('one claim is bound to one source that contains its exact cited quote', () 
     'TREŚĆ: An unrelated statement.',
     '[SOURCE 2]',
     'TREŚĆ: The supported fact is present.',
-  ].join('\\n');
+  ].join('\n');
   const result = normalizujWynikWalidatora({
     valid: true,
     reason: 'ok',
