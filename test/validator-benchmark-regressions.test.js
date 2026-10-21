@@ -40,6 +40,25 @@ test('source-scoped cause limitation is accepted for a why question even if vali
   assert.deepEqual(result.unsupported_claims, []);
 });
 
+test('a source-scoped date limitation does not invalidate a separately supported factual sentence', () => {
+  const quote = 'Geralt travels to Novigrad.';
+  const answer = 'Źródła nie potwierdzają dokładnej daty przybycia Geralta do Novigradu. Geralt udaje się do Novigradu.';
+  const payload = wynikModelu('Geralt udaje się do Novigradu.', quote, 'Geralt travels to Novigrad.');
+  payload.claims.unshift({
+    claim: 'Źródła nie potwierdzają dokładnej daty przybycia Geralta do Novigradu.',
+    supported: true,
+    source_ids: ['SOURCE 1'],
+    evidence_quote: quote,
+    claim_en: 'The sources do not confirm the exact date Geralt arrives in Novigrad.',
+  });
+  const result = normalizujWynikWalidatora(
+    payload, 'test-model', 'test', new Set(['SOURCE 1']), dane(quote), answer,
+    { question: 'Kiedy Geralt przybywa do Novigradu?' },
+  );
+  assert.equal(result.status, 'accepted', JSON.stringify(result.diagnostics));
+  assert.equal(result.diagnostics.normalizedClaimCount, 1);
+});
+
 test('cause limitation is not accepted when retrieved evidence states the causal relation', () => {
   const quote = 'GLaDOS is removed from her body and Wheatley is put in her place, putting him in control of the facility.';
   const answer = 'Źródła nie potwierdzają przyczyny, dla której Wheatley przejął kontrolę nad obiektem.';
