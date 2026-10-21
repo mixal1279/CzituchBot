@@ -75,6 +75,21 @@ test('claim-support audit warns when an old dated source is presented as current
   ).includes('stale_source_as_current'));
 });
 
+test('live benchmark extracts claim support audits from validator diagnostics', () => {
+  const audit = buildClaimSupportAudit({
+    claims: [{ claim: 'The game launched in 2011.', source_ids: ['SOURCE 1'], evidence_quote: 'The game launched in 2011.', supported: true }],
+    evidenceEvaluations: [{ ok: true, mode: 'exact_quote', reason: 'exact quote' }],
+    evidenceQuoteVerified: [true],
+    evidenceContexts: ['The game launched in 2011.'],
+  });
+  const extracted = extractClaimSupportAudit({
+    validatorResults: [{ validationDiagnostics: { claimSupport: audit } }],
+  });
+  assert.equal(extracted.totalClaims, 1);
+  assert.equal(extracted.claimSupportPassRate, 1);
+  assert.equal(extracted.verdictCounts.entailed, 1);
+});
+
 test('aggregate metric preserves per-claim verdicts and overclaim diagnostics', () => {
   const one = buildClaimSupportAudit({
     claims: [
