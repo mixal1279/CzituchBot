@@ -43,7 +43,7 @@ const CROSS_LANGUAGE_CONCEPTS = [
   ['ogien', /fire\w*|flame\w*|ogn\w*|plomien\w*/i],
   ['lod', /frost\w*|\bice\b|lod\w*|mroz\w*/i],
   ['smok', /dragon\w*|smok\w*/i],
-  ['zaklecie', /spell\w*|magic\w*|zakle\w*/i],
+  ['zaklecie', /spell\w*|magic\w*|mag\w*|zakle\w*/i],
   ['bron', /weapon\w*|sword\w*|bron\w*/i],
   ['elf', /\bhigh\s+elf\b|\belves?\b|elf\w*/i],
   ['wampir', /vampire\w*|wampir\w*/i],
