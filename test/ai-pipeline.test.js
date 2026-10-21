@@ -125,6 +125,13 @@ test('answer plans preserve source-backed role/location details and prohibit gue
   assert.match(when.instruction, /nie zgaduj daty/);
 });
 
+test('location-only gameplay detection recognizes inflected boss, quest, mission, and guide terms', () => {
+  for (const question of ['Gdzie znaleźć bossa w Elden Ring?', 'Gdzie znaleźć questy w Wiedźminie 3?', 'Gdzie znaleźć misje poboczne?', 'Gdzie znaleźć poradnika do gry?', 'Gdzie znaleźć solucję do questa?']) {
+    const plan = buildAnswerPlan(question, { intent: 'gameplay', is_gameplay: true, game: 'Elden Ring' });
+    assert.ok(plan.requirements.some(item => item.id === 'steps'), `${question} should retain the steps requirement`);
+  }
+});
+
 test('a source-scoped missing-date caveat is a valid temporal fallback without bypassing factual claim coverage', () => {
   const answer = 'Źródła potwierdzają, że Geralt przybywa do Novigradu, ale nie podają konkretnej daty ani momentu w czasie gry.';
   const plan = buildAnswerPlan('Kiedy Geralt przybywa do Novigradu?', { intent: 'web_fact', game: 'The Witcher 3' });
