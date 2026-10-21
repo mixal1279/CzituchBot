@@ -4091,10 +4091,14 @@ Pytanie użytkownika: ${pytanie}`;
     // evidence, a answer judge sprawdza, czy odpowiedź rzeczywiście odpowiada
     // na kształt pytania. Naprawiamy tylko odpowiedzi już ugruntowane w źródłach.
     let answerJudge = null;
-    if (walidacja.status === 'accepted') {
+    const partialNeedsCoreRepair = walidacja.status === 'soft_accepted'
+      && !partialAnswerPreservesCoreIntent(judgeAnswer(odp, answerPlan));
+    if (walidacja.status === 'accepted' || partialNeedsCoreRepair) {
       answerJudge = judgeAnswer(odp, answerPlan);
       console.log(`[AI][${requestId}] answer-judge=${JSON.stringify(answerJudge)}`);
-      if (answerJudge.status === 'repair' && answerJudge.repairable && !budzetPrzekroczony() && timeoutDlaGeneracji() !== null) {
+      if (answerJudge.status === 'repair' && answerJudge.repairable
+        && aiState.repairGeneracje < aiState.maxRepairGeneracji
+        && !budzetPrzekroczony() && timeoutDlaGeneracji() !== null) {
         const verifiedEvidenceContext = (walidacja.claims || [])
           .filter(claim => claim?.supported && claim?.source_ids?.length && claim?.evidence_quote)
           .slice(0, 6)
