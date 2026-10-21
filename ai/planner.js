@@ -73,7 +73,7 @@ function buildRetrievalQueries(question, routing = {}, options = {}) {
   } else if (isWhoQuestion) {
     dodajUnikalneQuery(queries, [entity, game, 'character identity background role companion lore'].filter(Boolean).join(' '));
   } else if (isWhyQuestion) {
-    dodajUnikalneQuery(queries, [entity, game, 'cause reason motivation event core transfer'].filter(Boolean).join(' '));
+    dodajUnikalneQuery(queries, [entity, game, 'cause reason motivation event core transfer lore'].filter(Boolean).join(' '));
   } else if (routing?.is_lore) {
     dodajUnikalneQuery(queries, [entity || original, game, 'character history story lore'].filter(Boolean).join(' '));
   } else if (routing?.is_gameplay) {
