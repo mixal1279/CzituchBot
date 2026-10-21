@@ -29,6 +29,8 @@ test('sentence-initial generic words are not treated as proper names', () => {
     'Nowo uzyskana potęga zmienia sytuację.',
     'Aby rozpocząć romans, zwiększ poziom aprobaty.',
     'Dodatkowo pojawia się nowa, ważna postać.',
+    'Źródło opisuje wymianę rdzeni.',
+    'Source describes the core transfer.',
   ]) {
     assert.deepEqual(wyodrebnijNazwyWlasne(claim), []);
   }
