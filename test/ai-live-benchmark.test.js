@@ -44,6 +44,9 @@ test('false-reject metric requires a discarded answer to pass independent gold f
   const accurateDiscardedFacts = scoreGoldenFacts('The item is at Caelem Ruins in Caelid.', item.expected.factual);
   assert.equal(accurateDiscardedFacts.passed, true);
   assert.equal(isFalseReject(discardedEvaluation, accurateDiscardedFacts, rejectedEvaluation, item), true);
+
+  const noGoldItem = { expected: { factual: { independentGold: false } } };
+  assert.equal(isFalseReject(discardedEvaluation, null, rejectedEvaluation, noGoldItem), false);
 });
 
 test('forbidden golden facts reduce factual score and are detected after normalization', () => {
