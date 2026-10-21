@@ -34,6 +34,14 @@ test('v26 answer plan identifies causal lore requirements', () => {
   assert.ok(plan.requirements.some(x => x.id === 'entity_context'));
 });
 
+test('who-answer guidance prioritizes the source-defined identity over secondary traits', () => {
+  const plan = buildAnswerPlan('Kim jest Astarion?', {
+    intent:'web_fact', entity:'Astarion', game:"Baldur's Gate 3",
+  });
+  assert.match(plan.instruction, /głównej tożsamości lub typu postaci/);
+  assert.match(plan.instruction, /nie mogą zastąpić głównej tożsamości/);
+});
+
 test('v26 answer plan detects and enforces coverage for multiple clauses', () => {
   const plan = buildAnswerPlan(
     'Dlaczego Wheatley przejął kontrolę nad GLaDOS i co doprowadziło do jego porażki?',
