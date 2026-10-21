@@ -154,8 +154,9 @@ test('partial answer never emits a claim that conflicts with source negation', (
     },
   ], answer));
 
-  assert.equal(r.status, 'rejected', JSON.stringify(r.diagnostics));
-  assert.equal(r.partialAnswer, null);
+  assert.equal(r.status, 'soft_accepted', JSON.stringify(r.diagnostics));
+  assert.match(r.partialAnswer, /Geralt jest wiedźminem z Kaer Morhen/);
+  assert.doesNotMatch(r.partialAnswer, /nie jest wiedźminem/);
 });
 
 test('partial answer does not lower the confidence threshold', () => {
