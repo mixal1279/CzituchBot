@@ -72,6 +72,7 @@ const KNOWN_ENTITY_ALIAS_PATTERNS = [
   { canonical: 'aperture science', pattern: /\baperture\s+science\b/iu },
   { canonical: 'bloody baron', pattern: /\b(?:bloody\s+baron|baron(?:a)?\s+krwaw(?:y|ego|ym)|krwaw(?:y|ego|emu)\s+baron(?:a|em|owi)?)\b/iu },
   { canonical: 'wild hunt', pattern: /\b(?:wild\s+hunt|dziki\s+gon|dzikiego\s+gonu|dzikim\s+gonem)\b/iu },
+  { canonical: 'cathedral of dragon communion', pattern: /\b(?:cathedral\s+of\s+dragon\s+communion|katedr(?:a|y|ę|e|ze)\s+komunii\s+smoka)\b/iu },
 ];
 // Aliasy z tabeli danych (ai/entityAliases.js) łączymy z legacy regexami.
 // Nie pomijamy grupy tylko dlatego, że jej kanoniczna nazwa już istnieje:
@@ -150,7 +151,12 @@ function wyodrebnijLiczbyIDaty(value) {
   // rzymskie cyfry w tytułach gier są pisane wielkimi literami (III, IV, IX).
   // Only uppercase sequel numerals used in titles (II–XVI); never treat abbreviations
   // such as MC, CD, DC or MM as numeric facts.
-  const romanMatches = raw.match(/\b(?:II|III|IV|V|VI|VII|VIII|IX|X|XI|XII|XIII|XIV|XV|XVI)\b/g) || [];
+  const romanMatches = [];
+  // Only convert a numeral when it follows a title-like run of capitalized words.
+  // This keeps GTA V / Final Fantasy X / Baldur's Gate III while avoiding
+  // arbitrary Roman-looking tokens in prose or acronyms such as MC, CD, MM, MIX.
+  const titleNumeralRe = /\b(?:[A-ZĄĆĘŁŃÓŚŹŻ][\p{L}\d'’.-]*\s+){1,5}(II|III|IV|V|VI|VII|VIII|IX|X|XI|XII|XIII|XIV|XV|XVI)\b/gu;
+  for (const match of raw.matchAll(titleNumeralRe)) romanMatches.push(match[1]);
   for (const r of romanMatches) {
     const n = rzymskieNaArabskie(r);
     if (n !== null) canonical.push(String(n));
@@ -445,12 +451,12 @@ function czyNazwaWlasnaWystepuje(entity, evidenceNormalized) {
 // nie występują w angielskich źródłach, więc ich nieobecność w tłumaczeniu nie świadczy o zgubieniu
 // nazwy. Wymagamy jej tylko wtedy, gdy nazwa (lub jej odmiana) jest w wyroczni nazw ze źródeł albo
 // jest znanym aliasem kanonicznym. Bez wyroczni zachowujemy dotychczasową, ścisłą kontrolę.
-function nazwaWymaganaWTlumaczeniu(name, nameOracle) {
-  if (!(nameOracle instanceof Set)) return true;
-  const normalizedName = normalizujClaim(name);
-  if (KNOWN_ENTITY_ALIAS_PATTERNS.some(alias => normalizujClaim(alias.canonical) === normalizedName)) return true;
-  return [name, ...wariantyNazwyDoDopasowania(name)]
-    .some(variant => nameOracle.has(normalizujTokenWyroczni(variant)));
+function nazwaWymaganaWTlumaczeniu(name) {
+  // Never drop an extracted proper name merely because it is absent from the
+  // source oracle. A localized name must map through a known alias and be present
+  // in claim_en; otherwise the English translation could silently erase an
+  // unsupported entity before source validation.
+  return Boolean(String(name || '').trim());
 }
 
 function sprawdzTwardeKonflikty(evidence, claim, options = {}) {
@@ -805,9 +811,15 @@ function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
     return { ok: false, reason: 'tłumaczenie claimu zmienia kierunek redukcji lub ochrony' };
   }
   const enNormalized = normalizujClaim(en);
-  const missing = wyodrebnijNazwyWlasne(pl, options)
+  const claimNames = [...new Set([
+    ...wyodrebnijNazwyWlasne(pl, options),
+    // Re-run without the source oracle so an unknown sentence-initial proper
+    // noun cannot be silently omitted from the English claim translation.
+    ...wyodrebnijNazwyWlasne(pl),
+  ])];
+  const missing = claimNames
     .filter(name => !czyNazwaWlasnaWystepuje(name, enNormalized))
-    .filter(name => nazwaWymaganaWTlumaczeniu(name, options.nameOracle));
+    .filter(name => nazwaWymaganaWTlumaczeniu(name));
   if (missing.length) return { ok: false, reason: 'tłumaczenie claimu gubi nazwy własne: ' + missing.slice(0, 3).join(', ') };
   return { ok: true };
 }
