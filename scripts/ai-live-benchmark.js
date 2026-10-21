@@ -125,7 +125,7 @@ function evaluateBenchmarkAnswer(answer, item) {
 
 function isFalseReject(discardedEvaluation, discardedFactual, evaluation, item) {
   const hasIndependentGold = item?.expected?.factual?.independentGold === true;
-  const discardedFactsPass = !hasIndependentGold || discardedFactual?.passed === true;
+  const discardedFactsPass = hasIndependentGold && discardedFactual?.passed === true;
   return Boolean(
     discardedEvaluation
     && discardedEvaluation.answered
