@@ -630,7 +630,7 @@ function tokenyPokrywajaSie(a, b) {
   return edits === 1;
 }
 function sprawdzPokrycieClaimamiOdpowiedzi(answer, claims) {
-  const sentences = String(answer || '').split(/(?<=[.!?])\\s+|\\n+/).map(x => x.trim()).filter(Boolean);
+  const sentences = String(answer || '').split(/(?<=[.!?])\s+|\n+/).map(x => x.trim()).filter(Boolean);
   const claimRows = (Array.isArray(claims) ? claims : [])
     .map(c => ({
       tokens: tokenyPokrycia(c?.claim || ''),
