@@ -82,12 +82,12 @@ test('hard timeout releases the pipeline when a provider ignores AbortSignal', a
 });
 
 test('initial validation can reserve one repair plus final validation budget', () => {
-  assert.equal(computeValidatorReserveMs(25000, 3, 4, 20000), 20000);
-  assert.equal(computeValidatorReserveMs(16000, 4, 4, 20000), 20000);
+  assert.equal(computeValidatorReserveMs(25000, 3, 4, 24000), 24000);
+  assert.equal(computeValidatorReserveMs(16000, 4, 4, 24000), 24000);
   assert.equal(computeValidatorReserveMs(16000, 4, 4), 2500);
   assert.equal(computeValidatorTimeout(22500, {
     maxTimeoutMs: 3000,
-    reserveMs: computeValidatorReserveMs(22500, 4, 4, 20000),
+    reserveMs: computeValidatorReserveMs(22500, 4, 4, 24000),
     minTimeoutMs: 2000,
   }), null, 'skip final fallback when it would consume the reserved repair budget');
 });
