@@ -5,6 +5,8 @@
 const REASONING_HEADROOM_TOKENS = { 'openai/gpt-oss-120b': 1500, default: 800 };
 const REASONING_MIN_ANSWER_TOKENS = 300;
 const REASONING_TOKEN_CEILING = 4000;
+const INITIAL_VALIDATOR_REPAIR_RESERVE_MS = 24000;
+const UNAVAILABLE_REPAIR_MIN_REMAINING_MS = 18000;
 const boostedPayloads = new WeakSet();
 
 /**
@@ -89,6 +91,15 @@ function awaitWithAbortTimeout(promise, timeoutMs, controller, label = 'provider
  * Keep at least 2.5s for a final response; callers may request a larger minimum
  * reserve when a bounded repair plus a final validation pass must still fit.
  */
+
+function shouldAttemptUnavailableRepair({ remainingMs, hasEvidence, alreadyAttempted } = {}) {
+  const remaining = Number(remainingMs);
+  return hasEvidence === true
+    && alreadyAttempted !== true
+    && Number.isFinite(remaining)
+    && remaining >= UNAVAILABLE_REPAIR_MIN_REMAINING_MS;
+}
+
 function computeValidatorReserveMs(remainingMs, currentSlot = 1, maxValidators = 3, minimumReserveMs = 0) {
   const remaining = Number(remainingMs);
   const repairReserve = Math.max(0, Number(minimumReserveMs) || 0);
@@ -205,4 +216,7 @@ module.exports = {
   computeValidatorTimeout,
   computeValidatorReserveMs,
   computeGenerationTimeout,
+  INITIAL_VALIDATOR_REPAIR_RESERVE_MS,
+  UNAVAILABLE_REPAIR_MIN_REMAINING_MS,
+  shouldAttemptUnavailableRepair,
 };
