@@ -3997,7 +3997,7 @@ Pytanie użytkownika: ${pytanie}`;
           'Jedno zdanie ma zawierać najwyżej jeden niezależnie sprawdzalny fakt. Nie łącz kilku twierdzeń spójnikami i nie dodawaj meta-komentarzy o tym, czego źródła nie mówią, jeśli nie jest to konieczne do odpowiedzi.',
           'Nie dopowiadaj lokalizacji, dat, przyczyn ani skutków, których nie potwierdza materiał. Jeśli źródła nie wystarczają do odpowiedzi, powiedz to krótko zamiast zgadywać.',
           answerPlan.instruction,
-        ].join('\\n');
+        ].join('\n');
         const unavailableRepair = await generujOdpowiedz(
           max_tokens,
           `${systemPrompt}\n\n[VALIDATOR OUTAGE REPAIR]\n${unavailableFeedback}`,
