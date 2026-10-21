@@ -1,9 +1,6 @@
 name: AI live benchmark
 
 on:
-  push:
-    branches:
-      - arena/9034b5a4-czituchbot
   workflow_dispatch:
     inputs:
       seed:
@@ -20,6 +17,7 @@ concurrency:
 
 jobs:
   live-benchmark:
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -28,7 +26,7 @@ jobs:
       AI_ALLOW_PARTIAL_ANSWERS: "1"
       AI_BENCHMARK_LIMIT: "5"
       AI_BENCHMARK_DELAY_MS: "5000"
-      AI_BENCHMARK_SEED: "0"
+      AI_BENCHMARK_SEED: ${{ inputs.seed || '0' }}
       AI_BENCHMARK_REQUIRE_PERFECT: "1"
       AI_BENCHMARK_JSON_PATH: ai-live-benchmark.json
       AI_PROVIDER_QUOTA_COOLDOWN_MS: "1800000"
