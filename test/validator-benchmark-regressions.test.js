@@ -135,6 +135,21 @@ test('short infobox quote must be bound to the claimed entity', () => {
   assert.match(unrelated.reason, /krótki cytat z infoboksu nie wiąże pola/);
 });
 
+test('short infobox quote fails closed when the claim subject cannot be bound', () => {
+  const claim = 'The character has the Rogue class.';
+  const quote = 'Class Rogue';
+  const result = normalizujWynikWalidatora(
+    wynikModelu(claim, quote),
+    'test-model',
+    'test',
+    new Set(['SOURCE 1']),
+    dane('Astarion Gender Male Class Rogue Race High Elf'),
+    claim,
+  );
+  assert.equal(result.accepted, false);
+  assert.match(result.reason, /krótki cytat z infoboksu nie wiąże pola z encją claimu/);
+});
+
 test('single-word and very short quotes are still rejected as evidence', () => {
   const claim = 'Astarion is a Rogue.';
   for (const quote of ['Rogue', 'a Rogue']) {
