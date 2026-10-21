@@ -127,6 +127,7 @@ test('validator accepts a claim supported by multiple sentences in one source bl
     supported: true, relevant: true, complete: true, hallucination: false, confidence: 0.96,
     claims: [{
       claim: 'Johnny Silverhand był związany z Alt Cunningham, a porwanie Alt przez Arasakę pogłębiło jego konflikt z Arasaką.',
+      claim_en: 'Johnny Silverhand was involved with Alt Cunningham, and Alt’s capture by Arasaka deepened his conflict with Arasaka.',
       supported: true, source_ids: ['SOURCE 1'],
       evidence_quote: 'Arasaka captured Alt during the 2013 incident.',
     }],
