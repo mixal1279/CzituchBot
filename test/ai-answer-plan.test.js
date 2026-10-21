@@ -4,7 +4,26 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { buildAnswerPlan, extractAnswerSignals, assessAnswerCompleteness } = require('../ai/answer-plan');
 const { buildRetrievalQueries, responseContract } = require('../ai/planner');
-const { judgeAnswer } = require('../ai/answer-judge');
+const { judgeAnswer, partialAnswerPreservesCoreIntent } = require('../ai/answer-judge');
+
+test('partial answers may omit game context but must preserve the core question intent', () => {
+  assert.equal(partialAnswerPreservesCoreIntent({
+    status: 'repair',
+    missing: ['entity_context'],
+  }), true);
+  assert.equal(partialAnswerPreservesCoreIntent({
+    status: 'repair',
+    missing: ['why', 'causal_explanation'],
+  }), false);
+  assert.equal(partialAnswerPreservesCoreIntent({
+    status: 'repair',
+    missing: ['steps', 'entity_context'],
+  }), false);
+  assert.equal(partialAnswerPreservesCoreIntent({
+    status: 'rejected',
+    missing: [],
+  }), false);
+});
 
 test('v26 answer plan identifies causal lore requirements', () => {
   const plan = buildAnswerPlan('Dlaczego Wheatley przejął kontrolę nad GLaDOS?', {
