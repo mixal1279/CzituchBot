@@ -94,6 +94,7 @@ const { buildAnswerPlan } = require('./ai/answer-plan');
 const { judgeAnswer } = require('./ai/answer-judge');
 const { parseEvidenceBlocks, buildQuestionEvidenceContext, escapeUntrustedEvidenceContent } = require('./ai/evidence');
 const { buildBoundedEvidencePrompt } = require('./ai/prompt-context');
+const { buildRequestMessages, buildOpenRouterMessages: formatOpenRouterMessages } = require('./ai/request-messages');
 const { parseGeminiGenerationResponse, buildGeminiGenerateContentUrl } = require('./ai/gemini-response');
 
 // Exact source spans help the validator quote evidence accurately. These are
@@ -3238,15 +3239,18 @@ Pytanie użytkownika: ${pytanie}`
 
   // Jeden kontrakt wejściowy dla wszystkich generatorów. Fallback nie może
   // nagle tracić historii albo dostawać innej interpretacji danych referencyjnych.
-  const buildMessages = (overrideSystemPrompt = systemPrompt) => ({
-    system: overrideSystemPrompt,
-    history: przygotujHistorieDoModelu(historiaRozmowy, 4),
-    user: buildBoundedEvidencePrompt(kontekstAI || pytanie, pytanie, 10000),
+  const buildMessages = (overrideSystemPrompt = systemPrompt) => buildRequestMessages({
+    systemPrompt: overrideSystemPrompt,
+    history: historiaRozmowy,
+    context: kontekstAI,
+    question: pytanie,
+    prepareHistory: przygotujHistorieDoModelu,
+    buildBoundedEvidencePrompt,
+    historyLimit: 4,
+    referenceLimit: 10000,
   });
-  const buildOpenRouterMessages = (overrideSystemPrompt = systemPrompt) => {
-    const m = buildMessages(overrideSystemPrompt);
-    return [{ role: 'system', content: m.system }, ...m.history, { role: 'user', content: m.user }];
-  };
+  const buildOpenRouterMessages = (overrideSystemPrompt = systemPrompt) =>
+    formatOpenRouterMessages(buildMessages(overrideSystemPrompt));
 
 
   // Jedno dodatkowe wyszukanie uruchamiane dopiero po odrzuceniu odpowiedzi przez validator.
