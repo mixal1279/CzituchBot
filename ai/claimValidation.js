@@ -736,8 +736,15 @@ function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
   if (en.length > pl.length * 3 + 60) return { ok: false, reason: 'tłumaczenie claimu jest nieproporcjonalnie długie' };
   if (!wyglądaNaAngielski(en)) return { ok: false, reason: 'claim_en nie wygląda na tekst angielski' };
   // Zbieżność claim_en z cytatem sama w sobie nie dowodzi błędu: poprawny claim
-  // może być wiernym tłumaczeniem zdania źródłowego. Wierność oceniamy poniżej
-  // przez negację, liczby, encje i relacje, a prompt zabrania kopiowania dodatkowych faktów.
+  // może być wiernym tłumaczeniem zdania źródłowego. Jeśli jednak model skopiował
+  // cały cytat, wymagamy też pozytywnej zgodności semantycznej PL→EN; inaczej
+  // późniejsza walidacja mogłaby porównać cytat z samym sobą zamiast z claimem.
+  const quoteNorm = normalizujClaim(options.evidenceQuote || '');
+  const copiedQuote = Boolean(quoteNorm) && normalizujClaim(en) === quoteNorm;
+  if (copiedQuote) {
+    const agreement = dopasowanieSemantyczne(en, pl, options);
+    if (!agreement.ok) return { ok: false, reason: 'claim_en kopiuje cytat, ale nie odpowiada treści claimu' };
+  }
   if (!zbiorRowny(wyodrebnijLiczbyIDaty(pl), wyodrebnijLiczbyIDaty(en))) {
     return { ok: false, reason: 'tłumaczenie claimu zmienia liczby lub daty' };
   }
