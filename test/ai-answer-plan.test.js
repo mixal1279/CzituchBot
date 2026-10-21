@@ -32,6 +32,8 @@ test('v26 answer plan identifies causal lore requirements', () => {
   assert.ok(plan.requirements.some(x => x.id === 'why'));
   assert.ok(plan.requirements.some(x => x.id === 'causal_explanation'));
   assert.ok(plan.requirements.some(x => x.id === 'entity_context'));
+  assert.match(plan.instruction, /jawnie podaje motyw lub cel działania/);
+  assert.match(plan.instruction, /nie zastępuj go domniemaną przyczyną/);
 });
 
 test('who-answer guidance prioritizes the source-defined identity over secondary traits', () => {
