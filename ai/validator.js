@@ -300,8 +300,8 @@ function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '', opt
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/ł/g, 'l') : '';
 
   // Jedna wspólna lista znaczników przyczyny (wcześniej druga kopia tu rozjeżdżała się z claimValidation.js).
-  // Po stronie claimu obowiązuje CAUSAL_RE; po stronie dowodu CAUSAL_EVIDENCE_RE, który dodatkowo
-  // uznaje frazy celu („so that”, „in order to”) za jawne powiązanie działania ze skutkiem.
+  // Frazy celu („so that”, „in order to”) są obsługiwane osobno niż dowód przyczynowości:
+  // same w sobie nie dowodzą, że zamierzony skutek rzeczywiście nastąpił.
   const causalRe = CAUSAL_RE;
   const claimCausal = causalRe.test(claimNorm);
   const quoteCausal = CAUSAL_EVIDENCE_RE.test(quoteNorm);
