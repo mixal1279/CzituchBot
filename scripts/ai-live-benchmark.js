@@ -157,17 +157,20 @@ function classifyBenchmarkOutcome(result = {}) {
   const details = [
     result.rejectionReason,
     ...(Array.isArray(result.fallbackReasons) ? result.fallbackReasons : []),
-    ...attempts.flatMap(attempt => [attempt.failure, attempt.error, attempt.reason]),
+    ...attempts.flatMap(attempt => [attempt.failure, attempt.error, attempt.reason, attempt.statusCode, attempt.code, attempt.message, attempt.timeoutAbort]),
     ...validatorResults.flatMap(row => [row.status, row.reason, row.error]),
   ].filter(Boolean).join(' ').toLowerCase();
   if (result.judgeStatus === 'accepted' && result.factualPassed !== false) return 'accepted';
   if (/(?:quota|rate.?limit|resource.?exhausted|tokens? per (?:day|minute)|\b429\b|\b402\b)/i.test(details)) return 'provider_quota';
   if (/(?:timeout|timed.?out|deadline|abort(?:ed)?|etimedout)/i.test(details)) return 'provider_timeout';
   if (/(?:budget_exhausted|budget|budżet|no_healthy_provider|request_deadline|model_calls_exhausted|generation_budget_exhausted)/i.test(details)) return 'no_fallback_budget';
-  if (/(?:evidence|quote|claim|unsupported|unverified|validator_reject|semantic|coverage|coarse)/i.test(details)
-      || result.finalStatus === 'rejected'
-      || result.judgeStatus === 'abstained'
-      || result.judgeStatus === 'error') return 'evidence_rejection';
+  if (result.judgeStatus === 'error' || result.finalStatus === 'error') return 'pipeline_error';
+  if (result.judgeStatus === 'abstained') return 'abstention';
+  const evidenceRejected = /(?:evidence|quote|claim|unsupported|unverified|validator_reject|coverage|coarse)/i.test(details)
+    || (result.finalStatus === 'rejected' && validatorResults.some(row =>
+      /rejected/i.test(String(row.status || '')) && /(?:evidence|quote|claim|unsupported|unverified|negacj|sprzeczn|liczb|source.?id)/i.test(String(row.reason || '') + ' ' + JSON.stringify(row.localRejectReasons || []))
+    ));
+  if (evidenceRejected) return 'evidence_rejection';
   return 'semantic_rejection';
 }
 
