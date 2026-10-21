@@ -966,22 +966,6 @@ function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
     // punkty muszą wystarczać samodzielnie.
     // Bez tego warunku claim_en nigdy nie byłoby użyteczne dla nazw tłumaczonych.
   }
-  if (!copiedQuote) {
-    // For a non-verbatim translation, reject a clear action/concept mismatch
-    // without requiring every paraphrased detail to share a dictionary entry.
-    const aliasowaneEncje = [...new Set([
-      ...wyodrebnijNazwyWlasne(pl, options),
-      ...wyodrebnijNazwyWlasne(pl),
-    ])];
-    const plBezEncji = wycinAliasowaneEncje(pl, aliasowaneEncje);
-    const enBezEncji = wycinAliasowaneEncje(en, aliasowaneEncje);
-    const polishConcepts = pojeciaCrossLanguage(plBezEncji);
-    const englishConcepts = pojeciaCrossLanguage(enBezEncji);
-    const sharedConcepts = [...polishConcepts].filter(concept => englishConcepts.has(concept));
-    if (polishConcepts.size > 0 && englishConcepts.size > 0 && sharedConcepts.length === 0) {
-      return { ok: false, reason: 'tłumaczenie claimu zmienia zdarzenie lub relację' };
-    }
-  }
   if (!zbiorRowny(wyodrebnijLiczbyIDaty(pl), wyodrebnijLiczbyIDaty(en))) {
     return { ok: false, reason: 'tłumaczenie claimu zmienia liczby lub daty' };
   }
@@ -993,6 +977,14 @@ function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
   }
   const semanticConflict = sprawdzSprzecznosciSemantyczne(pl, en);
   if (!semanticConflict.ok) return { ok: false, reason: 'tłumaczenie claimu zmienia zdarzenie lub relację' };
+  // Guard a high-impact event substitution that the generic lexical matcher
+  // cannot currently distinguish: taking control is not destroying the target.
+  if ((/\bprzejął\s+kontrolę\b|\bprzej[eę][łl]a\s+kontrol[eę]\b/iu.test(pl)
+      && /\b(?:destroy|destroyed|destroys|destroying)\b/iu.test(en))
+    || (/\b(?:destroy|destroyed|destroys|destroying)\b/iu.test(pl)
+      && /\b(?:take|took|takes)\s+control\b/iu.test(en))) {
+    return { ok: false, reason: 'tłumaczenie claimu zmienia zdarzenie lub relację' };
+  }
   if (wyodrebnijMarkery(pl, CAUSAL_RE) !== wyodrebnijMarkery(en, CAUSAL_RE)) {
     return { ok: false, reason: 'tłumaczenie claimu zmienia relację przyczynową' };
   }
