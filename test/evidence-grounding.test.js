@@ -184,6 +184,18 @@ test('causal repair does not use an unrelated sentence merely because it contain
   assert.doesNotMatch(repair, /SOURCE 1|reactor failed/);
 });
 
+test('causal repair recognizes explicit Polish outcome links without borrowing unrelated causal sentences', () => {
+  const source = {
+    sourceId: 'SOURCE 1',
+    title: 'Portal 2 core transfer',
+    url: 'https://example.test/portal-2-transfer',
+    content: 'Chell nacisnęła przycisk, który w ten sposób oddaje Wheatleyowi kontrolę nad obiektem.',
+  };
+  const claim = 'Chell nacisnęła przycisk, co umożliwiło Wheatleyowi przejęcie kontroli nad obiektem.';
+  const repair = buildEvidenceRepairContext([{ claim }], [source], new Set(['SOURCE 1']));
+  assert.match(repair, /w ten sposób oddaje Wheatleyowi kontrolę/);
+});
+
 test('evidence ranking strips leading image filenames but preserves verbatim source quotes', () => {
   const content = 'BG3 Astarion.png BG3 Astarion.png Astarion is an Origin character in Baldur’s Gate 3. You can play as Astarion or recruit him as a companion.';
   const blocks = parseEvidenceBlocks(`[SOURCE 1]
