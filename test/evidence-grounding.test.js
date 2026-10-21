@@ -303,7 +303,7 @@ test('validator accepts the original Elden Ring Greatsword location claim agains
   const data = `[SOURCE 1]\nTYTUŁ: Elden Ring guide\nTREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>\n${quote}\n<<<END_UNTRUSTED_SOURCE_CONTENT>>>`;
   const result = normalizujWynikWalidatora({
     valid: true, reason: 'ok', unsupported_claims: [], supported: true, relevant: true, complete: true, hallucination: false, confidence: 0.99,
-    claims: [{ claim, supported: true, source_ids: ['SOURCE 1'], evidence_quote: quote }],
+    claims: [{ claim, claim_en: 'The Greatsword is in the Caelid region, on the western side, by the road past Rotview Balcony and northwest of the Caelem Ruins.', supported: true, source_ids: ['SOURCE 1'], evidence_quote: quote }],
   }, 'test-model', 'test', new Set(['SOURCE 1']), data, claim);
   assert.equal(result.status, 'accepted', JSON.stringify(result.diagnostics));
   assert.equal(result.diagnostics.evidenceBindings[0].mode, 'exact_quote');
@@ -373,7 +373,7 @@ test('validator recognizes an English so-that source relation for a Polish Porta
   const claim = 'Chell i Wheatley wymusili transfer rdzenia z GLaDOS, co umożliwiło Wheatleyowi przejęcie kontroli nad całym ośrodkiem.';
   const result = normalizujWynikWalidatora({
     valid: true, reason: 'confirmed', unsupported_claims: [], supported: true, relevant: true, complete: true, hallucination: false, confidence: 0.99,
-    claims: [{ claim, supported: true, source_ids: ['SOURCE 15'], evidence_quote: quote }],
+    claims: [{ claim, claim_en: 'Chell and Wheatley forced a core transfer from GLaDOS, enabling Wheatley to take control of the facility.', supported: true, source_ids: ['SOURCE 15'], evidence_quote: quote }],
   }, 'test-model', 'test', new Set(['SOURCE 15']), data, claim);
   assert.equal(result.status, 'accepted', JSON.stringify(result.diagnostics));
   assert.equal(result.diagnostics.evidenceBindings[0].mode, 'exact_quote');
