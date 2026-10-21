@@ -8,6 +8,12 @@ const NEGATION_STRICT_RE = /(?<![\p{L}])(?:nie|nigdy|brak|bez|zaden|zadna|zadne|
 // Claim o redukcji/ograniczeniu jest zgodny z dowodem „no damage / take no damage” (zero implikuje zmniejszenie).
 const REDUCTION_RE = /(?<![\p{L}])(?:zmniejsz\w*|ogranicz\w*|redukuj\w*|zredukow\w*|oslab\w*|chron\w*|neutralizuj\w*|reduc\w*|mitigat\w*|lower\w*|decreas\w*|protect\w*|prevent\w*|avoid\w*|block\w*|ward\w*|immun\w*|zapobieg\w*|unik\w*|blok\w*|odporn\w*)(?![\p{L}])/iu;
 const CAUSAL_RE = /(?<![\p{L}])(?:bo|poniewaz|gdyz|dlatego|because|therefore|caused|causes|consequently|hence|as\s+a\s+result|led\s+to|leading\s+to|resulted\s+in|resulting\s+in|because\s+of|due\s+to|thereby|thus|allow(?:s|ed|ing)?|enabl(?:e|es|ed|ing)|which\s+(?:let|lets|allowed|allows|enabled|enables)|putting\s+(?:him|her|them|it)\s+in\s+control|so\s+(?:he|she|they|it|we|the)|in\s+exchange(?:\s+for)?|in\s+return(?:\s+for)?|in\s+turn|thanks\s+to|owing\s+to|w\s+zamian(?:\s+za)?|w\s+rewan[zż]u|w\s+wyniku|z\s+powodu|dzieki|spowod\w*|doprowadz\w*|umozliw\w*)(?![\p{L}])/iu;
+// Znaczniki celu („so that”, „in order to”) nie czynią CLAIMU przyczynowym — patrz test
+// „English purpose clauses do not trigger the unsupported-causal hard gate” — dlatego CAUSAL_RE
+// ich nie zawiera. W DOWODZIE są natomiast jawnym powiązaniem działania ze skutkiem:
+// „X force a core transfer so that Y can take control” wspiera claim „X umożliwiło Y przejęcie
+// kontroli”. Ten wariant służy wyłącznie do rozpoznawania sygnału przyczynowego po stronie dowodu.
+const CAUSAL_EVIDENCE_RE = new RegExp(`(?:${CAUSAL_RE.source})|(?<![\\p{L}])(?:so\\s+that|in\\s+order\\s+to|so\\s+as\\s+to)(?![\\p{L}])`, 'iu');
 const TEMPORAL_RE = /(?<![\p{L}])(?:19|20)\d{2}(?![\p{L}])|(?<![\p{L}])(?:styczen|luty|marzec|kwiecien|maj|czerwiec|lipiec|sierpien|wrzesien|pazdziernik|listopad|grudzien|wczoraj|dzisiaj|jutro|today|yesterday|tomorrow)(?![\p{L}])/iu;
 const CROSS_LANGUAGE_CONCEPTS = [
   ['porwanie', /kidnap\w*|abduct\w*|captur\w*|porwan\w*|uprowadz\w*/i],
@@ -428,6 +434,19 @@ function czyNazwaWlasnaWystepuje(entity, evidenceNormalized) {
   });
 }
 
+// Czy brak nazwy z polskiego claimu w angielskim claim_en jest błędem tłumaczenia?
+// Polskie odmiany i lokalizacje („Katedry Komunii Smoka” vs „Cathedral of Dragon Communion”)
+// nie występują w angielskich źródłach, więc ich nieobecność w tłumaczeniu nie świadczy o zgubieniu
+// nazwy. Wymagamy jej tylko wtedy, gdy nazwa (lub jej odmiana) jest w wyroczni nazw ze źródeł albo
+// jest znanym aliasem kanonicznym. Bez wyroczni zachowujemy dotychczasową, ścisłą kontrolę.
+function nazwaWymaganaWTlumaczeniu(name, nameOracle) {
+  if (!(nameOracle instanceof Set)) return true;
+  const normalizedName = normalizujClaim(name);
+  if (KNOWN_ENTITY_ALIAS_PATTERNS.some(alias => normalizujClaim(alias.canonical) === normalizedName)) return true;
+  return [name, ...wariantyNazwyDoDopasowania(name)]
+    .some(variant => nameOracle.has(normalizujTokenWyroczni(variant)));
+}
+
 function sprawdzTwardeKonflikty(evidence, claim, options = {}) {
   const e = String(evidence || '');
   const c = String(claim || '');
@@ -508,7 +527,7 @@ function czyRelacjaPrzyczynowaPokrywaClaim(evidence, claim, options = {}) {
     .split(/(?<=[.!?])\s+/)
     .map(s => s.trim())
     .filter(Boolean);
-  const relationRe = /(?<![\p{L}])(?:bo|poniewaz|gdyz|dlatego|z powodu|dzieki|spowod\w*|doprowadz\w*|umozliw\w*|because|therefore|due to|caus\w*|led to|leading to|lead\w*\s+(?:\w+\s+){0,3}to|resulted in|resulting in|so\s+(?:approach|use|avoid|keep|stay|choose|take|do|be)|thereby|thus|allow(?:s|ed|ing)?|enabl(?:e|es|ed|ing)|accidentally|by mistake|which\s+(?:let|lets|allowed|allows|enabled|enables)|putting\s+(?:him|her|them|it)\s+in\s+control)(?![\p{L}])/iu;
+  const relationRe = /(?<![\p{L}])(?:bo|poniewaz|gdyz|dlatego|z powodu|dzieki|spowod\w*|doprowadz\w*|umozliw\w*|because|therefore|due to|caus\w*|led to|leading to|lead\w*\s+(?:\w+\s+){0,3}to|resulted in|resulting in|so\s+(?:approach|use|avoid|keep|stay|choose|take|do|be)|so\s+that|in\s+order\s+to|so\s+as\s+to|thereby|thus|allow(?:s|ed|ing)?|enabl(?:e|es|ed|ing)|accidentally|by mistake|which\s+(?:let|lets|allowed|allows|enabled|enables)|putting\s+(?:him|her|them|it)\s+in\s+control)(?![\p{L}])/iu;
   return sentences.some(sentence => {
     const normalized = normalizujClaim(sentence);
     if (!relationRe.test(normalized)) return false;
@@ -543,7 +562,7 @@ function zgodnoscStrukturalna(evidence, claim, options = {}) {
   }
 
   const claimCausal = wyodrebnijMarkery(c, CAUSAL_RE);
-  const evidenceCausal = wyodrebnijMarkery(e, CAUSAL_RE);
+  const evidenceCausal = wyodrebnijMarkery(e, CAUSAL_EVIDENCE_RE);
   if (claimCausal && !evidenceCausal && !options.allowDistributedEvidence) {
     return { ok: false, reason: 'claim dodaje relację przyczynową nieobecną w dowodzie' };
   }
@@ -706,9 +725,11 @@ function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
     return { ok: false, reason: 'tłumaczenie claimu zmienia kierunek redukcji lub ochrony' };
   }
   const enNormalized = normalizujClaim(en);
-  const missing = wyodrebnijNazwyWlasne(pl, options).filter(name => !czyNazwaWlasnaWystepuje(name, enNormalized));
+  const missing = wyodrebnijNazwyWlasne(pl, options)
+    .filter(name => !czyNazwaWlasnaWystepuje(name, enNormalized))
+    .filter(name => nazwaWymaganaWTlumaczeniu(name, options.nameOracle));
   if (missing.length) return { ok: false, reason: 'tłumaczenie claimu gubi nazwy własne: ' + missing.slice(0, 3).join(', ') };
   return { ok: true };
 }
 
-module.exports = { KNOWN_ENTITY_ALIAS_PATTERNS, CAUSAL_RE, wyglądaNaAngielski, spojnoscTlumaczeniaClaimu, normalizujClaim, tokenyClaim, czyRelacjaPrzyczynowaPokrywaClaim, wyodrebnijLiczbyIDaty, wyodrebnijJednostkoweWartosci, wyodrebnijNazwyWlasne, zbudujWyroczniaNazw, zgodnoscStrukturalna, sprawdzTwardeKonflikty, sprawdzSprzecznosciSemantyczne, dopasowanieSemantyczne, sprawdzPokrycieClaimamiOdpowiedzi, czyDowodSemantyczniePokrywaClaim, tokenyPokrywajaSie };
+module.exports = { KNOWN_ENTITY_ALIAS_PATTERNS, CAUSAL_RE, CAUSAL_EVIDENCE_RE, wyglądaNaAngielski, spojnoscTlumaczeniaClaimu, normalizujClaim, tokenyClaim, czyRelacjaPrzyczynowaPokrywaClaim, wyodrebnijLiczbyIDaty, wyodrebnijJednostkoweWartosci, wyodrebnijNazwyWlasne, zbudujWyroczniaNazw, zgodnoscStrukturalna, sprawdzTwardeKonflikty, sprawdzSprzecznosciSemantyczne, dopasowanieSemantyczne, sprawdzPokrycieClaimamiOdpowiedzi, czyDowodSemantyczniePokrywaClaim, tokenyPokrywajaSie };

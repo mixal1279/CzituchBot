@@ -4,7 +4,7 @@
 const { assessEvidence } = require('./core');
 
 const { sprawdzTwardeFaktyOdpowiedzi } = require('./response');
-const { czyDowodSemantyczniePokrywaClaim, czyRelacjaPrzyczynowaPokrywaClaim, zgodnoscStrukturalna, sprawdzTwardeKonflikty, sprawdzSprzecznosciSemantyczne, sprawdzPokrycieClaimamiOdpowiedzi, spojnoscTlumaczeniaClaimu, zbudujWyroczniaNazw, wyglądaNaAngielski, CAUSAL_RE } = require('./claimValidation');
+const { czyDowodSemantyczniePokrywaClaim, czyRelacjaPrzyczynowaPokrywaClaim, zgodnoscStrukturalna, sprawdzTwardeKonflikty, sprawdzSprzecznosciSemantyczne, sprawdzPokrycieClaimamiOdpowiedzi, spojnoscTlumaczeniaClaimu, zbudujWyroczniaNazw, wyglądaNaAngielski, CAUSAL_RE, CAUSAL_EVIDENCE_RE } = require('./claimValidation');
 const { parseEvidenceBlocks, quoteExists, rankEvidenceForClaim, buildEvidenceRepairContext } = require('./evidence');
 
 // Kontrakt walidatora jest celowo mały: generator potrzebuje tylko jasnego
@@ -254,7 +254,11 @@ function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '', opt
     return { ok: false, reason: 'brak poprawnego source_id lub evidence_quote' };
   }
   const quote = evidenceQuote.trim();
-  if (quote.length < 12 || quote.length > 500) {
+  // Dolny próg: 8 znaków, a cytat 8–11-znakowy musi mieć co najmniej dwa wyrazy. Dzięki temu
+  // krótkie, ale dosłowne wpisy z infoboksów („Class Rogue”, „Gender Male”) są dowodem,
+  // a pojedyncze słowo nadal nim nie jest.
+  const quoteWordCount = quote.split(/\s+/u).filter(Boolean).length;
+  if (quote.length < 8 || (quote.length < 12 && quoteWordCount < 2) || quote.length > 500) {
     return { ok: false, reason: 'evidence_quote ma nieprawidłową długość' };
   }
 
@@ -264,9 +268,11 @@ function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '', opt
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/ł/g, 'l') : '';
 
   // Jedna wspólna lista znaczników przyczyny (wcześniej druga kopia tu rozjeżdżała się z claimValidation.js).
+  // Po stronie claimu obowiązuje CAUSAL_RE; po stronie dowodu CAUSAL_EVIDENCE_RE, który dodatkowo
+  // uznaje frazy celu („so that”, „in order to”) za jawne powiązanie działania ze skutkiem.
   const causalRe = CAUSAL_RE;
   const claimCausal = causalRe.test(claimNorm);
-  const quoteCausal = causalRe.test(quoteNorm);
+  const quoteCausal = CAUSAL_EVIDENCE_RE.test(quoteNorm);
 
   const quoteCaptured = /captur\w*|kidnapp\w*|abduct\w*|porwan\w*|schwyt\w*/i.test(quoteNorm);
   const quoteKilled = /kill\w*|murder\w*|zabij\w*|zabil\w*|zabila\w*|zabita\w*|zabite\w*|zabici\w*|zabity\w*|zabicie\w*|smier\w*/i.test(quoteNorm);
@@ -324,7 +330,7 @@ function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '', opt
       continue;
     }
 
-    if (claimCausal && !quoteCausal && !causalRe.test(verificationContext)) {
+    if (claimCausal && !quoteCausal && !CAUSAL_EVIDENCE_RE.test(verificationContext)) {
       reasons.push('claim dodaje relację przyczynową nieobecną w kontekście cytatu: ' + id);
       continue;
     }
