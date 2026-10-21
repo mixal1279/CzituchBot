@@ -4141,6 +4141,12 @@ Pytanie użytkownika: ${pytanie}`;
               aiState,
               metadaneRequestu,
             );
+            if (walidacja.status === 'soft_accepted' && walidacja.partialAnswer) {
+              odp = walidacja.partialAnswer;
+              odpowiedzCzesciowa = walidacja.partialAnswer;
+            } else {
+              odpowiedzCzesciowa = null;
+            }
             if (walidacja.status === 'accepted' || walidacja.status === 'soft_accepted') {
               walidacja = zastosujDeterministyczneGuards(
                 walidacja,
