@@ -2,7 +2,7 @@
 
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { createGroqCompletion, awaitWithAbortTimeout, computeValidatorTimeout, computeValidatorReserveMs, computeGenerationTimeout } = require('../ai/provider-runtime');
+const { createGroqCompletion, createGroqCompletionWithSchemaFallback, isGroqSchemaValidationError, awaitWithAbortTimeout, computeValidatorTimeout, computeValidatorReserveMs, computeGenerationTimeout } = require('../ai/provider-runtime');
 const { classifyFailure, shouldRetryFailure, nextFallbacks, selectRepairFallbacks, filterAvailableFallbacks, repairBudgetBlockReason, resetProviderQuotaCooldowns, markProviderQuota, isProviderQuotaBlocked, quotaCooldownMsFromError, retryAfterHint, configuredMaxFallbackSteps, shouldOpenQuotaCircuit } = require('../ai/fallback');
 
 test('Groq request body never contains signal; AbortSignal is passed in SDK transport options', async () => {
@@ -38,6 +38,35 @@ test('Groq request body never contains signal; AbortSignal is passed in SDK tran
   controller.abort();
   await assert.rejects(pending, { name: 'AbortError' });
   assert.equal(timedOut, true, 'aborting the request must still cancel the in-flight SDK request');
+});
+
+test('Groq schema-validation 400 retries once in JSON mode and remains subject to local validation', async () => {
+  const controller = new AbortController();
+  const payloads = [];
+  let calls = 0;
+  const groqClient = {
+    chat: { completions: { async create(payload) {
+      payloads.push(payload);
+      calls++;
+      if (calls === 1) {
+        throw Object.assign(new Error("400 json_validate_failed: '/claims/0' missing properties: 'supported'"), { status: 400 });
+      }
+      return { choices: [{ message: { content: '{"valid":true,"claims":[]}' } }] };
+    } } },
+  };
+  assert.equal(isGroqSchemaValidationError(Object.assign(new Error('400 json_validate_failed'), { status: 400 })), true);
+  assert.equal(isGroqSchemaValidationError(Object.assign(new Error('400 bad request'), { status: 400 })), false);
+  const result = await createGroqCompletionWithSchemaFallback(groqClient, {
+    model: 'openai/gpt-oss-20b',
+    messages: [{ role: 'user', content: 'validate' }],
+    max_completion_tokens: 300,
+    reasoning_effort: 'low',
+    response_format: { type: 'json_schema', json_schema: { strict: true } },
+  }, { signal: controller.signal, controller, timeoutMs: 2000, fallbackTimeoutMs: 1000 });
+  assert.equal(calls, 2);
+  assert.equal(payloads[0].response_format.type, 'json_schema');
+  assert.equal(payloads[1].response_format.type, 'json_object');
+  assert.equal(result.choices[0].message.content, '{"valid":true,"claims":[]}');
 });
 
 test('hard timeout releases the pipeline when a provider ignores AbortSignal', async () => {
