@@ -24,7 +24,7 @@ function dane(tresc) {
 }
 
 test('Roman numeral extraction ignores common abbreviations but keeps game sequel numerals', () => {
-  assert.deepEqual(wyodrebnijLiczbyIDaty('Astarion gra w MC, a tekst zawiera CD i MM.'), []);
+  assert.deepEqual(wyodrebnijLiczbyIDaty('Astarion gra w MC, a tekst zawiera CD, MM i MIX.'), []);
   assert.deepEqual(wyodrebnijLiczbyIDaty("Baldur's Gate III"), ['3']);
   assert.deepEqual(wyodrebnijLiczbyIDaty('Grand Theft Auto V'), ['5']);
   assert.deepEqual(wyodrebnijLiczbyIDaty('Final Fantasy X'), ['10']);
@@ -133,6 +133,13 @@ test('claim_en passes when a Polish-localized name is absent from both the Engli
   const claim = 'Wielki Miecz znajduje się w północno-zachodniej części Caelid, przy drodze prowadzącej na południe w stronę Katedry Komunii Smoka.';
   const result = spojnoscTlumaczeniaClaimu(claim, source, { nameOracle });
   assert.equal(result.ok, true, result.reason);
+});
+
+test('claim_en cannot silently drop an unsupported proper name from the Polish claim', () => {
+  const nameOracle = zbudujWyroczniaNazw([{ content: 'Geralt met a stranger.' }]);
+  const result = spojnoscTlumaczeniaClaimu('Geralt spotkał Gandalfa.', 'Geralt met a stranger.', { nameOracle });
+  assert.equal(result.ok, false, JSON.stringify(result));
+  assert.match(result.reason, /nazwy własne/);
 });
 
 test('claim_en copied from the evidence quote must still agree with the Polish claim', () => {
