@@ -146,7 +146,7 @@ test('short infobox quote fails closed when the claim subject cannot be bound', 
     dane('Astarion Gender Male Class Rogue Race High Elf'),
     claim,
   );
-  assert.equal(result.accepted, false);
+  assert.equal(result.status, 'rejected');
   assert.match(result.reason, /krótki cytat z infoboksu nie wiąże pola z encją claimu/);
 });
 
