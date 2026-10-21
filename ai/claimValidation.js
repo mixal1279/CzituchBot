@@ -222,7 +222,7 @@ function wyodrebnijNazwyWlasne(value, options = {}) {
   // Pomijamy częste słowa opisowe na początku zdania, ale nie imiona.
   // Wcześniejsze wykluczenie Artur/Arthur odrzucało poprawne nazwy własne.
   const genericFirstWords = new Set([
-    'decyzja', 'motywuje', 'nowo', 'następnie', 'nastepnie', 'ponadto',
+    'decyzja', 'motywuje', 'nowo', 'następnie', 'nastepnie', 'ponadto', 'alternatywnie', 'alternatywnymi', 'możesz', 'mozesz',
     'aby', 'dodatkowo', 'jednak', 'ogólnie', 'ogolnie', 'wtedy', 'potem', 'dlatego',
     'obecnie', 'później', 'pozniej', 'wcześniej', 'wczesniej',
     'ponieważ', 'poniewaz', 'chociaż', 'chociaz', 'choć', 'choc',
