@@ -26,11 +26,13 @@ function dane(tresc) {
 test('Roman numeral extraction ignores common abbreviations but keeps game sequel numerals', () => {
   assert.deepEqual(wyodrebnijLiczbyIDaty('Astarion gra w MC, a tekst zawiera CD i MM.'), []);
   assert.deepEqual(wyodrebnijLiczbyIDaty("Baldur's Gate III"), ['3']);
+  assert.deepEqual(wyodrebnijLiczbyIDaty('Grand Theft Auto V'), ['5']);
+  assert.deepEqual(wyodrebnijLiczbyIDaty('Final Fantasy X'), ['10']);
   assert.deepEqual(wyodrebnijLiczbyIDaty('Portal 2'), ['2']);
 });
 
 test('English "so that" in the source supports a Polish causal claim', () => {
-  const quote = 'Chell and Wheatley force a core transfer on GLaDOS so that Wheatley can take control of the facility and he and Chell can escape.';
+  const quote = "Chell and Wheatley force a core transfer on GLaDOS so that Wheatley can take control of the facility. GLaDOS' head is removed from her body and Wheatley is put in its place, putting him in control of the facility.";
   const claim = 'Chell i Wheatley wymusili transfer rdzenia z GLaDOS, co umożliwiło Wheatleyowi przejęcie kontroli nad całym ośrodkiem.';
   const result = normalizujWynikWalidatora(wynikModelu(claim, quote), 'test-model', 'test', new Set(['SOURCE 1']), dane(quote), claim);
   assert.equal(result.status, 'accepted', JSON.stringify(result.diagnostics));
@@ -50,6 +52,11 @@ test('a purpose clause cannot prove that the intended outcome actually occurred'
   );
   assert.equal(result.status, 'rejected');
   assert.match(result.reason, /cel lub możliwość.*skutek jako dokonany/);
+
+  const purposeClaim = 'Chell i Wheatley wymusili transfer rdzenia, aby Wheatley mógł przejąć kontrolę nad obiektem.';
+  const purposeQuote = 'Chell and Wheatley force a core transfer on GLaDOS so that Wheatley can take control of the facility.';
+  const purposeResult = normalizujWynikWalidatora(wynikModelu(purposeClaim, purposeQuote), 'test-model', 'test', new Set(['SOURCE 1']), dane(purposeQuote), purposeClaim);
+  assert.equal(purposeResult.status, 'accepted', JSON.stringify(purposeResult.diagnostics));
 
   const escapeQuote = 'Chell opened the door so that Wheatley could escape.';
   const escapeClaim = 'Wheatley escaped because Chell opened the door.';
