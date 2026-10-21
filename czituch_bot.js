@@ -3100,12 +3100,21 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
   if (!pogodaKontekst && !hltbKontekst && !infoKanalu && czyWyszukac && pytaniaAtomoweTavily.length && aiState.tavilySearches < aiState.maxWyszukanTavily && !budzetPrzekroczony()) {
     const materialyTavily = [];
     let sourceOffset = 0;
-    const specializedRetrievalQueries = advancedRetrievalPlan
-      .filter(item => aiPlan.responseProfile === 'lore'
-        ? item?.reason === 'lore'
-        : aiPlan.responseProfile === 'gameplay' ? item?.reason === 'gameplay' : false)
-      .map(item => item.query)
-      .filter(Boolean);
+    // Prefer the intent-specific query already built by the planner (exact
+    // location, character identity, causal mechanism, etc.) over a generic
+    // "lore/guide" query. The generic profile query often returns broad pages
+    // that do not contain the evidence slot required by the answer plan.
+    const intentSpecificRetrievalQueries = plannedRetrievalQueries.filter(query =>
+      /(?:exact location landmark nearby map|story timeline quest order arrival|character identity background role companion lore|cause reason motivation event core transfer|gameplay strategy mechanics guide walkthrough)/i.test(query)
+    );
+    const specializedRetrievalQueries = [
+      ...intentSpecificRetrievalQueries,
+      ...advancedRetrievalPlan
+        .filter(item => aiPlan.responseProfile === 'lore'
+          ? item?.reason === 'lore'
+          : aiPlan.responseProfile === 'gameplay' ? item?.reason === 'gameplay' : false)
+        .map(item => item.query),
+    ].filter(Boolean);
     const planowaneQueryRetrieval = selectRetrievalQueries({
       atomicQueries: pytaniaAtomoweTavily,
       causalQuery: causalRetrievalQuery,

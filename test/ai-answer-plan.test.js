@@ -4,6 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { buildAnswerPlan, extractAnswerSignals, assessAnswerCompleteness } = require('../ai/answer-plan');
 const { buildRetrievalQueries, responseContract } = require('../ai/planner');
+const { selectRetrievalQueries } = require('../ai/retrieval');
 const { judgeAnswer, partialAnswerPreservesCoreIntent } = require('../ai/answer-judge');
 
 test('partial answers may omit game context but must preserve the core question intent', () => {
@@ -214,3 +215,22 @@ test('retrieval planner targets cause and motivation for why questions', () => {
   });
   assert.ok(queries.some(q => /cause reason motivation event core transfer/i.test(q)), JSON.stringify(queries));
 });
+
+test('retrieval selection prioritizes intent-specific evidence over generic profile queries', () => {
+  const causalQuery = 'Dlaczego Wheatley przejął kontrolę nad GLaDOS? powód przyczyna motywacja why reason cause motivation';
+  const targetedQuery = 'Wheatley Portal 2 cause reason motivation event core transfer lore';
+  const genericLoreQuery = 'Portal 2 lore plot canon story';
+  const atomicQuery = 'W grze Portal 2: Dlaczego Wheatley przejął kontrolę nad GLaDOS?';
+
+  const selected = selectRetrievalQueries({
+    atomicQueries: [atomicQuery],
+    causalQuery,
+    specializedQueries: [targetedQuery, genericLoreQuery],
+    fallbackQueries: [],
+    maxQueries: 3,
+  });
+
+  assert.deepEqual(selected, [causalQuery, targetedQuery, atomicQuery]);
+  assert.ok(!selected.includes(genericLoreQuery));
+});
+
