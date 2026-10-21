@@ -417,11 +417,11 @@ function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '', opt
     // The first named subject is especially important for anaphoric quotes
     // ("He is a High Elf"): do not let the name oracle turn that pronoun-only
     // span into a direct quote for "Astarion is a High Elf".
-    const sentenceInitialSubject = String(claim || '').match(/^\\s*([\\p{Lu}][\\p{L}\\p{N}'’.-]*)\\s+(?:is|was|are|were|has|had|jest|był|była|są)\\b/iu)?.[1] || '';
+    const sentenceInitialSubject = String(claim || '').match(/^\s*([\p{Lu}][\p{L}\p{N}'’.-]*)\s+(?:is|was|are|were|has|had|jest|był|była|są)\b/iu)?.[1] || '';
     const subjectMissingFromExactQuote = Boolean(sentenceInitialSubject)
       && !quoteNormalizedForEntities.includes(normalizujClaim(sentenceInitialSubject));
-    const claimHasPurposeClause = /\\b(?:so that|in order to|so as to|aby|zeby|w celu)\\b/i.test(claimNorm);
-    const quoteHasPurposeClause = /\\b(?:so that|in order to|so as to|aby|zeby|w celu)\\b/i.test(quoteNorm);
+    const claimHasPurposeClause = /\b(?:so that|in order to|so as to|aby|zeby|w celu)\b/i.test(claimNorm);
+    const quoteHasPurposeClause = /\b(?:so that|in order to|so as to|aby|zeby|w celu)\b/i.test(quoteNorm);
     const exactQuoteIsSufficient = missingEntitiesFromExactQuote.length === 0
       && !subjectMissingFromExactQuote
       && (!claimHasPurposeClause || quoteHasPurposeClause);
