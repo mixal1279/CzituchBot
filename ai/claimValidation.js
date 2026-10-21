@@ -8,12 +8,10 @@ const NEGATION_STRICT_RE = /(?<![\p{L}])(?:nie|nigdy|brak|bez|zaden|zadna|zadne|
 // Claim o redukcji/ograniczeniu jest zgodny z dowodem „no damage / take no damage” (zero implikuje zmniejszenie).
 const REDUCTION_RE = /(?<![\p{L}])(?:zmniejsz\w*|ogranicz\w*|redukuj\w*|zredukow\w*|oslab\w*|chron\w*|neutralizuj\w*|reduc\w*|mitigat\w*|lower\w*|decreas\w*|protect\w*|prevent\w*|avoid\w*|block\w*|ward\w*|immun\w*|zapobieg\w*|unik\w*|blok\w*|odporn\w*)(?![\p{L}])/iu;
 const CAUSAL_RE = /(?<![\p{L}])(?:bo|poniewaz|gdyz|dlatego|because|therefore|caused|causes|consequently|hence|as\s+a\s+result|led\s+to|leading\s+to|resulted\s+in|resulting\s+in|because\s+of|due\s+to|thereby|thus|w\s+ten\s+sposob|przez\s+co|co\s+(?:umozliw\w*|spowod\w*)|motyw\w*|zmusz\w*|powoduj\w*|przyczyn\w*|wskutek|w\s+efekcie|allow(?:s|ed|ing)?|enabl(?:e|es|ed|ing)|which\s+(?:let|lets|allowed|allows|enabled|enables)|putting\s+(?:him|her|them|it)\s+in\s+control|so\s+(?:he|she|they|it|we|the)|in\s+exchange(?:\s+for)?|in\s+return(?:\s+for)?|in\s+turn|thanks\s+to|owing\s+to|w\s+zamian(?:\s+za)?|w\s+rewan[zż]u|w\s+wyniku|z\s+powodu|dzieki|spowod\w*|doprowadz\w*|umozliw\w*)(?![\p{L}])/iu;
-// Znaczniki celu („so that”, „in order to”) nie czynią CLAIMU przyczynowym — patrz test
-// „English purpose clauses do not trigger the unsupported-causal hard gate” — dlatego CAUSAL_RE
-// ich nie zawiera. W DOWODZIE są natomiast jawnym powiązaniem działania ze skutkiem:
-// „X force a core transfer so that Y can take control” wspiera claim „X umożliwiło Y przejęcie
-// kontroli”. Ten wariant służy wyłącznie do rozpoznawania sygnału przyczynowego po stronie dowodu.
-const CAUSAL_EVIDENCE_RE = new RegExp(`(?:${CAUSAL_RE.source})|(?<![\\p{L}])(?:so\\s+that|in\\s+order\\s+to|so\\s+as\\s+to)(?![\\p{L}])`, 'iu');
+// Purpose clauses express intent or a possible outcome, not proof that the outcome
+// occurred. Keep them out of the causal-evidence signal; the validator separately
+// checks purpose-versus-completed-outcome semantics.
+const CAUSAL_EVIDENCE_RE = CAUSAL_RE;
 const TEMPORAL_RE = /(?<![\p{L}])(?:19|20)\d{2}(?![\p{L}])|(?<![\p{L}])(?:styczen|luty|marzec|kwiecien|maj|czerwiec|lipiec|sierpien|wrzesien|pazdziernik|listopad|grudzien|wczoraj|dzisiaj|jutro|today|yesterday|tomorrow)(?![\p{L}])/iu;
 const CROSS_LANGUAGE_CONCEPTS = [
   ['porwanie', /kidnap\w*|abduct\w*|captur\w*|porwan\w*|uprowadz\w*/i],
