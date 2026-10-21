@@ -445,19 +445,6 @@ function czyNazwaWlasnaWystepuje(entity, evidenceNormalized) {
   });
 }
 
-// Czy brak nazwy z polskiego claimu w angielskim claim_en jest błędem tłumaczenia?
-// Polskie odmiany i lokalizacje („Katedry Komunii Smoka” vs „Cathedral of Dragon Communion”)
-// nie występują w angielskich źródłach, więc ich nieobecność w tłumaczeniu nie świadczy o zgubieniu
-// nazwy. Wymagamy jej tylko wtedy, gdy nazwa (lub jej odmiana) jest w wyroczni nazw ze źródeł albo
-// jest znanym aliasem kanonicznym. Bez wyroczni zachowujemy dotychczasową, ścisłą kontrolę.
-function nazwaWymaganaWTlumaczeniu(name) {
-  // Never drop an extracted proper name merely because it is absent from the
-  // source oracle. A localized name must map through a known alias and be present
-  // in claim_en; otherwise the English translation could silently erase an
-  // unsupported entity before source validation.
-  return Boolean(String(name || '').trim());
-}
-
 function sprawdzTwardeKonflikty(evidence, claim, options = {}) {
   const e = String(evidence || '');
   const c = String(claim || '');
@@ -839,8 +826,7 @@ function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
     ...wyodrebnijNazwyWlasne(pl),
   ])];
   const missing = claimNames
-    .filter(name => !czyNazwaWlasnaWystepuje(name, enNormalized))
-    .filter(name => nazwaWymaganaWTlumaczeniu(name));
+    .filter(name => !czyNazwaWlasnaWystepuje(name, enNormalized));
   if (missing.length) return { ok: false, reason: 'tłumaczenie claimu gubi nazwy własne: ' + missing.slice(0, 3).join(', ') };
   return { ok: true };
 }
