@@ -135,21 +135,25 @@ function buildClaimSupportAudit({ claims = [], evidenceEvaluations = [], evidenc
 function summarizeClaimSupportAudits(audits) {
   const valid = (Array.isArray(audits) ? audits : []).filter(audit => audit && Number.isFinite(audit.totalClaims));
   const records = valid.flatMap(audit => Array.isArray(audit.records) ? audit.records : []);
-  return buildClaimSupportAudit({
-    claims: records.map(record => ({
-      claim: record.claim,
-      source_ids: record.sourceIds,
-      evidence_quote: record.evidenceQuote,
-      supported: record.modelSupported,
-    })),
-    evidenceEvaluations: records.map(record => ({
-      ok: record.localEvidenceVerified,
-      mode: record.supportMode,
-      reason: record.reason,
-    })),
-    evidenceQuoteVerified: records.map(record => record.quoteVerified),
-    evidenceContexts: records.map(record => record.evidenceQuote),
-  });
+  const count = verdict => records.filter(record => record.verdict === verdict).length;
+  const total = records.length;
+  const overclaimTypes = [...new Set(records.flatMap(record => record.overclaimTypes || []))].sort();
+  return {
+    version: 1,
+    unit: 'claim_cited_span',
+    totalClaims: total,
+    verdictCounts: {
+      entailed: count('entailed'),
+      partial: count('partial'),
+      unsupported: count('unsupported'),
+      contradicted: count('contradicted'),
+      unverifiable: count('unverifiable'),
+    },
+    claimSupportPassRate: total ? Number((count('entailed') / total).toFixed(4)) : null,
+    claimSupportUsableRate: total ? Number(((count('entailed') + count('partial')) / total).toFixed(4)) : null,
+    overclaimCounts: Object.fromEntries(overclaimTypes.map(type => [type, records.filter(record => (record.overclaimTypes || []).includes(type)).length])),
+    records,
+  };
 }
 
 module.exports = {
