@@ -41,6 +41,7 @@ test('validator accepts Polish claims against an exact English evidence quote', 
     confidence: 0.96,
     claims: [{
       claim: 'Alt Cunningham została porwana i ciężko ranna przez członków gangu podczas incydentu z 2013 roku.',
+      claim_en: 'Alt Cunningham was kidnapped and seriously injured by gang members during the 2013 incident.',
       supported: true,
       source_ids: ['SOURCE 1'],
       evidence_quote: 'Alt Cunningham was kidnapped and seriously injured by gang members during the 2013 incident.',
@@ -86,6 +87,7 @@ test('validator accepts multilingual paraphrased evidence from the same source b
     confidence: 0.96,
     claims: [{
       claim: 'Johnny Silverhand był związany z Alt Cunningham, a porwanie Alt przez Arasakę pogłębiło jego konflikt z Arasaką.',
+      claim_en: 'Johnny Silverhand was involved with Alt Cunningham, and Alt’s capture by Arasaka deepened his conflict with Arasaka.',
       supported: true,
       source_ids: ['SOURCE 1'],
       evidence_quote: 'Their relationship was damaged after Arasaka captured Alt, and Johnny\'s hatred of Arasaka intensified.',
@@ -158,6 +160,7 @@ test('validator accepts supported causal synthesis from one authorized source bl
     supported: true, relevant: true, complete: true, hallucination: false, confidence: 0.96,
     claims: [{
       claim: answer,
+      claim_en: 'Wheatley took control of the facility so that he could escape Aperture Science with Chell.',
       supported: true,
       source_ids: ['SOURCE 1'],
       evidence_quote: 'Wheatley is put in its place, putting him in control of the facility.',
@@ -175,6 +178,7 @@ test('validator does not mistake a Polish sentence starter for a proper name', (
     supported: true, relevant: true, complete: true, hallucination: false, confidence: 0.96,
     claims: [{
       claim: answer,
+      claim_en: 'Against a fire-breathing dragon, use frost spells or frost-enchanted weapons, and do the reverse against a frost-breathing dragon.',
       supported: true,
       source_ids: ['SOURCE 1'],
       evidence_quote: 'If you are fighting a fire breathing dragon, use frost spells or frost enchanted weapons and vice versa for a frost breathing dragon.',
@@ -191,6 +195,7 @@ test('validator can verify a short exact quote when the same source provides the
     supported: true, relevant: true, complete: true, hallucination: false, confidence: 0.96,
     claims: [{
       claim: answer,
+      claim_en: 'Astarion is a High Elf.',
       supported: true,
       source_ids: ['SOURCE 1'],
       evidence_quote: 'He is a High Elf.',
