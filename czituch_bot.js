@@ -79,7 +79,7 @@ const { extractExplicitUserMemories, mergeMemoryRecords, buildVerifiedMemoryCont
 const { parseMemoryCommand, forgetMemories, describeMemories } = require('./ai/memory_manager');
 const { decomposeQuestion, isMultiPartQuestion, buildAdvancedRetrievalPlan, buildSupplementalRetrievalQuery, selectRetrievalQueries } = require('./ai/retrieval');
 const { classifyFailure, nextFallbacks, selectRepairFallbacks, filterAvailableFallbacks, repairBudgetBlockReason, GENERATION_FALLBACK_CHAIN, configuredMaxFallbackSteps, markProviderQuota, isProviderQuotaBlocked, quotaCooldownMsFromError, geminiGenerationCooldownMsFromError, retryAfterHint, openRouterErrorMessage, shouldOpenQuotaCircuit } = require('./ai/fallback');
-const { createGroqCompletion, createGroqCompletionWithSchemaFallback, awaitWithAbortTimeout, computeValidatorTimeout, computeValidatorReserveMs, computeGenerationTimeout, normalizeGroqSdkBaseUrl } = require('./ai/provider-runtime');
+const { createGroqCompletion, createGroqCompletionWithSchemaFallback, awaitWithAbortTimeout, computeValidatorTimeout, computeValidatorReserveMs, computeGenerationTimeout, normalizeGroqSdkBaseUrl, INITIAL_VALIDATOR_REPAIR_RESERVE_MS, shouldAttemptUnavailableRepair } = require('./ai/provider-runtime');
 const { createAIMetrics, recordAIMetric, snapshotAIMetrics } = require('./ai/metrics');
 const { DEFAULTS, sanitizeRequestText } = require('./ai/limits');
 const { createAIRequestContext } = require('./ai/requestContext');
@@ -1690,7 +1690,7 @@ async function walidujOdpowiedzGeminiModel(model, persona, pytanie, odpowiedz, d
     const validatorTimeoutMs = requestState
       ? computeValidatorTimeout(validatorRemainingMs, {
           maxTimeoutMs: 12000,
-          reserveMs: computeValidatorReserveMs(validatorRemainingMs, requestState?.validatory + 1, requestState?.maxValidatorow, requestState?.validationPass === 1 ? 24000 : 0),
+          reserveMs: computeValidatorReserveMs(validatorRemainingMs, requestState?.validatory + 1, requestState?.maxValidatorow, requestState?.validationPass === 1 ? INITIAL_VALIDATOR_REPAIR_RESERVE_MS : 0),
           minTimeoutMs: 4000,
         })
       : 3500;
@@ -1967,7 +1967,7 @@ async function walidujOdpowiedzOpenRouter(persona, pytanie, odpowiedz, dane, req
   const validatorTimeoutMs = requestState
     ? computeValidatorTimeout(remainingMs, {
         maxTimeoutMs: 9000,
-        reserveMs: computeValidatorReserveMs(remainingMs, requestState?.validatory + 1, requestState?.maxValidatorow, requestState?.validationPass === 1 ? 24000 : 0),
+        reserveMs: computeValidatorReserveMs(remainingMs, requestState?.validatory + 1, requestState?.maxValidatorow, requestState?.validationPass === 1 ? INITIAL_VALIDATOR_REPAIR_RESERVE_MS : 0),
         minTimeoutMs: 4000,
       })
     : 3000;
@@ -2105,7 +2105,7 @@ async function walidujOdpowiedzGroq(persona, pytanie, odpowiedz, dane, requestId
   const timeoutMs = requestState
     ? computeValidatorTimeout(remainingMs, {
         maxTimeoutMs: 3000,
-        reserveMs: computeValidatorReserveMs(remainingMs, requestState?.validatory + 1, requestState?.maxValidatorow, requestState?.validationPass === 1 ? 24000 : 0),
+        reserveMs: computeValidatorReserveMs(remainingMs, requestState?.validatory + 1, requestState?.maxValidatorow, requestState?.validationPass === 1 ? INITIAL_VALIDATOR_REPAIR_RESERVE_MS : 0),
         minTimeoutMs: 2000,
       })
     : 3000;
@@ -2240,7 +2240,7 @@ async function walidujOdpowiedzXKiro(persona, pytanie, odpowiedz, dane, requestI
   const timeoutMs = requestState
     ? (remainingMs < 14500 ? null : computeValidatorTimeout(remainingMs, {
         maxTimeoutMs: Number(process.env.AI_XKIRO_VALIDATOR_TIMEOUT_MS) || 4500,
-        reserveMs: computeValidatorReserveMs(remainingMs, requestState.validatory + 1, requestState.maxValidatorow, requestState.validationPass === 1 ? 24000 : 0),
+        reserveMs: computeValidatorReserveMs(remainingMs, requestState.validatory + 1, requestState.maxValidatorow, requestState.validationPass === 1 ? INITIAL_VALIDATOR_REPAIR_RESERVE_MS : 0),
         minTimeoutMs: 1200,
       }))
     : (Number(process.env.AI_XKIRO_VALIDATOR_TIMEOUT_MS) || 4500);
@@ -2400,7 +2400,7 @@ async function walidujOdpowiedzAIBezCache(persona, pytanie, odpowiedz, dane, his
       : 9000;
     const timeoutMs = computeValidatorTimeout(remainingMs, {
       maxTimeoutMs: 9000,
-      reserveMs: computeValidatorReserveMs(remainingMs, requestState?.validatory + 1, requestState?.maxValidatorow, requestState?.validationPass === 1 ? 24000 : 0),
+      reserveMs: computeValidatorReserveMs(remainingMs, requestState?.validatory + 1, requestState?.maxValidatorow, requestState?.validationPass === 1 ? INITIAL_VALIDATOR_REPAIR_RESERVE_MS : 0),
       minTimeoutMs: 4000,
     });
     if (requestState && timeoutMs === null) {
@@ -2453,7 +2453,7 @@ async function walidujOdpowiedzAIBezCache(persona, pytanie, odpowiedz, dane, his
       const groqTimeoutMs = requestState
         ? computeValidatorTimeout(groqRemainingMs, {
             maxTimeoutMs: 3000,
-            reserveMs: computeValidatorReserveMs(groqRemainingMs, requestState.validatory + 1, requestState.maxValidatorow, requestState.validationPass === 1 ? 24000 : 0),
+            reserveMs: computeValidatorReserveMs(groqRemainingMs, requestState.validatory + 1, requestState.maxValidatorow, requestState.validationPass === 1 ? INITIAL_VALIDATOR_REPAIR_RESERVE_MS : 0),
             minTimeoutMs: 2000,
           })
         : 3000;
@@ -2511,7 +2511,7 @@ async function walidujOdpowiedzAIBezCache(persona, pytanie, odpowiedz, dane, his
       : 6000;
     const xkiroTimeoutMs = xkiroRemainingMs < 14500 ? null : computeValidatorTimeout(xkiroRemainingMs, {
       maxTimeoutMs: Number(process.env.AI_XKIRO_VALIDATOR_TIMEOUT_MS) || 4500,
-      reserveMs: computeValidatorReserveMs(xkiroRemainingMs, requestState?.validatory + 1, requestState?.maxValidatorow, requestState?.validationPass === 1 ? 24000 : 0),
+      reserveMs: computeValidatorReserveMs(xkiroRemainingMs, requestState?.validatory + 1, requestState?.maxValidatorow, requestState?.validationPass === 1 ? INITIAL_VALIDATOR_REPAIR_RESERVE_MS : 0),
       minTimeoutMs: 1200,
     });
     if (xkiroTimeoutMs === null) {
@@ -2561,7 +2561,7 @@ async function walidujOdpowiedzAIBezCache(persona, pytanie, odpowiedz, dane, his
       : requestState.maxCzasMs - (Date.now() - requestState.startedAt);
     const timeoutMs = computeValidatorTimeout(remainingMs, {
       maxTimeoutMs: 3000,
-      reserveMs: computeValidatorReserveMs(remainingMs, requestState.validatory + 1, requestState.maxValidatorow, requestState.validationPass === 1 ? 24000 : 0),
+      reserveMs: computeValidatorReserveMs(remainingMs, requestState.validatory + 1, requestState.maxValidatorow, requestState.validationPass === 1 ? INITIAL_VALIDATOR_REPAIR_RESERVE_MS : 0),
       minTimeoutMs: 2000,
     });
     if (timeoutMs === null) {
@@ -3983,11 +3983,16 @@ Pytanie użytkownika: ${pytanie}`;
       // is unavailable. The first validation pass reserves this time explicitly;
       // repaired output still needs a normal validator verdict or all local gates.
       const remainingBeforeUnavailableRepair = pozostalyCzasMs();
+      const willAttemptUnavailableRepair = shouldAttemptUnavailableRepair({
+        remainingMs: remainingBeforeUnavailableRepair,
+        hasEvidence: Boolean(daneDoWalidacji),
+        alreadyAttempted: aiState.unavailableRepairAttempted,
+      });
       aiState.recordTiming('unavailable_repair_decision', {
         remainingMs: remainingBeforeUnavailableRepair,
-        willAttempt: Boolean(daneDoWalidacji && remainingBeforeUnavailableRepair >= 18000 && !aiState.unavailableRepairAttempted),
+        willAttempt: willAttemptUnavailableRepair,
       });
-      if (daneDoWalidacji && remainingBeforeUnavailableRepair >= 18000 && !aiState.unavailableRepairAttempted) {
+      if (willAttemptUnavailableRepair) {
         aiState.unavailableRepairAttempted = true;
         const unavailableFeedback = [
           'Poprzednia odpowiedź nie mogła zostać rozstrzygnięta, ponieważ transporty walidatora były niedostępne.',
