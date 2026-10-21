@@ -74,7 +74,7 @@ test('partial answer can retain a fifth verified identity claim without leaking 
     'Astarion jest towarzyszem do zrekrutowania.',
     'Astarion jest pomiotem wampirów.',
   ];
-  const data = '[SOURCE 1]\\nTYTUŁ: Baldur’s Gate 3\\nTREŚĆ: ' + facts.join(' ') + '\\n';
+  const data = '[SOURCE 1]\nTYTUŁ: Baldur’s Gate 3\nTREŚĆ: ' + facts.join(' ') + '\n';
   const unsupported = 'Ciri jest królową Nilfgaardu.';
   const claims = facts.map(claim => ({
     claim,
