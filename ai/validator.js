@@ -377,6 +377,46 @@ function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '', opt
   return { ok: false, reason: reasons[0] || 'brak zweryfikowanego evidence', ignoredSentenceInitialNames: [...ignoredSentenceInitialNames] };
 }
 
+const POLISH_CLAIM_LANGUAGE_CUES = /(?<![\\p{L}])(?:jest|są|sa|się|sie|nie|że|ze|przez|oraz|który|która|które|jego|jej|ich|dla|gdy|bo|był|była|było|ponieważ|poniewaz|dzięki|dzieki|może|mogą|moga|można|mozna|aby|żeby|zeby|został|została|zostal|zostala|będzie|bedzie|wtedy|potem|dlatego|więc|wiec)(?![\\p{L}])/giu;
+const ENGLISH_CLAIM_LANGUAGE_CUES = /(?<![\\p{L}])(?:the|of|and|is|was|were|are|to|in|for|with|that|he|she|his|her|by|on|as|at|it|its|from|after|before|during|has|had|have|an|this|these|those|their|be|been|not|which|who|can|will|may|only|also|than|then|but|or|if|when|where|took|takes|does|did|there|into|because)(?![\\p{L}])/giu;
+
+function countLanguageCues(value, pattern) {
+  const flags = pattern.flags.includes('g') ? pattern.flags : pattern.flags + 'g';
+  return [...String(value || '').matchAll(new RegExp(pattern.source, flags))].length;
+}
+
+// Claims są mapowane na zdania odpowiedzi. Gdy odpowiedź jest po polsku,
+// angielskie claims mogą przypadkiem przejść heurystykę pokrycia przez wspólne
+// nazwy własne lub pojęcia cross-language. Wymagamy wtedy języka odpowiedzi
+// w polu claim; claim_en służy wyłącznie do sprawdzenia dowodu w języku źródła.
+function wykryjNiezgodnyJezykClaimow(answer, claims) {
+  const text = String(answer || '').trim();
+  if (!text || !Array.isArray(claims) || !claims.length) return [];
+
+  const answerPolishCues = countLanguageCues(text, POLISH_CLAIM_LANGUAGE_CUES);
+  const answerEnglishCues = countLanguageCues(text, ENGLISH_CLAIM_LANGUAGE_CUES);
+  const answerHasPolishDiacritics = /[ąćęłńóśźż]/iu.test(text);
+  let answerLanguage = null;
+  if (answerHasPolishDiacritics || (answerPolishCues > 0 && answerPolishCues >= answerEnglishCues)) {
+    answerLanguage = 'pl';
+  } else if (answerEnglishCues >= 2 && answerPolishCues === 0) {
+    answerLanguage = 'en';
+  }
+  if (!answerLanguage) return [];
+
+  return claims.map((row, index) => {
+    const claim = String(row?.claim || '').trim();
+    if (!claim) return index;
+    const polishCues = countLanguageCues(claim, POLISH_CLAIM_LANGUAGE_CUES);
+    const englishCues = countLanguageCues(claim, ENGLISH_CLAIM_LANGUAGE_CUES);
+    const hasPolishDiacritics = /[ąćęłńóśźż]/iu.test(claim);
+
+    if (answerLanguage === 'pl' && !hasPolishDiacritics && polishCues === 0 && englishCues >= 2) return index;
+    if (answerLanguage === 'en' && (hasPolishDiacritics || polishCues >= 2) && englishCues === 0) return index;
+    return -1;
+  }).filter(index => index >= 0);
+}
+
 function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSourceIds = null, dane = '', answer = '') {
   if (!wynik || typeof wynik !== 'object' || Array.isArray(wynik)) return null;
 
@@ -482,6 +522,7 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
   const unknownSourceClaim = unknownSourceClaimIndexes.length > 0;
   const unsupportedEvidenceClaim = unsupportedEvidenceClaimIndexes.length > 0;
   const answerCoverage = answer ? sprawdzPokrycieClaimamiOdpowiedzi(answer, claims) : { ok: true, uncovered: [], totalSentences: null, checkedSentences: null, uncoveredSentenceIndexes: [] };
+  const claimLanguageMismatchIndexes = wykryjNiezgodnyJezykClaimow(answer, claims);
   const unsupportedFromClaims = claims.filter(c => !c.supported).map(c => c.claim).filter(Boolean);
   const unsupported = [...new Set([
     ...unsupportedFromClaims,
@@ -512,6 +553,7 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
 
   const claimContractOk = claims.length > 0
     && claims.every(c => c.supported)
+    && claimLanguageMismatchIndexes.length === 0
     && !unknownSourceClaim
     && !unsupportedEvidenceClaim
     && unverifiedEvidenceQuoteIndexes.length === 0
@@ -575,6 +617,7 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
     && claims.length > 0
     && verifiedPartialClaims.length > 0
     && hasPartialFailureTrigger
+    && claimLanguageMismatchIndexes.length === 0
     && !unknownSourceClaim
     && !tooManyClaims
     && !malformedClaims
@@ -588,6 +631,7 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
   const sprzecznyWerdykt = validFromModel === false
     && unsupported.length === 0
     && (!claims.length || claims.every(c => c.supported))
+    && claimLanguageMismatchIndexes.length === 0
     && !unknownSourceClaim
     && !unsupportedEvidenceClaim
     && !tooManyClaims
@@ -608,6 +652,7 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
   if (unsupportedEvidenceClaim) localRejectReasons.push('evidence_not_verified');
   if (unverifiedEvidenceQuoteIndexes.length) localRejectReasons.push('evidence_quote_not_exact');
   if (claims.some(c => !c.supported) || wynik.unsupported_claims.some(v => typeof v === 'string' && v.trim())) localRejectReasons.push('unsupported_claims_reported');
+  if (claimLanguageMismatchIndexes.length) localRejectReasons.push('claims_language_mismatch');
   if (!answerCoverage.ok) localRejectReasons.push('answer_not_covered_by_claims');
   if (!claimGranularityOk) localRejectReasons.push('claims_too_coarse_for_answer');
   if (validFromModel !== true) localRejectReasons.push('model_returned_invalid');
@@ -645,6 +690,7 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
     allowedSourceCount: allowed ? allowed.size : null,
     unsupportedClaimCount: unsupportedFromClaims.length,
     modelUnsupportedClaimCount: wynik.unsupported_claims.filter(v => typeof v === 'string' && v.trim()).length,
+    claimLanguageMismatchIndexes,
     answerCoverage: {
       ok: answerCoverage.ok,
       totalSentences: answerCoverage.totalSentences ?? null,
@@ -712,6 +758,8 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
         ? 'validator zwrócił niekompletny lub błędnie uformowany claim'
         : unknownSourceClaim
           ? 'claim wskazuje nieistniejące lub niedozwolone źródło'
+        : claimLanguageMismatchIndexes.length
+          ? 'claims nie są zapisane w języku sprawdzanej odpowiedzi'
         : !answerCoverage.ok
           ? 'claims nie pokrywają całej odpowiedzi'
           : unsupportedEvidenceClaim
