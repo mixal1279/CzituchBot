@@ -5,6 +5,7 @@ const path = require('node:path');
 const { buildAnswerPlan } = require('../ai/answer-plan');
 const { judgeAnswer } = require('../ai/answer-judge');
 const { normalizeFactText, scoreGoldenFacts } = require('../ai/benchmark-scorer');
+const { summarizeClaimSupportAudits } = require('../ai/claim-support');
 const { resetProviderQuotaCooldowns } = require('../ai/fallback');
 
 if (require.main === module && process.env.AI_LIVE_BENCHMARK !== '1') {
@@ -105,6 +106,17 @@ function evaluateBenchmarkAnswer(answer, item) {
     missing: answered ? judge.missing : plan.requirements.map(requirement => requirement.id),
     judge,
   };
+}
+
+function extractClaimSupportAudit(summary) {
+  const audits = [];
+  for (const row of summary?.validatorResults || []) {
+    const audit = row?.validationDiagnostics?.claimSupport
+      || row?.diagnostics?.claimSupport
+      || row?.claimSupport;
+    if (audit && Array.isArray(audit.records)) audits.push(audit);
+  }
+  return summarizeClaimSupportAudits(audits);
 }
 
 function writeBenchmarkReport(report, destination = process.env.AI_BENCHMARK_JSON_PATH) {
@@ -296,6 +308,7 @@ async function run() {
         generationAttempts: summary?.generationAttempts || [],
         generationBudget: summary?.generationBudget || null,
         validatorResults: summary?.validatorResults || [],
+        claimSupport: extractClaimSupportAudit(summary),
         timingTrace: summary?.timingTrace || [],
         fallbackReasons: summary?.fallbackReasons || [],
         tavilySearches: summary?.tavilySearches ?? null,
@@ -321,6 +334,7 @@ async function run() {
         generationAttempts: summary?.generationAttempts || [],
         generationBudget: summary?.generationBudget || null,
         validatorResults: summary?.validatorResults || [],
+        claimSupport: extractClaimSupportAudit(summary),
         timingTrace: summary?.timingTrace || [],
         fallbackReasons: summary?.fallbackReasons || [],
         tavilySearches: summary?.tavilySearches ?? null,
@@ -347,6 +361,7 @@ async function run() {
   const groqAttempts = results.flatMap(x => (x.generationAttempts || []).filter(a => /groq/i.test(String(a.provider || ''))));
   const providerOutage = groqAttempts.length > 0 && groqAttempts.every(a => a.status === 'error');
   diagnostic.providerOutage = providerOutage;
+  const claimSupport = summarizeClaimSupportAudits(results.map(result => result.claimSupport).filter(Boolean));
   const report = {
     benchmark: benchmark.name,
     mode: 'live',
@@ -358,8 +373,11 @@ async function run() {
     factualGoldCases: factualCases.length,
     factualAccuracy: factualCases.length ? Number((factualPassed / factualCases.length).toFixed(4)) : null,
     factualAverageScore: factualAverage === null ? null : Number(factualAverage.toFixed(4)),
+    claimSupportPassRate: claimSupport.claimSupportPassRate,
+    claimSupportUsableRate: claimSupport.claimSupportUsableRate,
+    claimSupport,
     durationMs: Date.now() - started,
-    note: 'Ten testuje produkcyjny pipeline i kompletność odpowiedzi. Nie jest niezależnym pomiarem factual accuracy; do tego potrzebny jest ręcznie zweryfikowany gold answer/fact set.',
+    note: 'Ten testuje produkcyjny pipeline, kompletność odpowiedzi i osobny audyt wsparcia claim-cytat. Nie jest niezależnym pomiarem factual accuracy; do tego potrzebny jest ręcznie zweryfikowany gold answer/fact set.',
     categories: [...new Set(results.map(x => x.category))].sort(),
     diagnostics: diagnostic,
     failures: results.filter(x => !x.answered || x.judgeStatus !== 'accepted' || x.factualPassed === false).slice(0, 100),
@@ -381,7 +399,7 @@ async function run() {
   }
 }
 
-module.exports = { normalizeFactText, scoreGoldenFacts, stratifiedCases, buildQuestionForBot, isFailureText, evaluateBenchmarkAnswer, classifyBenchmarkOutcome, buildBenchmarkDiagnostics, writeBenchmarkReport, writeStdoutAndWait, run };
+module.exports = { normalizeFactText, scoreGoldenFacts, stratifiedCases, buildQuestionForBot, isFailureText, evaluateBenchmarkAnswer, extractClaimSupportAudit, classifyBenchmarkOutcome, buildBenchmarkDiagnostics, writeBenchmarkReport, writeStdoutAndWait, run };
 
 if (require.main === module) {
   run().catch(error => {
