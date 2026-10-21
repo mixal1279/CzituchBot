@@ -93,6 +93,15 @@ const GENERATION_FALLBACK_CHAIN = [
   'xkiro:default',
   'openrouter:default',
 ];
+// Semantic repair is latency- and budget-sensitive. The normal generation
+// chain above stays unchanged; only the repair path uses this preference.
+const REPAIR_FALLBACK_PREFERENCE = [
+  'gemini:gemini-3.5-flash-lite',
+  'xkiro:default',
+  'openrouter:default',
+  'groq:openai/gpt-oss-20b',
+  'gemini:gemini-3.8-flash',
+];
 
 function configuredMaxFallbackSteps(value = process.env.AI_MAX_FALLBACK_STEPS) {
   if (value == null || String(value).trim() === '') return GENERATION_FALLBACK_CHAIN.length;
@@ -281,12 +290,15 @@ function nextFallbacks({ failure = 'unknown', attempted = [], failedProviders = 
 function selectRepairFallbacks({ failedProviders = [], exclude = [], availableProviders = null, maxFallbacks = 1 } = {}) {
   const blocked = new Set([...(failedProviders || []), ...(exclude || [])]);
   const available = Array.isArray(availableProviders) ? new Set(availableProviders) : null;
-  return nextFallbacks({
+  const candidates = nextFallbacks({
     failure: 'grounded_reject',
     failedProviders: [...blocked],
     maxFallbacks: GENERATION_FALLBACK_CHAIN.length,
   })
-    .filter(provider => !available || available.has(provider))
+    .filter(provider => !available || available.has(provider));
+  const preference = new Map(REPAIR_FALLBACK_PREFERENCE.map((provider, index) => [provider, index]));
+  return candidates
+    .sort((a, b) => (preference.get(a) ?? REPAIR_FALLBACK_PREFERENCE.length) - (preference.get(b) ?? REPAIR_FALLBACK_PREFERENCE.length))
     .slice(0, Math.max(0, Number(maxFallbacks) || 0));
 }
 
@@ -339,6 +351,7 @@ function shouldRetryFailure(failure) {
 
 module.exports = {
   GENERATION_FALLBACK_CHAIN,
+  REPAIR_FALLBACK_PREFERENCE,
   configuredMaxFallbackSteps,
   resetProviderQuotaCooldowns,
   quotaCooldownMsFromError,

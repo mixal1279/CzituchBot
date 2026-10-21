@@ -2998,11 +2998,11 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
     domains: Array.isArray(domeny) ? domeny.slice(0, 8) : [],
   };
 
+  const pytanieWieloczlonowe = isMultiPartQuestion(pytanie);
   let pytanieTavily = null;
   let pytaniaAtomoweTavily = [];
   if (czyWyszukac) {
     const rewrite = normalizujZapytanieTavily(rewriteWynik);
-    const pytanieWieloczlonowe = isMultiPartQuestion(pytanie);
     // Rewrite jest tylko optymalizatorem. Nie może zgubić istotnych elementów pytania.
     // Przy pustym, NONE albo podejrzanie krótkim rewrite używamy pełnego oryginału.
     const rewritePodejrzany = !rewrite
@@ -3110,7 +3110,13 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
       causalQuery: causalRetrievalQuery,
       specializedQueries: specializedRetrievalQueries,
       fallbackQueries: advancedRetrievalPlan.map(item => item?.query).filter(Boolean),
-      maxQueries: Math.min(3, Math.max(0, aiState.maxWyszukanTavily - aiState.tavilySearches)),
+      // Proste pytania nie potrzebują trzech kosztownych wyszukiwań. Trzecie
+      // zapytanie zachowujemy tylko dla pytań przyczynowych lub wieloczęściowych,
+      // gdzie osobne evidence realnie poprawia kompletność odpowiedzi.
+      maxQueries: Math.min(3,
+        (answerPlan.causalQuestion || pytanieWieloczlonowe) ? 3 : 2,
+        Math.max(0, aiState.maxWyszukanTavily - aiState.tavilySearches),
+      ),
     });
     const kolejkaTavily = planowaneQueryRetrieval.length
       ? planowaneQueryRetrieval
@@ -3733,7 +3739,11 @@ Pytanie użytkownika: ${pytanie}`;
           // Repair has one generation cycle, but may try several providers
           // if an endpoint fails quickly (e.g. quota). Each provider still obeys
           // the shared deadline and model-call budget.
-          maxFallbacks: configuredFallbackLimit,
+          // Repair ma być szybkim, lokalnie weryfikowanym odzyskaniem odpowiedzi,
+          // a nie pełnym łańcuchem generacji. Dwie próby wystarczą: szybki model
+          // oraz jeden niezależny fallback; dalsze próby zwykle tylko konsumują
+          // budżet i zwiększają ryzyko timeoutu.
+          maxFallbacks: Math.min(configuredFallbackLimit, 2),
         });
     }
 

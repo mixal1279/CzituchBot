@@ -235,6 +235,24 @@ test('repair after validator rejection selects only configured healthy providers
   }), []);
 });
 
+test('semantic repair prefers fast configured providers over slow endpoints', () => {
+  assert.deepEqual(selectRepairFallbacks({
+    failedProviders: ['groq:openai/gpt-oss-120b'],
+    availableProviders: [
+      'groq:openai/gpt-oss-20b',
+      'gemini:gemini-3.8-flash',
+      'gemini:gemini-3.5-flash-lite',
+      'xkiro:default',
+      'openrouter:default',
+    ],
+    maxFallbacks: 3,
+  }), [
+    'gemini:gemini-3.5-flash-lite',
+    'xkiro:default',
+    'openrouter:default',
+  ]);
+});
+
 test('repair checks shared model-call, generation and time limits before selecting a provider', () => {
   const budget = {
     // Naprawa wymaga co najmniej 13,5 s (3 s generowania + 10,5 s rezerwy).
