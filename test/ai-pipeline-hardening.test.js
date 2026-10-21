@@ -5,6 +5,7 @@ const assert = require('node:assert/strict');
 const { classifyFailure, shouldRetryFailure, retryAfterHint, quotaCooldownMsFromError } = require('../ai/fallback');
 const { createRequestBudget, sanitizeRequestText } = require('../ai/limits');
 const { extractAnswerSignals } = require('../ai/answer-plan');
+const { sprawdzPokrycieClaimamiOdpowiedzi } = require('../ai/claimValidation');
 
 test('provider failure classification prioritizes structured HTTP status over diagnostic metadata', () => {
   const error = {
@@ -49,4 +50,21 @@ test('purpose clauses satisfy why intent without being mislabeled as an explicit
   const cause = extractAnswerSignals('Wheatley przejął kontrolę z powodu awarii systemu.');
   assert.equal(cause.why, true);
   assert.equal(cause.motive_explanation, false);
+});
+
+test('answer coverage rejects a second factual sentence that has no supporting claim', () => {
+  const answer = 'Wheatley przejął kontrolę nad GLaDOS. Następnie zniszczył laboratorium.';
+  const coverage = sprawdzPokrycieClaimamiOdpowiedzi(answer, [
+    { claim: 'Wheatley przejął kontrolę nad GLaDOS' },
+  ]);
+  assert.equal(coverage.ok, false, JSON.stringify(coverage));
+});
+
+test('answer coverage accepts an answer when each factual sentence has a matching claim', () => {
+  const answer = 'Wheatley przejął kontrolę nad GLaDOS. Wheatley zniszczył laboratorium.';
+  const coverage = sprawdzPokrycieClaimamiOdpowiedzi(answer, [
+    { claim: 'Wheatley przejął kontrolę nad GLaDOS' },
+    { claim: 'Wheatley zniszczył laboratorium' },
+  ]);
+  assert.equal(coverage.ok, true, JSON.stringify(coverage));
 });
