@@ -199,7 +199,7 @@ function classifyClaimType(claim) {
 function evidenceRelationSignals(value) {
   const text = normalizeEvidenceText(value);
   return {
-    causal: /\b(?:bo|poniewaz|gdyz|dlatego|przez|dzieki|because|therefore|accidentally)\b|\bz powodu\b|\b(?:spowod\w*|doprowadz\w*|umozliw\w*|caus\w*|regain\w*|reactivat\w*)\b|\bdue to\b|\bled to\b|\blead\w*(?:\s+\w+){0,3}\s+to\b|\bso that\b|\bso\s+(?:approach|use|avoid|keep|stay|choose|take|do|be)\b|\bby mistake\b|\bodzysk\w*\s+kontrol\w*\b|\buruchom\w*\s+ponownie\b/i.test(text),
+    causal: /\b(?:bo|poniewaz|gdyz|dlatego|przez|dzieki|because|therefore|accidentally)\b|\bz powodu\b|\b(?:spowod\w*|doprowadz\w*|umozliw\w*|caus\w*|regain\w*|reactivat\w*|w ten sposob|przez co|co umozliw\w*|which in turn)\b|\bdue to\b|\bled to\b|\blead\w*(?:\s+\w+){0,3}\s+to\b|\bso that\b|\bso\s+(?:approach|use|avoid|keep|stay|choose|take|do|be)\b|\bby mistake\b|\bodzysk\w*\s+kontrol\w*\b|\buruchom\w*\s+ponownie\b/i.test(text),
     procedural: /\b(?:najpierw|nastepnie|potem|krok\w*|steps?|first|then|after|before|use|uzyj|kliknij|click|walkthrough)\b|\binstrukcj\w*\b/i.test(text),
     temporal: /\b(?:19|20)\d{2}\b|\b(?:(?:stycz|lut|marz|marc|kwiet|kwiec|maj|czerw|lip|sierp|wrzes|pazdz|listopad|grudzi|grudn|grudz)\w*|wczoraj|dzis\w*|jutro|today|yesterday|tomorrow)\b/i.test(text),
     location: /\b(?:w|na|near|located|location|area|region|city|miasto)\b|\b(?:znajduj\w*|lokacj\w*|miejsce\w*)\b/i.test(text),
@@ -352,7 +352,7 @@ function buildEvidenceCandidatesFromSources(sources, question = '', options = {}
 function causalRelationAnchorsMatch(claim, quote) {
   const normalizedClaim = normalizeEvidenceText(claim);
   const normalizedQuote = normalizeEvidenceText(quote);
-  const marker = /\b(?:because of|because|due to|therefore|as a result|caused? by|caus\w*|led to|resulted in|poniewaz|bo|dlatego|spowod\w*|doprowadz\w*|dzieki temu|w wyniku|co umozliw\w*)\b/u;
+  const marker = /\b(?:because of|because|due to|therefore|as a result|caused? by|caus\w*|led to|resulted in|poniewaz|bo|dlatego|spowod\w*|doprowadz\w*|dzieki temu|w wyniku|w ten sposob|przez co|co umozliw\w*|which in turn)\b/u;
   const match = marker.exec(normalizedClaim);
   if (!match) return false;
   let claimLeft = '';
