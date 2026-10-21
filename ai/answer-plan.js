@@ -119,7 +119,9 @@ function extractAnswerSignals(answer) {
   // Instrukcja planu każe napisać „źródła nie potwierdzają przyczyny”, gdy materiał
   // jej nie podaje. Taka uczciwa odpowiedź spełnia wymaganie „dlaczego”.
   const causeUnconfirmed = /\b(?:zrodla|zrodlo|materialy|dane)\b.{0,60}\bnie\s+(?:potwierdza\w*|wskazuja|podaja|precyzuja|wyjasniaja)\b|\bbrak\s+potwierdzon\w*\s+(?:przyczyn|powod)\w*|\bnie\s+wynika\b.{0,40}\b(?:przyczyn|powod|dlaczego)\w*/.test(text);
-  const causalExplanation = (Boolean(causalMarker) && hasMeaningfulTail(text, causalMarker)) || (Boolean(motiveMarker) && hasMeaningfulTail(text, motiveMarker)) || causeUnconfirmed;
+  const motiveExplanation = Boolean(motiveMarker) && hasMeaningfulTail(text, motiveMarker);
+  const causalExplanation = (Boolean(causalMarker) && hasMeaningfulTail(text, causalMarker)) || causeUnconfirmed;
+  const whyExplanation = causalExplanation || motiveExplanation;
   const procedural = /\b(nalezy|trzeba|mozna|sposob|krok|najpierw|potem|nastepnie|first|then|step|wystarczy|uzyj|uzywaj|wykorzystaj|skorzystaj|wybierz|zdobadz|znajdz|idz|wejdz|pokonaj|unikaj|zabij|atakuj|zbuduj|stworz|wez|kup|otworz|podejdz|poczekaj)\b/.exec(text)?.[0] || '';
   const mechanism = /\b(dziala|funkcjonuje|polega|mechanizm|umozliw\w*|pozwala)\b/.exec(text)?.[0] || '';
   const relationshipMarker = /\b(?:relacj\p{L}*|zwiazk\p{L}*|przyjac\p{L}*|wrog\p{L}*|sojusz\p{L}*|zdrad\p{L}*|partner\p{L}*)\b/u.exec(text)?.[0] || '';
@@ -127,8 +129,8 @@ function extractAnswerSignals(answer) {
   const whenUnconfirmed = /\b(?:zrodla?\w*|materialy|dane|sources?|evidence)\b.{0,120}\bnie\s+(?:podaj\w*|precyzuj\w*|okresl\w*|wskazuj\w*|potwierdz\w*|zawier\w*)\b.{0,80}\b(?:dat\w*|moment\w*|czas\w*|rok\w*)\b/.test(text);
 
   return {
-    why: causalExplanation,
-    motive_explanation: Boolean(motiveMarker) && hasMeaningfulTail(text, motiveMarker),
+    why: whyExplanation,
+    motive_explanation: motiveExplanation,
     how: Boolean(mechanism || procedural) && hasMeaningfulTail(text, mechanism || procedural),
     // A bounded statement that the retrieved sources omit a date is a valid
     // epistemic answer to a temporal query; it must not be mistaken for silence.
