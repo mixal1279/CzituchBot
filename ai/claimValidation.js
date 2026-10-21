@@ -548,6 +548,14 @@ function zgodnoscStrukturalna(evidence, claim, options = {}) {
   const c = String(claim || '');
   if (!e.trim() || !c.trim()) return { ok: false, reason: 'brak dowodu lub claimu' };
 
+  // Conditional evidence ("only if", "unless", "jeśli ...") does not prove the
+  // consequent as an unconditional fact. Preserve it when the claim states the
+  // condition too; do not let negation cleanup erase the logical qualifier.
+  const conditionalRe = /\b(?:if|unless|provided that|only if|only when|if and only if|as long as|jesli|jezeli|pod warunkiem|tylko jesli|tylko gdy|tylko kiedy)\b/u;
+  if (conditionalRe.test(normalizujClaim(e)) && !conditionalRe.test(normalizujClaim(c))) {
+    return { ok: false, reason: 'dowód jest warunkowy, a claim przedstawia skutek jako bezwarunkowy' };
+  }
+
   const hard = sprawdzTwardeKonflikty(e, c, options);
   if (!hard.ok) return hard;
   const semanticConflict = sprawdzSprzecznosciSemantyczne(e, c);
