@@ -62,7 +62,7 @@ const CROSS_LANGUAGE_CONCEPTS = [
   ['grywalnosc_postaci', /\bplay as\b|\bplayable character\b|\bcontrol (?:the|a|your) character\b|sterow\w*|mozna nim grac|nim grac/i],
   // Do not match generic 'land/lands' (e.g. fertile lands) or the spell name alone.
   // Require an explicit dragon-landing relation to avoid false concept overlap.
-  ['smok_na_ziemi', /\bdragon\w*.{0,40}\b(?:land(?:s|ed|ing)?|stay on the ground|on the ground)\b|\b(?:land(?:s|ed|ing)? on the ground|stay on the ground)\b.{0,40}\bdragon\w*\b|\bsmok\w*.{0,40}\b(?:wyladow\w*|ladow\w*|laduje\w*|pozostac na ziemi|na ziemi)\b|\b(?:wyladow\w*|laduje\w*).{0,40}\bsmok\w*\b/i],
+  ['smok_na_ziemi', /\bdragons?\b.{0,40}\b(?:land(?:s|ed|ing)?|stay on the ground|on the ground)\b|\b(?:land(?:s|ed|ing)? on the ground|stay on the ground)\b.{0,40}\bdragons?\b|\bsmok\w*.{0,40}\b(?:wyladow\w*|ladow\w*|laduje\w*|pozostac na ziemi|na ziemi)\b|\b(?:wyladow\w*|laduje\w*).{0,40}\bsmok\w*\b/i],
   ['odpornosc_zywiolowa', /resistan\w*|ward\w*|spellbreaker|odpornosc\w*|wardy|tarcze?\w*/i],
 ];
 function pojeciaCrossLanguage(value) {
