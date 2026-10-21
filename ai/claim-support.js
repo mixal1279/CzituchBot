@@ -34,13 +34,15 @@ function detectOverclaimTypes(claim, evidence) {
   const sourceHedged = /\b(?:may|might|could|possibly|potentially|suggests?|appears? to|limited evidence|small study|moze|mozliwe|prawdopodobnie|sugeruje|wstepne dane|niewielkim badaniu)\b/u.test(e);
   const claimAbsolute = /\b(?:always|never|proves?|guarantees?|definitely|certainly|undoubtedly|all|every|none|must|zawsze|nigdy|dowodzi|udowodniono|gwarantuje|bez watpienia|na pewno|wszyscy|wszystkie|kazdy|kazda|zaden|zadna)\b/u.test(c);
   const claimHedged = /\b(?:may|might|could|possibly|potentially|suggests?|appears? to|moze|mozliwe|prawdopodobnie|sugeruje|wydaje sie)\b/u.test(c);
-  if (sourceHedged && !claimHedged && (claimAbsolute || /\b(?:is|are|was|were|improves?|increases?|reduces?|shows?|means?|jest|sa|byl|zwieksza|poprawia|zmniejsza|oznacza|pokazuje)\b/u.test(c))) types.push('hedge_to_absolute');
+  // A source hedge alone does not make an ordinary declarative claim absolute.
+  // Hard-fail only when the claim itself adds an explicit absolute/guarantee cue.
+  if (sourceHedged && !claimHedged && claimAbsolute) types.push('hedge_to_absolute');
 
   // Preserve qualifiers attached to numeric claims. "Up to 30%" is not the
   // same as an unqualified "30%". The numeric value must occur on both sides.
-  const sourceUpTo = /\b(?:up to|at most|no more than|maximum of|do maksymalnie|maksymalnie do|do)\s*\d+(?:[.,]\d+)?\s*%?/u.test(e);
+  const sourceUpTo = /\b(?:up to|at most|no more than|maximum of|do maksymalnie|maksymalnie do|maksymalnie)\s*\d+(?:[.,]\d+)?\s*%?|\bdo\s+\d+(?:[.,]\d+)?\s*%/u.test(e);
   const claimHasNumber = /\d+(?:[.,]\d+)?\s*%?/u.test(c);
-  const claimPreservesUpperBound = /\b(?:up to|at most|no more than|maximum of|do maksymalnie|maksymalnie do|maksymalnie|do)\b/u.test(c);
+  const claimPreservesUpperBound = /\b(?:up to|at most|no more than|maximum of|do maksymalnie|maksymalnie do|maksymalnie)\b|\bdo\s+\d+(?:[.,]\d+)?\s*%/u.test(c);
   if (sourceUpTo && claimHasNumber && !claimPreservesUpperBound) types.push('up_to_qualifier_dropped');
 
   const quantifierPatterns = [
