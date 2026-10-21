@@ -233,6 +233,7 @@ function wyodrebnijNazwyWlasne(value, options = {}) {
     'to', 'ten', 'ta', 'te', 'jego', 'jej', 'oni', 'one', 'smoki', 'najlepszym', 'gracz', 'gracze', 'wrog', 'postać', 'postac', 'pytanie', 'odpowiedź', 'odpowiedz',
     'przeciw', 'przed', 'przez', 'po', 'podczas', 'dzięki', 'dzieki', 'wokół', 'wokol', 'wśród', 'wsrod', 'według', 'wedlug', 'zanim', 'mimo', 'wskutek', 'dowiedziawszy',
     'misja', 'misji', 'mission', 'quest', 'transfer', 'core', 'initial', 'first',
+    'zrodlo', 'zrodla', 'zrodlem', 'source', 'sources', 'opis', 'opisuje', 'description',
     'a', 'an', 'the', 'if', 'it', 'he', 'she', 'they', 'we', 'you', 'his', 'her', 'their',
     'this', 'these', 'those', 'once', 'with', 'against', 'during', 'after', 'before', 'from', 'for', 'as',
     'how', 'why', 'when', 'where', 'who', 'what', 'which', 'while', 'then', 'also', 'one', 'two',
