@@ -136,6 +136,26 @@ test('live diagnostics separate provider quota, timeout, budget and evidence rej
   });
 });
 
+test('benchmark classifies provider HTTP status and pipeline errors separately', () => {
+  assert.equal(classifyBenchmarkOutcome({
+    finalStatus: 'unavailable',
+    generationAttempts: [{ statusCode: 429, message: 'provider error' }],
+  }), 'provider_quota');
+  assert.equal(classifyBenchmarkOutcome({
+    judgeStatus: 'error',
+    finalStatus: 'error',
+    rejectionReason: 'unexpected TypeError',
+  }), 'pipeline_error');
+  assert.equal(classifyBenchmarkOutcome({
+    judgeStatus: 'abstained',
+    finalStatus: 'rejected',
+  }), 'abstention');
+  assert.equal(classifyBenchmarkOutcome({
+    judgeStatus: 'error',
+    validatorResults: [{ status: 'unavailable', reason: 'timeout' }],
+  }), 'provider_timeout');
+});
+
 test('benchmark report is written atomically as valid JSON at the configured path', () => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'czituch-benchmark-'));
   const outputPath = path.join(directory, 'nested', 'report.json');
