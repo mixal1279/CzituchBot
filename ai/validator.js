@@ -406,7 +406,19 @@ function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '', opt
       nameOracle,
     });
     collectIgnoredNames(quoteStructural);
-    if (quoteStructural.ok) {
+
+    // An exact quote may share the main action with a claim while omitting a
+    // named subject/object or location supplied by a neighbouring sentence.
+    // Do not label that as direct entailment: the bounded same-source context
+    // must bind every extracted claim entity before the claim can pass.
+    const quoteNormalizedForEntities = normalizujClaim(quote);
+    const claimEntitiesForQuote = wyodrebnijNazwyWlasne(claim, { nameOracle });
+    const quoteContainsClaimEntities = claimEntitiesForQuote.every(entity => {
+      const normalizedEntity = normalizujClaim(entity);
+      return normalizedEntity && quoteNormalizedForEntities.includes(normalizedEntity);
+    });
+
+    if (quoteStructural.ok && quoteContainsClaimEntities) {
       return { ok: true, sourceId: id, mode: 'exact_quote', reason: 'cytat występuje w źródle i bezpośrednio wspiera claim', ignoredSentenceInitialNames: [...ignoredSentenceInitialNames] };
     }
 
