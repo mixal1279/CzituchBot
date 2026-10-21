@@ -641,13 +641,6 @@ function sprawdzPokrycieClaimamiOdpowiedzi(answer, claims) {
     }))
     .filter(row => row.tokens.length >= 2 || row.concepts.size || row.entities.length);
 
-  // Claims are atomic and can jointly cover a sentence, but a single shared
-  // name/concept must not make a sentence with extra facts appear covered.
-  // Use the union of claim vocabulary; keep semantic fallback only when most
-  // sentence concepts and a meaningful lexical portion are both represented.
-  const claimTokens = [...new Set(claimRows.flatMap(row => row.tokens))];
-  const claimConcepts = new Set(claimRows.flatMap(row => [...row.concepts]));
-  const claimEntities = new Set(claimRows.flatMap(row => row.entities));
   const uncovered = [];
   let checkedSentences = 0;
 
@@ -658,18 +651,37 @@ function sprawdzPokrycieClaimamiOdpowiedzi(answer, claims) {
 
     const sentenceConcepts = pojeciaCrossLanguage(sentence);
     const sentenceEntities = wyodrebnijNazwyWlasne(sentence);
-    const sharedTokens = tokens.filter(token =>
-      claimTokens.some(claimToken => tokenyPokrywajaSie(token, claimToken))
-    );
-    const tokenCoverage = sharedTokens.length / Math.max(tokens.length, 1);
-    const sharedConcepts = [...sentenceConcepts].filter(concept => claimConcepts.has(concept));
-    const conceptCoverage = sentenceConcepts.size ? sharedConcepts.length / sentenceConcepts.size : 0;
-    const sharedEntities = sentenceEntities.filter(entity => claimEntities.has(entity));
-    const entityCoverage = sentenceEntities.length ? sharedEntities.length / sentenceEntities.length : 0;
 
-    // Paraphrase fallback is deliberately narrow: concepts alone are not enough
-    // to cover a long sentence, and matching a recurring character name is not
-    // evidence that the action/event in this sentence has been claimed.
+    // Keep ownership: a claim may contribute coverage only when it has a
+    // meaningful lexical connection to this sentence and shares a semantic
+    // anchor (concept/entity). This prevents two unrelated claims from
+    // assembling a plausible-looking aggregate vocabulary.
+    const coherentRows = claimRows.map(row => {
+      const matchedTokens = tokens.filter(token =>
+        row.tokens.some(claimToken => tokenyPokrywajaSie(token, claimToken))
+      );
+      const tokenCoverage = matchedTokens.length / Math.max(tokens.length, 1);
+      const sharedConcepts = [...sentenceConcepts].filter(concept => row.concepts.has(concept));
+      const sharedEntities = sentenceEntities.filter(entity => row.entities.includes(entity));
+      const coherent = tokenCoverage >= 0.30
+        && (sharedConcepts.length > 0 || sharedEntities.length > 0 || tokenCoverage >= 0.65);
+      return { row, matchedTokens, tokenCoverage, sharedConcepts, sharedEntities, coherent };
+    }).filter(item => item.coherent);
+
+    const ownedTokens = new Set(coherentRows.flatMap(item => item.matchedTokens));
+    const tokenCoverage = tokens.filter(token => ownedTokens.has(token)).length / Math.max(tokens.length, 1);
+    const conceptsOwned = [...sentenceConcepts].filter(concept =>
+      coherentRows.some(item => item.row.concepts.has(concept))
+    );
+    const conceptCoverage = sentenceConcepts.size ? conceptsOwned.length / sentenceConcepts.size : 0;
+    const entitiesOwned = sentenceEntities.filter(entity =>
+      coherentRows.some(item => item.row.entities.includes(entity))
+    );
+    const entityCoverage = sentenceEntities.length ? entitiesOwned.length / sentenceEntities.length : 0;
+
+    // Semantic fallback requires every material concept to be attributable to
+    // a coherent claim; a high aggregate token score alone cannot prove a
+    // relation assembled from unrelated claim fragments.
     const hasStrongSemanticCoverage = sentenceConcepts.size >= 2
       && conceptCoverage >= 0.8
       && tokenCoverage >= 0.35;
@@ -691,6 +703,7 @@ function sprawdzPokrycieClaimamiOdpowiedzi(answer, claims) {
     uncovered: uncovered.slice(0, 4).map(item => item.text),
   };
 }
+
 function czyDowodSemantyczniePokrywaClaim(evidence, claim, options = {}) {
   return zgodnoscStrukturalna(evidence, claim, options).ok;
 }
