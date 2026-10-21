@@ -125,6 +125,10 @@ test('answer completeness requires the planned entity and avoids purpose/locatio
   assert.equal(purpose.why, true);
   assert.equal(purpose.causal_explanation, true);
   assert.equal(purpose.steps, false);
+
+  const statedPurpose = extractAnswerSignals('Wheatley przeniósł rdzeń, co miało na celu upokorzenie GLaDOS.');
+  assert.equal(statedPurpose.why, true);
+  assert.equal(statedPurpose.causal_explanation, true);
   assert.equal(extractAnswerSignals('Z powodu awarii system przestał działać.').where, false);
   assert.equal(extractAnswerSignals('Cena wynosi 100 zł.').quantity, true);
 });
