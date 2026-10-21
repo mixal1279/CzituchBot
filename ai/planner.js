@@ -71,7 +71,7 @@ function buildRetrievalQueries(question, routing = {}, options = {}) {
   } else if (isWhenQuestion) {
     dodajUnikalneQuery(queries, [entity, game, 'story timeline quest order arrival'].filter(Boolean).join(' '));
   } else if (isWhoQuestion) {
-    dodajUnikalneQuery(queries, [entity, game, 'character identity background role companion'].filter(Boolean).join(' '));
+    dodajUnikalneQuery(queries, [entity, game, 'character identity background role companion lore'].filter(Boolean).join(' '));
   } else if (isWhyQuestion) {
     dodajUnikalneQuery(queries, [entity, game, 'cause reason motivation event core transfer'].filter(Boolean).join(' '));
   } else if (routing?.is_lore) {
