@@ -41,9 +41,17 @@ function classifyAIRequest(pytanie, policyCategory, recipeDetector = () => false
     confidence = Math.min(confidence, 0.68);
   }
 
+  // entity_type opisuje typ DOPASOWANEGO aliasu, nie encji raportowanej.
+  // Świadomie nie zmieniamy tego na typ gry: dla pytania „Kim jest Wheatley w
+  // Portal 2?” encją raportowaną jest gra, ale odpowiedź dotyczy postaci, a
+  // entity_type='game' włączałoby grę jako twardą encję docelową (czituch_bot.js)
+  // i odrzucałoby poprawną odpowiedź o postaci. Rozstrzygnięcie „kto jest
+  // podmiotem pytania” wymaga osobnej heurystyki — game_type jest raportowane
+  // obok, żeby rozbieżność była widoczna w logu.
   return {
     intent: category, entity, entity_type: resolved?.type || (entity ? 'entity' : null),
     game: resolved?.game || (resolved?.type === 'game' ? resolved.name : null), resolved_entity: resolved,
+    game_type: resolved?.game_type || null,
     needs_web: needsWeb, needs_fresh_data: needsFreshData, freshness, source_type: sourceType,
     is_lore: lore, is_gameplay: gameplay, confidence,
     confidence_policy: confidence < 0.65 ? 'clarify' : confidence < 0.8 ? 'retrieve_and_guard' : 'normal', query: text,

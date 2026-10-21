@@ -265,6 +265,11 @@ test('repair after validator rejection selects only configured healthy providers
 });
 
 test('semantic repair prefers fast configured providers over slow endpoints', () => {
+  // Preferencja repairu ma dawać NAJPIERWSZEGO kandydata temu, kto odpowiada
+  // najszybciej i najbardziej przewidywalnie. W live benchmarku (2026-10-21)
+  // Gemini zajął 12 s i nie zwrócił werdyktu w 5/5 przypadków, a xKiro nigdy
+  // nie zdążył — obaj stali na początku listy, przez co cykl repairu nigdy nie
+  // wyprodukował odpowiedzi. Groq gpt-oss-20b odpowiadał w 1,3–2,3 s.
   assert.deepEqual(selectRepairFallbacks({
     failedProviders: ['groq:openai/gpt-oss-120b'],
     availableProviders: [
@@ -276,9 +281,9 @@ test('semantic repair prefers fast configured providers over slow endpoints', ()
     ],
     maxFallbacks: 3,
   }), [
+    'groq:openai/gpt-oss-20b',
     'gemini:gemini-3.5-flash-lite',
     'xkiro:default',
-    'openrouter:default',
   ]);
 });
 

@@ -208,6 +208,19 @@ function buildBenchmarkDiagnostics(results, allCases = benchmark.cases, selected
   );
   const goldCases = allCases.filter(item => item.expected?.factual?.independentGold === true);
   const selectedGoldCases = selectedCases.filter(item => item.expected?.factual?.independentGold === true);
+  // Awaria providera to nie tylko awaria Groq: w live benchmarku Gemini było
+  // niedostępne w 5/5 przypadków, a detektor patrzył wyłącznie na Groq i
+  // raportował providerOutage=false. Benchmark, w którym kluczowy provider
+  // leży, nie mierzy kodu — musi to być widoczne w raporcie.
+  const providerAttempts = results.flatMap(result => [
+    ...(result.generationAttempts || []).map(attempt => ({ provider: String(attempt.provider || ''), status: attempt.status })),
+    ...(result.validatorResults || []).map(row => ({ provider: String(row.provider || ''), status: row.status })),
+  ]).filter(attempt => attempt.provider);
+  const providersWithAttempts = [...new Set(providerAttempts.map(attempt => attempt.provider))];
+  const failedOutageProviders = providersWithAttempts.filter(provider => {
+    const attempts = providerAttempts.filter(attempt => attempt.provider === provider);
+    return attempts.length > 0 && attempts.every(attempt => attempt.status === 'error' || attempt.status === 'unavailable');
+  });
   const categories = [...new Set(allCases.map(item => item.category || 'uncategorized'))].sort();
   const goldCoverageByCategory = Object.fromEntries(categories.map(category => [
     category,
@@ -224,13 +237,19 @@ function buildBenchmarkDiagnostics(results, allCases = benchmark.cases, selected
   return {
     validatorRejected: results.filter(result => result.finalStatus === 'rejected').length,
     validatorInconclusive: results.filter(result => result.finalStatus === 'inconclusive').length,
-    validatorUnavailable: results.filter(result => result.finalStatus === 'unavailable').length,
+    // Licznik dotyczył końca REQUESTU, a nie wywołań walidatora: przy 5
+    // odrzuconych przypadkach raportował 0, mimo że 7 z 12 wywołań walidatora
+    // zakończyło się statusem 'unavailable'.
+    validatorUnavailable: validatorRows.filter(row => row.status === 'unavailable').length,
+    requestsUnavailable: results.filter(result => result.finalStatus === 'unavailable').length,
     validatorCalls: validatorRows.length,
     validatorProviderCalls,
     validatorStatusCounts,
     validatorTransportFailures: validatorRows
       .filter(row => row.status === 'unavailable' || row.status === 'error' || row.technicalError === true)
       .map(row => ({ provider: row.provider || 'unknown', model: row.model || null, status: row.status || 'unknown', reason: row.reason || null })),
+    providerOutage: failedOutageProviders.length > 0,
+    outageProviders: failedOutageProviders,
     validatorSecondOpinions: results.reduce((sum, result) =>
       sum + (result.timingTrace || []).filter(event => event.stage === 'validator_second_opinion').length, 0),
     tavilyHttpCalls: tavilyHttpEvents.length,
@@ -286,6 +305,27 @@ async function run() {
       const evaluation = evaluateBenchmarkAnswer(answer, item);
       const { judge } = evaluation;
       const factual = scoreGoldenFacts(answer, item.expected?.factual);
+      // Odrzucona treść: jeśli pipeline wyrzucił odpowiedź w zamian za odmowę,
+      // odpowiedź tę nadal mamy w diagnostyce walidatora. Oceniamy ją tym samym
+      // sędzią — to jedyna podstawa, żeby policzyć FALSSZYWE odrzucenia
+      // (wcześniej licznik był martwy, bo nic go nie wypełniało).
+      const discardedAnswer = (() => {
+        if (evaluation.answered) return null;
+        for (const row of summary?.validatorResults || []) {
+          const candidate = row?.validationDiagnostics?.benchmarkTrace?.answer;
+          if (typeof candidate === 'string' && candidate.trim()) return candidate;
+        }
+        return null;
+      })();
+      const discardedEvaluation = discardedAnswer
+        ? evaluateBenchmarkAnswer(discardedAnswer, item)
+        : null;
+      const falseReject = Boolean(
+        discardedEvaluation
+        && discardedEvaluation.answered
+        && discardedEvaluation.judgeStatus === 'accepted'
+        && !evaluation.answered,
+      );
       results.push({
         id: item.id,
         category: item.category,
@@ -294,6 +334,9 @@ async function run() {
         abstained: evaluation.abstained,
         completeness: evaluation.completeness,
         judgeStatus: evaluation.judgeStatus,
+        discardedAnswer,
+        discardedJudgeStatus: discardedEvaluation ? discardedEvaluation.judgeStatus : null,
+        falseReject,
         rejectionReason: [
           evaluation.judgeStatus !== 'accepted' ? evaluation.judgeReason : null,
           ...(summary?.validatorResults || [])
@@ -360,11 +403,13 @@ async function run() {
   const factualPassed = factualCases.filter(x => x.factualPassed).length;
   const factualAverage = factualCases.length ? factualCases.reduce((sum, x) => sum + x.factualScore, 0) / factualCases.length : null;
   const diagnostic = buildBenchmarkDiagnostics(results, benchmark.cases, cases);
-  // Jeśli Groq nie odpowiedział ani razu (limit dzienny, awaria), wynik mierzy limity, nie kod.
-  const groqAttempts = results.flatMap(x => (x.generationAttempts || []).filter(a => /groq/i.test(String(a.provider || ''))));
-  const providerOutage = groqAttempts.length > 0 && groqAttempts.every(a => a.status === 'error');
-  diagnostic.providerOutage = providerOutage;
+  const providerOutage = Boolean(diagnostic.providerOutage);
   const claimSupport = summarizeClaimSupportAudits(results.map(result => result.claimSupport).filter(Boolean));
+  // Fałszywe odrzucenia policzone tu, a nie w pipeline: to benchmark zna złoty
+  // plan i sędziego, więc tylko on może orzec, że odrzucona odpowiedź była
+  // poprawna. Pipeline tego nie wie i nie może wiedzieć.
+  const falseRejects = results.filter(result => result.falseReject);
+  const discardedAnswers = results.filter(result => result.discardedAnswer);
   const report = {
     benchmark: benchmark.name,
     mode: 'live',
@@ -373,6 +418,10 @@ async function run() {
     total: results.length,
     answeredAccuracy: Number((answered / results.length).toFixed(4)),
     completenessAccuracy: Number((complete / results.length).toFixed(4)),
+    falseRejects: falseRejects.length,
+    falseRejectCaseIds: falseRejects.map(result => result.id),
+    discardedAnswers: discardedAnswers.length,
+    discardedAnswerCaseIds: discardedAnswers.map(result => result.id),
     factualGoldCases: factualCases.length,
     factualAccuracy: factualCases.length ? Number((factualPassed / factualCases.length).toFixed(4)) : null,
     factualAverageScore: factualAverage === null ? null : Number(factualAverage.toFixed(4)),

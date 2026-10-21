@@ -95,11 +95,19 @@ const GENERATION_FALLBACK_CHAIN = [
 ];
 // Semantic repair is latency- and budget-sensitive. The normal generation
 // chain above stays unchanged; only the repair path uses this preference.
+//
+// Kolejność ma tu znaczenie wykonawcze: na cykl repairu mieści się JEDNA próba
+// dostawcy (próg 13,5 s = 3 s na próbę + 10,5 s rezerwy na walidator), więc
+// pierwszy kandydat musi być tym, który faktycznie odpowiada. W live benchmarku
+// (2026-10-21) Gemini zajął 12 s i nie zwrócił werdyktu w 5/5 przypadków,
+// a xKiro nigdy nie zdążył — obaj stali na początku listy, a model, który
+// odpowiadał w 0,6–1,5 s, był dopiero czwarty.
 const REPAIR_FALLBACK_PREFERENCE = [
+  'groq:openai/gpt-oss-20b',
+  'groq:openai/gpt-oss-120b',
   'gemini:gemini-3.5-flash-lite',
   'xkiro:default',
   'openrouter:default',
-  'groq:openai/gpt-oss-20b',
   'gemini:gemini-3.8-flash',
 ];
 

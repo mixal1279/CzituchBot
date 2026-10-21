@@ -116,6 +116,50 @@ test('live diagnostics distinguish validator failures from generation failures a
   assert.equal(diagnostics.goldCoverageByCategory.how.independentGold, 1);
 });
 
+test('live diagnostics report validator unavailability per call and detect outages of any provider', () => {
+  const benchmark = JSON.parse(fs.readFileSync(path.join(__dirname, 'ai-benchmark.json'), 'utf8'));
+  const selected = stratifiedCases(benchmark.cases, 5, 113);
+  // Gemini niedostępne w każdym wywołaniu: to awaria providera, a nie wynik kodu.
+  const diagnostics = buildBenchmarkDiagnostics([{
+    finalStatus: 'rejected',
+    modelCalls: 3,
+    generationAttempts: [{ provider: 'groq', model: 'openai/gpt-oss-120b', status: 'success' }],
+    validatorResults: [
+      { provider: 'gemini', model: 'gemini-3.5-flash-lite', status: 'unavailable', technicalError: true, reason: 'timeout' },
+      { provider: 'gemini', model: 'gemini-3.5-flash-lite', status: 'unavailable', technicalError: true, reason: 'timeout' },
+      { provider: 'groq', model: 'openai/gpt-oss-20b', status: 'rejected' },
+    ],
+    timingTrace: [],
+  }], benchmark.cases, selected);
+
+  // Licznik dotyczy WYWOŁAŃ walidatora, nie końca requestu.
+  assert.equal(diagnostics.validatorUnavailable, 2);
+  assert.equal(diagnostics.requestsUnavailable, 0);
+  // Awaria Gemini w każdym wywołaniu musi być widoczna, inaczej benchmark
+  // raportuje providerOutage=false i uznaje pomiar za ważny.
+  assert.equal(diagnostics.providerOutage, true);
+  assert.deepEqual(diagnostics.outageProviders, ['gemini']);
+  // Provider, który odpowiedział, nie jest awarią.
+  assert.equal(diagnostics.outageProviders.includes('groq'), false);
+});
+
+test('live diagnostics detect generation-only provider outages', () => {
+  const benchmark = JSON.parse(fs.readFileSync(path.join(__dirname, 'ai-benchmark.json'), 'utf8'));
+  const selected = stratifiedCases(benchmark.cases, 5, 113);
+  const diagnostics = buildBenchmarkDiagnostics([{
+    finalStatus: 'unavailable',
+    modelCalls: 0,
+    generationAttempts: [
+      { provider: 'groq', model: 'openai/gpt-oss-120b', status: 'error', failure: 'timeout' },
+      { provider: 'groq', model: 'openai/gpt-oss-20b', status: 'error', failure: 'timeout' },
+    ],
+    validatorResults: [],
+    timingTrace: [],
+  }], benchmark.cases, selected);
+  assert.equal(diagnostics.providerOutage, true);
+  assert.deepEqual(diagnostics.outageProviders, ['groq']);
+});
+
 test('live diagnostics separate provider quota, timeout, budget and evidence rejection', () => {
   assert.equal(classifyBenchmarkOutcome({ judgeStatus: 'accepted', factualPassed: true }), 'accepted');
   assert.equal(classifyBenchmarkOutcome({ finalStatus: 'unavailable', fallbackReasons: ['quota'] }), 'provider_quota');

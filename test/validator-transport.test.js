@@ -464,8 +464,8 @@ test('po deterministycznym odrzuceniu cytatu pipeline nie zużywa budżetu na ko
   assert.deepEqual(requestState.validatorResults.map(row => row.provider), ['gemini']);
 });
 
-test('circuit breaker dla Groq, xKiro i OpenRouter otwiera się po dwóch timeoutach i resetuje po sukcesie', () => {
-  for (const provider of ['groq', 'xkiro', 'openrouter']) {
+test('circuit breaker dla Groq, xKiro, OpenRouter i Gemini otwiera się po dwóch timeoutach i resetuje po sukcesie', () => {
+  for (const provider of ['groq', 'xkiro', 'openrouter', 'gemini']) {
     hooks.resetValidatorBreakers();
     assert.equal(hooks.validatorBreakerIsOpen(provider), false);
     hooks.recordValidatorTransportResult(provider, { timeoutAbort: true }, 'breaker-test-1');

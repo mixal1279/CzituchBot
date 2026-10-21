@@ -2386,10 +2386,11 @@ async function walidujOdpowiedzAIBezCache(persona, pytanie, odpowiedz, dane, his
   const models = KONFIGURACJA.geminiKey
     && Date.now() >= geminiValidatorCooldownUntil
     && Date.now() >= geminiAccountQuotaCooldownUntil
+    && !validatorBreakerIsOpen('gemini')
     && !isProviderQuotaBlocked(`gemini:${AI_GEMINI_VALIDATOR_MODEL}`)
     ? [AI_GEMINI_VALIDATOR_MODEL]
     : [];
-  if (!models.length) console.warn(`[AI][${requestId}] Gemini validator w cooldownie — używam fallbacku OpenRouter`);
+  if (!models.length) console.warn(`[AI][${requestId}] Gemini validator w cooldownie lub breaker otwarty — używam fallbacku`);
   let last = null;
   let lastRejected = null;
   for (let i = 0; i < models.length; i++) {
@@ -2413,6 +2414,11 @@ async function walidujOdpowiedzAIBezCache(persona, pytanie, odpowiedz, dane, his
     const remainingBefore = requestState?.remainingMs?.() ?? null;
     requestState?.recordTiming?.('validator_provider_start', { provider: 'gemini', model: models[i], remainingBefore });
     const result = await walidujOdpowiedzGeminiModel(models[i], persona, pytanie, odpowiedz, dane, historiaRozmowy, requestId, requestState, requestMeta);
+    // Wynik Gemini musi trafić do circuit breakera tak jak wyniki Groq/xKiro/
+    // OpenRouter. Bez tego breaker nigdy nie otwierał się dla Gemini, więc przy
+    // awarii providera każdy kolejny request płacił pełne 12 s za werdykt,
+    // którego nie było (live benchmark 2026-10-21: 5/5 przypadków, 0 werdyktów).
+    recordValidatorTransportResult('gemini', result, requestId);
     const validatorElapsedMs = Date.now() - validatorStartedAt;
     const remainingAfter = requestState?.remainingMs?.() ?? null;
     requestState?.recordTiming?.('validator_provider_end', { provider: 'gemini', model: models[i], status: result.status, validatorElapsedMs, remainingBefore, remainingAfter, reason: String(result.reason || '').slice(0, 180) });
@@ -2895,7 +2901,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
   max_tokens = Math.max(Number(max_tokens) || 200, responseCfg.maxTokens);
   systemPrompt = `${systemPrompt}\n\n${responseContract(aiPlan.responseProfile)}\n\n[ANSWER PLAN]\n${answerPlan.instruction}\n\n[EVIDENCE-FIRST GENERATION]\nDla każdej informacji faktograficznej najpierw wybierz konkretny EVIDENCE CANDIDATE, a dopiero potem napisz zdanie. Jedno zdanie ma zawierać tylko jeden materialny claim albo bardzo ścisłe parafrazowanie jednego fragmentu dowodu. Nie łącz kilku wydarzeń w jeden claim, jeśli wymagają różnych dowodów. Nie wyciągaj przyczynowości z samej kolejności wydarzeń: użyj relacji przyczynowej tylko wtedy, gdy pojedynczy dowód wyraźnie ją stwierdza. Nie wymyślaj cytatów, source_id, nazw własnych, dat, liczb ani szczegółów. Jeśli EVIDENCE CANDIDATES nie potwierdzają części pytania, pomiń tę część albo jasno powiedz, że brak wystarczających danych. Przed wysłaniem odpowiedzi sprawdź mentalnie każde zdanie: „który dokładnie candidate je potwierdza?”. Nigdy nie wypisuj etykiet technicznych „EVIDENCE CANDIDATE” ani numerów candidate w odpowiedzi dla użytkownika. Jeśli pytanie zaczyna się od „W grze <tytuł>:”, potraktuj tytuł jako kontekst retrieval, nie powtarzaj go w claimach bez dowodu z treści źródła.`;
   const kategoriaAI = routingAI.intent;
-  console.log(`[AI][${requestId}] routing=${JSON.stringify({ intent: routingAI.intent, entity: routingAI.entity, game: routingAI.game, entity_type: routingAI.entity_type, needs_web: routingAI.needs_web, freshness: routingAI.freshness, source_type: routingAI.source_type, response_profile: aiPlan.responseProfile, confidence: routingAI.confidence })}`);
+  console.log(`[AI][${requestId}] routing=${JSON.stringify({ intent: routingAI.intent, entity: routingAI.entity, game: routingAI.game, entity_type: routingAI.entity_type, game_type: routingAI.game_type, needs_web: routingAI.needs_web, freshness: routingAI.freshness, source_type: routingAI.source_type, response_profile: aiPlan.responseProfile, confidence: routingAI.confidence })}`);
   console.log(`[AI] kategoria=${kategoriaAI} nick=${nick}`);
   const jestRecepturaMC = czyPytanieOReceptureMC(pytanie);
   const daneRecepturyMC = jestRecepturaMC ? await pobierzDaneRecepturyMC(pytanie) : null;
@@ -4124,6 +4130,19 @@ Pytanie użytkownika: ${pytanie}`;
   odp = finalizeResponse(odp, aiState.finalStatus);
 
   AI_METRYKI[aiState.finalStatus] = (AI_METRYKI[aiState.finalStatus] || 0) + 1;
+  // Odpowiedź, którą pipeline wyrzucił w zamian za odmowę. Sam pipeline nie
+  // umie orzec, czy wyrzucenie było błędne (odpowiedź mogła zawierać fakt
+  // spoza źródła), ale fakt odrzucenia treści musi być widoczny — inaczej
+  // benchmark wygląda tak, jakby model po prostu nie odpowiedział.
+  const discardedAnswer = ['accepted', 'soft_accepted'].includes(aiState.finalStatus)
+    ? null
+    : (() => {
+      for (let i = aiState.validatorResults.length - 1; i >= 0; i--) {
+        const candidate = aiState.validatorResults[i]?.validationDiagnostics?.benchmarkTrace?.answer;
+        if (typeof candidate === 'string' && candidate.trim()) return candidate;
+      }
+      return null;
+    })();
   recordAIMetric(AI_OBSERVABILITY, {
     status: aiState.finalStatus,
     latencyMs: Date.now() - aiState.startedAt,
@@ -4135,7 +4154,16 @@ Pytanie użytkownika: ${pytanie}`;
     validatorStatuses: aiState.validatorResults.map(v => v.status),
     retrievalStatuses: aiState.tavilyLastStatus ? [aiState.tavilyLastStatus] : [],
     claimCoverage: aiState.validatorResults.at(-1)?.claimCoverage ?? null,
-    answerQuality: aiState.validatorResults.at(-1)?.confidence ?? (aiState.finalStatus === 'accepted' ? 1 : 0),
+    // Confidence walidatora opisuje jego WERDYKT, nie odpowiedź. Dla odrzuconej
+    // odpowiedzi raportowanie 0,95 jako „jakości” wprowadzało w błąd: benchmark
+    // pokazywał jakość 0,93 przy kompletnie odrzuconych przypadkach.
+    validatorConfidence: aiState.validatorResults.at(-1)?.confidence ?? null,
+    // Jakość tego, co faktycznie trafiło do użytkownika — tylko dla odpowiedzi wydanych.
+    answerQuality: ['accepted', 'soft_accepted'].includes(aiState.finalStatus)
+      ? (aiState.validatorResults.at(-1)?.confidence ?? (aiState.finalStatus === 'accepted' ? 1 : 0))
+      : null,
+    discardedAnswer: Boolean(discardedAnswer),
+    discardedAnswerText: discardedAnswer ? String(discardedAnswer).slice(0, 2000) : null,
   });
   zalogujPodsumowanieAI(aiState.finalStatus);
   const newMemories = extractExplicitUserMemories(pytanie, { sourceRole: 'user', userId: verifiedMemoryUserId, sourceMessageId: requestId });

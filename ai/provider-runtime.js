@@ -17,11 +17,22 @@ function withReasoningHeadroom(payload) {
   if (!payload || typeof payload !== 'object' || boostedPayloads.has(payload)) return payload;
   const model = String(payload.model || '');
   if (!model.startsWith('openai/gpt-oss') || !payload.reasoning_effort) return payload;
-  const base = Number(payload.max_completion_tokens);
+  // Budżet tokenów bywa podawany jako max_tokens (starsza nazwa) albo
+  // max_completion_tokens. Helper czytał wyłącznie tę drugą, więc zapytania
+  // z max_tokens (np. przepisywanie zapytania do wyszukiwarki) po cichu nie
+  // dostawały zapasu na reasoning i wracały z pustą treścią. Używamy pola,
+  // które podał wywołujący, i nie zmieniamy jego nazwy.
+  // Number(null) === 0, więc pole ustawione na null nie może wygrywać wyboru.
+  const maTokeny = value => value != null && value !== '' && Number.isFinite(Number(value));
+  const field = maTokeny(payload.max_completion_tokens)
+    ? 'max_completion_tokens'
+    : (maTokeny(payload.max_tokens) ? 'max_tokens' : null);
+  if (!field) return payload;
+  const base = Number(payload[field]);
   if (!Number.isFinite(base) || base <= 0) return payload;
   const headroom = REASONING_HEADROOM_TOKENS[model] ?? REASONING_HEADROOM_TOKENS.default;
   const answerBudget = Math.max(base, REASONING_MIN_ANSWER_TOKENS);
-  payload.max_completion_tokens = Math.min(answerBudget + headroom, Math.max(base, REASONING_TOKEN_CEILING));
+  payload[field] = Math.min(answerBudget + headroom, Math.max(base, REASONING_TOKEN_CEILING));
   boostedPayloads.add(payload);
   return payload;
 }
