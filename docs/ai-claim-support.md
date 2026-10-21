@@ -4,7 +4,7 @@ CzituchBot treats claim support as a first-class validation artifact, separate f
 
 ## Unit of evaluation
 
-The audit unit is one atomic claim paired with one cited source span. The model may inspect the request's source pool to locate evidence, but the final local checks bind the claim to a single cited source and verify the exact quote plus a bounded same-source context. A different source cannot compensate for a missing or insufficient citation.
+The audit unit is one atomic claim paired with one cited source span. The model may inspect the request's source pool to locate a candidate citation, but the final local checks bind the claim to one selected source and verify the exact quote plus a bounded same-source context. A different source cannot compensate for a missing or insufficient citation. The deterministic verifier is the authority for acceptance; the model's `supported` flag is not sufficient by itself.
 
 ## Per-claim verdicts
 
@@ -14,7 +14,7 @@ The audit unit is one atomic claim paired with one cited source span. The model 
 - `contradicted`: the cited span conflicts with the claim on a checked hard fact such as negation, quantity, time, or event relation.
 - `unverifiable`: the source ID or exact quote cannot be verified.
 
-Every record retains the claim, the selected source ID, the exact quote, model/local verdicts, support mode, reason, and any overclaim warnings. These records are attached to validator diagnostics as `claimSupport`.
+Every record retains the claim, the selected source ID, the exact quote, bounded context for diagnosis, model/local verdicts, support mode, reason, and any overclaim warnings. The overclaim detector examines the exact cited span, not neighboring sentences, so an unrelated hedge or qualifier cannot change this claim's label. These records are attached to validator diagnostics as `claimSupport`.
 
 ## Overclaim checks
 
@@ -32,8 +32,9 @@ The first four are hard failures and route the answer into repair; a stale-sourc
 The live benchmark emits:
 - `claimSupportPassRate`: fraction of claim-citation pairs labeled `entailed`;
 - `claimSupportUsableRate`: fraction labeled `entailed` or `partial`;
-- `claimSupport.verdictCounts` and `claimSupport.overclaimCounts`;
-- per-claim audit records for regression diagnosis.
+- `claimSupport.verdictCounts` and `claimSupport.overclaimCounts` for backwards compatibility;
+- `claimSupport.claimSourceVerdictCounts`, a normalized citation-level taxonomy: `supported`, `partial`, `contradicted`, `not_enough_evidence`, and `unsupported_by_cited_source`;
+- per-claim audit records including both the legacy `verdict` and normalized `claimSourceVerdict` for regression diagnosis.
 
 The strict pass rate intentionally does not silently count partial/contextual matches as exact citation support. It is independent of `completenessAccuracy` and the manually curated factual gold score.
 
