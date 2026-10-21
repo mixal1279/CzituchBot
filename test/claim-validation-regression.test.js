@@ -171,6 +171,12 @@ test('rhetorical "do not forget" does not invert the polarity of a factual claim
   assert.equal(result.ok, true, result.reason);
 });
 
+test('an unrelated “never explained” subordinate clause does not negate the main event', () => {
+  const evidence = 'Although it was never explained, Wheatley was disconnected from GLaDOS and given other jobs.';
+  assert.equal(sprawdzTwardeKonflikty(evidence, 'Wheatley was disconnected from GLaDOS.').ok, true);
+  assert.equal(sprawdzTwardeKonflikty('Wheatley was never disconnected from GLaDOS.', 'Wheatley was disconnected from GLaDOS.').ok, false);
+});
+
 test('lack of stability is a negative noun phrase, not negation of the destruction event', () => {
   const result = sprawdzTwardeKonflikty(
     "Wheatley's lack of stability is going to cause the destruction of Aperture Science.",

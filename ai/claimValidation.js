@@ -488,7 +488,15 @@ function czyNazwaWlasnaWystepuje(entity, evidenceNormalized) {
 function sprawdzTwardeKonflikty(evidence, claim, options = {}) {
   const e = String(evidence || '');
   const c = String(claim || '');
-  const evidenceNegated = wyodrebnijMarkery(e, NEGATION_RE);
+  // Clause-scoped exception: “Although it was never explained, X happened”
+  // negates the explanation, not event X. A document-level negation scan used
+  // to reject a positive claim about X because an unrelated subordinate clause
+  // contained “never”. Keep the hard gate for negation of the actual event.
+  const evidenceForNegation = e.replace(
+    /\\b(?:although|though|while)\\s+(?:it|this|that)\\s+(?:was|is|has been)\\s+never\\s+explained\\b[,;:]?\\s*/giu,
+    ' ',
+  );
+  const evidenceNegated = wyodrebnijMarkery(evidenceForNegation, NEGATION_RE);
   const claimNegated = wyodrebnijMarkery(c, NEGATION_RE);
   if (!options.ignoreNegation && !options.allowDistributedEvidence && claimNegated !== evidenceNegated) {
     // „take no damage” (kwantyfikator zerowy, bez żadnego innego zaprzeczenia w dowodzie) potwierdza pozytywny
