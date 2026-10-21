@@ -821,11 +821,13 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
   if (maStarePola && wynik.complete !== true) localRejectReasons.push('model_marked_incomplete');
   if (maStarePola && wynik.hallucination !== false) localRejectReasons.push('model_flagged_hallucination');
 
-  // Domyślnie częściowa akceptacja jest wyłączona: każda zaakceptowana odpowiedź musi spełniać
-  // pełny lokalny kontrakt dowodowy. Tryb opt-in (AI_ALLOW_PARTIAL_ANSWERS=1) odpowiada wyłącznie
-  // claimami z lokalnie zweryfikowanym cytatem, z zachowaniem wszystkich progów powyżej
-  // (confidence, liczby/daty, negacje, nieznane źródła, format). Pozostałe twierdzenia są pomijane.
-  const softAccepted = !accepted && process.env.AI_ALLOW_PARTIAL_ANSWERS === '1' && partialAccepted;
+  // Bezpieczna odpowiedź częściowa jest domyślnie dozwolona: zawiera wyłącznie
+  // atomowe claimy z lokalnie zweryfikowanym źródłem i cytatem. Każdy claim z
+  // konfliktem negacji/liczb/dat, nadmiernym wnioskowaniem lub nieznanym źródłem
+  // pozostaje wykluczony. AI_ALLOW_PARTIAL_ANSWERS=0 wyłącza tę możliwość.
+  const partialAnswersEnabled = process.env.AI_ALLOW_PARTIAL_ANSWERS !== '0'
+    && process.env.AI_ALLOW_PARTIAL_ANSWERS !== 'false';
+  const softAccepted = !accepted && partialAnswersEnabled && partialAccepted;
   const status = accepted
     ? 'accepted'
     : (softAccepted
