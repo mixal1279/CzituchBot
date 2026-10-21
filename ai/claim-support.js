@@ -36,7 +36,7 @@ function detectOverclaimTypes(claim, evidence) {
   const claimHedged = /\b(?:may|might|could|possibly|potentially|suggests?|appears? to|moze|mozliwe|prawdopodobnie|sugeruje|wydaje sie)\b/u.test(c);
   // A source hedge alone does not make an ordinary declarative claim absolute.
   // Hard-fail only when the claim itself adds an explicit absolute/guarantee cue.
-  const claimStatesOutcome = /\b(?:improves?|increases?|reduces?|shows?|means?|proves?|guarantees?|causes?|prevents?|jest|sa|byl|zwieksza|poprawia|zmniejsza|oznacza|pokazuje|powoduje|zapobiega)\b/u.test(c);
+  const claimStatesOutcome = /\b(?:improves?|increases?|reduces?|shows?|means?|proves?|guarantees?|causes?|prevents?|zwieksza|poprawia|zmniejsza|oznacza|pokazuje|powoduje|zapobiega)\b/u.test(c);
   if (sourceHedged && !claimHedged && (claimAbsolute || claimStatesOutcome)) types.push('hedge_to_absolute');
 
   // Preserve qualifiers attached to numeric claims. "Up to 30%" is not the
