@@ -77,6 +77,27 @@ test('a Polish declarative sentence is not absolute merely because it says jest'
   ), []);
 });
 
+test('a hedge on one outcome does not reject a claim using a generic reporting verb', () => {
+  assert.deepEqual(detectOverclaimTypes(
+    'The results show a trend.',
+    'The method may reduce latency.',
+  ), []);
+});
+
+test('a matching hedged outcome cannot be stated as certain without a qualifier', () => {
+  assert.ok(detectOverclaimTypes(
+    'The method reduces latency.',
+    'The method may reduce latency.',
+  ).includes('hedge_to_absolute'));
+});
+
+test('Polish exclusive quantifier is recognized after normalization', () => {
+  assert.ok(detectOverclaimTypes(
+    'Wyłącznie gracze z kluczem mogą wejść.',
+    'Gracze z kluczem mogą wejść.',
+  ).includes('unsupported_quantifier'));
+});
+
 test('date ranges do not trigger the dropped upper-bound guard', () => {
   assert.ok(!detectOverclaimTypes(
     'The game was released in 2015.',
