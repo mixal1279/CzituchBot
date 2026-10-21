@@ -35,6 +35,14 @@ test('partial answer keeps only locally verified claims when another quote is mi
   const answer = 'Geralt jest wiedźminem z Kaer Morhen. Yennefer jest królową Nilfgaardu.';
   const r = withPartialAnswersEnabled(() => result([
     {
+      claim: 'Geralt jest wiedźminem z Kaer Morhen — a Yennefer jest czarodziejką z Vengerbergu.',
+      claim_en: '',
+      supported: true,
+      source_ids: ['SOURCE 1'],
+      evidence_quote: 'Geralt jest wiedźminem z Kaer Morhen. Yennefer jest czarodziejką z Vengerbergu.',
+      reason: 'ok',
+    },
+    {
       claim: 'Geralt jest wiedźminem z Kaer Morhen.',
       claim_en: '',
       supported: true,
