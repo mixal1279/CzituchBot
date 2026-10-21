@@ -165,13 +165,18 @@ test('skipped provider attempts do not count as a provider outage', () => {
   const selected = stratifiedCases(benchmark.cases, 5, 113);
   const diagnostics = buildBenchmarkDiagnostics([{
     finalStatus: 'rejected',
-    generationAttempts: [{ provider: 'xkiro', model: 'default', status: 'skipped' }],
-    validatorResults: [{ provider: 'gemini', model: 'gemini-3.5-flash-lite', status: 'rejected' }],
+    generationAttempts: [],
+    validatorResults: [{ provider: 'xkiro', model: 'default', status: 'unavailable', skipped: true, reason: 'budget exhausted' }],
     timingTrace: [],
   }], benchmark.cases, selected);
 
   assert.equal(diagnostics.providerOutage, false);
   assert.deepEqual(diagnostics.outageProviders, []);
+  assert.equal(diagnostics.validatorCalls, 0);
+  assert.equal(diagnostics.validatorUnavailable, 0);
+  assert.equal(diagnostics.validatorSkipped, 1);
+  assert.equal(diagnostics.validatorStatusCounts.skipped, 1);
+  assert.deepEqual(diagnostics.validatorTransportFailures, []);
 });
 
 test('live diagnostics separate provider quota, timeout, budget and evidence rejection', () => {
