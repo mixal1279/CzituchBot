@@ -3259,11 +3259,7 @@
         "factual": {
           "mustInclude": [
             [
-              "Caelem Ruins"
-            ],
-            [
-              "Caelid",
-              "wozie"
+              "Caelid"
             ]
           ],
           "mustNot": [],
@@ -3271,6 +3267,18 @@
           "independentGoldSources": [
             "https://eldenring.fandom.com/wiki/Greatsword",
             "https://eldenring.fandom.com/wiki/Caelem_Ruins"
+          ],
+          "mustIncludeAny": [
+            [
+              "Caelem Ruins",
+              "Cathedral of Dragon Communion"
+            ],
+            [
+              "wozie",
+              "wózkiem",
+              "wózku",
+              "wóz"
+            ]
           ]
         }
       }
