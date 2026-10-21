@@ -42,6 +42,13 @@ test('Gemini validator and generation fallbacks use documented GenerateContent f
   assert.match(source, /model === 'gemini-3\.5-flash-lite'[\s\S]{0,120}\{ thinkingLevel: 'minimal' \}/);
 });
 
+test('repair budget matches the provider timeout and logs never expose generated text', () => {
+  const source = read('czituch_bot.js');
+  assert.match(source, /const minRepairGenerationBudgetMs = 13_500/);
+  assert.doesNotMatch(source, /końcówka surowego tekstu=/);
+  assert.match(source, /generator zwrócił etykietę EVIDENCE CANDIDATE/);
+});
+
 test('answer-completeness repair includes the prior answer and uses real line separators', () => {
   const source = read('czituch_bot.js');
   const start = source.indexOf('const verifiedEvidenceContext = (walidacja.claims || [])');
