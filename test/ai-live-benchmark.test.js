@@ -239,6 +239,10 @@ test('secondary validator outage is reported as degradation, not a benchmark out
   assert.equal(diagnostics.providerOutage, false);
   assert.deepEqual(diagnostics.outageProviders, []);
   assert.deepEqual(diagnostics.degradedProviders, ['xkiro:validator']);
+  assert.equal(diagnostics.qualityComparable, false);
+  assert.equal(diagnostics.validatorUnavailableRate, 0.5);
+  assert.ok(diagnostics.qualityDegradationReasons.includes('validator_unavailable_rate_above_25_percent'));
+  assert.ok(diagnostics.qualityDegradationReasons.includes('fallback_provider_degradation'));
 });
 
 test('live diagnostics separate provider quota, timeout, budget and evidence rejection', () => {
