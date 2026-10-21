@@ -23,6 +23,7 @@ const CROSS_LANGUAGE_CONCEPTS = [
   ['zwiazek', /relationship\w*|girlfriend\w*|boyfriend\w*|partner\w*|romanc\w*|romantic\w*|involved|zwi[aą]zk\w*|zwiaz\w*|relacj\w*|dziewczyn\w*|chlopak\w*/i],
   ['pomoc', /help\w*|assist\w*|save\w*|rescu\w*|pomog\w*|pomaga\w*|urat\w*|ocal\w*/i],
   ['kontrola', /control\w*|take[s]?\s+over|command\w*|manipulat\w*|kontrol\w*|przej[a]l\w*|manipul\w*/i],
+  ['szef', /\bboss\b|szef\w*|leader\w*|przywodc\w*/i],
   ['porazka', /defeat\w*|beaten|overcome\w*|pokon\w*|pora[zż]k\w*/i],
   ['zdrada', /betray\w*|traitor\w*|zdradz\w*|zdrajc\w*/i],
   ['tworzenie', /creat\w*|develop\w*|build\w*|made\b|stworz\w*|tworz\w*|opracow\w*/i],
@@ -803,6 +804,13 @@ function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
     // Entity/name overlap alone is not positive evidence that the action agrees:
     // „zniszczył Aperture” must not pass against „took control of Aperture”.
     if ((polishConcepts.size || englishConcepts.size) && sharedConcepts.length === 0) {
+      return { ok: false, reason: 'claim_en kopiuje cytat, ale nie odpowiada treści claimu' };
+    }
+    // A copied quote must not add a second fact just because one concept overlaps.
+    // The English claim is a translation, not a vehicle for smuggling in adjacent
+    // source facts that the Polish claim never asserted.
+    const addedConcepts = [...englishConcepts].filter(concept => !polishConcepts.has(concept));
+    if (addedConcepts.length) {
       return { ok: false, reason: 'claim_en kopiuje cytat, ale nie odpowiada treści claimu' };
     }
     const agreement = dopasowanieSemantyczne(en, pl, options);
