@@ -186,7 +186,7 @@ function tokenOverlap(a, b) {
 
 function classifyClaimType(claim) {
   const text = normalizeEvidenceText(claim);
-  if (/(?:dlaczego|why|powod\w*|przyczyn\w*|motyw\w*|doprowadz\w*|spowod\w*|zmusz\w*|umożliw\w*|umozliw\w*|poniewa[zż]|dlatego|bo |z powodu|w celu|po tym\s*,?\s*jak|wskutek|w efekcie|przez pomylk\w*|przez przypadek|because|due to|therefore|caus\w*|led to|resulted in|resulting in|so that|accidentally|by mistake)/i.test(text)) return 'causal';
+  if (/(?:dlaczego|why|powod\w*|przyczyn\w*|motyw\w*|doprowadz\w*|spowod\w*|zmusz\w*|umożliw\w*|umozliw\w*|poniewa[zż]|dlatego|bo |z powodu|po tym\s*,?\s*jak|wskutek|w efekcie|przez pomylk\w*|przez przypadek|because|due to|therefore|caus\w*|led to|resulted in|resulting in|accidentally|by mistake)/i.test(text)) return 'causal';
   if (/(?:jak |w jaki sposób|how |sposob\w*|instrukcj\w*|krok\w*|walkthrough|guide)/i.test(text)) return 'procedural';
   if (/(?:kiedy|when |rok\b|data|dzien\w*|today|yesterday|tomorrow)/i.test(text)) return 'temporal';
   if (/(?:gdzie|where |lokacj\w*|miejsce)/i.test(text)) return 'location';
@@ -199,7 +199,7 @@ function classifyClaimType(claim) {
 function evidenceRelationSignals(value) {
   const text = normalizeEvidenceText(value);
   return {
-    causal: /\b(?:bo|poniewaz|gdyz|dlatego|przez|dzieki|because|therefore|accidentally)\b|\bz powodu\b|\b(?:spowod\w*|doprowadz\w*|umozliw\w*|caus\w*|regain\w*|reactivat\w*|w ten sposob|przez co|co umozliw\w*|which in turn|motyw\w*|zmusz\w*|powoduj\w*|przyczyn\w*|wskutek|w efekcie)\b|\bdue to\b|\bled to\b|\blead\w*(?:\s+\w+){0,3}\s+to\b|\bso that\b|\bso\s+(?:approach|use|avoid|keep|stay|choose|take|do|be)\b|\bby mistake\b|\bodzysk\w*\s+kontrol\w*\b|\buruchom\w*\s+ponownie\b/i.test(text),
+    causal: /\b(?:bo|poniewaz|gdyz|dlatego|przez|dzieki|because|therefore|accidentally)\b|\bz powodu\b|\b(?:spowod\w*|doprowadz\w*|umozliw\w*|caus\w*|regain\w*|reactivat\w*|w ten sposob|przez co|co umozliw\w*|which in turn|motyw\w*|zmusz\w*|powoduj\w*|przyczyn\w*|wskutek|w efekcie)\b|\bdue to\b|\bled to\b|\blead\w*(?:\s+\w+){0,3}\s+to\b|\bso\s+(?:approach|use|avoid|keep|stay|choose|take|do|be)\b|\bby mistake\b|\bodzysk\w*\s+kontrol\w*\b|\buruchom\w*\s+ponownie\b/i.test(text),
     procedural: /\b(?:najpierw|nastepnie|potem|krok\w*|steps?|first|then|after|before|use|uzyj|kliknij|click|walkthrough)\b|\binstrukcj\w*\b/i.test(text),
     temporal: /\b(?:19|20)\d{2}\b|\b(?:(?:stycz|lut|marz|marc|kwiet|kwiec|maj|czerw|lip|sierp|wrzes|pazdz|listopad|grudzi|grudn|grudz)\w*|wczoraj|dzis\w*|jutro|today|yesterday|tomorrow)\b/i.test(text),
     location: /\b(?:w|na|near|located|location|area|region|city|miasto)\b|\b(?:znajduj\w*|lokacj\w*|miejsce\w*)\b/i.test(text),
