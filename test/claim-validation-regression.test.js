@@ -22,6 +22,7 @@ test('dragon landing concept does not match generic land or lands wording', () =
 });
 
 
+test('sentence-initial generic words are not treated as proper names', () => {
   for (const claim of [
     'Decyzja ta wynikała z wcześniejszych wydarzeń.',
     'Motywuje go to do dalszego działania.',
