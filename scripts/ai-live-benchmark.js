@@ -123,6 +123,18 @@ function evaluateBenchmarkAnswer(answer, item) {
   };
 }
 
+function isFalseReject(discardedEvaluation, discardedFactual, evaluation, item) {
+  const hasIndependentGold = item?.expected?.factual?.independentGold === true;
+  const discardedFactsPass = !hasIndependentGold || discardedFactual?.passed === true;
+  return Boolean(
+    discardedEvaluation
+    && discardedEvaluation.answered
+    && discardedEvaluation.judgeStatus === 'accepted'
+    && !evaluation.answered
+    && discardedFactsPass
+  );
+}
+
 function extractClaimSupportAudit(summary) {
   const audits = [];
   for (const row of summary?.validatorResults || []) {
@@ -329,12 +341,10 @@ async function run() {
       const discardedEvaluation = discardedAnswer
         ? evaluateBenchmarkAnswer(discardedAnswer, item)
         : null;
-      const falseReject = Boolean(
-        discardedEvaluation
-        && discardedEvaluation.answered
-        && discardedEvaluation.judgeStatus === 'accepted'
-        && !evaluation.answered,
-      );
+      const discardedFactual = discardedAnswer
+        ? scoreGoldenFacts(discardedAnswer, item.expected?.factual)
+        : null;
+      const falseReject = isFalseReject(discardedEvaluation, discardedFactual, evaluation, item);
       results.push({
         id: item.id,
         category: item.category,
@@ -345,6 +355,8 @@ async function run() {
         judgeStatus: evaluation.judgeStatus,
         discardedAnswer,
         discardedJudgeStatus: discardedEvaluation ? discardedEvaluation.judgeStatus : null,
+        discardedFactualScore: discardedFactual?.score ?? null,
+        discardedFactualPassed: discardedFactual?.passed ?? null,
         falseReject,
         rejectionReason: [
           evaluation.judgeStatus !== 'accepted' ? evaluation.judgeReason : null,
@@ -462,7 +474,7 @@ async function run() {
 }
 
 module.exports = {
-  wybierzOdrzuconaOdpowiedz, normalizeFactText, scoreGoldenFacts, stratifiedCases, buildQuestionForBot, isFailureText, evaluateBenchmarkAnswer, extractClaimSupportAudit, classifyBenchmarkOutcome, buildBenchmarkDiagnostics, writeBenchmarkReport, writeStdoutAndWait, run };
+  wybierzOdrzuconaOdpowiedz, normalizeFactText, scoreGoldenFacts, stratifiedCases, buildQuestionForBot, isFailureText, evaluateBenchmarkAnswer, isFalseReject, extractClaimSupportAudit, classifyBenchmarkOutcome, buildBenchmarkDiagnostics, writeBenchmarkReport, writeStdoutAndWait, run };
 
 if (require.main === module) {
   run().catch(error => {
