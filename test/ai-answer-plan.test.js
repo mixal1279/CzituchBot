@@ -144,8 +144,14 @@ test('answer completeness requires the planned entity and avoids purpose/locatio
 
   const purpose = extractAnswerSignals('Wheatley przejął kontrolę, aby uciec z laboratorium.');
   assert.equal(purpose.why, true);
+  assert.equal(purpose.motive_explanation, true);
   assert.equal(purpose.causal_explanation, true);
   assert.equal(purpose.steps, false);
+
+  const explicitCause = extractAnswerSignals('Wheatley przejął kontrolę z powodu awarii systemu.');
+  assert.equal(explicitCause.why, true);
+  assert.equal(explicitCause.motive_explanation, false);
+  assert.equal(explicitCause.causal_explanation, true);
   assert.equal(extractAnswerSignals('Z powodu awarii system przestał działać.').where, false);
   assert.equal(extractAnswerSignals('Cena wynosi 100 zł.').quantity, true);
 });
