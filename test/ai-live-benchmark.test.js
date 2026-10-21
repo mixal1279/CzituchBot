@@ -29,6 +29,30 @@ test('gold facts require normalized whole phrases, not accidental substrings', (
   assert.deepEqual(falsePositive.missing, [['Wheatley', 'przejął kontrolę']]);
 });
 
+test('gold facts accept grounded alternative landmarks and Polish cart inflections', () => {
+  const factual = {
+    independentGold: true,
+    mustInclude: [['Caelid']],
+    mustIncludeAny: [
+      ['Caelem Ruins', 'Cathedral of Dragon Communion'],
+      ['wozie', 'wózkiem', 'wózku', 'wóz'],
+    ],
+    mustNot: [],
+  };
+  const grounded = scoreGoldenFacts(
+    'Wielki Miecz znajduje się w północno-zachodniej części Caelid, w opuszczonym wózku przy drodze w stronę Katedry Komunii Smoka.',
+    factual,
+  );
+  assert.equal(grounded.passed, true, JSON.stringify(grounded));
+
+  const missingLandmark = scoreGoldenFacts(
+    'Wielki Miecz znajduje się w Caelid, w opuszczonym wózku przy drodze.',
+    factual,
+  );
+  assert.equal(missingLandmark.passed, false);
+  assert.deepEqual(missingLandmark.missing, [['Caelem Ruins', 'Cathedral of Dragon Communion']]);
+});
+
 test('false-reject metric requires a discarded answer to pass independent gold facts', () => {
   const item = { expected: { factual: {
     independentGold: true,
