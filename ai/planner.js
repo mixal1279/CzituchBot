@@ -61,10 +61,10 @@ function buildRetrievalQueries(question, routing = {}, options = {}) {
   // Add one intent-specific retrieval query. A generic "lore/guide" query
   // often retrieves pages about the game but misses the exact evidence slot
   // (location landmark, timeline/quest order, character identity, or causal link).
-  const isWhereQuestion = /(?:^|\\s)(?:gdzie|dok[aą]d|sk[aą]d|where)(?:\\s|$)/iu.test(original);
-  const isWhenQuestion = /(?:^|\\s)(?:kiedy|when)(?:\\s|$)|w jakim momencie|w którym momencie/iu.test(original);
-  const isWhoQuestion = /(?:^|\\s)(?:kim jest|kto jest|who is|who was)(?:\\s|$)/iu.test(original);
-  const isWhyQuestion = /(?:^|\\s)(?:dlaczego|czemu|why)(?:\\s|$)|z jakiego powodu/iu.test(original);
+  const isWhereQuestion = /(?:^|\s)(?:gdzie|dok[aą]d|sk[aą]d|where)(?:\s|$)/iu.test(original);
+  const isWhenQuestion = /(?:^|\s)(?:kiedy|when)(?:\s|$)|w jakim momencie|w którym momencie/iu.test(original);
+  const isWhoQuestion = /(?:^|\s)(?:kim jest|kto jest|who is|who was)(?:\s|$)/iu.test(original);
+  const isWhyQuestion = /(?:^|\s)(?:dlaczego|czemu|why)(?:\s|$)|z jakiego powodu/iu.test(original);
 
   if (isWhereQuestion) {
     dodajUnikalneQuery(queries, [entity, game, 'exact location landmark nearby map'].filter(Boolean).join(' '));
