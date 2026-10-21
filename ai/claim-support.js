@@ -67,11 +67,14 @@ function detectOverclaimTypes(claim, evidence) {
   return [...new Set(types)];
 }
 
-function buildClaimSupportAudit({ claims = [], evidenceEvaluations = [], evidenceQuoteVerified = [], evidenceContexts = [] } = {}) {
+function buildClaimSupportAudit({ claims = [], evidenceEvaluations = [], evidenceQuoteVerified = [], evidenceQuotes = [], evidenceContexts = [] } = {}) {
   const records = claims.map((claim, index) => {
     const evaluation = evidenceEvaluations[index] || { ok: false, reason: 'brak lokalnej oceny dowodu' };
     const quoteVerified = evidenceQuoteVerified[index] === true;
-    const evidence = String(evidenceContexts[index] || claim?.evidence_quote || '');
+    // Overclaim rules must inspect the exact cited span, not neighbouring sentences.
+    // A nearby hedge or qualifier about another fact must not change this claim's verdict.
+    const evidence = String(evidenceQuotes[index] || claim?.evidence_quote || '');
+    const evidenceContext = String(evidenceContexts[index] || evidence);
     const overclaimTypes = detectOverclaimTypes(claim?.claim, evidence);
     const hardOverclaims = overclaimTypes.filter(type => HARD_OVERCLAIM_TYPES.has(type));
     const reason = String(evaluation.reason || claim?.reason || '').slice(0, 500);
@@ -89,17 +92,31 @@ function buildClaimSupportAudit({ claims = [], evidenceEvaluations = [], evidenc
       verdict = 'unsupported';
     }
 
+    // Normalized citation-level outcome for downstream RAG evaluation.
+    // Keep the legacy verdict above to avoid breaking existing dashboards.
+    const claimSourceVerdict = verdict === 'entailed'
+      ? 'supported'
+      : verdict === 'partial'
+        ? 'partial'
+        : verdict === 'contradicted'
+          ? 'contradicted'
+          : verdict === 'unverifiable'
+            ? 'not_enough_evidence'
+            : 'unsupported_by_cited_source';
+
     const warnings = overclaimTypes.map(type => ({ type, severity: HARD_OVERCLAIM_TYPES.has(type) ? 'error' : 'warning' }));
     return {
       claimIndex: index,
       claim: String(claim?.claim || '').slice(0, 500),
       sourceIds: Array.isArray(claim?.source_ids) ? claim.source_ids.slice(0, 5) : [],
       evidenceQuote: String(claim?.evidence_quote || '').slice(0, 500),
+      evidenceContext: evidenceContext.slice(0, 1200),
       modelSupported: claim?.supported === true,
       quoteVerified,
       localEvidenceVerified: evaluation.ok === true,
       supportMode: evaluation.mode || null,
       verdict,
+      claimSourceVerdict,
       reason: hardOverclaims.length
         ? 'claim zawiera możliwe nadmierne wnioskowanie: ' + hardOverclaims.join(', ')
         : reason || (verdict === 'entailed' ? 'cytat bezpośrednio wspiera claim' : 'brak wystarczającego wsparcia w przypisanym cytacie'),
@@ -120,6 +137,13 @@ function buildClaimSupportAudit({ claims = [], evidenceEvaluations = [], evidenc
     unit: 'claim_cited_span',
     totalClaims: total,
     verdictCounts: { entailed, partial, unsupported, contradicted, unverifiable },
+    claimSourceVerdictCounts: {
+      supported: records.filter(record => record.claimSourceVerdict === 'supported').length,
+      partial: records.filter(record => record.claimSourceVerdict === 'partial').length,
+      contradicted: records.filter(record => record.claimSourceVerdict === 'contradicted').length,
+      not_enough_evidence: records.filter(record => record.claimSourceVerdict === 'not_enough_evidence').length,
+      unsupported_by_cited_source: records.filter(record => record.claimSourceVerdict === 'unsupported_by_cited_source').length,
+    },
     // Strict pass rate counts only claims directly entailed by their exact span.
     claimSupportPassRate: total ? Number((entailed / total).toFixed(4)) : null,
     // Usable rate is reported separately so bounded-context/paraphrase support
@@ -149,6 +173,11 @@ function summarizeClaimSupportAudits(audits) {
       contradicted: count('contradicted'),
       unverifiable: count('unverifiable'),
     },
+    claimSourceVerdictCounts: Object.fromEntries(
+      ['supported', 'partial', 'contradicted', 'not_enough_evidence', 'unsupported_by_cited_source'].map(verdict => [
+        verdict, records.filter(record => record.claimSourceVerdict === verdict).length,
+      ]),
+    ),
     claimSupportPassRate: total ? Number((count('entailed') / total).toFixed(4)) : null,
     claimSupportUsableRate: total ? Number(((count('entailed') + count('partial')) / total).toFixed(4)) : null,
     overclaimCounts: Object.fromEntries(overclaimTypes.map(type => [type, records.filter(record => (record.overclaimTypes || []).includes(type)).length])),
