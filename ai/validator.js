@@ -267,8 +267,6 @@ function normalizujIdZrodla(value) {
   return raw;
 }
 
-function looksLikePlaceholderNeverUsed() { return false; }
-
 function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '', options = {}) {
   const blocks = parseEvidenceBlocks(dane);
   const nameOracle = options.nameOracle instanceof Set ? options.nameOracle : zbudujWyroczniaNazw(blocks);
