@@ -1655,24 +1655,6 @@ function zarezerwujSlotWalidatora(requestState, purpose) {
   return false;
 }
 
-function zarezerwujSlotWalidatora(requestState, purpose) {
-  if (!requestState) return true;
-  if (typeof requestState.reserveValidatorModel === 'function') {
-    return requestState.reserveValidatorModel(purpose);
-  }
-  // Compatibility for older request-context test doubles. Roll back the first
-  // reservation if the model budget rejects the second one.
-  if (!requestState.reserveValidator || !requestState.zarezerwujModel) return false;
-  const previousValidatorCount = Number(requestState.validatory);
-  if (!requestState.reserveValidator(purpose)) return false;
-  if (requestState.zarezerwujModel(purpose)) return true;
-  if (Number.isFinite(previousValidatorCount)) {
-    requestState.validatory = previousValidatorCount;
-  } else if (Number.isFinite(Number(requestState.validatory))) {
-    requestState.validatory = Math.max(0, Number(requestState.validatory) - 1);
-  }
-  return false;
-}
 
 async function walidujOdpowiedzGeminiModel(model, persona, pytanie, odpowiedz, dane, historiaRozmowy = [], requestId = '-', requestState = null, requestMeta = null) {
   if (!dane) return { status: 'unavailable', ok: false, technicalError: true, provider: 'gemini', model, unsupported_claims: [], reason: 'brak danych referencyjnych' };
