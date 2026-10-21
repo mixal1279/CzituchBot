@@ -48,10 +48,11 @@ function buildAnswerPlan(question, routing = {}) {
   // a nie procedury. Wymaganie steps/how dla nich powoduje, że poprawna
   // odpowiedź „znajduje się w Y” zostaje odrzucona przez answer-judge
   // jako „brakujące kroki” (np. Elden Ring Wielki Miecz).
-  const isLocationOnlyGameplay = routing.is_gameplay && slots.has('where')
+  const isGameplay = routing.is_gameplay === true || routing.intent === 'gameplay';
+  const isLocationOnlyGameplay = isGameplay && slots.has('where')
     && !slots.has('why') && !/jak\s+(?:przej|zrobi|pokona|zdoby|odblokowa|rozwiąza|ukoncz|uzyc|użyc|aktywow|napraw)/i.test(q)
     && !/(?<![\p{L}\p{N}_])(?:walkthrough\p{L}*|solucj\p{L}*|poradnik\p{L}*|boss\p{L}*|quest\p{L}*|misj\p{L}*)(?![\p{L}\p{N}_])/iu.test(q);
-  if (routing.is_gameplay && !isLocationOnlyGameplay) slots.add('steps');
+  if (isGameplay && !isLocationOnlyGameplay) slots.add('steps');
   // Procedural questions satisfy the broad how-intent as well as the steps slot.
   if (slots.has('steps')) slots.add('how');
   if (slots.has('why')) {
