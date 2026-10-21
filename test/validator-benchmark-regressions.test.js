@@ -81,6 +81,15 @@ test('lack of stability is not confused with sentence negation but contradicts a
   assert.match(contradiction.reason, /brak stabilności/);
 });
 
+test('validator accepts source-matched fire-attack advice without narrowing it to dragon breath', () => {
+  const quote = 'To avoid fire attacks, you can run, use a ward, or bash Alduin with your shield (if he is landed).';
+  const claim = 'Unikaj ataków ognia, biegając, używając tarczy lub zaklęcia ochronnego.';
+  const payload = wynikModelu(claim, quote);
+  payload.claims[0].claim_en = 'Avoid fire attacks by running, using a shield, or a ward.';
+  const result = normalizujWynikWalidatora(payload, 'test-model', 'test', new Set(['SOURCE 1']), dane(quote), claim);
+  assert.equal(result.status, 'accepted', JSON.stringify(result.diagnostics));
+});
+
 test('conditional-only evidence cannot support an unconditional claim', () => {
   const { zgodnoscStrukturalna } = require('../ai/claimValidation');
   const conditionalEvidence = 'The door opens only when the switch is off.';
