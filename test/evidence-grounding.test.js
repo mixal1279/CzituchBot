@@ -196,6 +196,18 @@ test('causal repair recognizes explicit Polish outcome links without borrowing u
   assert.match(repair, /w ten sposób oddaje Wheatleyowi kontrolę/);
 });
 
+test('causal repair relation signals include motivation and coercion claims', () => {
+  const source = {
+    sourceId: 'SOURCE 1',
+    title: 'Geralt and the bandits',
+    url: 'https://example.test/geralt-bandits',
+    content: 'Geralt zmusił bandytów do ucieczki, przejmując kontrolę nad mostem.',
+  };
+  const claim = 'Geralt zmusił bandytów do ucieczki.';
+  const repair = buildEvidenceRepairContext([{ claim }], [source], new Set(['SOURCE 1']));
+  assert.match(repair, /Geralt zmusił bandytów do ucieczki/);
+});
+
 test('evidence ranking strips leading image filenames but preserves verbatim source quotes', () => {
   const content = 'BG3 Astarion.png BG3 Astarion.png Astarion is an Origin character in Baldur’s Gate 3. You can play as Astarion or recruit him as a companion.';
   const blocks = parseEvidenceBlocks(`[SOURCE 1]
