@@ -967,10 +967,8 @@ function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
     // Bez tego warunku claim_en nigdy nie byłoby użyteczne dla nazw tłumaczonych.
   }
   if (!copiedQuote) {
-    // A translation must preserve the claim's cross-language concepts even when
-    // it is not a verbatim copy of the evidence quote. Otherwise an unrelated
-    // English sentence (e.g. "destroyed Aperture") can pass the lightweight
-    // polarity/number/name checks for a Polish claim about taking control.
+    // For a non-verbatim translation, reject a clear action/concept mismatch
+    // without requiring every paraphrased detail to share a dictionary entry.
     const aliasowaneEncje = [...new Set([
       ...wyodrebnijNazwyWlasne(pl, options),
       ...wyodrebnijNazwyWlasne(pl),
@@ -980,11 +978,8 @@ function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
     const polishConcepts = pojeciaCrossLanguage(plBezEncji);
     const englishConcepts = pojeciaCrossLanguage(enBezEncji);
     const sharedConcepts = [...polishConcepts].filter(concept => englishConcepts.has(concept));
-    const addedConcepts = [...englishConcepts].filter(concept => !polishConcepts.has(concept));
-    const missingConcepts = [...polishConcepts].filter(concept => !englishConcepts.has(concept));
-    if (((polishConcepts.size || englishConcepts.size) && sharedConcepts.length === 0)
-      || addedConcepts.length || missingConcepts.length) {
-      return { ok: false, reason: 'tłumaczenie claimu zmienia zdarzenie lub nie zachowuje zgodności pojęć' };
+    if (polishConcepts.size > 0 && englishConcepts.size > 0 && sharedConcepts.length === 0) {
+      return { ok: false, reason: 'tłumaczenie claimu zmienia zdarzenie lub relację' };
     }
   }
   if (!zbiorRowny(wyodrebnijLiczbyIDaty(pl), wyodrebnijLiczbyIDaty(en))) {
