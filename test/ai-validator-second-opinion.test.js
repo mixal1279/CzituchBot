@@ -29,6 +29,32 @@ test('unsupported causal inference skips redundant second opinions', () => {
   assert.equal(czyWartoDrugaOpinieWalidatora(result), false);
 });
 
+test('deterministic answer coverage failure skips a redundant second opinion', () => {
+  const result = {
+    status: 'rejected',
+    diagnostics: {
+      localRejectReasons: ['evidence_not_verified', 'answer_not_covered_by_claims', 'claims_too_coarse_for_answer'],
+    },
+  };
+  assert.equal(czyWartoDrugaOpinieWalidatora(result), false);
+});
+
+test('non-verbatim evidence quote skips a redundant second opinion', () => {
+  const result = {
+    status: 'rejected',
+    diagnostics: { localRejectReasons: ['evidence_quote_not_exact'] },
+  };
+  assert.equal(czyWartoDrugaOpinieWalidatora(result), false);
+});
+
+test('unknown source IDs skip a redundant second opinion', () => {
+  const result = {
+    status: 'rejected',
+    diagnostics: { localRejectReasons: ['unknown_source_id'] },
+  };
+  assert.equal(czyWartoDrugaOpinieWalidatora(result), false);
+});
+
 test('ambiguous proper-name/evidence binding can still receive an independent opinion', () => {
   const result = {
     status: 'rejected',
