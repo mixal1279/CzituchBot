@@ -37,6 +37,21 @@ test('English "so that" in the source supports a Polish causal claim', () => {
   assert.equal(result.diagnostics.evidenceBindings[0].mode, 'exact_quote');
 });
 
+test('a purpose clause cannot prove that the intended outcome actually occurred', () => {
+  const quote = 'Chell pushed the button so that Wheatley could take control.';
+  const claim = 'Wheatley took control because Chell pushed the button.';
+  const result = normalizujWynikWalidatora(
+    wynikModelu(claim, quote),
+    'test-model',
+    'test',
+    new Set(['SOURCE 1']),
+    dane(quote),
+    claim,
+  );
+  assert.equal(result.status, 'rejected');
+  assert.match(result.reason, /cel lub możliwość.*skutek jako dokonany/);
+});
+
 test('short two-word infobox quotes are accepted when the entity and concept checks pass', () => {
   const claim = 'Astarion is a Rogue.';
   const result = normalizujWynikWalidatora(wynikModelu(claim, 'Class Rogue'), 'test-model', 'test', new Set(['SOURCE 1']), dane('Astarion Gender Male Class Rogue Race High Elf'), claim);
