@@ -413,11 +413,11 @@ function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '', opt
     const quoteNormalizedForEntities = normalizujClaim(quote);
     const claimEntitiesForExactQuote = [...new Set(wyodrebnijNazwyWlasne(claim, { nameOracle }))];
     const missingEntitiesFromExactQuote = claimEntitiesForExactQuote
-      .filter(entity => !czyNazwaWlasnaWystepuje(entity, quoteNormalizedForEntities));
-    const claimStatesPurpose = /\\b(?:so that|in order to|so as to|aby|zeby|w celu)\\b/i.test(claimNorm);
-    const quoteStatesPurpose = /\\b(?:so that|in order to|so as to|aby|zeby|w celu)\\b/i.test(quoteNorm);
+      .filter(entity => !quoteNormalizedForEntities.includes(normalizujClaim(entity)));
+    const claimHasPurposeClause = /\\b(?:so that|in order to|so as to|aby|zeby|w celu)\\b/i.test(claimNorm);
+    const quoteHasPurposeClause = /\\b(?:so that|in order to|so as to|aby|zeby|w celu)\\b/i.test(quoteNorm);
     const exactQuoteIsSufficient = missingEntitiesFromExactQuote.length === 0
-      && (!claimStatesPurpose || quoteStatesPurpose);
+      && (!claimHasPurposeClause || quoteHasPurposeClause);
     if (quoteStructural.ok && exactQuoteIsSufficient) {
       return { ok: true, sourceId: id, mode: 'exact_quote', reason: 'cytat występuje w źródle i bezpośrednio wspiera claim', ignoredSentenceInitialNames: [...ignoredSentenceInitialNames] };
     }
