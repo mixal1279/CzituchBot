@@ -75,7 +75,7 @@ function buildAnswerPlan(question, routing = {}) {
   }));
   const responseShapeGuidance = [
     slots.has('who')
-      ? 'Dla pytań „kto/kim jest” zacznij od głównej tożsamości lub typu postaci, który źródło wyraźnie podaje; następnie podaj istotną rolę lub relację. Rasa i klasa są dodatkowymi atrybutami — nie mogą zastąpić głównej tożsamości. Nie dopisuj etykiety, której źródło nie potwierdza.'
+      ? 'Dla pytań „kto/kim jest” zacznij od głównej tożsamości lub typu postaci, który źródło wyraźnie podaje; następnie podaj istotną rolę lub relację (np. towarzysz lub antagonista). Rasa i klasa są dodatkowymi atrybutami — nie mogą zastąpić głównej tożsamości. Nie dopisuj etykiety, której źródło nie potwierdza.'
       : '',
     slots.has('where')
       ? 'Dla pytań „gdzie” podaj nazwane miejsce lub region oraz konkretny punkt orientacyjny, jeśli źródła potwierdzają oba elementy; nie zastępuj nazw własnych ogólnym opisem.'
