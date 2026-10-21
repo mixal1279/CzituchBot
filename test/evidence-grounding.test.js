@@ -184,6 +184,13 @@ test('causal repair does not use an unrelated sentence merely because it contain
   assert.doesNotMatch(repair, /SOURCE 1|reactor failed/);
 });
 
+test('purpose clauses are not classified as proof of a causal outcome', () => {
+  const { evidenceRelationSignals, classifyClaimType } = require('../ai/evidence');
+  assert.equal(evidenceRelationSignals('Chell pushed the button so that Wheatley could take control.').causal, false);
+  assert.equal(classifyClaimType('Wheatley could take control so that Chell could escape.'), 'factual');
+  assert.equal(evidenceRelationSignals('The button enabled Wheatley to take control.').causal, true);
+});
+
 test('causal repair recognizes explicit Polish outcome links without borrowing unrelated causal sentences', () => {
   const source = {
     sourceId: 'SOURCE 1',
