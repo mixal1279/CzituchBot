@@ -27,14 +27,14 @@ function detectOverclaimTypes(claim, evidence) {
   const types = [];
   if (!c || !e) return types;
 
-  const causalClaim = /\b(?:because|therefore|caused? by|causes?|leads? to|resulted? in|as a result|dzieki temu|z powodu|poniewaz|dlatego|spowodow\w*|doprowadz\w*|umozliw\w*)\b/u.test(c);
-  const causalEvidence = /\b(?:because|therefore|caused? by|causes?|leads? to|resulted? in|as a result|due to|so that|in order to|dzieki temu|z powodu|poniewaz|dlatego|spowodow\w*|doprowadz\w*|umozliw\w*|w wyniku)\b/u.test(e);
+  const causalClaim = /\b(?:because|therefore|caused? by|caus\\w*|causes?|leads? to|resulted? in|as a result|dzieki temu|z powodu|poniewaz|dlatego|spowodow\w*|doprowadz\w*|umozliw\w*)\b/u.test(c);
+  const causalEvidence = /\b(?:because|therefore|caused? by|caus\\w*|causes?|leads? to|resulted? in|as a result|due to|so that|in order to|dzieki temu|z powodu|poniewaz|dlatego|spowodow\w*|doprowadz\w*|umozliw\w*|w wyniku)\b/u.test(e);
   if (causalClaim && !causalEvidence) types.push('correlation_to_causation');
 
   const sourceHedged = /\b(?:may|might|could|possibly|potentially|suggests?|appears? to|limited evidence|small study|up to|moze|mozliwe|prawdopodobnie|sugeruje|wstepne dane|niewielkim badaniu|do\s+\d)\b/u.test(e);
   const claimAbsolute = /\b(?:always|never|proves?|guarantees?|definitely|certainly|undoubtedly|all|every|none|must|zawsze|nigdy|dowodzi|udowodniono|gwarantuje|bez watpienia|na pewno|wszyscy|wszystkie|kazdy|kazda|zaden|zadna)\b/u.test(c);
   const claimHedged = /\b(?:may|might|could|possibly|potentially|suggests?|appears? to|moze|mozliwe|prawdopodobnie|sugeruje|wydaje sie)\b/u.test(c);
-  if (sourceHedged && claimAbsolute && !claimHedged) types.push('hedge_to_absolute');
+  if (sourceHedged && !claimHedged && (claimAbsolute || /\\b(?:is|are|was|were|improves?|increases?|reduces?|shows?|means?|jest|s[aą]|by[lł]|zwi[eę]ksza|poprawia|zmniejsza|oznacza|pokazuje)\\b/u.test(c))) types.push('hedge_to_absolute');
 
   // Preserve qualifiers attached to numeric claims. "Up to 30%" is not the
   // same as an unqualified "30%". The numeric value must occur on both sides.
