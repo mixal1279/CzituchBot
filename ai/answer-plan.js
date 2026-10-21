@@ -50,7 +50,7 @@ function buildAnswerPlan(question, routing = {}) {
   // jako „brakujące kroki” (np. Elden Ring Wielki Miecz).
   const isLocationOnlyGameplay = routing.is_gameplay && slots.has('where')
     && !slots.has('why') && !/jak\s+(?:przej|zrobi|pokona|zdoby|odblokowa|rozwiąza|ukoncz|uzyc|użyc|aktywow|napraw)/i.test(q)
-    && !/\b(?:walkthrough|solucj|poradnik|boss|quest|misj)\b/i.test(q);
+    && !/(?<![\p{L}\p{N}_])(?:walkthrough\p{L}*|solucj\p{L}*|poradnik\p{L}*|boss\p{L}*|quest\p{L}*|misj\p{L}*)(?![\p{L}\p{N}_])/iu.test(q);
   if (routing.is_gameplay && !isLocationOnlyGameplay) slots.add('steps');
   // Procedural questions satisfy the broad how-intent as well as the steps slot.
   if (slots.has('steps')) slots.add('how');
