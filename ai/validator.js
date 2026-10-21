@@ -571,7 +571,8 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
   const unsupportedEvidenceClaim = unsupportedEvidenceClaimIndexes.length > 0;
   const answerCoverage = answer ? sprawdzPokrycieClaimamiOdpowiedzi(answer, claims) : { ok: true, uncovered: [], totalSentences: null, checkedSentences: null, uncoveredSentenceIndexes: [] };
   const claimLanguageMismatchIndexes = wykryjNiezgodnyJezykClaimow(answer, claims);
-  const unsupportedFromClaims = claims.filter(c => !c.supported).map(c => c.claim).filter(Boolean);
+  const hardOverclaimIndexes = new Set(hardOverclaimClaimIndexes);
+  const unsupportedFromClaims = claims.filter((c, index) => !c.supported || hardOverclaimIndexes.has(index)).map(c => c.claim).filter(Boolean);
   const unsupported = [...new Set([
     ...unsupportedFromClaims,
     ...wynik.unsupported_claims
@@ -781,8 +782,8 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
     evidenceSourceCount: evidenceAssessment.sourceCount,
     evidenceIndependentHosts: evidenceAssessment.independentHosts,
     localRejectReasons,
-    evidenceRepairContext: unsupportedEvidenceClaimIndexes.length
-      ? buildEvidenceRepairContext(unsupportedEvidenceClaimIndexes.map(index => claims[index]), allowedBlocks, allowed, 4)
+    evidenceRepairContext: [...new Set([...unsupportedEvidenceClaimIndexes, ...hardOverclaimClaimIndexes])].length
+      ? buildEvidenceRepairContext([...new Set([...unsupportedEvidenceClaimIndexes, ...hardOverclaimClaimIndexes])].map(index => claims[index]), allowedBlocks, allowed, 4)
       : '',
   };
 
@@ -814,7 +815,9 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
           ? 'claims nie są zapisane w języku sprawdzanej odpowiedzi'
         : !answerCoverage.ok
           ? 'claims nie pokrywają całej odpowiedzi'
-          : unsupportedEvidenceClaim
+          : hardOverclaimClaimIndexes.length
+          ? 'claim zawiera nadmierne wnioskowanie: ' + [...new Set(claimSupportAudit.records.filter(record => hardOverclaimClaimIndexes.includes(record.claimIndex)).flatMap(record => record.overclaimTypes))].join(', ')
+        : unsupportedEvidenceClaim
             ? (unsupportedEvidenceReasons.flatMap(x => x.reasons)[0] || 'co najmniej jeden claim nie jest potwierdzony przez wskazane źródło')
           : ((typeof wynik.reason === 'string' ? wynik.reason.trim().slice(0, 500) : '') || (accepted ? 'odpowiedź jest ugruntowana w danych' : 'odpowiedź zawiera niepotwierdzone twierdzenia')),
   };
