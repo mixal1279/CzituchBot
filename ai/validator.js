@@ -745,8 +745,8 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
     && unsupported.length === 0;
 
   const questionText = normalizujClaim(options.question || '');
-  const causalQuestion = /\\b(?:dlaczego|czemu|z jakiego powodu|jaka byla przyczyna|co spowodowalo|why|how come|what caused|what was the reason)\\b/u.test(questionText);
-  const causalLimitation = /\\b(?:przyczyn\\w*|powod\\w*|cause\\w*|reason\\w*)\\b/u.test(normalizujClaim(answer));
+  const causalQuestion = /\b(?:dlaczego|czemu|z jakiego powodu|jaka byla przyczyna|co spowodowalo|why|how come|what caused|what was the reason)\b/u.test(questionText);
+  const causalLimitation = /\b(?:przyczyn\w*|powod\w*|cause\w*|reason\w*)\b/u.test(normalizujClaim(answer));
   // A source-scoped limitation is a valid answer to an explicitly causal question
   // when the retrieved evidence does not establish the cause. In this case the
   // answer contains no factual assertion to bind to claims; ignore contradictory
