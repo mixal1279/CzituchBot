@@ -76,7 +76,7 @@ jobs:
             const d = r.diagnostics || {};
             const lines = [
               "## AI live benchmark",
-              r.valid === false ? "**WYNIK NIEWAŻNY: Groq niedostępny lub limit dzienny wyczerpany.**" : "",
+              r.valid === false ? "**WYNIK NIEWAŻNY: niedostępność dostawcy: " + ((d.outageProviders || []).join(", ") || "nieustalony") + ".**" : "",
               "- przypadków: " + r.total + " (ziarno " + (r.seed || 0) + ")",
               "- odpowiedzi: " + r.answeredAccuracy + ", kompletność: " + r.completenessAccuracy + ", factual: " + r.factualAccuracy,
               "- claim-source support: ścisłe=" + r.claimSupportPassRate + ", użyteczne=" + r.claimSupportUsableRate,
