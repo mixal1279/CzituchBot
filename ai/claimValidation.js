@@ -253,7 +253,11 @@ function wyodrebnijNazwyWlasne(value, options = {}) {
     // („Najłatwiej dotrzeć do wózka…” → „The easiest way to get there…”).
     'najlatwiej', 'najprościej', 'najszybciej', 'najczesciej', 'zazwyczaj', 'przede',
     // Liczba mnoga rzeczownika pospolitego: „postać” była na liście, „postacie” nie.
-    'postacie', 'postaci', 'bohaterzy', 'bohaterowie'
+    'postacie', 'postaci', 'bohaterzy', 'bohaterowie',
+    // Rzeczownik pospolity na początku claimu nie może zostać uznany za encję.
+    // W live benchmark „Przejęcie kontroli przez Wheatleya…” było błędnie
+    // odrzucane, bo „Przejęcie” nie występowało w angielskim claim_en jako nazwa.
+    'przejecie', 'przejecia', 'przejeciu', 'przejeciem', 'przejec'
   ].map(normalizujClaim));
   const candidates = [];
   const aliasSpans = [];

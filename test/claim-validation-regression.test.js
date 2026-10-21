@@ -58,6 +58,18 @@ test('diacritics-normalized generic first words are not extracted as names', () 
   assert.equal(wyodrebnijNazwyWlasne('Nie ma potwierdzenia…').includes('nie'), false);
 });
 
+test('sentence-initial inflections of przejęcie are common nouns, not proper names', () => {
+  for (const claim of [
+    'Przejęcie kontroli przez Wheatleya nastąpiło po transferze rdzenia.',
+    'Przejęcia kontroli przez Wheatleya nie opisano dokładnie.',
+    'Przejęciu kontroli towarzyszył transfer rdzenia.',
+    'Przejęciem kontroli zakończyła się procedura.',
+  ]) {
+    assert.equal(wyodrebnijNazwyWlasne(claim).some(name => /^przejec/.test(name)), false, claim);
+  }
+  assert.ok(wyodrebnijNazwyWlasne('Wheatley przejął kontrolę.').includes('wheatley'));
+});
+
 test('real first-word names Artur and Arthur remain detectable', () => {
   assert.ok(wyodrebnijNazwyWlasne('Artur opuścił miasto.').includes('artur'));
   assert.ok(wyodrebnijNazwyWlasne('Arthur opuścił miasto.').includes('arthur'));
