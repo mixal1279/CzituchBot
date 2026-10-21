@@ -26,6 +26,7 @@ const CROSS_LANGUAGE_CONCEPTS = [
   ['porazka', /defeat\w*|beaten|overcome\w*|pokon\w*|pora[zż]k\w*/i],
   ['zdrada', /betray\w*|traitor\w*|zdradz\w*|zdrajc\w*/i],
   ['tworzenie', /creat\w*|develop\w*|build\w*|made\b|stworz\w*|tworz\w*|opracow\w*/i],
+  ['destrukcja', /destroy\w*|destruct\w*|demolish\w*|ruin\w*|zniszcz\w*|zniszczen\w*|rozbij\w*/i],
   ['praca', /work\w*|employ\w*|job\w*|prac\w*|zatrud\w*/i],
   ['lokalizacja', /found|find\w*|locat\w*|location\w*|znalezc\w*|znajduj\w*|lokaliz\w*|lezy|polozen\w*/i],
   ['rodzina', /family|families|wife|daughter|son|missing\s+(?:wife|daughter|son|family)|rodzin\w*|zaginion\w*|zona|corka|syn\w*/i],
@@ -688,9 +689,14 @@ function sprawdzPokrycieClaimamiOdpowiedzi(answer, claims) {
     const hasStrongEntityCoverage = sentenceEntities.length > 0
       && entityCoverage >= 0.9
       && tokenCoverage >= 0.45;
-    const coverage = tokenCoverage >= 0.55
-      ? tokenCoverage
-      : (hasStrongSemanticCoverage || hasStrongEntityCoverage ? 0.56 : tokenCoverage);
+    // A sentence containing a material concept that no coherent claim owns is
+    // not covered merely because names and common words inflate lexical overlap.
+    const hasUncoveredConcept = sentenceConcepts.size > 0 && conceptCoverage < 0.8;
+    const coverage = hasUncoveredConcept
+      ? Math.min(tokenCoverage, 0.54)
+      : (tokenCoverage >= 0.55
+        ? tokenCoverage
+        : (hasStrongSemanticCoverage || hasStrongEntityCoverage ? 0.56 : tokenCoverage));
 
     if (coverage < 0.55) uncovered.push({ index: sentenceIndex, text: sentence.slice(0, 180) });
   }
