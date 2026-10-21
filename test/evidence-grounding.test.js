@@ -162,6 +162,28 @@ test('causal repair excludes semantically related quotes without an explicit cau
   assert.doesNotMatch(repair, /SOURCE 1|He took control of Aperture/);
 });
 
+test('causal repair does not use an unrelated sentence merely because it contains a causal marker', () => {
+  const unrelated = {
+    sourceId: 'SOURCE 1',
+    title: 'Unrelated cause',
+    url: 'https://example.test/unrelated',
+    content: 'Because the reactor failed, the lights went out. Wheatley took control of Aperture.',
+  };
+  const supported = {
+    sourceId: 'SOURCE 2',
+    title: 'Related cause',
+    url: 'https://example.test/related',
+    content: "Wheatley's instability caused the destruction of Aperture.",
+  };
+  const repair = buildEvidenceRepairContext(
+    [{ claim: "Wheatley's instability caused the destruction of Aperture." }],
+    [unrelated, supported],
+    new Set(['SOURCE 1', 'SOURCE 2']),
+  );
+  assert.match(repair, /SOURCE 2/);
+  assert.doesNotMatch(repair, /SOURCE 1|reactor failed/);
+});
+
 test('evidence ranking strips leading image filenames but preserves verbatim source quotes', () => {
   const content = 'BG3 Astarion.png BG3 Astarion.png Astarion is an Origin character in Baldur’s Gate 3. You can play as Astarion or recruit him as a companion.';
   const blocks = parseEvidenceBlocks(`[SOURCE 1]
