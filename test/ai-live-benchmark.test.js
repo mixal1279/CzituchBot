@@ -6,7 +6,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { normalizeFactText, scoreGoldenFacts } = require('../ai/benchmark-scorer');
-const { buildQuestionForBot, evaluateBenchmarkAnswer, classifyBenchmarkOutcome, buildBenchmarkDiagnostics, stratifiedCases, isFailureText, writeBenchmarkReport, writeStdoutAndWait, wybierzOdrzuconaOdpowiedz } = require('../scripts/ai-live-benchmark');
+const { buildQuestionForBot, evaluateBenchmarkAnswer, classifyBenchmarkOutcome, buildBenchmarkDiagnostics, stratifiedCases, isFailureText, writeBenchmarkReport, writeStdoutAndWait, wybierzOdrzuconaOdpowiedz, isFalseReject } = require('../scripts/ai-live-benchmark');
 
 test('benchmark factual normalization preserves words with Polish diacritics and collapses whitespace', () => {
   assert.equal(normalizeFactText('Święty Łukasz  —  przejął kontrolę.'), 'swiety lukasz przejal kontrole');
@@ -27,6 +27,23 @@ test('gold facts require normalized whole phrases, not accidental substrings', (
   const falsePositive = scoreGoldenFacts('Wheatley przejął kontrolowanie; ślad kontrolowania pozostał.', facts);
   assert.equal(falsePositive.passed, false);
   assert.deepEqual(falsePositive.missing, [['Wheatley', 'przejął kontrolę']]);
+});
+
+test('false-reject metric requires a discarded answer to pass independent gold facts', () => {
+  const item = { expected: { factual: {
+    independentGold: true,
+    mustInclude: [['Caelem Ruins', 'Caelid']],
+    mustNot: [],
+  } } };
+  const discardedEvaluation = { answered: true, judgeStatus: 'accepted' };
+  const rejectedEvaluation = { answered: false, judgeStatus: 'abstained' };
+  const inaccurateDiscardedFacts = scoreGoldenFacts('The item is somewhere in Caelid.', item.expected.factual);
+  assert.equal(inaccurateDiscardedFacts.passed, false);
+  assert.equal(isFalseReject(discardedEvaluation, inaccurateDiscardedFacts, rejectedEvaluation, item), false);
+
+  const accurateDiscardedFacts = scoreGoldenFacts('The item is at Caelem Ruins in Caelid.', item.expected.factual);
+  assert.equal(accurateDiscardedFacts.passed, true);
+  assert.equal(isFalseReject(discardedEvaluation, accurateDiscardedFacts, rejectedEvaluation, item), true);
 });
 
 test('forbidden golden facts reduce factual score and are detected after normalization', () => {
