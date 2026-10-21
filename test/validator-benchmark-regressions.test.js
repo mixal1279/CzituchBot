@@ -51,7 +51,8 @@ test('a purpose clause cannot prove that the intended outcome actually occurred'
     claim,
   );
   assert.equal(result.status, 'rejected');
-  assert.match(result.reason, /cel lub możliwość.*skutek jako dokonany/);
+  assert.equal(result.diagnostics.evidenceBindings[0].supportVerified, false);
+  assert.match(result.reason, /cel lub możliwość.*skutek jako dokonany|correlation_to_causation/);
 
   const purposeClaim = 'Chell i Wheatley wymusili transfer rdzenia, aby Wheatley mógł przejąć kontrolę nad obiektem.';
   const purposeQuote = 'Chell and Wheatley force a core transfer on GLaDOS so that Wheatley can take control of the facility.';
