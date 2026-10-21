@@ -86,7 +86,8 @@ function awaitWithAbortTimeout(promise, timeoutMs, controller, label = 'provider
 
 /**
  * Choose a reserve for later validator/fallback slots from the remaining deadline.
- * Keep at least 2.5s for a final response; skip calls that cannot fit a 4s attempt.
+ * Keep at least 2.5s for a final response; callers may request a larger minimum
+ * reserve when a bounded repair plus a final validation pass must still fit.
  */
 function computeValidatorReserveMs(remainingMs, currentSlot = 1, maxValidators = 3, minimumReserveMs = 0) {
   const remaining = Number(remainingMs);
