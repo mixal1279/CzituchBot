@@ -445,7 +445,8 @@ async function run() {
   const serializedReport = writeBenchmarkReport(report);
   if (!process.env.AI_BENCHMARK_JSON_PATH) await writeStdoutAndWait(serializedReport);
   if (providerOutage) {
-    console.error('[LIVE BENCHMARK] WYNIK NIEWAŻNY: Groq nie zwrócił żadnej odpowiedzi (limit dzienny lub awaria). Nie oceniaj jakości kodu po tym runie.');
+    const outageProviders = (diagnostic.outageProviders || []).join(', ') || 'nieustalony dostawca';
+    console.error(`[LIVE BENCHMARK] WYNIK NIEWAŻNY: wszystkie próby dla dostawcy niedostępne lub zakończone błędem: ${outageProviders}. Nie oceniaj jakości kodu po tym runie.`);
     process.exitCode = 3;
     return;
   }
