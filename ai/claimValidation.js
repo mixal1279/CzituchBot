@@ -742,6 +742,14 @@ function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
   const quoteNorm = normalizujClaim(options.evidenceQuote || '');
   const copiedQuote = Boolean(quoteNorm) && normalizujClaim(en) === quoteNorm;
   if (copiedQuote) {
+    const polishConcepts = pojeciaCrossLanguage(pl);
+    const englishConcepts = pojeciaCrossLanguage(en);
+    const sharedConcepts = [...polishConcepts].filter(concept => englishConcepts.has(concept));
+    // Entity/name overlap alone is not positive evidence that the action agrees:
+    // „zniszczył Aperture” must not pass against „took control of Aperture”.
+    if ((polishConcepts.size || englishConcepts.size) && sharedConcepts.length === 0) {
+      return { ok: false, reason: 'claim_en kopiuje cytat, ale nie odpowiada treści claimu' };
+    }
     const agreement = dopasowanieSemantyczne(en, pl, options);
     if (!agreement.ok) return { ok: false, reason: 'claim_en kopiuje cytat, ale nie odpowiada treści claimu' };
   }
