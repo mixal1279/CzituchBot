@@ -132,4 +132,63 @@ function computeGenerationTimeout(remainingMs, {
   return timeoutMs >= minTimeoutMs ? Math.floor(timeoutMs) : null;
 }
 
-module.exports = { createGroqCompletion, awaitWithAbortTimeout, withReasoningHeadroom, normalizeGroqSdkBaseUrl, computeValidatorTimeout, computeValidatorReserveMs, computeGenerationTimeout };
+function isGroqSchemaValidationError(error) {
+  const status = Number(error?.status ?? error?.statusCode ?? error?.response?.status ?? 0);
+  const message = String(error?.message || error || '');
+  return status === 400 && /json_validate_failed|generated json does not match the expected schema|does not validate with \/properties\//i.test(message);
+}
+
+/**
+ * Groq may occasionally return a schema-validation HTTP 400 for a GPT-OSS
+ * validator request even when the strict schema is valid. Retry that specific
+ * provider-contract failure once in JSON Object Mode; the caller still parses
+ * the result and applies the full local evidence/claim contract before use.
+ * Never retry quota, transport, timeout, or semantic-validation failures.
+ */
+async function createGroqCompletionWithSchemaFallback(groqClient, payload, {
+  signal,
+  controller,
+  timeoutMs = 3000,
+  fallbackTimeoutMs = 1200,
+} = {}) {
+  const startedAt = Date.now();
+  const originalPayload = { ...payload };
+  const activeController = controller || {
+    signal,
+    abort() { try { signal?.throwIfAborted?.(); } catch (_) {} },
+  };
+  try {
+    return await awaitWithAbortTimeout(
+      createGroqCompletion(groqClient, { ...originalPayload }, { signal }),
+      timeoutMs,
+      activeController,
+      'Groq validator',
+    );
+  } catch (error) {
+    if (!isGroqSchemaValidationError(error) || signal?.aborted || activeController.signal?.aborted) throw error;
+    const remaining = Math.max(0, Number(timeoutMs) - (Date.now() - startedAt));
+    const retryTimeout = Math.min(Number(fallbackTimeoutMs) || 1200, remaining);
+    if (retryTimeout < 250) throw error;
+    return await awaitWithAbortTimeout(
+      createGroqCompletion(groqClient, {
+        ...originalPayload,
+        response_format: { type: 'json_object' },
+      }, { signal }),
+      retryTimeout,
+      activeController,
+      'Groq validator JSON fallback',
+    );
+  }
+}
+
+module.exports = {
+  createGroqCompletion,
+  createGroqCompletionWithSchemaFallback,
+  isGroqSchemaValidationError,
+  awaitWithAbortTimeout,
+  withReasoningHeadroom,
+  normalizeGroqSdkBaseUrl,
+  computeValidatorTimeout,
+  computeValidatorReserveMs,
+  computeGenerationTimeout,
+};
