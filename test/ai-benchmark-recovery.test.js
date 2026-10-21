@@ -45,9 +45,9 @@ test('pełna odpowiedź nie jest wydawana, gdy zabrakło zweryfikowanego partial
 
 test('nazwa przetłumaczona przez alias przechodzi kontrolę spójności tłumaczenia', () => {
   const result = spojnoscTlumaczeniaClaimu(
-    'Najłatwiej dotrzeć do wózka zaczynając od Kościoła Palącego się i podążając wschodnim szlakiem.',
-    'The easiest way to get there is starting at the Smoldering Church and just following the road east.',
-    { evidenceQuote: 'The easiest way to get there is starting at the Smoldering Church and just following the road east.' },
+    'Najłatwiej dotrzeć do wózka zaczynając od Katedry Smoczej Komunii i podążając wschodnim szlakiem.',
+    'The easiest way to get there is starting at the Cathedral of Dragon Communion and just following the road east.',
+    { evidenceQuote: 'The easiest way to get there is starting at the Cathedral of Dragon Communion and just following the road east.' },
   );
   assert.equal(result.ok, true, JSON.stringify(result));
 });
@@ -75,7 +75,7 @@ test('rzeczownik pospolity w liczbie mnogiej nie jest traktowany jako encja', ()
 });
 
 test('przysłówek na początku zdania nie jest traktowany jako encja', () => {
-  const names = wyodrebnijNazwyWlasne('Najłatwiej dotrzeć do wózka zaczynając od Kościoła Palącego się.');
+  const names = wyodrebnijNazwyWlasne('Najłatwiej dotrzeć do wózka zaczynając od Katedry Smoczej Komunii.');
   assert.ok(!names.includes('najlatwiej'), JSON.stringify(names));
 });
 
