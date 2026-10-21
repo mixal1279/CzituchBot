@@ -195,8 +195,8 @@ function buildBenchmarkDiagnostics(results, allCases = benchmark.cases, selected
   const validatorStatusCounts = {};
   for (const row of validatorRows) {
     const provider = String(row.provider || 'unknown');
-    const status = String(row.status || 'unknown');
-    validatorProviderCalls[provider] = (validatorProviderCalls[provider] || 0) + 1;
+    const status = row.skipped === true ? 'skipped' : String(row.status || 'unknown');
+    if (row.skipped !== true) validatorProviderCalls[provider] = (validatorProviderCalls[provider] || 0) + 1;
     validatorStatusCounts[status] = (validatorStatusCounts[status] || 0) + 1;
   }
   const classifyGenerationFailure = attempt => {
@@ -228,9 +228,9 @@ function buildBenchmarkDiagnostics(results, allCases = benchmark.cases, selected
   // raportował providerOutage=false. Benchmark, w którym kluczowy provider
   // leży, nie mierzy kodu — musi to być widoczne w raporcie.
   const providerAttempts = results.flatMap(result => [
-    ...(result.generationAttempts || []).map(attempt => ({ provider: String(attempt.provider || ''), status: attempt.status })),
-    ...(result.validatorResults || []).map(row => ({ provider: String(row.provider || ''), status: row.status })),
-  ]).filter(attempt => attempt.provider);
+    ...(result.generationAttempts || []).map(attempt => ({ provider: String(attempt.provider || ''), status: attempt.status, skipped: attempt.skipped === true })),
+    ...(result.validatorResults || []).map(row => ({ provider: String(row.provider || ''), status: row.status, skipped: row.skipped === true })),
+  ]).filter(attempt => attempt.provider && !attempt.skipped);
   const providersWithAttempts = [...new Set(providerAttempts.map(attempt => attempt.provider))];
   const failedOutageProviders = providersWithAttempts.filter(provider => {
     const attempts = providerAttempts.filter(attempt => attempt.provider === provider);
@@ -255,13 +255,14 @@ function buildBenchmarkDiagnostics(results, allCases = benchmark.cases, selected
     // Licznik dotyczył końca REQUESTU, a nie wywołań walidatora: przy 5
     // odrzuconych przypadkach raportował 0, mimo że 7 z 12 wywołań walidatora
     // zakończyło się statusem 'unavailable'.
-    validatorUnavailable: validatorRows.filter(row => row.status === 'unavailable').length,
+    validatorUnavailable: validatorRows.filter(row => row.status === 'unavailable' && row.skipped !== true).length,
+    validatorSkipped: validatorRows.filter(row => row.skipped === true).length,
     requestsUnavailable: results.filter(result => result.finalStatus === 'unavailable').length,
-    validatorCalls: validatorRows.length,
+    validatorCalls: validatorRows.filter(row => row.skipped !== true).length,
     validatorProviderCalls,
     validatorStatusCounts,
     validatorTransportFailures: validatorRows
-      .filter(row => row.status === 'unavailable' || row.status === 'error' || row.technicalError === true)
+      .filter(row => row.skipped !== true && (row.status === 'unavailable' || row.status === 'error' || row.technicalError === true))
       .map(row => ({ provider: row.provider || 'unknown', model: row.model || null, status: row.status || 'unknown', reason: row.reason || null })),
     providerOutage: failedOutageProviders.length > 0,
     outageProviders: failedOutageProviders,
