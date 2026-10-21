@@ -47,12 +47,21 @@ test('a stated motive phrased as "miało na celu" satisfies a why answer plan', 
   assert.deepEqual(result.missing, []);
 });
 
+test('where-answer guidance requests a named landmark rather than direction alone', () => {
+  const plan = buildAnswerPlan('Gdzie znajduje się Wielki Miecz?', {
+    intent: 'web_fact', is_gameplay: true, entity: 'Greatsword', game: 'Elden Ring',
+  });
+  assert.match(plan.instruction, /precyzyjny punkt orientacyjny/);
+  assert.match(plan.instruction, /ruiny, budowla lub konkretny obiekt/);
+});
+
 test('who-answer guidance prioritizes source-defined identity over secondary traits', () => {
   const plan = buildAnswerPlan('Kim jest Astarion?', {
     intent:'web_fact', entity:'Astarion', game:"Baldur's Gate 3",
   });
-  assert.match(plan.instruction, /głównej tożsamości lub typu postaci/);
-  assert.match(plan.instruction, /nie mogą zastąpić głównej tożsamości/);
+  assert.match(plan.instruction, /głównej tożsamości lub definiującego statusu postaci/);
+  assert.match(plan.instruction, /nie mogą zastąpić definiującej tożsamości/);
+  assert.match(plan.instruction, /wampirzy pomiot/);
 });
 
 test('v26 answer plan detects and enforces coverage for multiple clauses', () => {
