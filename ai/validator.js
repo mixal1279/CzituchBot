@@ -278,9 +278,15 @@ function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '', opt
   // a tłumaczenie przeszło mechaniczną kontrolę zgodności z polskim oryginałem.
   // Zgodność claim_en z cytatem nie jest sama w sobie błędem; niezgodne zdarzenia,
   // polaryzacja, liczby, nazwy i relacje są wykrywane przez testy semantyczne poniżej.
-  if (options.claimEn && typeof evidenceQuote === 'string' && wyglądaNaAngielski(evidenceQuote)) {
+  if (typeof evidenceQuote === 'string' && wyglądaNaAngielski(evidenceQuote)) {
+    if (!String(options.claimEn || '').trim()) {
+      return { ok: false, reason: 'brak angielskiego tłumaczenia claimu dla angielskiego dowodu' };
+    }
     const consistency = spojnoscTlumaczeniaClaimu(claim, options.claimEn, { nameOracle, evidenceQuote });
-    if (consistency.ok) claim = String(options.claimEn);
+    if (!consistency.ok) {
+      return { ok: false, reason: consistency.reason || 'angielskie tłumaczenie claimu nie zgadza się z oryginałem' };
+    }
+    claim = String(options.claimEn);
   }
   if (!Array.isArray(sourceIds) || !sourceIds.length || typeof evidenceQuote !== 'string') {
     return { ok: false, reason: 'brak poprawnego source_id lub evidence_quote' };
@@ -624,8 +630,21 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
     })()
     : { contains: false, only: false };
   const claimLanguageMismatchIndexes = wykryjNiezgodnyJezykClaimow(answer, claims);
+  // Cross-language verification is only meaningful when the original claim is preserved
+  // and its English translation is explicitly supplied. Without it, lexical/alias overlap
+  // can accidentally let a Polish claim pass against an English quote without checking the action.
+  const missingCrossLanguageTranslationIndexes = claims
+    .map((claim, index) => claim.supported === true
+      && wyglądaNaAngielski(claim.evidence_quote)
+      && wykryjJezykClaimu(claim.claim) === 'pl'
+      && !String(claim.claim_en || '').trim()
+      ? index : -1)
+    .filter(index => index >= 0);
   const hardOverclaimIndexes = new Set(hardOverclaimClaimIndexes);
-  const unsupportedFromClaims = claims.filter((c, index) => !c.supported || hardOverclaimIndexes.has(index)).map(c => c.claim).filter(Boolean);
+  const missingCrossLanguageTranslationSet = new Set(missingCrossLanguageTranslationIndexes);
+  const unsupportedFromClaims = claims.filter((c, index) =>
+    !c.supported || hardOverclaimIndexes.has(index) || missingCrossLanguageTranslationSet.has(index)
+  ).map(c => c.claim).filter(Boolean);
   const unsupported = [...new Set([
     ...unsupportedFromClaims,
     ...wynik.unsupported_claims
@@ -656,6 +675,7 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
   const claimContractOk = claims.length > 0
     && claims.every(c => c.supported)
     && claimLanguageMismatchIndexes.length === 0
+    && missingCrossLanguageTranslationIndexes.length === 0
     && !unknownSourceClaim
     && !unsupportedEvidenceClaim
     && unverifiedEvidenceQuoteIndexes.length === 0
@@ -722,6 +742,7 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
     && verifiedPartialClaims.length > 0
     && hasPartialFailureTrigger
     && claimLanguageMismatchIndexes.length === 0
+    && missingCrossLanguageTranslationIndexes.length === 0
     && !unknownSourceClaim
     && !tooManyClaims
     && !malformedClaims
@@ -758,6 +779,7 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
   if (unverifiedEvidenceQuoteIndexes.length) localRejectReasons.push('evidence_quote_not_exact');
   if (claims.some(c => !c.supported) || wynik.unsupported_claims.some(v => typeof v === 'string' && v.trim())) localRejectReasons.push('unsupported_claims_reported');
   if (claimLanguageMismatchIndexes.length) localRejectReasons.push('claims_language_mismatch');
+  if (missingCrossLanguageTranslationIndexes.length) localRejectReasons.push('claim_translation_missing');
   // Diagnostyka bez zmiany decyzji: odpowiedź zawierająca zastrzeżenie „źródła
   // nie podają…” odpowiada na pytanie zastrzeżeniem, nie faktem. Samo pokrycie
   // zdań zgłaszałoby wtedy problem z kompozycją, a problem jest gdzie indziej.
@@ -872,6 +894,8 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
           ? 'claim wskazuje nieistniejące lub niedozwolone źródło'
         : claimLanguageMismatchIndexes.length
           ? 'claims nie są zapisane w języku sprawdzanej odpowiedzi'
+        : missingCrossLanguageTranslationIndexes.length
+          ? 'brak angielskiego tłumaczenia claimu dla angielskiego dowodu'
         : answerLimitation.contains
           ? 'odpowiedź zawiera zastrzeżenie o braku danych w źródłach zamiast odpowiedzi na pytanie'
         : !answerCoverage.ok
