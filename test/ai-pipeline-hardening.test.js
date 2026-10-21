@@ -45,7 +45,7 @@ test('purpose clauses satisfy why intent without being mislabeled as an explicit
   const motive = extractAnswerSignals('Wheatley przejął kontrolę, aby upokorzyć GLaDOS.');
   assert.equal(motive.why, true);
   assert.equal(motive.motive_explanation, true);
-  assert.equal(motive.causal_explanation, true);
+  assert.equal(motive.causal_explanation, false);
 
   const cause = extractAnswerSignals('Wheatley przejął kontrolę z powodu awarii systemu.');
   assert.equal(cause.why, true);
