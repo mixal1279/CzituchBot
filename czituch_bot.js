@@ -2369,13 +2369,7 @@ async function walidujOdpowiedzAI(persona, pytanie, odpowiedz, dane, historiaRoz
 // obchodzimy twardych konfliktów merytorycznych. Każdy wynik nadal przechodzi
 // ten sam lokalny kontrakt, w tym dokładne przypisanie cytatu do SOURCE ID.
 function czyWartoDrugaOpinieWalidatora(result) {
-  if (result?.status !== 'rejected') return false;
-  const reasons = [
-    result.reason,
-    ...(result.diagnostics?.localRejectReasons || []),
-    ...(result.diagnostics?.unsupportedEvidenceClaims || []).flatMap(item => item.reasons || []),
-  ].filter(Boolean).join(' ').toLocaleLowerCase('pl-PL');
-  return /evidence_quote|evidence not verified|evidence_not_verified|cytat|source.?id|claims_missing|malformed_claims|answer_not_covered_by_claims|claim_en|nazw własnych|nazw wlasnych|claimy nie pokrywają|claimy nie pokrywaja/i.test(reasons);
+  return AI_VALIDATOR.czyWartoDrugaOpinieWalidatora(result);
 }
 
 async function walidujOdpowiedzAIBezCache(persona, pytanie, odpowiedz, dane, historiaRozmowy = [], requestId = '-', requestState = null, requestMeta = null) {
