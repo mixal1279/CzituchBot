@@ -431,7 +431,9 @@ function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '', opt
     if (quoteStructural.ok && !exactQuoteIsSufficient) {
       reasons.push(missingEntitiesFromExactQuote.length
         ? 'cytat samodzielnie nie zawiera wszystkich nazw własnych claimu; wymagany jest lokalny kontekst źródła'
-        : 'cytat samodzielnie nie potwierdza relacji celu podanej w claimie; wymagany jest lokalny kontekst źródła');
+        : subjectMissingFromExactQuote
+          ? 'cytat samodzielnie nie zawiera jawnego podmiotu claimu; wymagany jest lokalny kontekst źródła'
+          : 'cytat samodzielnie nie potwierdza relacji celu podanej w claimie; wymagany jest lokalny kontekst źródła');
     }
 
     // Bounded same-source synthesis supports local anaphora and facts stated in
