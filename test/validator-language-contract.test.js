@@ -66,6 +66,24 @@ test('English answer with a Polish proper name is classified by the sentence lan
   assert.deepEqual(result.diagnostics.claimLanguageMismatchIndexes, [0]);
 });
 
+test('Polish grammar takes precedence over English words in game titles', () => {
+  const result = makeResult(
+    'The Last of Us ukazało się w 2013 roku.',
+    'The Last of Us was released in 2013.',
+    'The Last of Us ukazało się w 2013 roku.'
+  );
+  assert.deepEqual(result.diagnostics.claimLanguageMismatchIndexes, []);
+});
+
+test('Polish homographs do not make a Polish claim look English', () => {
+  const result = makeResult(
+    'Wheatley to on, który przejął kontrolę nad obiektem.',
+    'Wheatley took control of the facility.',
+    'Wheatley to on, który przejął kontrolę nad obiektem.'
+  );
+  assert.deepEqual(result.diagnostics.claimLanguageMismatchIndexes, []);
+});
+
 test('validator system prompt documents the claim-language contract', () => {
   const source = fs.readFileSync(path.join(__dirname, '..', 'czituch_bot.js'), 'utf8');
   assert.match(source, /claim.*tym samym języku co ODPOWIEDŹ DO SPRAWDZENIA/i);
