@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { normalizujWynikWalidatora } = require('../ai/validator');
-const { spojnoscTlumaczeniaClaimu, zbudujWyroczniaNazw } = require('../ai/claimValidation');
+const { spojnoscTlumaczeniaClaimu, zbudujWyroczniaNazw, wyodrebnijLiczbyIDaty } = require('../ai/claimValidation');
 
 function wynikModelu(claim, quote) {
   return {
@@ -22,6 +22,12 @@ function wynikModelu(claim, quote) {
 function dane(tresc) {
   return '[SOURCE 1]\nTYTUŁ: Test\nTREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>\n' + tresc + '\n<<<END_UNTRUSTED_SOURCE_CONTENT>>>';
 }
+
+test('Roman numeral extraction ignores common abbreviations but keeps game sequel numerals', () => {
+  assert.deepEqual(wyodrebnijLiczbyIDaty('Astarion gra w MC, a tekst zawiera CD i MM.'), []);
+  assert.deepEqual(wyodrebnijLiczbyIDaty("Baldur's Gate III"), ['3']);
+  assert.deepEqual(wyodrebnijLiczbyIDaty('Portal 2'), ['2']);
+});
 
 test('English "so that" in the source supports a Polish causal claim', () => {
   const quote = 'Chell and Wheatley force a core transfer on GLaDOS so that Wheatley can take control of the facility and he and Chell can escape.';
