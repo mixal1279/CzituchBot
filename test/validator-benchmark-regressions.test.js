@@ -64,6 +64,18 @@ test('a purpose clause cannot prove that the intended outcome actually occurred'
   assert.equal(escapeResult.status, 'rejected');
 });
 
+test('conditional-only evidence cannot support an unconditional claim', () => {
+  const { zgodnoscStrukturalna } = require('../ai/claimValidation');
+  const conditionalEvidence = 'The door opens only when the switch is off.';
+  const unconditionalClaim = 'The door opens.';
+  const result = zgodnoscStrukturalna(conditionalEvidence, unconditionalClaim);
+  assert.equal(result.ok, false, JSON.stringify(result));
+  assert.match(result.reason, /dowód jest warunkowy/);
+
+  const qualifiedClaim = 'The door opens only when the switch is off.';
+  assert.equal(zgodnoscStrukturalna(conditionalEvidence, qualifiedClaim).ok, true);
+});
+
 test('short two-word infobox quotes are accepted when the entity and concept checks pass', () => {
   const claim = 'Astarion is a Rogue.';
   const result = normalizujWynikWalidatora(wynikModelu(claim, 'Class Rogue'), 'test-model', 'test', new Set(['SOURCE 1']), dane('Astarion Gender Male Class Rogue Race High Elf'), claim);
