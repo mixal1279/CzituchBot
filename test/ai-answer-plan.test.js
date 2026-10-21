@@ -2,7 +2,8 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { buildAnswerPlan, buildRetrievalQueries, extractAnswerSignals, assessAnswerCompleteness } = require('../ai/answer-plan');
+const { buildAnswerPlan, extractAnswerSignals, assessAnswerCompleteness } = require('../ai/answer-plan');
+const { buildRetrievalQueries } = require('../ai/planner');
 const { judgeAnswer } = require('../ai/answer-judge');
 
 test('v26 answer plan identifies causal lore requirements', () => {
