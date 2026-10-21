@@ -966,6 +966,27 @@ function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
     // punkty muszą wystarczać samodzielnie.
     // Bez tego warunku claim_en nigdy nie byłoby użyteczne dla nazw tłumaczonych.
   }
+  if (!copiedQuote) {
+    // A translation must preserve the claim's cross-language concepts even when
+    // it is not a verbatim copy of the evidence quote. Otherwise an unrelated
+    // English sentence (e.g. "destroyed Aperture") can pass the lightweight
+    // polarity/number/name checks for a Polish claim about taking control.
+    const aliasowaneEncje = [...new Set([
+      ...wyodrebnijNazwyWlasne(pl, options),
+      ...wyodrebnijNazwyWlasne(pl),
+    ])];
+    const plBezEncji = wycinAliasowaneEncje(pl, aliasowaneEncje);
+    const enBezEncji = wycinAliasowaneEncje(en, aliasowaneEncje);
+    const polishConcepts = pojeciaCrossLanguage(plBezEncji);
+    const englishConcepts = pojeciaCrossLanguage(enBezEncji);
+    const sharedConcepts = [...polishConcepts].filter(concept => englishConcepts.has(concept));
+    const addedConcepts = [...englishConcepts].filter(concept => !polishConcepts.has(concept));
+    const missingConcepts = [...polishConcepts].filter(concept => !englishConcepts.has(concept));
+    if (((polishConcepts.size || englishConcepts.size) && sharedConcepts.length === 0)
+      || addedConcepts.length || missingConcepts.length) {
+      return { ok: false, reason: 'tłumaczenie claimu zmienia zdarzenie lub nie zachowuje zgodności pojęć' };
+    }
+  }
   if (!zbiorRowny(wyodrebnijLiczbyIDaty(pl), wyodrebnijLiczbyIDaty(en))) {
     return { ok: false, reason: 'tłumaczenie claimu zmienia liczby lub daty' };
   }
