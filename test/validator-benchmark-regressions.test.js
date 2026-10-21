@@ -54,6 +54,20 @@ test('causal control relation is recognized in quoted evidence', () => {
   assert.equal(result.status, 'accepted', JSON.stringify(result.diagnostics));
 });
 
+test('Dragonrend force-to-land relation matches Polish causal wording', () => {
+  const quote = 'Dragonrend forces the dragon to land.';
+  const claim = 'Dragonrend zmusza smoka do lądowania.';
+  const result = normalizujWynikWalidatora(
+    wynikModelu(claim, quote, quote),
+    'test-model',
+    'test',
+    new Set(['SOURCE 1']),
+    dane(quote),
+    claim,
+  );
+  assert.equal(result.status, 'accepted', JSON.stringify(result.diagnostics));
+});
+
 test('a purpose clause cannot prove that the intended outcome actually occurred', () => {
   const quote = 'Chell pushed the button so that Wheatley could take control.';
   const claim = 'Wheatley took control because Chell pushed the button.';
