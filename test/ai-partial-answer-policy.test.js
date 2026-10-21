@@ -6,6 +6,17 @@ const { normalizujWynikWalidatora } = require('../ai/validator');
 
 const source = '[SOURCE 1]\nTYTUŁ: Wiedźmin — notatki\nTREŚĆ: Geralt jest wiedźminem z Kaer Morhen. Yennefer jest czarodziejką z Vengerbergu.';
 
+function withPartialAnswersEnabled(fn) {
+  const previous = process.env.AI_ALLOW_PARTIAL_ANSWERS;
+  process.env.AI_ALLOW_PARTIAL_ANSWERS = '1';
+  try {
+    return fn();
+  } finally {
+    if (previous === undefined) delete process.env.AI_ALLOW_PARTIAL_ANSWERS;
+    else process.env.AI_ALLOW_PARTIAL_ANSWERS = previous;
+  }
+}
+
 function result(claims, answer) {
   return normalizujWynikWalidatora({
     valid: true,
@@ -22,7 +33,7 @@ function result(claims, answer) {
 
 test('partial answer keeps only locally verified claims when another quote is missing', () => {
   const answer = 'Geralt jest wiedźminem z Kaer Morhen. Yennefer jest królową Nilfgaardu.';
-  const r = result([
+  const r = withPartialAnswersEnabled(() => result([
     {
       claim: 'Geralt jest wiedźminem z Kaer Morhen.',
       claim_en: '',
@@ -39,7 +50,7 @@ test('partial answer keeps only locally verified claims when another quote is mi
       evidence_quote: 'Yennefer jest królową Nilfgaardu.',
       reason: 'ok',
     },
-  ], answer);
+  ], answer));
 
   assert.equal(r.status, 'soft_accepted', JSON.stringify(r.diagnostics));
   assert.match(r.partialAnswer, /Geralt jest wiedźminem z Kaer Morhen/);
@@ -48,8 +59,8 @@ test('partial answer keeps only locally verified claims when another quote is mi
 });
 
 test('partial answer never includes a claim with an unknown source ID', () => {
-  const answer = 'Geralt jest wiedźminem z Kaer Morhen. Yennefer jest czarodziejką.';
-  const r = normalizujWynikWalidatora({
+  const answer = 'Geralt jest wiedźminem z Kaer Morhen. Yennefer jest królową Nilfgaardu.';
+  const r = withPartialAnswersEnabled(() => normalizujWynikWalidatora({
     valid: true,
     reason: 'ok',
     unsupported_claims: [],
@@ -71,12 +82,12 @@ test('partial answer never includes a claim with an unknown source ID', () => {
         claim: 'Yennefer jest czarodziejką.',
         supported: true,
         source_ids: ['SOURCE 99'],
-        evidence_quote: 'Yennefer jest czarodziejką.',
+        evidence_quote: 'Yennefer została królową Nilfgaardu po ślubie.',
         reason: 'ok',
         claim_en: '',
       },
     ],
-  }, 'test-model', 'test', new Set(['SOURCE 1']), source, answer);
+  }, 'test-model', 'test', new Set(['SOURCE 1']), source, answer));
 
   assert.equal(r.status, 'rejected');
   assert.equal(r.partialAnswer, null);
