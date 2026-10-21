@@ -17,6 +17,8 @@ test('dragon landing concept does not match generic land or lands wording', () =
   assert.equal(pojeciaCrossLanguage('The lands around the castle are fertile.').has('smok_na_ziemi'), false);
   assert.equal(pojeciaCrossLanguage('They are landing at the airport.').has('smok_na_ziemi'), false);
   assert.equal(pojeciaCrossLanguage('The dragon lands after the spell.').has('smok_na_ziemi'), true);
+  assert.equal(pojeciaCrossLanguage('Dragonrend forces him to land.').has('smok_na_ziemi'), false);
+  assert.equal(pojeciaCrossLanguage('Dragonrend forces the dragon to land.').has('smok_na_ziemi'), true);
   assert.equal(pojeciaCrossLanguage('Dragonrend is an ancient shout.').has('smok_na_ziemi'), false);
   assert.equal(pojeciaCrossLanguage('Smok wylądował na ziemi.').has('smok_na_ziemi'), true);
 });
