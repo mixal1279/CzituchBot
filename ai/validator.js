@@ -307,8 +307,11 @@ function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '', opt
   const quoteCausal = CAUSAL_EVIDENCE_RE.test(quoteNorm);
   const quoteStatesPurpose = /\b(?:so that|in order to|so as to|aby|zeby|w celu)\b/i.test(quoteNorm)
     && /\b(?:can|could|may|might|will|would|moze|mogl|mogla|mogli|mogly|bedzie|beda)\b/i.test(quoteNorm);
-  const claimStatesCompletedOutcome = /\b(?:przejal kontrol[eę]|przejela kontrol[eę]|przejeli kontrol[eę]|took control|takes control|took over|has taken control|regained control|obj[aą][łl] kontrol[eę]|przej[aą][łl] w[lł]adz[eę]|escaped|escapes|left|defeated|destroyed|killed|opened|activated|won|lost|uciekl\w*|opusc\w*|zniszcz\w*|zabil\w*|pokonal\w*|otworz\w*|aktyw\w*|wygral\w*|przegral\w*)\b/i.test(claimNorm);
-  if (quoteStatesPurpose && claimStatesCompletedOutcome) {
+  const quoteStatesCompletedOutcome = /\b(?:took control|takes control|take control|has taken control|regained control|putting him in control|put him in control|is put in control|was put in control|escaped|escapes|left|defeated|destroyed|killed|opened|activated|won|lost|przejal kontrol[eę]|przejela kontrol[eę]|przejeli kontrol[eę]|obj[aą][łl] kontrol[eę]|przej[aą][łl] w[lł]adz[eę]|uciekl\w*|opusc\w*|zniszcz\w*|zabil\w*|pokonal\w*|otworz\w*|aktyw\w*|wygral\w*|przegral\w*)\b/i.test(quoteNorm);
+  // A purpose clause alone ("so that Y can...") proves intention/possibility,
+  // not that the outcome occurred. For causal claims, require a completed
+  // outcome to be stated in the same bounded source context.
+  if (quoteStatesPurpose && claimCausal && !quoteStatesCompletedOutcome) {
     return { ok: false, reason: 'dowód opisuje cel lub możliwość, a claim przedstawia skutek jako dokonany' };
   }
 
