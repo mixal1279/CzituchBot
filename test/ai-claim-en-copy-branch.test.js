@@ -7,16 +7,16 @@ const assert = require('node:assert');
 
 const { spojnoscTlumaczeniaClaimu } = require('../ai/claimValidation');
 
-const CYTAT = 'Wheatley takes control of the Smoldering Church.';
+const CYTAT = 'Wheatley takes control of the Cathedral of Dragon Communion.';
 
 test('podmiana encji jest wykrywana także wtedy, gdy claim_en kopiuje cytat', () => {
   const wynik = spojnoscTlumaczeniaClaimu(
-    'Wheatley przejmuje kontrolę nad Świątynią Palącego się.',
+    'Wheatley przejmuje kontrolę nad Świątynią Smoczej Komunii.',
     CYTAT,
     { evidenceQuote: CYTAT },
   );
-  // „Świątynia Palącego się” nie jest aliasem „Smoldering Church”
-  // (w tabeli jest „Kościoła Palącego się”), więc musi zostać odrzucona.
+  // „Świątynia Smoczej Komunii” nie jest aliasem „Cathedral of Dragon Communion”
+  // (w tabeli jest „Katedra Smoczej Komunii”), więc musi zostać odrzucona.
   assert.equal(wynik.ok, false);
   assert.match(wynik.reason, /nazw[ay] własne|treści claimu/);
 });
@@ -25,7 +25,7 @@ test('claim twierdzący pojęcie nieobecne w cytacie nie przechodzi', () => {
   // claim twierdzi „niszczy”, a cytat mówi tylko o przejęciu kontroli.
   // Jedno wspólne pojęcie (kontrola) nie może usprawiedliwiać braku „destrukcja”.
   const wynik = spojnoscTlumaczeniaClaimu(
-    'Wheatley przejmuje kontrolę i zniszczy Kościoła Palącego się.',
+    'Wheatley przejmuje kontrolę i zniszczy Katedry Smoczej Komunii.',
     CYTAT,
     { evidenceQuote: CYTAT },
   );
@@ -34,9 +34,9 @@ test('claim twierdzący pojęcie nieobecne w cytacie nie przechodzi', () => {
 });
 
 test('cytat zawierający pojęcie nieobecne w claimie nie przechodzi', () => {
-  const cytat = 'Wheatley takes control of the Smoldering Church and destroys it.';
+  const cytat = 'Wheatley takes control of the Cathedral of Dragon Communion and destroys it.';
   const wynik = spojnoscTlumaczeniaClaimu(
-    'Wheatley przejmuje kontrolę nad Kościoła Palącego się.',
+    'Wheatley przejmuje kontrolę nad Katedry Smoczej Komunii.',
     cytat,
     { evidenceQuote: cytat },
   );
@@ -46,7 +46,7 @@ test('cytat zawierający pojęcie nieobecne w claimie nie przechodzi', () => {
 
 test('poprawny claim z przetłumaczoną nazwą przechodzi, gdy claim_en kopiuje cytat', () => {
   const wynik = spojnoscTlumaczeniaClaimu(
-    'Wheatley przejmuje kontrolę nad Kościoła Palącego się.',
+    'Wheatley przejmuje kontrolę nad Katedry Smoczej Komunii.',
     CYTAT,
     { evidenceQuote: CYTAT },
   );
@@ -55,8 +55,8 @@ test('poprawny claim z przetłumaczoną nazwą przechodzi, gdy claim_en kopiuje 
 
 test('ten sam claim z wiernym tłumaczeniem (nie kopią cytatu) też przechodzi', () => {
   const wynik = spojnoscTlumaczeniaClaimu(
-    'Wheatley przejmuje kontrolę nad Kościoła Palącego się.',
-    'Wheatley takes control of the Smoldering Church.',
+    'Wheatley przejmuje kontrolę nad Katedry Smoczej Komunii.',
+    'Wheatley takes control of the Cathedral of Dragon Communion.',
     { evidenceQuote: CYTAT },
   );
   assert.equal(wynik.ok, true, JSON.stringify(wynik));
