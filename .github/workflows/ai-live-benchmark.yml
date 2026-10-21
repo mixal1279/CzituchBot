@@ -86,6 +86,7 @@ jobs:
               "- porównywalność jakości: " + (d.qualityComparable ? "tak" : "nie — metryki ograniczone przez dostawców"),
               "- ograniczenia jakości: " + ((d.qualityDegradationReasons || []).join(", ") || "brak"),
               "- odrzucone przez walidator: " + d.validatorRejected + ", niejednoznaczne: " + d.validatorInconclusive,
+              "- odrzucone odpowiedzi zaakceptowane przez judge: " + (r.discardedJudgeAcceptedCount || 0) + " (" + ((r.discardedJudgeAcceptedCaseIds || []).join(", ") || "brak") + "), z poprawnymi gold facts: " + (r.discardedJudgeAcceptedFactualPassedCount || 0),
               "- wywołania walidatora: " + d.validatorCalls + ", pominięte: " + (d.validatorSkipped || 0) + ", niedostępne: " + d.validatorUnavailable,
               "- klasy wyników: " + Object.entries(d.outcomeCounts || {}).map(([k, v]) => k + "=" + v).join(", "),
               "",
