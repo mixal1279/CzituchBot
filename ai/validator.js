@@ -4,7 +4,7 @@
 const { assessEvidence } = require('./core');
 
 const { sprawdzTwardeFaktyOdpowiedzi } = require('./response');
-const { czyDowodSemantyczniePokrywaClaim, czyRelacjaPrzyczynowaPokrywaClaim, zgodnoscStrukturalna, sprawdzTwardeKonflikty, sprawdzSprzecznosciSemantyczne, sprawdzPokrycieClaimamiOdpowiedzi, spojnoscTlumaczeniaClaimu, zbudujWyroczniaNazw, wyglądaNaAngielski, normalizujClaim, CAUSAL_RE, CAUSAL_EVIDENCE_RE, czyOgraniczenieDowodowe } = require('./claimValidation');
+const { czyDowodSemantyczniePokrywaClaim, czyRelacjaPrzyczynowaPokrywaClaim, zgodnoscStrukturalna, sprawdzTwardeKonflikty, sprawdzSprzecznosciSemantyczne, sprawdzPokrycieClaimamiOdpowiedzi, spojnoscTlumaczeniaClaimu, zbudujWyroczniaNazw, wyodrebnijNazwyWlasne, czyNazwaWlasnaWystepuje, wyglądaNaAngielski, normalizujClaim, CAUSAL_RE, CAUSAL_EVIDENCE_RE, czyOgraniczenieDowodowe } = require('./claimValidation');
 const { parseEvidenceBlocks, quoteExists, rankEvidenceForClaim, buildEvidenceRepairContext } = require('./evidence');
 const { buildClaimSupportAudit, HARD_OVERCLAIM_TYPES } = require('./claim-support');
 
@@ -406,8 +406,25 @@ function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '', opt
       nameOracle,
     });
     collectIgnoredNames(quoteStructural);
-    if (quoteStructural.ok) {
+    // A direct quote may be accepted only when it contains the claim's named
+    // entities and its stated relation. A verified quote plus nearby context is
+    // a different support mode: do not label it exact merely because a loose
+    // semantic overlap passes the structural matcher.
+    const quoteNormalizedForEntities = normalizujClaim(quote);
+    const claimEntitiesForExactQuote = [...new Set(wyodrebnijNazwyWlasne(claim, { nameOracle }))];
+    const missingEntitiesFromExactQuote = claimEntitiesForExactQuote
+      .filter(entity => !czyNazwaWlasnaWystepuje(entity, quoteNormalizedForEntities));
+    const claimStatesPurpose = /\\b(?:so that|in order to|so as to|aby|zeby|w celu)\\b/i.test(claimNorm);
+    const quoteStatesPurpose = /\\b(?:so that|in order to|so as to|aby|zeby|w celu)\\b/i.test(quoteNorm);
+    const exactQuoteIsSufficient = missingEntitiesFromExactQuote.length === 0
+      && (!claimStatesPurpose || quoteStatesPurpose);
+    if (quoteStructural.ok && exactQuoteIsSufficient) {
       return { ok: true, sourceId: id, mode: 'exact_quote', reason: 'cytat występuje w źródle i bezpośrednio wspiera claim', ignoredSentenceInitialNames: [...ignoredSentenceInitialNames] };
+    }
+    if (quoteStructural.ok && !exactQuoteIsSufficient) {
+      reasons.push(missingEntitiesFromExactQuote.length
+        ? 'cytat samodzielnie nie zawiera wszystkich nazw własnych claimu; wymagany jest lokalny kontekst źródła'
+        : 'cytat samodzielnie nie potwierdza relacji celu podanej w claimie; wymagany jest lokalny kontekst źródła');
     }
 
     // Bounded same-source synthesis supports local anaphora and facts stated in
