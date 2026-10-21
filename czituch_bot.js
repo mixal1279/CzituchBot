@@ -79,7 +79,7 @@ const { extractExplicitUserMemories, mergeMemoryRecords, buildVerifiedMemoryCont
 const { parseMemoryCommand, forgetMemories, describeMemories } = require('./ai/memory_manager');
 const { decomposeQuestion, isMultiPartQuestion, buildAdvancedRetrievalPlan, buildSupplementalRetrievalQuery, selectRetrievalQueries } = require('./ai/retrieval');
 const { classifyFailure, nextFallbacks, selectRepairFallbacks, filterAvailableFallbacks, repairBudgetBlockReason, GENERATION_FALLBACK_CHAIN, configuredMaxFallbackSteps, markProviderQuota, isProviderQuotaBlocked, quotaCooldownMsFromError, geminiGenerationCooldownMsFromError, retryAfterHint, openRouterErrorMessage, shouldOpenQuotaCircuit } = require('./ai/fallback');
-const { createGroqCompletion, awaitWithAbortTimeout, computeValidatorTimeout, computeValidatorReserveMs, computeGenerationTimeout, normalizeGroqSdkBaseUrl } = require('./ai/provider-runtime');
+const { createGroqCompletion, createGroqCompletionWithSchemaFallback, awaitWithAbortTimeout, computeValidatorTimeout, computeValidatorReserveMs, computeGenerationTimeout, normalizeGroqSdkBaseUrl } = require('./ai/provider-runtime');
 const { createAIMetrics, recordAIMetric, snapshotAIMetrics } = require('./ai/metrics');
 const { DEFAULTS, sanitizeRequestText } = require('./ai/limits');
 const { createAIRequestContext } = require('./ai/requestContext');
@@ -2124,19 +2124,19 @@ async function walidujOdpowiedzGroq(persona, pytanie, odpowiedz, dane, requestId
   try {
     // createGroqCompletion dodaje 800 tokenów rezerwy na reasoning dla gpt-oss-20b:
     // 1400 + 800 = 2200 max_completion_tokens w faktycznym żądaniu.
-    const data = await awaitWithAbortTimeout(
-      createGroqCompletion(groqClient, {
-        model,
-        messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
-        temperature: 0,
-        max_completion_tokens: 1400,
-        reasoning_effort: 'low',
-        response_format: buildGroqValidatorResponseFormat(model),
-      }, { signal: controller.signal }),
-      timeoutMs,
+    const data = await createGroqCompletionWithSchemaFallback(groqClient, {
+      model,
+      messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
+      temperature: 0,
+      max_completion_tokens: 1400,
+      reasoning_effort: 'low',
+      response_format: buildGroqValidatorResponseFormat(model),
+    }, {
+      signal: controller.signal,
       controller,
-      'Groq validator',
-    );
+      timeoutMs,
+      fallbackTimeoutMs: Math.min(1200, Math.max(0, timeoutMs - 250)),
+    });
     const choice = data?.choices?.[0] || {};
     const message = choice?.message || {};
     const rawContent = message?.content;
