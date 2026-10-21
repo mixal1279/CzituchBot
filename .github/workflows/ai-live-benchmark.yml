@@ -78,6 +78,8 @@ jobs:
               r.valid === false ? "**WYNIK NIEWAŻNY: Groq niedostępny lub limit dzienny wyczerpany.**" : "",
               "- przypadków: " + r.total + " (ziarno " + (r.seed || 0) + ")",
               "- odpowiedzi: " + r.answeredAccuracy + ", kompletność: " + r.completenessAccuracy + ", factual: " + r.factualAccuracy,
+              "- claim-source support: ścisłe=" + r.claimSupportPassRate + ", użyteczne=" + r.claimSupportUsableRate,
+              "- claim-source werdykty: " + Object.entries((r.claimSupport || {}).claimSourceVerdictCounts || {}).map(([k, v]) => k + "=" + v).join(", "),
               "- błędy providerów: " + ((d.providerFailures || []).join(", ") || "brak"),
               "- odrzucone przez walidator: " + d.validatorRejected + ", niejednoznaczne: " + d.validatorInconclusive,
               "- klasy wyników: " + Object.entries(d.outcomeCounts || {}).map(([k, v]) => k + "=" + v).join(", "),
