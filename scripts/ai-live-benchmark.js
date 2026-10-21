@@ -465,6 +465,10 @@ async function run() {
   // poprawna. Pipeline tego nie wie i nie może wiedzieć.
   const falseRejects = results.filter(result => result.falseReject);
   const discardedAnswers = results.filter(result => result.discardedAnswer);
+  // Keep semantic candidate acceptance visible even when independent gold facts
+  // are incomplete. This is not counted as a false reject unless the strict
+  // false-reject criteria (including independent gold facts) also pass.
+  const discardedJudgeAccepted = discardedAnswers.filter(result => result.discardedJudgeStatus === 'accepted');
   const report = {
     benchmark: benchmark.name,
     mode: 'live',
@@ -477,6 +481,9 @@ async function run() {
     falseRejectCaseIds: falseRejects.map(result => result.id),
     discardedAnswers: discardedAnswers.length,
     discardedAnswerCaseIds: discardedAnswers.map(result => result.id),
+    discardedJudgeAcceptedCount: discardedJudgeAccepted.length,
+    discardedJudgeAcceptedCaseIds: discardedJudgeAccepted.map(result => result.id),
+    discardedJudgeAcceptedFactualPassedCount: discardedJudgeAccepted.filter(result => result.discardedFactualPassed === true).length,
     factualGoldCases: factualCases.length,
     factualAccuracy: factualCases.length ? Number((factualPassed / factualCases.length).toFixed(4)) : null,
     factualAverageScore: factualAverage === null ? null : Number(factualAverage.toFixed(4)),
