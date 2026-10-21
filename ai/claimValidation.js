@@ -8,6 +8,11 @@ const NEGATION_STRICT_RE = /(?<![\p{L}])(?:nie|nigdy|brak|bez|zaden|zadna|zadne|
 // Claim o redukcji/ograniczeniu jest zgodny z dowodem „no damage / take no damage” (zero implikuje zmniejszenie).
 const REDUCTION_RE = /(?<![\p{L}])(?:zmniejsz\w*|ogranicz\w*|redukuj\w*|zredukow\w*|oslab\w*|chron\w*|neutralizuj\w*|reduc\w*|mitigat\w*|lower\w*|decreas\w*|protect\w*|prevent\w*|avoid\w*|block\w*|ward\w*|immun\w*|zapobieg\w*|unik\w*|blok\w*|odporn\w*)(?![\p{L}])/iu;
 const CAUSAL_RE = /(?<![\p{L}])(?:bo|poniewaz|gdyz|dlatego|because|therefore|caused|causes|consequently|hence|as\s+a\s+result|led\s+to|leading\s+to|resulted\s+in|resulting\s+in|because\s+of|due\s+to|thereby|thus|w\s+ten\s+sposob|przez\s+co|co\s+(?:umozliw\w*|spowod\w*)|motyw\w*|zmusz\w*|powoduj\w*|przyczyn\w*|wskutek|w\s+efekcie|allow(?:s|ed|ing)?|enabl(?:e|es|ed|ing)|which\s+(?:let|lets|allowed|allows|enabled|enables)|putting\s+(?:him|her|them|it)\s+in\s+control|so\s+(?:he|she|they|it|we|the)|in\s+exchange(?:\s+for)?|in\s+return(?:\s+for)?|in\s+turn|thanks\s+to|owing\s+to|w\s+zamian(?:\s+za)?|w\s+rewan[zż]u|w\s+wyniku|z\s+powodu|dzieki|spowod\w*|doprowadz\w*|umozliw\w*)(?![\p{L}])/iu;
+// UWAGA: celowo NIE ma tu "force/forc\w*". Po polsku "zmusz\w*" jest markerem
+// przyczyny, a po angielsku "forced a core transfer" opisuje akcję, nie
+// przyczynę — dodanie tego słowa łamało strażnika "cel vs przyczyna"
+// (test/entity-aliases.test.js). Asymetria PL/EN jest realna i wymaga
+// porównania rodzin relacji, a nie poszerzania listy słów.
 // Purpose clauses express intent or a possible outcome, not proof that the outcome
 // occurred. Keep them out of the causal-evidence signal; the validator separately
 // checks purpose-versus-completed-outcome semantics.
@@ -69,7 +74,10 @@ const KNOWN_ENTITY_ALIAS_PATTERNS = [
   { canonical: 'spellbreaker', pattern: /\b(?:spellbreaker|zaklinacz\s+spellbreaker|łamacz(?:a|owi|em|u)?\s+zakl(?:ę|e)ć)\b/iu },
   { canonical: 'extended relaxation center', pattern: /\b(?:extended\s+relaxation\s+center|centrum\s+(?:przedluzonego|rozszerzonego)\s+relaksu)\b/iu },
   { canonical: 'aperture laboratories', pattern: /\b(?:aperture\s+laboratories|laboratori(?:a|ach|ami|ow|ów)\s+aperture)\b/iu },
-  { canonical: 'aperture science', pattern: /\baperture\s+science\b/iu },
+  // „facility of Aperture” to PARAFRAZA z jednego źródła benchmarku, nie nazwa —
+  // założenie do potwierdzenia na szerszej próbie. „Aperture Labs” celowo usunięte:
+  // zlewałoby się z osobnym wpisem „aperture laboratories” powyżej.
+  { canonical: 'aperture science', pattern: /\b(?:aperture\s+science|facility\s+of\s+aperture)\b/iu },
   { canonical: 'bloody baron', pattern: /\b(?:bloody\s+baron|baron(?:a)?\s+krwaw(?:y|ego|ym)|krwaw(?:y|ego|emu)\s+baron(?:a|em|owi)?)\b/iu },
   { canonical: 'wild hunt', pattern: /\b(?:wild\s+hunt|dziki\s+gon|dzikiego\s+gonu|dzikim\s+gonem)\b/iu },
   { canonical: 'cathedral of dragon communion', pattern: /\b(?:cathedral\s+of\s+dragon\s+communion|katedr(?:a|y|ę|e|ze)\s+komunii\s+smoka)\b/iu },
@@ -529,7 +537,17 @@ function dopasowanieSemantyczne(evidence, claim, options = {}) {
   const entities = wyodrebnijNazwyWlasne(claim, nameOptions);
   const normalizedEvidence = normalizujClaim(evidence);
   const missingEntities = entities.filter(entity => !czyNazwaWlasnaWystepuje(entity, normalizedEvidence));
-  if (missingEntities.length) return { ok: false, reason: 'dowód nie zawiera wszystkich istotnych nazw własnych claimu', ignoredSentenceInitialNames };
+  if (missingEntities.length) {
+    // Nazwa własna z polskiego claimu nie występuje w angielskim dowodzie. Jeśli
+    // model nie zwrócił tłumaczenia claim_en, nie da się rozstrzygnąć, czy nazwa
+    // jest przetłumaczona („Kościoła Palącego się” → „Smoldering Church”), czy
+    // wymyślona. Powód musi to mówić wprost — nazwa braku nazwy własnej
+    // sugerowała problem z treścią odpowiedzi, a problem leży w kontrakcie.
+    if (!options.claimEn && wyglądaNaAngielski(evidence)) {
+      return { ok: false, reason: 'brak tłumaczenia claimu (claim_en) dla angielskiego dowodu — nazw własnych nie da się rozstrzygnąć', ignoredSentenceInitialNames };
+    }
+    return { ok: false, reason: 'dowód nie zawiera wszystkich istotnych nazw własnych claimu', ignoredSentenceInitialNames };
+  }
   if (sharedConcepts.length >= 2) return { ok: true, mode: 'multiple_cross_language_concepts', sharedConcepts, overlap, ignoredSentenceInitialNames };
   if (sharedConcepts.length >= 1 && entities.length >= 1) return { ok: true, mode: 'concept_and_entity', sharedConcepts, overlap, ignoredSentenceInitialNames };
   if (overlap >= (entities.length ? 0.34 : 0.45)) return { ok: true, mode: 'token_overlap', overlap, sharedConcepts, ignoredSentenceInitialNames };
@@ -896,4 +914,4 @@ function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
   return { ok: true };
 }
 
-module.exports = { KNOWN_ENTITY_ALIAS_PATTERNS, CAUSAL_RE, CAUSAL_EVIDENCE_RE, wyglądaNaAngielski, spojnoscTlumaczeniaClaimu, normalizujClaim, tokenyClaim, czyRelacjaPrzyczynowaPokrywaClaim, wyodrebnijLiczbyIDaty, wyodrebnijJednostkoweWartosci, wyodrebnijNazwyWlasne, zbudujWyroczniaNazw, zgodnoscStrukturalna, sprawdzTwardeKonflikty, sprawdzSprzecznosciSemantyczne, dopasowanieSemantyczne, sprawdzPokrycieClaimamiOdpowiedzi, czyDowodSemantyczniePokrywaClaim, tokenyPokrywajaSie };
+module.exports = { KNOWN_ENTITY_ALIAS_PATTERNS, CAUSAL_RE, CAUSAL_EVIDENCE_RE, wyglądaNaAngielski, spojnoscTlumaczeniaClaimu, czyOgraniczenieDowodowe, normalizujClaim, tokenyClaim, czyRelacjaPrzyczynowaPokrywaClaim, wyodrebnijLiczbyIDaty, wyodrebnijJednostkoweWartosci, wyodrebnijNazwyWlasne, zbudujWyroczniaNazw, zgodnoscStrukturalna, sprawdzTwardeKonflikty, sprawdzSprzecznosciSemantyczne, dopasowanieSemantyczne, sprawdzPokrycieClaimamiOdpowiedzi, czyDowodSemantyczniePokrywaClaim, tokenyPokrywajaSie };

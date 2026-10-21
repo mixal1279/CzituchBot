@@ -4,7 +4,7 @@
 const { assessEvidence } = require('./core');
 
 const { sprawdzTwardeFaktyOdpowiedzi } = require('./response');
-const { czyDowodSemantyczniePokrywaClaim, czyRelacjaPrzyczynowaPokrywaClaim, zgodnoscStrukturalna, sprawdzTwardeKonflikty, sprawdzSprzecznosciSemantyczne, sprawdzPokrycieClaimamiOdpowiedzi, spojnoscTlumaczeniaClaimu, zbudujWyroczniaNazw, wyglądaNaAngielski, normalizujClaim, CAUSAL_RE, CAUSAL_EVIDENCE_RE } = require('./claimValidation');
+const { czyDowodSemantyczniePokrywaClaim, czyRelacjaPrzyczynowaPokrywaClaim, zgodnoscStrukturalna, sprawdzTwardeKonflikty, sprawdzSprzecznosciSemantyczne, sprawdzPokrycieClaimamiOdpowiedzi, spojnoscTlumaczeniaClaimu, zbudujWyroczniaNazw, wyglądaNaAngielski, normalizujClaim, CAUSAL_RE, CAUSAL_EVIDENCE_RE, czyOgraniczenieDowodowe } = require('./claimValidation');
 const { parseEvidenceBlocks, quoteExists, rankEvidenceForClaim, buildEvidenceRepairContext } = require('./evidence');
 const { buildClaimSupportAudit, HARD_OVERCLAIM_TYPES } = require('./claim-support');
 
@@ -611,6 +611,18 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
   const unknownSourceClaim = unknownSourceClaimIndexes.length > 0;
   const unsupportedEvidenceClaim = unsupportedEvidenceClaimIndexes.length > 0;
   const answerCoverage = answer ? sprawdzPokrycieClaimamiOdpowiedzi(answer, claims) : { ok: true, uncovered: [], totalSentences: null, checkedSentences: null, uncoveredSentenceIndexes: [] };
+  // Odpowiedź, która wyłącznie ogranicza się do „źródła nie podają daty…”, nie jest
+  // odpowiedzią na pytanie. Brama pokrycia zgłosiłaby wtedy „claims nie pokrywają
+  // całej odpowiedzi”, co sugeruje problem z kompozycją, a problem leży w tym, że
+  // odpowiedzi po prostu nie ma. Powód musi mówić o tym wprost.
+  const answerLimitation = answer
+    ? (() => {
+      const sentences = String(answer).split(/(?<=[.!?])\s+|\n+/).map(x => x.trim()).filter(Boolean);
+      if (!sentences.length) return { contains: false, only: false };
+      const limitations = sentences.filter(sentence => czyOgraniczenieDowodowe(sentence));
+      return { contains: limitations.length > 0, only: limitations.length === sentences.length };
+    })()
+    : { contains: false, only: false };
   const claimLanguageMismatchIndexes = wykryjNiezgodnyJezykClaimow(answer, claims);
   const hardOverclaimIndexes = new Set(hardOverclaimClaimIndexes);
   const unsupportedFromClaims = claims.filter((c, index) => !c.supported || hardOverclaimIndexes.has(index)).map(c => c.claim).filter(Boolean);
@@ -746,6 +758,11 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
   if (unverifiedEvidenceQuoteIndexes.length) localRejectReasons.push('evidence_quote_not_exact');
   if (claims.some(c => !c.supported) || wynik.unsupported_claims.some(v => typeof v === 'string' && v.trim())) localRejectReasons.push('unsupported_claims_reported');
   if (claimLanguageMismatchIndexes.length) localRejectReasons.push('claims_language_mismatch');
+  // Diagnostyka bez zmiany decyzji: odpowiedź zawierająca zastrzeżenie „źródła
+  // nie podają…” odpowiada na pytanie zastrzeżeniem, nie faktem. Samo pokrycie
+  // zdań zgłaszałoby wtedy problem z kompozycją, a problem jest gdzie indziej.
+  if (answerLimitation.contains) localRejectReasons.push('answer_contains_limitation');
+  if (answerLimitation.only) localRejectReasons.push('answer_is_limitation_only');
   if (!answerCoverage.ok) localRejectReasons.push('answer_not_covered_by_claims');
   if (!claimGranularityOk) localRejectReasons.push('claims_too_coarse_for_answer');
   if (validFromModel !== true) localRejectReasons.push('model_returned_invalid');
@@ -855,6 +872,8 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
           ? 'claim wskazuje nieistniejące lub niedozwolone źródło'
         : claimLanguageMismatchIndexes.length
           ? 'claims nie są zapisane w języku sprawdzanej odpowiedzi'
+        : answerLimitation.contains
+          ? 'odpowiedź zawiera zastrzeżenie o braku danych w źródłach zamiast odpowiedzi na pytanie'
         : !answerCoverage.ok
           ? 'claims nie pokrywają całej odpowiedzi'
           : hardOverclaimClaimIndexes.length
