@@ -821,13 +821,10 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
   if (maStarePola && wynik.complete !== true) localRejectReasons.push('model_marked_incomplete');
   if (maStarePola && wynik.hallucination !== false) localRejectReasons.push('model_flagged_hallucination');
 
-  // Bezpieczna odpowiedź częściowa jest domyślnie dozwolona: zawiera wyłącznie
-  // atomowe claimy z lokalnie zweryfikowanym źródłem i cytatem. Każdy claim z
-  // konfliktem negacji/liczb/dat, nadmiernym wnioskowaniem lub nieznanym źródłem
-  // pozostaje wykluczony. AI_ALLOW_PARTIAL_ANSWERS=0 wyłącza tę możliwość.
-  const partialAnswersEnabled = process.env.AI_ALLOW_PARTIAL_ANSWERS !== '0'
-    && process.env.AI_ALLOW_PARTIAL_ANSWERS !== 'false';
-  const softAccepted = !accepted && partialAnswersEnabled && partialAccepted;
+  // Częściowa odpowiedź pozostaje opt-in: zawiera wyłącznie atomowe claimy
+  // z lokalnie zweryfikowanym źródłem i cytatem. Każdy claim z konfliktem
+  // negacji/liczb/dat, nadmiernym wnioskowaniem lub nieznanym źródłem jest wykluczony.
+  const softAccepted = !accepted && process.env.AI_ALLOW_PARTIAL_ANSWERS === '1' && partialAccepted;
   const status = accepted
     ? 'accepted'
     : (softAccepted
