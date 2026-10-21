@@ -7,7 +7,7 @@ const NEGATION_RE = /(?<![\p{L}])(?:nie|nigdy|brak|bez|zaden|zadna|zadne|never|n
 const NEGATION_STRICT_RE = /(?<![\p{L}])(?:nie|nigdy|brak|bez|zaden|zadna|zadne|never|not|cannot|without|lack\s+of|absence\s+of|unable|neither|nor|fails?\s+to|\p{L}+n['’]t)(?![\p{L}])/iu;
 // Claim o redukcji/ograniczeniu jest zgodny z dowodem „no damage / take no damage” (zero implikuje zmniejszenie).
 const REDUCTION_RE = /(?<![\p{L}])(?:zmniejsz\w*|ogranicz\w*|redukuj\w*|zredukow\w*|oslab\w*|chron\w*|neutralizuj\w*|reduc\w*|mitigat\w*|lower\w*|decreas\w*|protect\w*|prevent\w*|avoid\w*|block\w*|ward\w*|immun\w*|zapobieg\w*|unik\w*|blok\w*|odporn\w*)(?![\p{L}])/iu;
-const CAUSAL_RE = /(?<![\p{L}])(?:bo|poniewaz|gdyz|dlatego|because|therefore|caused|causes|consequently|hence|as\s+a\s+result|led\s+to|leading\s+to|resulted\s+in|resulting\s+in|because\s+of|due\s+to|thereby|thus|allow(?:s|ed|ing)?|enabl(?:e|es|ed|ing)|which\s+(?:let|lets|allowed|allows|enabled|enables)|putting\s+(?:him|her|them|it)\s+in\s+control|so\s+(?:he|she|they|it|we|the)|in\s+exchange(?:\s+for)?|in\s+return(?:\s+for)?|in\s+turn|thanks\s+to|owing\s+to|w\s+zamian(?:\s+za)?|w\s+rewan[zż]u|w\s+wyniku|z\s+powodu|dzieki|spowod\w*|doprowadz\w*|umozliw\w*)(?![\p{L}])/iu;
+const CAUSAL_RE = /(?<![\p{L}])(?:bo|poniewaz|gdyz|dlatego|because|therefore|caused|causes|consequently|hence|as\s+a\s+result|led\s+to|leading\s+to|resulted\s+in|resulting\s+in|because\s+of|due\s+to|thereby|thus|w\s+ten\s+sposob|przez\s+co|co\s+(?:umozliw\w*|spowod\w*)|allow(?:s|ed|ing)?|enabl(?:e|es|ed|ing)|which\s+(?:let|lets|allowed|allows|enabled|enables)|putting\s+(?:him|her|them|it)\s+in\s+control|so\s+(?:he|she|they|it|we|the)|in\s+exchange(?:\s+for)?|in\s+return(?:\s+for)?|in\s+turn|thanks\s+to|owing\s+to|w\s+zamian(?:\s+za)?|w\s+rewan[zż]u|w\s+wyniku|z\s+powodu|dzieki|spowod\w*|doprowadz\w*|umozliw\w*)(?![\p{L}])/iu;
 // Znaczniki celu („so that”, „in order to”) nie czynią CLAIMU przyczynowym — patrz test
 // „English purpose clauses do not trigger the unsupported-causal hard gate” — dlatego CAUSAL_RE
 // ich nie zawiera. W DOWODZIE są natomiast jawnym powiązaniem działania ze skutkiem:
@@ -47,11 +47,14 @@ const CROSS_LANGUAGE_CONCEPTS = [
   ['modyfikacja_zachowania', /\bbehav\w*|make her behave|intelligence dampening|zmusz\w*|zachow\w*|rdzen osobowosci/i],
   ['walka_konna', /horseback|mounted combat|on horseback|konskiego grzbietu|na koniu|z konia|walczac z konia/i],
   ['pozycja_zdystansu', /far back|high up|at range|dystans\w*|z daleka|na dystans/i],
-  ['gigantyczne_zwierzeta', /giant dogs?|gigantyczn\w*\s+ps\w*|wielkie psy/i],
+  ['gigantyczne_zwierzeta', /giant (?:zombie[- ]?)?dogs?|gigantyczn\w*\s+(?:zombie\s+)?ps\w*|wielkie (?:zombie\s+)?psy/i],
+  ['ochrona_miejsca', /guard\w*|strzez\w*|pilnow\w*/i],
+  ['atak', /\b(?:attack\w*|atak\w*)\b/i],
+  ['okrzyk', /\b(?:shout\w*|okrzyk\w*)\b/i],
   ['ostroznosc', /cautious\w*|approach cautiously|ostrozn\w*|ostrozne podejscie/i],
   ['zagrozenie', /lethal|dangerous|deadly|niebezpiecz\w*|zabojcz\w*/i],
   ['grywalnosc_postaci', /play as|playable character|control\w*|sterow\w*|mozna nim grac|nim grac/i],
-  ['smok_na_ziemi', /stay on the ground|on the ground|land(?:s|ed|ing)? on the ground|dragonrend|wyladow\w*|pozostac na ziemi|na ziemi/i],
+  ['smok_na_ziemi', /stay on the ground|on the ground|land(?:s|ed|ing)? on the ground|\blands?\b|\blanding\b|\blanded\b|dragonrend|wyladow\w*|pozostac na ziemi|na ziemi/i],
   ['odpornosc_zywiolowa', /resistan\w*|ward\w*|spellbreaker|odpornosc\w*|wardy|tarcze?\w*/i],
 ];
 function pojeciaCrossLanguage(value) {
@@ -201,7 +204,7 @@ function wyodrebnijNazwyWlasne(value, options = {}) {
     'obecnie', 'później', 'pozniej', 'wcześniej', 'wczesniej',
     'ponieważ', 'poniewaz', 'chociaż', 'chociaz', 'choć', 'choc',
     'jeśli', 'jesli', 'gdy', 'kiedy', 'podczas', 'wreszcie',
-    'większość', 'wiekszosc', 'część', 'czesc', 'każdy', 'kazdy',
+    'większość', 'wiekszosc', 'część', 'czesc', 'każdy', 'kazdy', 'dwóch', 'dwoch', 'two', 'three', 'four', 'several', 'many',
     'pierwszy', 'drugi', 'trzeci', 'można', 'mozna', 'może', 'moze',
     'jest', 'są', 'sa', 'był', 'byla', 'było', 'bylo', 'byli',
     'to', 'ten', 'ta', 'te', 'jego', 'jej', 'oni', 'one', 'smoki', 'najlepszym', 'gracz', 'gracze', 'wrog', 'postać', 'postac', 'pytanie', 'odpowiedź', 'odpowiedz',
@@ -530,7 +533,7 @@ function czyRelacjaPrzyczynowaPokrywaClaim(evidence, claim, options = {}) {
     .split(/(?<=[.!?])\s+/)
     .map(s => s.trim())
     .filter(Boolean);
-  const relationRe = /(?<![\p{L}])(?:bo|poniewaz|gdyz|dlatego|z powodu|dzieki|spowod\w*|doprowadz\w*|umozliw\w*|because|therefore|due to|caus\w*|led to|leading to|lead\w*\s+(?:\w+\s+){0,3}to|resulted in|resulting in|so\s+(?:approach|use|avoid|keep|stay|choose|take|do|be)|so\s+that|in\s+order\s+to|so\s+as\s+to|thereby|thus|allow(?:s|ed|ing)?|enabl(?:e|es|ed|ing)|accidentally|by mistake|which\s+(?:let|lets|allowed|allows|enabled|enables)|putting\s+(?:him|her|them|it)\s+in\s+control)(?![\p{L}])/iu;
+  const relationRe = /(?<![\p{L}])(?:bo|poniewaz|gdyz|dlatego|z powodu|dzieki|spowod\w*|doprowadz\w*|umozliw\w*|because|therefore|due to|caus\w*|led to|leading to|lead\w*\s+(?:\w+\s+){0,3}to|resulted in|resulting in|so\s+(?:approach|use|avoid|keep|stay|choose|take|do|be)|so\s+that|in\s+order\s+to|so\s+as\s+to|thereby|thus|w\s+ten\s+sposob|przez\s+co|co\s+(?:umozliw\w*|spowod\w*)|allow(?:s|ed|ing)?|enabl(?:e|es|ed|ing)|accidentally|by mistake|which\s+(?:let|lets|allowed|allows|enabled|enables)|putting\s+(?:him|her|them|it)\s+in\s+control)(?![\p{L}])/iu;
   return sentences.some(sentence => {
     const normalized = normalizujClaim(sentence);
     if (!relationRe.test(normalized)) return false;
