@@ -630,7 +630,7 @@ function tokenyPokrywajaSie(a, b) {
   return edits === 1;
 }
 function sprawdzPokrycieClaimamiOdpowiedzi(answer, claims) {
-  const sentences = String(answer || '').split(/(?<=[.!?])\s+|\n+/).map(x => x.trim()).filter(Boolean);
+  const sentences = String(answer || '').split(/(?<=[.!?])\\s+|\\n+/).map(x => x.trim()).filter(Boolean);
   const claimRows = (Array.isArray(claims) ? claims : [])
     .map(c => ({
       tokens: tokenyPokrycia(c?.claim || ''),
@@ -638,33 +638,49 @@ function sprawdzPokrycieClaimamiOdpowiedzi(answer, claims) {
       entities: wyodrebnijNazwyWlasne(c?.claim || ''),
     }))
     .filter(row => row.tokens.length >= 2 || row.concepts.size || row.entities.length);
+
+  // Claims are atomic and can jointly cover a sentence, but a single shared
+  // name/concept must not make a sentence with extra facts appear covered.
+  // Use the union of claim vocabulary; keep semantic fallback only when most
+  // sentence concepts and a meaningful lexical portion are both represented.
+  const claimTokens = [...new Set(claimRows.flatMap(row => row.tokens))];
+  const claimConcepts = new Set(claimRows.flatMap(row => [...row.concepts]));
+  const claimEntities = new Set(claimRows.flatMap(row => row.entities));
   const uncovered = [];
   let checkedSentences = 0;
+
   for (const [sentenceIndex, sentence] of sentences.entries()) {
     const tokens = tokenyPokrycia(sentence);
     if (tokens.length < 2) continue;
     checkedSentences++;
+
     const sentenceConcepts = pojeciaCrossLanguage(sentence);
     const sentenceEntities = wyodrebnijNazwyWlasne(sentence);
-    const maxCoverage = claimRows.reduce((best, row) => {
-      const covered = tokens.filter(t => row.tokens.some(c => tokenyPokrywajaSie(t, c))).length / Math.max(tokens.length, 1);
-      const sharedConcepts = [...sentenceConcepts].filter(concept => row.concepts.has(concept)).length;
-      const sharedEntities = sentenceEntities.filter(entity => row.entities.includes(entity)).length;
-      // Coverage asks whether the answer sentence is represented by a claim,
-      // so the sentence—not the potentially shorter claim—is the denominator.
-      // Using row.*.size here let one shared concept/name make a long sentence
-      // appear fully covered even when it added other events or characters.
-      const conceptCoverage = sentenceConcepts.size ? sharedConcepts / sentenceConcepts.size : 0;
-      const entityCoverage = sentenceEntities.length ? sharedEntities / sentenceEntities.length : 0;
-      const semanticCoverage = Math.max(
-        covered,
-        conceptCoverage >= 0.5 ? 0.62 : 0,
-        entityCoverage >= 0.75 && covered >= 0.25 ? 0.62 : 0
-      );
-      return Math.max(best, semanticCoverage);
-    }, 0);
-    if (maxCoverage < 0.55) uncovered.push({ index: sentenceIndex, text: sentence.slice(0, 180) });
+    const sharedTokens = tokens.filter(token =>
+      claimTokens.some(claimToken => tokenyPokrywajaSie(token, claimToken))
+    );
+    const tokenCoverage = sharedTokens.length / Math.max(tokens.length, 1);
+    const sharedConcepts = [...sentenceConcepts].filter(concept => claimConcepts.has(concept));
+    const conceptCoverage = sentenceConcepts.size ? sharedConcepts.length / sentenceConcepts.size : 0;
+    const sharedEntities = sentenceEntities.filter(entity => claimEntities.has(entity));
+    const entityCoverage = sentenceEntities.length ? sharedEntities.length / sentenceEntities.length : 0;
+
+    // Paraphrase fallback is deliberately narrow: concepts alone are not enough
+    // to cover a long sentence, and matching a recurring character name is not
+    // evidence that the action/event in this sentence has been claimed.
+    const hasStrongSemanticCoverage = sentenceConcepts.size >= 2
+      && conceptCoverage >= 0.8
+      && tokenCoverage >= 0.35;
+    const hasStrongEntityCoverage = sentenceEntities.length > 0
+      && entityCoverage >= 0.9
+      && tokenCoverage >= 0.45;
+    const coverage = tokenCoverage >= 0.55
+      ? tokenCoverage
+      : (hasStrongSemanticCoverage || hasStrongEntityCoverage ? 0.56 : tokenCoverage);
+
+    if (coverage < 0.55) uncovered.push({ index: sentenceIndex, text: sentence.slice(0, 180) });
   }
+
   return {
     ok: uncovered.length === 0,
     totalSentences: sentences.length,
