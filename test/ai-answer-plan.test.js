@@ -32,6 +32,26 @@ test('v26 answer plan identifies causal lore requirements', () => {
   assert.ok(plan.requirements.some(x => x.id === 'why'));
   assert.ok(plan.requirements.some(x => x.id === 'causal_explanation'));
   assert.ok(plan.requirements.some(x => x.id === 'entity_context'));
+  assert.match(plan.instruction, /jawnie podaje motyw lub cel działania/);
+  assert.match(plan.instruction, /nie zastępuj go domniemaną przyczyną/);
+});
+
+test('a stated motive phrased as "miało na celu" satisfies a why answer plan', () => {
+  const plan = buildAnswerPlan('Dlaczego Wheatley przejął kontrolę nad GLaDOS?', {
+    intent:'web_fact', is_lore:true, entity:'Wheatley', game:'Portal 2',
+  });
+  const answer = 'Wheatley przeniósł rdzeń GLaDOS do układu z baterią ziemniaczaną, co miało na celu upokorzenie jej.';
+  const result = judgeAnswer(answer, plan);
+  assert.equal(result.status, 'accepted', JSON.stringify(result));
+  assert.deepEqual(result.missing, []);
+});
+
+test('who-answer guidance prioritizes the source-defined identity over secondary traits', () => {
+  const plan = buildAnswerPlan('Kim jest Astarion?', {
+    intent:'web_fact', entity:'Astarion', game:"Baldur's Gate 3",
+  });
+  assert.match(plan.instruction, /głównej tożsamości lub typu postaci/);
+  assert.match(plan.instruction, /nie mogą zastąpić głównej tożsamości/);
 });
 
 test('v26 answer plan detects and enforces coverage for multiple clauses', () => {
@@ -125,6 +145,10 @@ test('answer completeness requires the planned entity and avoids purpose/locatio
   assert.equal(purpose.why, true);
   assert.equal(purpose.causal_explanation, true);
   assert.equal(purpose.steps, false);
+
+  const statedPurpose = extractAnswerSignals('Wheatley przeniósł rdzeń, co miało na celu upokorzenie GLaDOS.');
+  assert.equal(statedPurpose.why, true);
+  assert.equal(statedPurpose.causal_explanation, true);
   assert.equal(extractAnswerSignals('Z powodu awarii system przestał działać.').where, false);
   assert.equal(extractAnswerSignals('Cena wynosi 100 zł.').quantity, true);
 });

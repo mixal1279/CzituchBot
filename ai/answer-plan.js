@@ -75,7 +75,7 @@ function buildAnswerPlan(question, routing = {}) {
   }));
   const responseShapeGuidance = [
     slots.has('who')
-      ? 'Dla pytań „kto/kim jest” podaj potwierdzoną tożsamość oraz istotną rolę lub relację, jeśli źródło ją wyraźnie podaje (np. towarzysz, antagonista albo klasa postaci).'
+      ? 'Dla pytań „kto/kim jest” zacznij od głównej tożsamości lub typu postaci, który źródło wyraźnie podaje; następnie podaj istotną rolę lub relację (np. towarzysz lub antagonista). Rasa i klasa są dodatkowymi atrybutami — nie mogą zastąpić głównej tożsamości. Nie dopisuj etykiety, której źródło nie potwierdza.'
       : '',
     slots.has('where')
       ? 'Dla pytań „gdzie” podaj nazwane miejsce lub region oraz konkretny punkt orientacyjny, jeśli źródła potwierdzają oba elementy; nie zastępuj nazw własnych ogólnym opisem.'
@@ -98,7 +98,7 @@ function buildAnswerPlan(question, routing = {}) {
       : requirements.length >= 2 ? 'medium' : 'low',
     causalQuestion,
     instruction: requirements.length
-      ? 'Odpowiedź musi pokryć: ' + requirements.map(r => r.id).join(', ') + '. Każde zdanie faktograficzne ma być atomowym claimem opartym na jednym zweryfikowanym fragmencie evidence. Dla pytania „dlaczego/czemu” oddziel fakt od przyczyny: podaj przyczynę tylko wtedy, gdy konkretny evidence quote wyraźnie łączy przyczynę ze skutkiem. Nie traktuj kolejności wydarzeń jako przyczynowości. Jeśli brak takiego dowodu, powiedz wprost, że źródła nie potwierdzają przyczyny.' + (responseShapeGuidance ? ' ' + responseShapeGuidance : '')
+      ? 'Odpowiedź musi pokryć: ' + requirements.map(r => r.id).join(', ') + '. Każde zdanie faktograficzne ma być atomowym claimem opartym na jednym zweryfikowanym fragmencie evidence. Dla pytania „dlaczego/czemu” oddziel fakt od przyczyny: podaj przyczynę tylko wtedy, gdy konkretny evidence quote wyraźnie łączy przyczynę ze skutkiem. Nie traktuj kolejności wydarzeń jako przyczynowości. Jeśli źródło jawnie podaje motyw lub cel działania (np. próbę upokorzenia), podaj ten motyw wprost i nie zastępuj go domniemaną przyczyną z sąsiednich zdań. Nie zamieniaj celu działania na przyczynę zdarzenia. Jeśli brak takiego dowodu, powiedz wprost, że źródła nie potwierdzają przyczyny.' + (responseShapeGuidance ? ' ' + responseShapeGuidance : '')
       : 'Odpowiedz bezpośrednio i nie dodawaj niepotwierdzonych faktów.' + (responseShapeGuidance ? ' ' + responseShapeGuidance : ''),
   };
 }
@@ -113,7 +113,7 @@ function hasMeaningfulTail(text, marker) {
 function extractAnswerSignals(answer) {
   const text = normalize(answer);
   const where = /\b(?:w(?!\s+(?:wyniku|rezultacie|celu|zamian|zwiazku|odpowiedni\w*|okreslon\w*|miejsc\w*))|we(?!\s+wzgledu)|na(?!\s+(?:skutek|podstawie|poczatku|koncu))|do(?!\s+tego)|z(?!\s+(?:powodu|przyczyny|uwagi|tego))|ze(?!\s+wzgledu))\s+[a-z0-9-]+/.test(text);
-  const causalMarker = /\b(dlaczego|czemu|powod|z powodu|z przyczyny|ze wzgledu na|z uwagi na|poniewaz|dlatego|gdyz|bo|aby|zeby|w zamian|w wyniku|w rezultacie|dzieki|because|because of|due to)\b/.exec(text)?.[0] || '';
+  const causalMarker = /\b(dlaczego|czemu|powod|z powodu|z przyczyny|ze wzgledu na|z uwagi na|poniewaz|dlatego|gdyz|bo|aby|zeby|w celu|na celu|w zamian|w wyniku|w rezultacie|dzieki|because|because of|due to)\b/.exec(text)?.[0] || '';
   // Instrukcja planu każe napisać „źródła nie potwierdzają przyczyny”, gdy materiał
   // jej nie podaje. Taka uczciwa odpowiedź spełnia wymaganie „dlaczego”.
   const causeUnconfirmed = /\b(?:zrodla|zrodlo|materialy|dane)\b.{0,60}\bnie\s+(?:potwierdza\w*|wskazuja|podaja|precyzuja|wyjasniaja)\b|\bbrak\s+potwierdzon\w*\s+(?:przyczyn|powod)\w*|\bnie\s+wynika\b.{0,40}\b(?:przyczyn|powod|dlaczego)\w*/.test(text);
