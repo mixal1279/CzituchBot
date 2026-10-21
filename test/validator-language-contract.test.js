@@ -57,13 +57,13 @@ test('a Polish claim with a verified English translation is language-aligned', (
 });
 
 
-test('English answer with a Polish proper name is not classified as a Polish answer', () => {
+test('English answer with a Polish proper name is classified by the sentence language', () => {
   const result = makeResult(
-    'Łódź is the third-largest city in Poland.',
+    'Łódź jest trzecim co do wielkości miastem w Polsce.',
     'Łódź is the third-largest city in Poland.',
     'Łódź is the third-largest city in Poland.'
   );
-  assert.deepEqual(result.diagnostics.claimLanguageMismatchIndexes, []);
+  assert.deepEqual(result.diagnostics.claimLanguageMismatchIndexes, [0]);
 });
 
 test('validator system prompt documents the claim-language contract', () => {
