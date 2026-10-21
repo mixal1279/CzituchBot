@@ -144,7 +144,9 @@ function wyodrebnijLiczbyIDaty(value) {
   // żeby pominąć zwykłe słowa, w których przypadkowo występują litery rzymskie
   // (np. „mix”, „id”, „civic”, „civil”, „Liv”, „mill”, „Mili”). Poprawne
   // rzymskie cyfry w tytułach gier są pisane wielkimi literami (III, IV, IX).
-  const romanMatches = raw.match(/\b(?:II|III|IV|IX|VI|VII|VIII|XIV|XIX|XX|XI|XII|XV|XL|XC|LI|LV|LX|CD|CM|DC|MC|MCM|MM|MMX[IVX]|[IVXLCDM]{3,})\b/g) || [];
+  // Only uppercase sequel numerals used in titles (II–XVI); never treat abbreviations
+  // such as MC, CD, DC or MM as numeric facts.
+  const romanMatches = raw.match(/\b(?:II|III|IV|V?I{1,3}|IX|XI{0,3}|XIV|XV|XVI)\b/g)?.filter(r => r !== 'I') || [];
   for (const r of romanMatches) {
     const n = rzymskieNaArabskie(r);
     if (n !== null) canonical.push(String(n));
