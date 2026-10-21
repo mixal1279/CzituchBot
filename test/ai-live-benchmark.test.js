@@ -237,6 +237,15 @@ test('quality comparability is true when primary and fallback calls are healthy'
   assert.equal(diagnostics.qualityComparable, true);
   assert.deepEqual(diagnostics.qualityDegradationReasons, []);
   assert.equal(diagnostics.validatorUnavailableRate, 0);
+
+  const noValidatorCalls = buildBenchmarkDiagnostics([{
+    finalStatus: 'unverified',
+    generationAttempts: [{ provider: 'groq', model: 'openai/gpt-oss-120b', status: 'success' }],
+    validatorResults: [],
+    timingTrace: [],
+  }], benchmark.cases, selected);
+  assert.equal(noValidatorCalls.qualityComparable, false);
+  assert.ok(noValidatorCalls.qualityDegradationReasons.includes('no_validator_calls'));
 });
 
 test('secondary validator outage is reported as degradation, not a benchmark outage', () => {
