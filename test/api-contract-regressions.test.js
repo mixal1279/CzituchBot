@@ -49,6 +49,17 @@ test('repair budget matches the provider timeout and logs never expose generated
   assert.match(source, /generator zwrócił etykietę EVIDENCE CANDIDATE/);
 });
 
+test('validator repair prompt uses real newline separators and asks for a faithful claim_en translation', () => {
+  const source = read('czituch_bot.js');
+  const start = source.indexOf('const feedback = [', source.indexOf('const evidenceRepairContext'));
+  const end = source.indexOf('const promptRetry =', start);
+  assert.ok(start >= 0 && end > start, 'validator repair prompt should exist');
+  const branch = source.slice(start, end);
+  assert.match(branch, /Pole claim_en musi być wiernym tłumaczeniem/);
+  assert.match(branch, /\]\.join\('\\n'\);/);
+  assert.doesNotMatch(branch, /\]\.join\('\\\\n'\);/, 'validator repair prompt must not contain literal backslash-n separators');
+});
+
 test('answer-completeness repair includes the prior answer and uses real line separators', () => {
   const source = read('czituch_bot.js');
   const start = source.indexOf('const verifiedEvidenceContext = (walidacja.claims || [])');
