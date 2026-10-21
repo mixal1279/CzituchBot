@@ -14,6 +14,17 @@ test('an escape claim cannot cover an additional unsupported facility-maintenanc
   assert.deepEqual(result.uncoveredSentenceIndexes, [0]);
 });
 
+test('unrelated claims cannot assemble support for an unsupported combined relation', () => {
+  const answer = 'Wheatley przejął kontrolę nad GLaDOS, a Chell zniszczyła rdzeń po ucieczce.';
+  const result = sprawdzPokrycieClaimamiOdpowiedzi(answer, [
+    { claim: 'Wheatley przejął kontrolę nad GLaDOS.' },
+    { claim: 'Chell uciekła z obiektu.' },
+  ]);
+
+  assert.equal(result.ok, false, JSON.stringify(result));
+  assert.deepEqual(result.uncoveredSentenceIndexes, [0]);
+});
+
 test('several atomic claims can jointly cover the same answer sentence', () => {
   const answer = 'Wheatley przejął kontrolę nad GLaDOS po transferze rdzeni, który przeniósł rdzeń GLaDOS na Wheatleya.';
   const result = sprawdzPokrycieClaimamiOdpowiedzi(answer, [
