@@ -104,11 +104,11 @@ function computeValidatorReserveMs(remainingMs, currentSlot = 1, maxValidators =
     return withRepairReserve(2500);
   }
   if (futureSlots === 1) {
-    if (remaining >= 10500) return 6500;
-    if (remaining >= 6500) return 2500;
+    if (remaining >= 10500) return withRepairReserve(6500);
+    if (remaining >= 6500) return withRepairReserve(2500);
     return withRepairReserve(2500);
   }
-  return 2500;
+  return withRepairReserve(2500);
 }
 
 /**
