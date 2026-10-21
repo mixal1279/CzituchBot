@@ -389,31 +389,30 @@ function countLanguageCues(value, pattern) {
 // angielskie claims mogą przypadkiem przejść heurystykę pokrycia przez wspólne
 // nazwy własne lub pojęcia cross-language. Wymagamy wtedy języka odpowiedzi
 // w polu claim; claim_en służy wyłącznie do sprawdzenia dowodu w języku źródła.
-function wykryjNiezgodnyJezykClaimow(answer, claims) {
-  const text = String(answer || '').trim();
-  if (!text || !Array.isArray(claims) || !claims.length) return [];
+function wykryjJezykClaimu(value) {
+  const text = String(value || '').trim();
+  if (!text) return null;
+  const polishCues = countLanguageCues(text, POLISH_CLAIM_LANGUAGE_CUES);
+  const englishCues = countLanguageCues(text, ENGLISH_CLAIM_LANGUAGE_CUES);
+  const hasPolishDiacritics = /[ąćęłńóśźż]/iu.test(text);
 
-  const answerPolishCues = countLanguageCues(text, POLISH_CLAIM_LANGUAGE_CUES);
-  const answerEnglishCues = countLanguageCues(text, ENGLISH_CLAIM_LANGUAGE_CUES);
-  const answerHasPolishDiacritics = /[ąćęłńóśźż]/iu.test(text);
-  let answerLanguage = null;
-  if (answerHasPolishDiacritics || (answerPolishCues > 0 && answerPolishCues >= answerEnglishCues)) {
-    answerLanguage = 'pl';
-  } else if (answerEnglishCues >= 2 && answerPolishCues === 0) {
-    answerLanguage = 'en';
-  }
-  if (!answerLanguage) return [];
+  if (polishCues > englishCues) return 'pl';
+  // Require multiple English signals to avoid classifying an English sentence
+  // solely from a short ambiguous token such as "in" or "is".
+  if (englishCues > polishCues && englishCues >= 2) return 'en';
+  // Diacritics are only a tie-breaker. They often occur in place and character
+  // names inside otherwise English sentences (e.g. Łódź, Triss Merigold).
+  if (englishCues === polishCues && hasPolishDiacritics) return 'pl';
+  return null;
+}
+
+function wykryjNiezgodnyJezykClaimow(answer, claims) {
+  const answerLanguage = wykryjJezykClaimu(answer);
+  if (!answerLanguage || !Array.isArray(claims) || !claims.length) return [];
 
   return claims.map((row, index) => {
-    const claim = String(row?.claim || '').trim();
-    if (!claim) return index;
-    const polishCues = countLanguageCues(claim, POLISH_CLAIM_LANGUAGE_CUES);
-    const englishCues = countLanguageCues(claim, ENGLISH_CLAIM_LANGUAGE_CUES);
-    const hasPolishDiacritics = /[ąćęłńóśźż]/iu.test(claim);
-
-    if (answerLanguage === 'pl' && !hasPolishDiacritics && polishCues === 0 && englishCues >= 2) return index;
-    if (answerLanguage === 'en' && (hasPolishDiacritics || polishCues >= 2) && englishCues === 0) return index;
-    return -1;
+    const claimLanguage = wykryjJezykClaimu(row?.claim);
+    return claimLanguage && claimLanguage !== answerLanguage ? index : -1;
   }).filter(index => index >= 0);
 }
 
