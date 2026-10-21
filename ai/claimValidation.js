@@ -817,7 +817,7 @@ function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
       // only when at least one non-entity concept agrees; the hard guards below
       // still reject changed negation, causal relation, and known event conflicts.
       if (sharedConcepts.length === 0) {
-        return { ok: false, reason: 'claim_en zmienia zdarzenie lub relację względem claimu polskiego' };
+        return { ok: false, reason: 'claim_en kopiuje cytat, ale nie odpowiada treści claimu (zmiana zdarzenia lub relacji)' };
       }
     }
   }
