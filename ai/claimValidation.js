@@ -645,7 +645,7 @@ function tokenyPokrywajaSie(a, b) {
 }
 function czyOgraniczenieDowodowe(sentence) {
   const text = normalizujClaim(sentence);
-  const limitation = /\b(?:nie\s+(?:potwierdza\w*|podaje\w*|precyzuje\w*|okresla\w*|wskazuje\w*|zawiera\w*|znalazl\w*|znaleziono)|brak\s+(?:dokladn\w*\s+)?(?:dat\w*|moment\w*|czas\w*|potwierdzon\w*\s+(?:przyczyn\w*|powod\w*)))\b/u.test(text);
+  const limitation = /\b(?:nie\s+(?:potwierdz\w*|podaj\w*|precyz\w*|okresl\w*|wskaz\w*|zawier\w*|znalazl\w*|znaleziono)|brak\s+(?:dokladn\w*\s+)?(?:dat\w*|moment\w*|czas\w*|potwierdzon\w*\s+(?:przyczyn\w*|powod\w*)))\b/u.test(text);
   const scopedTopic = /\b(?:dat\w*|moment\w*|czas\w*|rok\w*|przyczyn\w*|powod\w*)\b/u.test(text);
   const sourceMention = /\b(?:zrodla?\w*|materialy|dane|sources?|evidence)\b/u.test(text);
   const inheritedSourceScope = /^\s*(?:ale|jednak)?\s*nie\b/u.test(text);
