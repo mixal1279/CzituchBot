@@ -340,6 +340,17 @@ function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '', opt
     const sourceContext = buildBoundedSourceContext(block.content, quote, 1);
     const verificationContext = sourceContext || quote;
 
+    // Very short infobox fields such as "Class Rogue" are meaningful only
+    // when the nearby source context binds that field to the claimed subject.
+    // A matching field value from another character/page section is not enough.
+    if (quote.length < 12) {
+      const subject = String(claim || '').match(/^\s*([\p{Lu}][\p{L}\p{N}'’.-]*(?:\s+[\p{Lu}][\p{L}\p{N}'’.-]*){0,2})\s+(?:is|was|are|were|jest|był|była|są|należy|belongs)\b/iu)?.[1];
+      if (subject && !normalizujClaim(verificationContext).includes(normalizujClaim(subject))) {
+        reasons.push('krótki cytat z infoboksu nie wiąże pola z encją claimu: ' + id);
+        continue;
+      }
+    }
+
     // Negation must be checked against the sentence containing the exact quote.
     // A neighbouring sentence may discuss an unrelated negative fact; using it
     // for the polarity check caused valid positive claims to be rejected.
