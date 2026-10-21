@@ -113,7 +113,10 @@ function hasMeaningfulTail(text, marker) {
 function extractAnswerSignals(answer) {
   const text = normalize(answer);
   const where = /\b(?:w(?!\s+(?:wyniku|rezultacie|celu|zamian|zwiazku|odpowiedni\w*|okreslon\w*|miejsc\w*))|we(?!\s+wzgledu)|na(?!\s+(?:skutek|podstawie|poczatku|koncu))|do(?!\s+tego)|z(?!\s+(?:powodu|przyczyny|uwagi|tego))|ze(?!\s+wzgledu))\s+[a-z0-9-]+/.test(text);
-  const causalMarker = /\b(dlaczego|czemu|powod|z powodu|z przyczyny|ze wzgledu na|z uwagi na|poniewaz|dlatego|gdyz|bo|aby|zeby|w celu|na celu|w zamian|w wyniku|w rezultacie|dzieki|because|because of|due to)\b/.exec(text)?.[0] || '';
+  // Przyczyna i motyw to odrębne sygnały: „aby/w celu” opisuje intencję, a nie dowodzi, że skutek nastąpił.
+  const causalMarker = /\b(dlaczego|czemu|powod|z powodu|z przyczyny|ze wzgledu na|z uwagi na|poniewaz|dlatego|gdyz|bo|w zamian|w wyniku|w rezultacie|dzieki|because|because of|due to|caused by|led to|resulted in)\b/.exec(text)?.[0] || '';
+  const motiveMarker = /\b(?:aby|zeby|w celu|na celu|po to(?:,)? zeby|z zamiarem|w zamiarze|w intencji|so that|in order to|so as to)\b/.exec(text)?.[0] || '';
+  const causalExplanation = (Boolean(causalMarker) && hasMeaningfulTail(text, causalMarker)) || (Boolean(motiveMarker) && hasMeaningfulTail(text, motiveMarker)) || causeUnconfirmed;
   // Instrukcja planu każe napisać „źródła nie potwierdzają przyczyny”, gdy materiał
   // jej nie podaje. Taka uczciwa odpowiedź spełnia wymaganie „dlaczego”.
   const causeUnconfirmed = /\b(?:zrodla|zrodlo|materialy|dane)\b.{0,60}\bnie\s+(?:potwierdza\w*|wskazuja|podaja|precyzuja|wyjasniaja)\b|\bbrak\s+potwierdzon\w*\s+(?:przyczyn|powod)\w*|\bnie\s+wynika\b.{0,40}\b(?:przyczyn|powod|dlaczego)\w*/.test(text);
@@ -124,7 +127,8 @@ function extractAnswerSignals(answer) {
   const whenUnconfirmed = /\b(?:zrodla?\w*|materialy|dane|sources?|evidence)\b.{0,120}\bnie\s+(?:podaj\w*|precyzuj\w*|okresl\w*|wskazuj\w*|potwierdz\w*|zawier\w*)\b.{0,80}\b(?:dat\w*|moment\w*|czas\w*|rok\w*)\b/.test(text);
 
   return {
-    why: (Boolean(causalMarker) && hasMeaningfulTail(text, causalMarker)) || causeUnconfirmed,
+    why: causalExplanation,
+    motive_explanation: Boolean(motiveMarker) && hasMeaningfulTail(text, motiveMarker),
     how: Boolean(mechanism || procedural) && hasMeaningfulTail(text, mechanism || procedural),
     // A bounded statement that the retrieved sources omit a date is a valid
     // epistemic answer to a temporal query; it must not be mistaken for silence.
@@ -146,7 +150,8 @@ function extractAnswerSignals(answer) {
     relationship: Boolean(relationshipMarker)
       && /\b(?:wspolprac|wspolpracy|konflikt|przyjazn|zauf|zdrad|sojusz|wrog|partner|lacz|dziel)\p{L}*/u.test(text),
     entity_context: text.length > 0,
-    causal_explanation: (Boolean(causalMarker) && hasMeaningfulTail(text, causalMarker)) || causeUnconfirmed,
+    // Dla slotu „dlaczego” jawnie podany motyw jest wyjaśnieniem, ale pozostaje oznaczony osobno.
+    causal_explanation: causalExplanation,
   };
 }
 
