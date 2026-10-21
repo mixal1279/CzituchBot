@@ -223,6 +223,22 @@ test('skipped provider attempts do not count as a provider outage', () => {
   assert.deepEqual(diagnostics.validatorTransportFailures, []);
 });
 
+test('quality comparability is true when primary and fallback calls are healthy', () => {
+  const benchmark = JSON.parse(fs.readFileSync(path.join(__dirname, 'ai-benchmark.json'), 'utf8'));
+  const selected = stratifiedCases(benchmark.cases, 5, 113);
+  const diagnostics = buildBenchmarkDiagnostics([{
+    finalStatus: 'accepted',
+    generationAttempts: [{ provider: 'groq', model: 'openai/gpt-oss-120b', status: 'success' }],
+    validatorResults: [{ provider: 'gemini', model: 'gemini-3.5-flash-lite', status: 'accepted' }],
+    timingTrace: [],
+  }], benchmark.cases, selected);
+
+  assert.equal(diagnostics.providerOutage, false);
+  assert.equal(diagnostics.qualityComparable, true);
+  assert.deepEqual(diagnostics.qualityDegradationReasons, []);
+  assert.equal(diagnostics.validatorUnavailableRate, 0);
+});
+
 test('secondary validator outage is reported as degradation, not a benchmark outage', () => {
   const benchmark = JSON.parse(fs.readFileSync(path.join(__dirname, 'ai-benchmark.json'), 'utf8'));
   const selected = stratifiedCases(benchmark.cases, 5, 113);
