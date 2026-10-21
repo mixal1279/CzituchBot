@@ -49,6 +49,14 @@ test('produkcyjne aliasy PL/EN normalizują znane encje do jednego kanonicznego 
   assert.deepEqual(wyodrebnijNazwyWlasne('Dragonborn używa Smoczej Zguby.'), ['dragonrend', 'dragonborn']);
 });
 
+test('Greatsword has a verified Polish item-name alias', () => {
+  const entry = ENTITY_ALIAS_GROUPS.find(item => item.canonical === 'greatsword');
+  assert.ok(entry);
+  const pattern = buildAliasPattern(entry.names);
+  assert.match('Wielki Miecz', pattern);
+  assert.match('Greatsword', pattern);
+});
+
 test('production alias table excludes unverified Smoldering Church translation', () => {
   assert.equal(ENTITY_ALIAS_GROUPS.some(entry => entry.canonical === 'smoldering church'), false);
   assert.equal(KNOWN_ENTITY_ALIAS_PATTERNS.some(entry => entry.canonical === 'smoldering church'), false);
