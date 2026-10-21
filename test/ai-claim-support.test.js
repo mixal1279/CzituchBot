@@ -91,6 +91,20 @@ test('a matching hedged outcome cannot be stated as certain without a qualifier'
   ).includes('hedge_to_absolute'));
 });
 
+test('same-source bounded context can resolve causality only for a locally accepted context-supported claim', () => {
+  const claim = 'The transfer caused the outcome.';
+  const quote = 'The transfer occurred.';
+  const context = 'The transfer occurred, causing the outcome.';
+  assert.ok(detectOverclaimTypes(claim, quote).includes('correlation_to_causation'));
+  assert.deepEqual(detectOverclaimTypes(claim, quote, { context, allowContextForCausality: true }), []);
+  assert.ok(detectOverclaimTypes(claim, quote, { context, allowContextForCausality: false }).includes('correlation_to_causation'));
+});
+
+test('English each is recognized as an all-quantifier equivalent', () => {
+  assert.deepEqual(detectOverclaimTypes('Each player can use this route.', 'Every player can use this route.'), []);
+  assert.ok(detectOverclaimTypes('Each player can use this route.', 'Some players can use this route.').includes('unsupported_quantifier'));
+});
+
 test('Polish exclusive quantifier is recognized after normalization', () => {
   assert.ok(detectOverclaimTypes(
     'Wyłącznie gracze z kluczem mogą wejść.',
