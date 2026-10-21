@@ -150,7 +150,7 @@ function wyodrebnijLiczbyIDaty(value) {
   // rzymskie cyfry w tytułach gier są pisane wielkimi literami (III, IV, IX).
   // Only uppercase sequel numerals used in titles (II–XVI); never treat abbreviations
   // such as MC, CD, DC or MM as numeric facts.
-  const romanMatches = raw.match(/\b(?:II|III|IV|V?I{1,3}|IX|XI{0,3}|XIV|XV|XVI)\b/g)?.filter(r => r !== 'I') || [];
+  const romanMatches = raw.match(/\b(?:II|III|IV|V|VI|VII|VIII|IX|X|XI|XII|XIII|XIV|XV|XVI)\b/g) || [];
   for (const r of romanMatches) {
     const n = rzymskieNaArabskie(r);
     if (n !== null) canonical.push(String(n));
