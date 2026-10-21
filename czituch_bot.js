@@ -184,7 +184,7 @@ function buildValidatorEvidenceHints(question, answer, data) {
     'Nie twórz identyfikatorów z tytułów, nazw gier, nazw stron ani własnych skrótów. Jeśli nie możesz przypisać cytatu do jednego z powyższych ID, oznacz claim jako unsupported.',
     'KANDYDACI NA DOSŁOWNE CYTATY (wskazówki; cytat i ID muszą być zweryfikowane w danych referencyjnych):',
     hints,
-  ].join('\\n');
+  ].join('\n');
 }
 
 // =============================================
@@ -4000,7 +4000,7 @@ Pytanie użytkownika: ${pytanie}`;
         ].join('\\n');
         const unavailableRepair = await generujOdpowiedz(
           max_tokens,
-          `${systemPrompt}\\n\\n[VALIDATOR OUTAGE REPAIR]\\n${unavailableFeedback}`,
+          `${systemPrompt}\n\n[VALIDATOR OUTAGE REPAIR]\n${unavailableFeedback}`,
           'validator unavailable repair',
           false,
         );
