@@ -29,7 +29,7 @@ function detectOverclaimTypes(claim, evidence, options = {}) {
   if (!c || !e) return types;
 
   const causalClaim = /\b(?:because|therefore|caused? by|caus\w*|leads? to|resulted? in|as a result|dzieki temu|z powodu|poniewaz|dlatego|spowod\w*|doprowadz\w*|umozliw\w*)\b/u.test(c);
-  const causalEvidencePattern = /\b(?:because|therefore|caused? by|caus\w*|leads? to|resulted? in|as a result|due to|dzieki temu|z powodu|poniewaz|dlatego|spowod\w*|doprowadz\w*|umozliw\w*|w wyniku|w ten sposob|przez co|co umozliw\w*|putting him in control|put him in control|allow(?:ed|s)?|enabl\w*)\b/u;
+  const causalEvidencePattern = /\b(?:because|therefore|caused? by|caus\w*|leads? to|resulted? in|as a result|due to|dzieki temu|z powodu|poniewaz|dlatego|spowod\w*|doprowadz\w*|umozliw\w*|w wyniku|w ten sposob|przez co|co umozliw\w*|putting him in control|put him in control|giving (?:him|her|them|it) control|force(?:s|d|ing)? (?:the )?[\p{L}\p{N}]+(?: [\p{L}\p{N}]+){0,1} to [\p{L}\p{N}]+|allow(?:ed|s)?|enabl\w*)\b/u;
   const causalEvidence = causalEvidencePattern.test(e)
     || (options.allowContextForCausality === true && causalEvidencePattern.test(context));
   if (causalClaim && !causalEvidence) types.push('correlation_to_causation');
