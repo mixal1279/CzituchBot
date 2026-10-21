@@ -489,6 +489,21 @@ function sprawdzTwardeKonflikty(evidence, claim, options = {}) {
 }
 
 function sprawdzSprzecznosciSemantyczne(evidence, claim) {
+  const normalizedEvidence = normalizujClaim(evidence);
+  const normalizedClaim = normalizujClaim(claim);
+  const negativeStabilityRe = /\b(?:lack of stability|absence of stability|instabil\w*|unstable|niestabiln\w*|brak stabiln\w*)\b/u;
+  const positiveStabilityRe = /\b(?:stability|stable|stabiln\w*)\b/u;
+  const evidenceLacksStability = negativeStabilityRe.test(normalizedEvidence);
+  const claimLacksStability = negativeStabilityRe.test(normalizedClaim);
+  const evidenceAssertsStability = positiveStabilityRe.test(normalizedEvidence) && !evidenceLacksStability;
+  const claimAssertsStability = positiveStabilityRe.test(normalizedClaim) && !claimLacksStability;
+  if (evidenceLacksStability && claimAssertsStability) {
+    return { ok: false, reason: 'claim twierdzi stabilność, a dowód wskazuje brak stabilności' };
+  }
+  if (evidenceAssertsStability && claimLacksStability) {
+    return { ok: false, reason: 'claim twierdzi brak stabilności, a dowód wskazuje stabilność' };
+  }
+
   const eConcepts = pojeciaCrossLanguage(evidence);
   const cConcepts = pojeciaCrossLanguage(claim);
   const eAction = {
