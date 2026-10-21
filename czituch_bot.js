@@ -86,6 +86,7 @@ const { createAIRequestContext } = require('./ai/requestContext');
 const { sprawdzTwardeFaktyOdpowiedzi, sprawdzFormatOdpowiedzi, maskSentenceAbbreviations } = require('./ai/response');
 const { Firestore } = require('@google-cloud/firestore');
 const { ocenJakoscOdpowiedzi } = require('./ai/quality');
+const { usunEtykietyEvidenceCandidate, maEtykieteEvidenceCandidate, oczyscOdpowiedzPrzedWalidacja } = require('./ai/answer-sanitize');
 const { AI_MODELS } = require('./ai/modelConfig');
 const { parsujStrukturalnePodsumowanie } = require('./ai/history');
 const { createRequestId, sanitizeQuestion, planRequest, evaluateEvidence, shouldValidate, decideValidation, finalText: finalizeAIPipelineText } = require('./ai/pipeline');
@@ -386,6 +387,9 @@ function wyznaczRoutingAI(pytanie) {
 
 function zastosujDeterministyczneGuards(walidacja, odpowiedz, dane, pytanie, formatOptions = {}, routingForQuality = {}, qualityProfile = 'simple') {
   if (!walidacja || !['accepted', 'soft_accepted'].includes(walidacja.status)) return walidacja;
+  // Walidator ocenia tekst bez etykiet EVIDENCE CANDIDATE; guardy muszą oceniać dokładnie ten sam tekst,
+  // inaczej etykieta po kropce odrzuca odpowiedź zaakceptowaną przez walidator („nie kończy się pełnym zdaniem”).
+  odpowiedz = usunEtykietyEvidenceCandidate(odpowiedz);
   const partial = walidacja.status === 'soft_accepted' && Boolean(walidacja.partialAnswer);
   const format = sprawdzFormatOdpowiedzi(odpowiedz, formatOptions);
   if (!format.ok) {
@@ -2347,14 +2351,6 @@ async function walidujOdpowiedzXKiro(persona, pytanie, odpowiedz, dane, requestI
 // porównać modele na benchmarku bez zmiany kodu: AI_GEMINI_VALIDATOR_MODEL=gemini-3.8-flash.
 const AI_GEMINI_VALIDATOR_MODEL = process.env.AI_GEMINI_VALIDATOR_MODEL || 'gemini-3.5-flash-lite';
 
-function usunEtykietyEvidenceCandidate(tekst) {
-  return String(tekst || '')
-    .replace(/\s*\(?\s*EVIDENCE CANDIDATES?\s*\d+(?:\s*[,;]\s*\d+)*\s*\)?/gi, '')
-    .replace(/[ \t]{2,}/g, ' ')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
-}
-
 async function walidujOdpowiedzAI(persona, pytanie, odpowiedz, dane, historiaRozmowy = [], requestId = '-', requestState = null, requestMeta = null) {
   odpowiedz = usunEtykietyEvidenceCandidate(odpowiedz);
   const cacheKey = dane ? verdictCache.key({ question: pytanie, answer: odpowiedz, evidence: dane, model: AI_GEMINI_VALIDATOR_MODEL }) : null;
@@ -3801,19 +3797,13 @@ Pytanie użytkownika: ${pytanie}`;
     );
   }
 
-function oczyscOdpowiedzPrzedWalidacja(tekst) {
-  return String(tekst || '')
-    .split(/\r?\n/)
-    .filter(line => !/https?:\/\/|www\./i.test(line))
-    .filter(line => !/^(?:📚\s*)?Źródło(?: poradnika)?\s*:/i.test(line))
-    .join('\n')
-    .replace(/\[[^\]]*\]\(https?:\/\/[^)]+\)/gi, '')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
-}
-
   wynikGeneracji = await generujOdpowiedz(max_tokens, systemPrompt);
-  let odp = oczyscOdpowiedzPrzedWalidacja(ograniczDoPelnychZdanAI(usunMarkeryWewnetrzneAI(filtrBezpieczenstwa(wynikGeneracji.tekst)), responseCfg.maxSentences, 1800, responseCfg.maxWords));
+  const tekstZGeneratora = usunMarkeryWewnetrzneAI(filtrBezpieczenstwa(wynikGeneracji.tekst));
+  if (maEtykieteEvidenceCandidate(tekstZGeneratora)) {
+    // Surowy tekst nie jest nigdzie zapisywany, więc logujemy końcówkę — to jedyny ślad, że generator złamał kontrakt promptu.
+    console.warn(`[AI][${requestId}] generator zwrócił etykietę EVIDENCE CANDIDATE mimo zakazu w prompcie — usuwam przed walidacją; końcówka surowego tekstu=${JSON.stringify(String(tekstZGeneratora).slice(-80))}`);
+  }
+  let odp = oczyscOdpowiedzPrzedWalidacja(ograniczDoPelnychZdanAI(usunEtykietyEvidenceCandidate(tekstZGeneratora), responseCfg.maxSentences, 1800, responseCfg.maxWords));
   if (!odp) { console.log(`[AI][${requestId}] final status=unavailable — brak odpowiedzi`); zalogujPodsumowanieAI('unavailable'); return; }
   console.log(`[AI][${requestId}] generator=${wynikGeneracji.provider}/${wynikGeneracji.model} liczba prób 120B=${liczbaProb120b}`);
 
@@ -4023,7 +4013,7 @@ function oczyscOdpowiedzPrzedWalidacja(tekst) {
         if (repairResult.tekst) {
           const repaired = oczyscOdpowiedzPrzedWalidacja(
             ograniczDoPelnychZdanAI(
-              usunMarkeryWewnetrzneAI(filtrBezpieczenstwa(repairResult.tekst)),
+              usunEtykietyEvidenceCandidate(usunMarkeryWewnetrzneAI(filtrBezpieczenstwa(repairResult.tekst))),
               responseCfg.maxSentences,
               1800,
               responseCfg.maxWords,
@@ -8598,6 +8588,7 @@ if (process.env.NODE_ENV === 'test') {
     walidujOdpowiedzXKiro,
     walidujOdpowiedzGroq,
     walidujOdpowiedzAIBezCache,
+    zastosujDeterministyczneGuards,
     recordValidatorTransportResult,
     isProviderQuotaBlocked,
     validatorBreakerIsOpen,
