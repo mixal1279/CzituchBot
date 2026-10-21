@@ -72,6 +72,17 @@ function buildAnswerPlan(question, routing = {}) {
     required: true,
     reason: slot === 'clause_coverage' ? 'multiple_question_clauses' : (matched.includes(slot) ? 'question_signal' : 'intent_contract'),
   }));
+  const responseShapeGuidance = [
+    slots.has('who')
+      ? 'Dla pytań „kto/kim jest” podaj potwierdzoną tożsamość oraz istotną rolę lub relację, jeśli źródło ją wyraźnie podaje (np. towarzysz, antagonista albo klasa postaci).'
+      : '',
+    slots.has('where')
+      ? 'Dla pytań „gdzie” podaj nazwane miejsce lub region oraz konkretny punkt orientacyjny, jeśli źródła potwierdzają oba elementy; nie zastępuj nazw własnych ogólnym opisem.'
+      : '',
+    slots.has('when')
+      ? 'Dla pytań „kiedy” nie zgaduj daty ani kolejności wydarzeń. Jeśli źródła nie podają dokładnego momentu, zaznacz to wprost i podaj tylko potwierdzony kontekst.'
+      : '',
+  ].filter(Boolean).join(' ');
 
   return {
     version: 26,
@@ -86,8 +97,8 @@ function buildAnswerPlan(question, routing = {}) {
       : requirements.length >= 2 ? 'medium' : 'low',
     causalQuestion,
     instruction: requirements.length
-      ? 'Odpowiedź musi pokryć: ' + requirements.map(r => r.id).join(', ') + '. Każde zdanie faktograficzne ma być atomowym claimem opartym na jednym zweryfikowanym fragmencie evidence. Dla pytania „dlaczego/czemu” oddziel fakt od przyczyny: podaj przyczynę tylko wtedy, gdy konkretny evidence quote wyraźnie łączy przyczynę ze skutkiem. Nie traktuj kolejności wydarzeń jako przyczynowości. Jeśli brak takiego dowodu, powiedz wprost, że źródła nie potwierdzają przyczyny.'
-      : 'Odpowiedz bezpośrednio i nie dodawaj niepotwierdzonych faktów.',
+      ? 'Odpowiedź musi pokryć: ' + requirements.map(r => r.id).join(', ') + '. Każde zdanie faktograficzne ma być atomowym claimem opartym na jednym zweryfikowanym fragmencie evidence. Dla pytania „dlaczego/czemu” oddziel fakt od przyczyny: podaj przyczynę tylko wtedy, gdy konkretny evidence quote wyraźnie łączy przyczynę ze skutkiem. Nie traktuj kolejności wydarzeń jako przyczynowości. Jeśli brak takiego dowodu, powiedz wprost, że źródła nie potwierdzają przyczyny.' + (responseShapeGuidance ? ' ' + responseShapeGuidance : '')
+      : 'Odpowiedz bezpośrednio i nie dodawaj niepotwierdzonych faktów.' + (responseShapeGuidance ? ' ' + responseShapeGuidance : ''),
   };
 }
 
