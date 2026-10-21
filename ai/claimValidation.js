@@ -31,7 +31,7 @@ const CROSS_LANGUAGE_CONCEPTS = [
   ['lokalizacja', /found|find\w*|locat\w*|location\w*|znalezc\w*|znajduj\w*|lokaliz\w*|lezy|polozen\w*/i],
   ['rodzina', /family|families|wife|daughter|son|missing\s+(?:wife|daughter|son|family)|rodzin\w*|zaginion\w*|zona|corka|syn\w*/i],
   ['wymiana_informacji', /in\s+exchange\s+for|in\s+return\s+for|exchange\w*|w\s+zamian\s+za|w\s+zamian\w*|wzajemn\w*/i],
-  ['poscig', /chase\w*|pursu\w*|hunt(?:ed|ing|s)\b|flee\w*|escap\w*|uciek\w*|gonil\w*|scig\w*|ucieczk\w*/i],
+  ['poscig', /chas\w*|pursu\w*|hunt(?:ed|ing|s)\b|flee\w*|escap\w*|uciek\w*|gonil\w*|scig\w*|ucieczk\w*/i],
   ['schronienie', /shelter\w*|refuge\w*|seek\w*\s+shelter|schron\w*|azyl\w*/i],
   ['informacja', /information\w*|informacj\w*|wiadomos\w*/i],
   ['ogien', /fire\w*|flame\w*|ogn\w*|plomien\w*/i],
