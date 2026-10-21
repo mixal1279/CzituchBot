@@ -804,22 +804,15 @@ function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
     if ((polishConcepts.size || englishConcepts.size) && sharedConcepts.length === 0) {
       return { ok: false, reason: 'claim_en kopiuje cytat, ale nie odpowiada treści claimu' };
     }
-    // A concept absent from the Polish-side dictionary is not automatically an
-    // added fact: CROSS_LANGUAGE_CONCEPTS is intentionally incomplete and does
-    // not cover every faithful translation (for example, "core transfer").
-    // Keep the positive relation check, but rely on the strict independent
-    // guards below for negation, causal/purpose relation, quantities, and
-    // contradictory actions. Shared entity names alone are never sufficient.
-    const agreement = dopasowanieSemantyczne(en, pl, options);
-    if (!agreement.ok) {
-      // Semantic overlap can fail for a faithful cross-language rendering when
-      // the concept dictionary lacks one equivalent. Permit this narrow case
-      // only when at least one non-entity concept agrees; the hard guards below
-      // still reject changed negation, causal relation, and known event conflicts.
-      if (sharedConcepts.length === 0) {
-        return { ok: false, reason: 'claim_en kopiuje cytat, ale nie odpowiada treści claimu (zmiana zdarzenia lub relacji)' };
-      }
+    // Do not let one shared concept excuse extra source facts in claim_en.
+    // Improve the cross-language dictionary instead when a faithful equivalent
+    // (such as Polish "schwytał" and English "captured") is missing.
+    const addedConcepts = [...englishConcepts].filter(concept => !polishConcepts.has(concept));
+    if (addedConcepts.length) {
+      return { ok: false, reason: 'claim_en kopiuje cytat, ale nie odpowiada treści claimu' };
     }
+    const agreement = dopasowanieSemantyczne(en, pl, options);
+    if (!agreement.ok) return { ok: false, reason: 'claim_en kopiuje cytat, ale nie odpowiada treści claimu' };
   }
   if (!zbiorRowny(wyodrebnijLiczbyIDaty(pl), wyodrebnijLiczbyIDaty(en))) {
     return { ok: false, reason: 'tłumaczenie claimu zmienia liczby lub daty' };
