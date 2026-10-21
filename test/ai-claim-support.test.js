@@ -56,6 +56,14 @@ test('claim-support audit flags correlation-to-causation overclaim', () => {
   ).includes('correlation_to_causation'));
 });
 
+test('purpose language alone is not treated as proof of a completed causal outcome', () => {
+  const claim = 'Wheatley took control because Chell pushed the button.';
+  const purposeOnly = 'Chell pushed the button so that Wheatley could take control.';
+  const explicitOutcome = 'Chell pushed the button so that Wheatley could take control. Wheatley is put in place, putting him in control of the facility.';
+  assert.ok(detectOverclaimTypes(claim, purposeOnly).includes('correlation_to_causation'));
+  assert.deepEqual(detectOverclaimTypes(claim, explicitOutcome), []);
+});
+
 test('claim-support audit flags a hedge upgraded to an absolute', () => {
   assert.ok(detectOverclaimTypes(
     'The method always guarantees success.',
