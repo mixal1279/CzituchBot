@@ -118,7 +118,7 @@ test('answer plans preserve source-backed role/location details and prohibit gue
   assert.match(who.instruction, /towarzysz/);
 
   const where = buildAnswerPlan('Gdzie znaleźć Wielki Miecz?', { intent: 'web_fact', game: 'Elden Ring', is_gameplay: true });
-  assert.match(where.instruction, /nazwane miejsce lub region/);
+  assert.match(where.instruction, /nazwane miejsce docelowe/);
   assert.match(where.instruction, /punkt orientacyjny/);
 
   const when = buildAnswerPlan('Kiedy Geralt przybywa do Novigradu?', { intent: 'web_fact', game: 'The Witcher 3' });
