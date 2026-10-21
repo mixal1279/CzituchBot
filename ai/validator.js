@@ -761,10 +761,10 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
   const partialFormat = partialAnswerCandidate
     ? sprawdzKompletnoscOdpowiedzi(partialAnswerCandidate)
     : { ok: false };
-  // An evidence mismatch by itself is not a partial-acceptance trigger. However,
-  // a whole-answer coverage/granularity failure may still return independently
-  // verified claims; claims with entity, negation, numeric, temporal, action, or
-  // causal mismatches remain excluded by the per-claim evidence checks above.
+  // A failed claim may trigger a partial response only when another claim has
+  // independent local support. The failed claim itself is never emitted: entity,
+  // negation, numeric, temporal, action, and causal mismatches fail its own
+  // evidence evaluation and are filtered from verifiedPartialClaims.
   const partialEligibleEvidenceFailureIndexes = unsupportedEvidenceClaimIndexes.filter(index => {
     const reasons = unsupportedEvidenceReasons.find(item => item.claimIndex === index)?.reasons || [];
     return reasons.length > 0 && reasons.every(reason =>
@@ -772,6 +772,7 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
     );
   });
   const hasPartialFailureTrigger = unsupported.length > 0
+    || unsupportedEvidenceClaimIndexes.length > 0
     || partialEligibleEvidenceFailureIndexes.length > 0
     || !answerCoverage.ok
     || !claimGranularityOk;
