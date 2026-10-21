@@ -27,8 +27,8 @@ function detectOverclaimTypes(claim, evidence) {
   const types = [];
   if (!c || !e) return types;
 
-  const causalClaim = /\b(?:because|therefore|caused? by|caus\w*|leads? to|resulted? in|as a result|dzieki temu|z powodu|poniewaz|dlatego|spowodow\w*|doprowadz\w*|umozliw\w*)\b/u.test(c);
-  const causalEvidence = /\b(?:because|therefore|caused? by|caus\w*|leads? to|resulted? in|as a result|due to|so that|in order to|dzieki temu|z powodu|poniewaz|dlatego|spowodow\w*|doprowadz\w*|umozliw\w*|w wyniku)\b/u.test(e);
+  const causalClaim = /\b(?:because|therefore|caused? by|caus\w*|leads? to|resulted? in|as a result|dzieki temu|z powodu|poniewaz|dlatego|spowod\w*|doprowadz\w*|umozliw\w*)\b/u.test(c);
+  const causalEvidence = /\b(?:because|therefore|caused? by|caus\w*|leads? to|resulted? in|as a result|due to|so that|in order to|dzieki temu|z powodu|poniewaz|dlatego|spowod\w*|doprowadz\w*|umozliw\w*|w wyniku)\b/u.test(e);
   if (causalClaim && !causalEvidence) types.push('correlation_to_causation');
 
   const sourceHedged = /\b(?:may|might|could|possibly|potentially|suggests?|appears? to|limited evidence|small study|moze|mozliwe|prawdopodobnie|sugeruje|wstepne dane|niewielkim badaniu)\b/u.test(e);
