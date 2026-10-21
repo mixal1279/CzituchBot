@@ -133,6 +133,24 @@ test('answer plan classifies how-to combat questions as procedural', () => {
   assert.ok(plan.requirements.some(x => x.id === 'how'));
 });
 
+test('location-only gameplay exemption recognizes inflected procedure terms', () => {
+  for (const question of [
+    'Gdzie znaleźć bossa w Elden Ring?',
+    'Gdzie znaleźć questy w Skyrim?',
+    'Gdzie są misje poboczne?',
+    'Gdzie szukać poradnika do gry?',
+    'Gdzie znaleźć solucję do questa?',
+  ]) {
+    const plan = buildAnswerPlan(question, { intent: 'web_fact', is_gameplay: true });
+    assert.ok(plan.requirements.some(x => x.id === 'steps'), question);
+  }
+
+  const locationOnly = buildAnswerPlan('Gdzie znaleźć Wielki Miecz?', {
+    intent: 'web_fact', is_gameplay: true,
+  });
+  assert.ok(!locationOnly.requirements.some(x => x.id === 'steps'));
+});
+
 test('v26 judge rejects generic relationship answer', () => {
   const plan = buildAnswerPlan('Jaka jest relacja Geralta i Yennefer?', {
     intent:'web_fact', is_lore:true, entity:'Geralt', game:'The Witcher 3',
