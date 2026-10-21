@@ -79,7 +79,7 @@ test('primary generation honors AI_GENERATOR_MODEL and checks quota cooldown bef
 
 test('validator provider preflight uses production timeout budgets', () => {
   const source = read('scripts/validator-providers-preflight.js');
-  assert.match(source, /xKiro:\s*Number\(process\.env\.AI_XKIRO_VALIDATOR_TIMEOUT_MS\)\s*\|\|\s*3000/);
+  assert.match(source, /xKiro:\s*Number\(process\.env\.AI_XKIRO_VALIDATOR_TIMEOUT_MS\)\s*\|\|\s*4500/);
   assert.match(source, /OpenRouter:\s*3000/);
   assert.match(source, /Groq:\s*3000/);
   assert.match(source, /result\.ms > productionTimeoutMs/);
