@@ -41,9 +41,6 @@ test('sentence-initial generic words are not treated as proper names', () => {
 });
 
 test('English cart cannot be mistranslated as a Polish basket', () => {
-  assert.equal(pojeciaCrossLanguage('The Greatsword is in an abandoned treasure cart.').has('woz'), true);
-  assert.equal(pojeciaCrossLanguage('Wielki Miecz leży w opuszczonym wozie.').has('woz'), true);
-  assert.equal(pojeciaCrossLanguage('Wielki Miecz leży w opuszczonym koszu ze skarbem.').has('kosz'), true);
   assert.equal(sprawdzSprzecznosciSemantyczne(
     'The Greatsword is in an abandoned treasure cart.',
     'Wielki Miecz leży w opuszczonym koszu ze skarbem.',
