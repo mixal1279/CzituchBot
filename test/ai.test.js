@@ -765,6 +765,7 @@ console.log('AI regression tests: OK');
     hallucination: false,
     claims: [{
       claim: 'Astarion to wysoki elf i łotrzyk.',
+      claim_en: 'Astarion is a High Elf and a Rogue.',
       supported: true,
       source_ids: ['SOURCE 1'],
       evidence_quote: 'Astarion is a High Elf Rogue vampire spawn.',
