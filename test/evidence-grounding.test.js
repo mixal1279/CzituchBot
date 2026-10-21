@@ -20,6 +20,46 @@ function base(claim, sourceId, quote, answer = claim) {
   }, 'test-model', 'test', new Set([sourceId]), answer && `[${sourceId}]\nTREŚĆ: ${quote}`);
 }
 
+test('validator rejects a hedged source upgraded to an absolute and emits claim support audit', () => {
+  const result = base(
+    'The method improves outcomes.',
+    'SOURCE 1',
+    'The method may improve outcomes.',
+  );
+  assert.equal(result.status, 'rejected');
+  assert.equal(result.diagnostics.claimSupport.records[0].verdict, 'unsupported');
+  assert.ok(result.diagnostics.localRejectReasons.includes('claim_support_overclaim'));
+  assert.ok(result.diagnostics.claimSupport.records[0].overclaimTypes.includes('hedge_to_absolute'));
+});
+
+test('one claim is bound to one source that contains its exact cited quote', () => {
+  const data = [
+    '[SOURCE 1]',
+    'TREŚĆ: An unrelated statement.',
+    '[SOURCE 2]',
+    'TREŚĆ: The supported fact is present.',
+  ].join('\\n');
+  const result = normalizujWynikWalidatora({
+    valid: true,
+    reason: 'ok',
+    unsupported_claims: [],
+    supported: true,
+    relevant: true,
+    complete: true,
+    hallucination: false,
+    confidence: 0.95,
+    claims: [{
+      claim: 'The supported fact is present.',
+      supported: true,
+      source_ids: ['SOURCE 1', 'SOURCE 2'],
+      evidence_quote: 'The supported fact is present.',
+    }],
+  }, 'test-model', 'test', new Set(['SOURCE 1', 'SOURCE 2']), data, 'The supported fact is present.');
+  assert.equal(result.status, 'accepted');
+  assert.deepEqual(result.claims[0].source_ids, ['SOURCE 2']);
+  assert.deepEqual(result.diagnostics.claimSupport.records[0].sourceIds, ['SOURCE 2']);
+});
+
 test('evidence parser preserves source identity and exact content', () => {
   const data = '[SOURCE 1]\nTYTUŁ: Test\nURL: https://example.com/a\nTREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>\nArthur returned to camp.\n<<<END_UNTRUSTED_SOURCE_CONTENT>>>';
   const blocks = parseEvidenceBlocks(data);
