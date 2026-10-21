@@ -508,7 +508,7 @@ function wykryjNiezgodnyJezykClaimow(answer, claims) {
 
 function isAtomicPartialClaimText(value) {
   const claim = String(value || '').trim();
-  if (!claim || /[;—–]/u.test(claim)) return false;
+  if (!claim || /[;—–/]/u.test(claim)) return false;
   if (/\b(?:because|therefore|as a result|w wyniku|z powodu|poniewaz|dzieki temu|co spowodow\w*|which caused|leading to|resulting in)\b/iu.test(claim)) return false;
   if (/,\s*(?:co|ktory|ktora|ktore|which|who|that)\b/iu.test(claim)) return false;
   if (/^\s*(?:i|oraz|and|but|co|which|ktory|ktora|ktore)\b/iu.test(claim)) return false;
