@@ -76,6 +76,17 @@ test('conditional-only evidence cannot support an unconditional claim', () => {
   assert.equal(zgodnoscStrukturalna(conditionalEvidence, qualifiedClaim).ok, true);
 });
 
+test('gameplay paraphrases preserve attack, shout, landing, and giant zombie-dog concepts across languages', () => {
+  const { zgodnoscStrukturalna } = require('../ai/claimValidation');
+  const attackQuote = 'Every time he lands, attack him. You will need to use the shout multiple times.';
+  const attackClaim = 'Po wylądowaniu atakuj go, powtarzając okrzyk.';
+  assert.equal(zgodnoscStrukturalna(attackQuote, attackClaim).ok, true, JSON.stringify(zgodnoscStrukturalna(attackQuote, attackClaim)));
+
+  const dogsQuote = 'The trouble is that two giant zombie dogs are guarding it.';
+  const dogsClaim = 'Dwóch gigantycznych zombie-psów strzeże tego miejsca.';
+  assert.equal(zgodnoscStrukturalna(dogsQuote, dogsClaim).ok, true, JSON.stringify(zgodnoscStrukturalna(dogsQuote, dogsClaim)));
+});
+
 test('short two-word infobox quotes are accepted when the entity and concept checks pass', () => {
   const claim = 'Astarion is a Rogue.';
   const result = normalizujWynikWalidatora(wynikModelu(claim, 'Class Rogue'), 'test-model', 'test', new Set(['SOURCE 1']), dane('Astarion Gender Male Class Rogue Race High Elf'), claim);
