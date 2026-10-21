@@ -562,8 +562,8 @@ function dopasowanieSemantyczne(evidence, claim, options = {}) {
   if (missingEntities.length) {
     // Nazwa własna z polskiego claimu nie występuje w angielskim dowodzie. Jeśli
     // model nie zwrócił tłumaczenia claim_en, nie da się rozstrzygnąć, czy nazwa
-    // jest przetłumaczona („Kościoła Palącego się” → „Smoldering Church”), czy
-    // wymyślona. Powód musi to mówić wprost — nazwa braku nazwy własnej
+    // ma zweryfikowany odpowiednik w drugim języku, czy została wymyślona.
+    // Powód musi to mówić wprost — nazwa braku nazwy własnej
     // sugerowała problem z treścią odpowiedzi, a problem leży w kontrakcie.
     if (!options.claimEn && wyglądaNaAngielski(evidence)) {
       return { ok: false, reason: 'brak tłumaczenia claimu (claim_en) dla angielskiego dowodu — nazw własnych nie da się rozstrzygnąć', ignoredSentenceInitialNames };
@@ -885,9 +885,9 @@ function zbiorRowny(a, b) {
 }
 
 // Wycina z tekstu wzmianki o encjach należących do tej samej grupy aliasowej.
-// Encje tłumaczone („Kościoła Palącego się” → „Smoldering Church”) nie mają
-// wspólnych tokenów, więc porównanie treści z ich udziałem zawsze dawałoby
-// fałszywy negatyw. Wycinamy grupę po obu stronach, żeby porównać resztę.
+// Zweryfikowane nazwy PL/EN nie zawsze mają wspólne tokeny, więc porównanie
+// treści z ich udziałem mogłoby dać fałszywy negatyw. Wycinamy grupę po obu
+// stronach, żeby porównać resztę; niezweryfikowane aliasy nie trafiają do tabeli.
 function wycinAliasowaneEncje(text, names) {
   let out = String(text || '');
   const wzorce = [];
@@ -973,10 +973,8 @@ function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
     if (missingConcepts.length) {
       return { ok: false, reason: powodNiezgodnosci };
     }
-    // Zgodności leksykalnej PL↔EN tutaj nie wymagamy: nazwy własne są w tych
-    // językach tłumaczone („Kościoła Palącego się” → „Smoldering Church”), więc
-    // wymaganie ich pokrycia w drugim tekście jest strukturalnie niespełnialne
-    // i odrzucało każde poprawne tłumaczenie. Rozstrzygają zamiast tego:
+    // Zgodności leksykalnej PL↔EN tutaj nie wymagamy dla nazw z jawnie
+    // zweryfikowanymi aliasami: nie muszą mieć wspólnych tokenów. Rozstrzygają zamiast tego:
     //   • zbiory pojęć powyżej (claim_en nie dodaje, nie podmienia i nie pomija
     //     pojęcia po wycięciu encji),
     //   • twarde kontrole liczb, jednostek, negacji i przyczyny poniżej,
