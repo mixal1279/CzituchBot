@@ -4125,6 +4125,7 @@ Pytanie użytkownika: ${pytanie}`;
           );
           if (repaired) {
             odp = repaired;
+            aiState.validationPass = 2;
             walidacja = await validateAI(
               aiProfile === 'billy' ? 'billy' : aiProfile === 'edzzi' ? 'edzzi' : aiProfile === 'angie' ? 'angie' : 'generic',
               pytanie,
