@@ -13,7 +13,8 @@ const {
   pojeciaCrossLanguage,
 } = require('../ai/claimValidation');
 
-test('dragon landing concept does not match generic land or lands wording', () => {\n  assert.equal(pojeciaCrossLanguage('The lands around the castle are fertile.').has('smok_na_ziemi'), false);\n  assert.equal(pojeciaCrossLanguage('They are landing at the airport.').has('smok_na_ziemi'), false);\n  assert.equal(pojeciaCrossLanguage('The dragon lands after the spell.').has('smok_na_ziemi'), true);\n  assert.equal(pojeciaCrossLanguage('Smok wylądował na ziemi.').has('smok_na_ziemi'), true);\n});\n\ntest('sentence-initial generic words are not treated as proper names', () => {
+test('dragon landing concept does not match generic land or lands wording', () => {\n  assert.equal(pojeciaCrossLanguage('The lands around the castle are fertile.').has('smok_na_ziemi'), false);\n  assert.equal(pojeciaCrossLanguage('They are landing at the airport.').has('smok_na_ziemi'), false);\n  assert.equal(pojeciaCrossLanguage('The dragon lands after the spell.').has('smok_na_ziemi'), true);
+  assert.equal(pojeciaCrossLanguage('Dragonrend is an ancient shout.').has('smok_na_ziemi'), false);\n  assert.equal(pojeciaCrossLanguage('Smok wylądował na ziemi.').has('smok_na_ziemi'), true);\n});\n\ntest('sentence-initial generic words are not treated as proper names', () => {
   for (const claim of [
     'Decyzja ta wynikała z wcześniejszych wydarzeń.',
     'Motywuje go to do dalszego działania.',
