@@ -58,10 +58,26 @@ function buildRetrievalQueries(question, routing = {}, options = {}) {
     dodajUnikalneQuery(queries, [entity, ...(game && normalizujQueryToken(game) !== normalizedEntity ? [game] : []), ...filtered].join(' '));
   }
 
-  if (routing?.is_lore) {
-    dodajUnikalneQuery(queries, [entity || original, 'historia fabuła lore'].join(' '));
+  // Add one intent-specific retrieval query. A generic "lore/guide" query
+  // often retrieves pages about the game but misses the exact evidence slot
+  // (location landmark, timeline/quest order, character identity, or causal link).
+  const isWhereQuestion = /(?:^|\\s)(?:gdzie|dok[aą]d|sk[aą]d|where)(?:\\s|$)/iu.test(original);
+  const isWhenQuestion = /(?:^|\\s)(?:kiedy|when)(?:\\s|$)|w jakim momencie|w którym momencie/iu.test(original);
+  const isWhoQuestion = /(?:^|\\s)(?:kim jest|kto jest|who is|who was)(?:\\s|$)/iu.test(original);
+  const isWhyQuestion = /(?:^|\\s)(?:dlaczego|czemu|why)(?:\\s|$)|z jakiego powodu/iu.test(original);
+
+  if (isWhereQuestion) {
+    dodajUnikalneQuery(queries, [entity, game, 'exact location landmark nearby map'].filter(Boolean).join(' '));
+  } else if (isWhenQuestion) {
+    dodajUnikalneQuery(queries, [entity, game, 'story timeline quest order arrival'].filter(Boolean).join(' '));
+  } else if (isWhoQuestion) {
+    dodajUnikalneQuery(queries, [entity, game, 'character identity background role companion'].filter(Boolean).join(' '));
+  } else if (isWhyQuestion) {
+    dodajUnikalneQuery(queries, [entity, game, 'cause reason motivation event core transfer'].filter(Boolean).join(' '));
+  } else if (routing?.is_lore) {
+    dodajUnikalneQuery(queries, [entity || original, game, 'character history story lore'].filter(Boolean).join(' '));
   } else if (routing?.is_gameplay) {
-    dodajUnikalneQuery(queries, [entity || original, 'guide walkthrough'].join(' '));
+    dodajUnikalneQuery(queries, [entity || original, game, 'gameplay strategy mechanics guide walkthrough'].filter(Boolean).join(' '));
   } else if (routing?.freshness === 'live') {
     dodajUnikalneQuery(queries, [entity, ...keywords.slice(0, 8), 'latest today'].filter(Boolean).join(' '));
   } else if (routing?.freshness === 'recent') {
