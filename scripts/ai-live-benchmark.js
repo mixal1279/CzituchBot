@@ -267,6 +267,15 @@ function buildBenchmarkDiagnostics(results, allCases = benchmark.cases, selected
     ...failedGenerationProviders.filter(provider => provider !== 'groq').map(provider => `${provider}:generation`),
     ...failedValidatorProviders.filter(provider => provider !== 'gemini').map(provider => `${provider}:validator`),
   ])].sort();
+  const validatorCalls = validatorRows.filter(row => row.skipped !== true).length;
+  const validatorUnavailable = validatorRows.filter(row => row.status === 'unavailable' && row.skipped !== true).length;
+  const validatorUnavailableRate = validatorCalls ? validatorUnavailable / validatorCalls : 0;
+  const qualityDegradationReasons = [];
+  if (failedOutageProviders.length > 0) qualityDegradationReasons.push('primary_provider_outage');
+  if (validatorUnavailableRate > 0.25) qualityDegradationReasons.push('validator_unavailable_rate_above_25_percent');
+  if (degradedProviders.length > 0) qualityDegradationReasons.push('fallback_provider_degradation');
+  if (generationProviderFailures.length > 0) qualityDegradationReasons.push('generation_provider_errors');
+  const qualityComparable = qualityDegradationReasons.length === 0;
   const categories = [...new Set(allCases.map(item => item.category || 'uncategorized'))].sort();
   const goldCoverageByCategory = Object.fromEntries(categories.map(category => [
     category,
@@ -286,10 +295,13 @@ function buildBenchmarkDiagnostics(results, allCases = benchmark.cases, selected
     // Licznik dotyczył końca REQUESTU, a nie wywołań walidatora: przy 5
     // odrzuconych przypadkach raportował 0, mimo że 7 z 12 wywołań walidatora
     // zakończyło się statusem 'unavailable'.
-    validatorUnavailable: validatorRows.filter(row => row.status === 'unavailable' && row.skipped !== true).length,
+    validatorUnavailable,
     validatorSkipped: validatorRows.filter(row => row.skipped === true).length,
     requestsUnavailable: results.filter(result => result.finalStatus === 'unavailable').length,
-    validatorCalls: validatorRows.filter(row => row.skipped !== true).length,
+    validatorCalls,
+    validatorUnavailableRate: Number(validatorUnavailableRate.toFixed(3)),
+    qualityComparable,
+    qualityDegradationReasons,
     validatorProviderCalls,
     validatorStatusCounts,
     validatorTransportFailures: validatorRows
