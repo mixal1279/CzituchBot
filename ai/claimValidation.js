@@ -61,7 +61,9 @@ const CROSS_LANGUAGE_CONCEPTS = [
   ['ostroznosc', /cautious\w*|approach cautiously|ostrozn\w*|ostrozne podejscie/i],
   ['zagrozenie', /lethal|dangerous|deadly|niebezpiecz\w*|zabojcz\w*/i],
   ['grywalnosc_postaci', /\bplay as\b|\bplayable character\b|\bcontrol (?:the|a|your) character\b|sterow\w*|mozna nim grac|nim grac/i],
-  ['smok_na_ziemi', /stay on the ground|on the ground|land(?:s|ed|ing)? on the ground|\blands?\b|\blanding\b|\blanded\b|dragonrend|wyladow\w*|pozostac na ziemi|na ziemi/i],
+  // Do not match generic 'land/lands' (e.g. fertile lands). Require dragon-specific
+  // landing language or the named Dragonrend spell to avoid false concept overlap.
+  ['smok_na_ziemi', /dragonrend|\bdragon\w*.{0,40}\b(?:land(?:s|ed|ing)?|stay on the ground|on the ground)\b|\b(?:land(?:s|ed|ing)? on the ground|stay on the ground)\b.{0,40}\bdragon\w*\b|\bsmok\w*.{0,40}\b(?:wyladow\w*|laduje\w*|pozostac na ziemi|na ziemi)\b|\b(?:wyladow\w*|laduje\w*).{0,40}\bsmok\w*\b/i],
   ['odpornosc_zywiolowa', /resistan\w*|ward\w*|spellbreaker|odpornosc\w*|wardy|tarcze?\w*/i],
 ];
 function pojeciaCrossLanguage(value) {
@@ -1013,9 +1015,9 @@ function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
   ])];
   // Twarda kontrola: polska nazwa własna musi wystąpić w angielskim tłumaczeniu.
   // Dla nazwy przetłumaczonej rozstrzyga tabela aliasów — czyNazwaWlasnaWystepuje
-  // sprawdza w niej wzorzec (PL i EN w jednym wyrażeniu), więc „Kościoła Palącego
-  // się” → „Smoldering Church” przechodzi, a podmiana encji („Malenia” → „Radahn”)
-  // i utrata encji („Wheatley” → „He”) nadal padają. Te dwie ostatnie własności
+  // sprawdza w niej wzorzec (PL i EN w jednym wyrażeniu), a podmiana encji
+  // („Malenia” → „Radahn”) i utrata encji („Wheatley” → „He”) nadal padają.
+  // Te dwie ostatnie własności
   // są pilnawcami podmiany podmiotu, więc nie mogą zostać rozluźnione.
   const missing = claimNames
     .filter(name => !czyNazwaWlasnaWystepuje(name, enNormalized));
@@ -1023,4 +1025,4 @@ function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
   return { ok: true };
 }
 
-module.exports = { KNOWN_ENTITY_ALIAS_PATTERNS, CAUSAL_RE, CAUSAL_EVIDENCE_RE, wyglądaNaAngielski, spojnoscTlumaczeniaClaimu, czyOgraniczenieDowodowe, normalizujClaim, tokenyClaim, liczbyDoPorownania, czyRelacjaPrzyczynowaPokrywaClaim, wyodrebnijLiczbyIDaty, wyodrebnijJednostkoweWartosci, wyodrebnijNazwyWlasne, zbudujWyroczniaNazw, zgodnoscStrukturalna, sprawdzTwardeKonflikty, sprawdzSprzecznosciSemantyczne, dopasowanieSemantyczne, sprawdzPokrycieClaimamiOdpowiedzi, czyDowodSemantyczniePokrywaClaim, tokenyPokrywajaSie, czyNazwaWlasnaWystepuje };
+module.exports = { KNOWN_ENTITY_ALIAS_PATTERNS, pojeciaCrossLanguage, CAUSAL_RE, CAUSAL_EVIDENCE_RE, wyglądaNaAngielski, spojnoscTlumaczeniaClaimu, czyOgraniczenieDowodowe, normalizujClaim, tokenyClaim, liczbyDoPorownania, czyRelacjaPrzyczynowaPokrywaClaim, wyodrebnijLiczbyIDaty, wyodrebnijJednostkoweWartosci, wyodrebnijNazwyWlasne, zbudujWyroczniaNazw, zgodnoscStrukturalna, sprawdzTwardeKonflikty, sprawdzSprzecznosciSemantyczne, dopasowanieSemantyczne, sprawdzPokrycieClaimamiOdpowiedzi, czyDowodSemantyczniePokrywaClaim, tokenyPokrywajaSie, czyNazwaWlasnaWystepuje };
