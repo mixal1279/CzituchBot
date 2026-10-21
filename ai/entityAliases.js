@@ -14,6 +14,7 @@ const ENTITY_ALIAS_GROUPS = Object.freeze([
   { canonical: 'dragonrend', names: ['Dragonrend', 'Smocza Zguba'] },
   { canonical: 'cathedral of dragon communion', names: ['Cathedral of Dragon Communion', 'Katedra Smoczej Komunii', 'Katedra Komunii Smoka'] },
   { canonical: 'greatsword', names: ['Greatsword', 'Wielki Miecz'] },
+  { canonical: 'eternal fire', names: ['Eternal Fire', 'Wieczny Ogień'] },
 ]);
 
 const DIACRITIC_CLASSES = { a: 'aą', c: 'cć', e: 'eę', l: 'lł', n: 'nń', o: 'oó', s: 'sś', z: 'zźż' };
