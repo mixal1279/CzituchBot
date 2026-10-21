@@ -160,6 +160,20 @@ test('live diagnostics detect generation-only provider outages', () => {
   assert.deepEqual(diagnostics.outageProviders, ['groq']);
 });
 
+test('skipped provider attempts do not count as a provider outage', () => {
+  const benchmark = JSON.parse(fs.readFileSync(path.join(__dirname, 'ai-benchmark.json'), 'utf8'));
+  const selected = stratifiedCases(benchmark.cases, 5, 113);
+  const diagnostics = buildBenchmarkDiagnostics([{
+    finalStatus: 'rejected',
+    generationAttempts: [{ provider: 'xkiro', model: 'default', status: 'skipped' }],
+    validatorResults: [{ provider: 'gemini', model: 'gemini-3.5-flash-lite', status: 'rejected' }],
+    timingTrace: [],
+  }], benchmark.cases, selected);
+
+  assert.equal(diagnostics.providerOutage, false);
+  assert.deepEqual(diagnostics.outageProviders, []);
+});
+
 test('live diagnostics separate provider quota, timeout, budget and evidence rejection', () => {
   assert.equal(classifyBenchmarkOutcome({ judgeStatus: 'accepted', factualPassed: true }), 'accepted');
   assert.equal(classifyBenchmarkOutcome({ finalStatus: 'unavailable', fallbackReasons: ['quota'] }), 'provider_quota');
