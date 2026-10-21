@@ -15,6 +15,7 @@ const CAUSAL_EVIDENCE_RE = CAUSAL_RE;
 const TEMPORAL_RE = /(?<![\p{L}])(?:19|20)\d{2}(?![\p{L}])|(?<![\p{L}])(?:styczen|luty|marzec|kwiecien|maj|czerwiec|lipiec|sierpien|wrzesien|pazdziernik|listopad|grudzien|wczoraj|dzisiaj|jutro|today|yesterday|tomorrow)(?![\p{L}])/iu;
 const CROSS_LANGUAGE_CONCEPTS = [
   ['porwanie', /kidnap\w*|abduct\w*|captur\w*|porwan\w*|uprowadz\w*|schwyt\w*/i],
+  ['transfer_rdzenia', /core transfer|transfer of (?:the )?core|transfer(?:u|em|ze)? rdzenia|transfer rdzenia/i],
   ['obrazenia', /injur\w*|wound\w*|hurt\w*|damage\w*|harm\w*|rann\w*|obraz\w*/i],
   ['zabojstwo', /kill\w*|murder\w*|death|dead|zabij\w*|zabil\w*|zabila\w*|zabici\w*|zabity\w*|zabicie\w*|zgin\w*|smier\w*/i],
   ['konflikt', /conflict\w*|feud\w*|fight\w*|war\w*|hatred|hate\w*|konflikt\w*|walcz\w*|wojn\w*/i],
