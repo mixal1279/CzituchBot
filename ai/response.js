@@ -18,6 +18,12 @@ function wyodrebnijTwardeTokeny(tekst) {
   const input = String(tekst || '');
   // `\b` jest ASCII-only i nie działa po „ł”/„ę” (np. „100 zł”), dlatego lookaroundy Unicode.
   const re = /(?:(?<![\p{L}\p{N}_.,])(?:19|20)\d{2}(?![\p{L}\p{N}_])|(?<![\p{L}\p{N}_.,])\d+(?:[.,]\d+)?\s*%|(?<![\p{L}\p{N}_.,])\d+(?:[.,]\d+)?\s*(?:zł|pln|usd|eur|gb|mb|tb|hz|fps|°c|stopni|godzin(?:y|ę|ach)?|minut(?:y|ę|ach)?|lat(?:a|)|km|m|kg|g)(?![\p{L}\p{N}_]))/giu;
+  // Liczby słowne („trzysta”, „dwadzieścia”) celowo NIE są tu dokładane:
+  // to porównanie odpowiedzi z źródłem bywa międzyjęzykowe (polska odpowiedź
+  // wobec angielskiego źródła), a „trzysta” po polsku to „three hundred” po
+  // angielsku. Wtedy każda polska liczba słowna byłaby fałszywie zgłaszana
+  // jako niepotwierdzona. Liczby słowne porównujemy w obrębie jednego języku
+  // (ai/claimValidation.js: liczbyDoPorownania).
   return [...new Set((input.match(re) || []).map(normalizujTokenLiczbowy))];
 }
 

@@ -4111,7 +4111,10 @@ Pytanie użytkownika: ${pytanie}`;
       unavailableMessage: 'Chwilowo nie mogę potwierdzić tej informacji, więc nie będę zgadywać.',
       // partialAnswer jest tu jedynym dopuszczalnym źródłem treści dla statusu
       // soft_accepted — nigdy pełna odpowiedź przekazana z zewnątrz.
-      partialAnswer: walidacja.partialAnswer || odpowiedzCzesciowa || null,
+      // Tylko partialAnswer z OSTATNIEGO werdyktu. Podmiana na odpowiedź
+      // z wcześniejszego przebiegu (odpowiedzCzesciowa) publikowałaby treść,
+      // na którą ostatni werdykt się nie zgadza.
+      partialAnswer: walidacja.partialAnswer || null,
     });
     console.log(`[AI][${requestId}] final status=${walidacja.status} Tavily=${uzupelnienieTavilyWykonane ? 'uzupełniono' : 'bez uzupełnienia'} źródła=${daneDoWalidacji ? daneDoWalidacji.split('---').length : 0}`);
   } else {

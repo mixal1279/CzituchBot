@@ -1,6 +1,7 @@
 'use strict';
 
 const { ENTITY_ALIAS_GROUPS, buildEntityAliasPatterns } = require('./entityAliases');
+const { slowaLiczbowe } = require('./polishNumbers');
 
 const NEGATION_RE = /(?<![\p{L}])(?:nie|nigdy|brak|bez|zaden|zadna|zadne|never|no|not|cannot|without|lack\s+of|absence\s+of|unable|neither|nor|fails?\s+to|\p{L}+n['’]t)(?![\p{L}])/iu;
 // Ta sama lista bez gołego „no”: „no damage” to kwantyfikator zerowy, a nie zaprzeczenie czasownika.
@@ -169,6 +170,12 @@ function wyodrebnijLiczbyIDaty(value) {
     const n = rzymskieNaArabskie(r);
     if (n !== null) canonical.push(String(n));
   }
+  // Uwaga: liczby słowne („trzysta”, „dwadzieścia”) celowo NIE są tu dokładane.
+  // To porównanie bywa międzyjęzykowe (polski claim wobec angielskiego
+  // dowodu), a „dwie” po polsku to „two” po angielsku — różne słowa, ta sama
+  // liczba. Porównanie słów pomijałoby wtedy poprawny claim. Liczby słowne
+  // porównujemy tam, gdzie obie strony są w tym samym języku
+  // (patrz liczbyDoPorownania).
   return [...new Set(canonical)];
 }
 const UNIT_ALIASES = new Map([
@@ -705,6 +712,7 @@ function sprawdzPokrycieClaimamiOdpowiedzi(answer, claims) {
       tokens: tokenyPokrycia(c?.claim || ''),
       concepts: pojeciaCrossLanguage(c?.claim || ''),
       entities: wyodrebnijNazwyWlasne(c?.claim || ''),
+      numbers: liczbyDoPorownania(c?.claim || ''),
     }))
     .filter(row => row.tokens.length >= 2 || row.concepts.size || row.entities.length);
 
@@ -727,6 +735,7 @@ function sprawdzPokrycieClaimamiOdpowiedzi(answer, claims) {
     checkedSentences++;
 
     const sentenceConcepts = pojeciaCrossLanguage(sentence);
+    const sentenceNumbers = liczbyDoPorownania(sentence);
     let sentenceEntities = wyodrebnijNazwyWlasne(sentence);
     let anaphoric = false;
     if (!sentenceEntities.length && ANAPHORA.test(sentence)) {
@@ -761,7 +770,15 @@ function sprawdzPokrycieClaimamiOdpowiedzi(answer, claims) {
         // jego pokrycie leksykalne z definicji jest niskie. Kotwicą jest rozwiązana
         // encja: jeśli claim o tej samej encji potwierdza treść zdania, zdanie jest
         // pokryte. Próg tokenowy jest tu niższy, bo encja weryfikuje tożsamość.
-        ? tokenCoverage >= 0.15 && (sharedEntities.length > 0 || sharedConcepts.length > 0)
+        //
+        // Niskie pokrycie leksykalne oznacza jednak, że zdanie może wnieść treść,
+        // której claim nie potwierdza. Liczby są tu najostrzejszą granicą:
+        // claim dzielący z zdaniem jedno słowo („lat”) pokrywałby zdanie
+        // „Jego historia trwa trzysta lat”, mimo że tej liczby nie ma w dowodzie.
+        // Liczba w zdaniu anaforycznym musi więc występować w spójnym claimie.
+        ? tokenCoverage >= 0.15
+          && (sharedEntities.length > 0 || sharedConcepts.length > 0)
+          && sentenceNumbers.every(number => row.numbers.includes(number))
         : tokenCoverage >= 0.30
           && (sharedConcepts.length > 0 || sharedEntities.length > 0 || tokenCoverage >= 0.65);
       return { row, matchedTokens, tokenCoverage, sharedConcepts, sharedEntities, coherent };
@@ -825,12 +842,24 @@ function czyDowodSemantyczniePokrywaClaim(evidence, claim, options = {}) {
 // musi zgadzać się z oryginałem w tym, co da się sprawdzić mechanicznie.
 const EN_FUNCTION_WORDS = /(?<![\p{L}])(?:the|of|and|is|was|were|are|to|in|for|with|that|he|she|his|her|by|on|as|at|it|its|from|after|before|during|has|had|have|an|this|these|those|their|be|been|not|which|who|can|will|may|only|also|than|then|but|or|if|when|where|lasts?|takes?|does|did)(?![\p{L}])/giu;
 // Polskie słowa funkcyjne: ich obecność wyklucza tekst angielski nawet bez znaków diakrytycznych.
-const PL_FUNCTION_WORDS = /(?<![\p{L}])(?:jest|się|sie|nie|że|ze|przez|oraz|który|która|które|jego|jej|ich|dla|od|po|ale|czy|gdy|bo|są|był|była|było|jak|trwa|walka|gra|gdzie)(?![\p{L}])/iu;
+// Tylko słowa, które w angielskim NIE występują jako samodzielne słowa.
+// „do”, „w”, „z”, „i”, „a”, „to” są celowo pominięte — wszystkie występują
+// po angielsku, a ich dopisanie odwróciłoby wykrywanie dla prawdziwych
+// angielskich źródeł (czyli dla tej ścieżki, którą claim_en obsługuje).
+// Z tego samego powodu usunięto „ale” (ang. piwo), „po”, „bo” i „jak”
+// („Jak and Daxter”) — występują w angielskich tekstach o grach.
+const PL_FUNCTION_WORDS = /(?<![\p{L}])(?:jest|się|sie|nie|że|ze|przez|oraz|który|która|które|jego|jej|ich|dla|od|czy|gdy|są|był|była|było|były|trwa|walka|gra|gdzie|przy|także|również|jednak|ponieważ|zatem|więc|wszystkie|wszystkich|można|należy|szukać|tylko|nadal|wciąż|według|blisko|daleko|część|większość|musi|każdy|każda|wszystko|nic|ktoś|zawsze|nigdy|właśnie|bardzo|choć|chociaż|ponadto|wobec|około)(?![\p{L}])/iu;
+
+// Polskie czasowniki 3. os. liczby pojedynczej: „przybywa”, „zostaje”.
+// Końcówki „-wa” i „-uje” nie występują w angielskim w tej pozycji
+// (wyjątki typu „Iowa” są nazwami własnymi, więc je pomijamy).
+const PL_VERB_ENDINGS = /(?:^|[^\p{Lu}])[\p{Ll}]{3,}(?:wa|uje)(?![\p{L}])/u;
 
 function wyglądaNaAngielski(text) {
   const t = String(text || '');
   if (/[ąćęłńóśźżĄĆĘŁŃÓŚŹŻ]/.test(t)) return false;
   if (PL_FUNCTION_WORDS.test(t)) return false;
+  if (PL_VERB_ENDINGS.test(t)) return false;
   // Krótki claim typu „Malenia defeated Radahn.” nie ma słów funkcyjnych, ale też nie ma polskich.
   return (t.match(EN_FUNCTION_WORDS) || []).length >= 1 || t.trim().split(/\s+/).length >= 3;
 }
@@ -867,6 +896,13 @@ function wycinAliasowaneEncje(text, names) {
     } catch (_) { /* pomijamy wzorzec, którego nie da się zastosować */ }
   }
   return out.replace(/\s+/g, ' ').trim();
+}
+
+// Liczby do porównania w obrębie jednego języku (odpowiedź ↔ claim).
+// Łączy zapis cyfrowy i słowny, bo model miesza oba zapisy w jednym tekście.
+// Nie wolno używać tego do porównania claimu z angielskim dowodem.
+function liczbyDoPorownania(tekst) {
+  return [...new Set([...wyodrebnijLiczbyIDaty(tekst), ...slowaLiczbowe(tekst)])];
 }
 
 function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
@@ -923,8 +959,11 @@ function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
     //   • zbiory pojęć powyżej (claim_en nie dodaje, nie podmienia i nie pomija
     //     pojęcia po wycięciu encji),
     //   • twarde kontrole liczb, jednostek, negacji i przyczyny poniżej,
-    //   • kontrola dowodu wykonywana na claim_en w języku źródła
-    //     (ai/validator.js: claim_en służy do sprawdzenia dowodu w języku źródła).
+    //   • twarda kontrola nazw własnych poniżej (claim nie może zgubić ani
+    //     podmienić nazwy).
+    // Kontrola dowodu na claim_en NIE jest tu strażnikiem: gdy claim_en jest
+    // kopią cytatu, porównuje ona cytat z samym sobą. Dlatego powyższe trzy
+    // punkty muszą wystarczać samodzielnie.
     // Bez tego warunku claim_en nigdy nie byłoby użyteczne dla nazw tłumaczonych.
   }
   if (!zbiorRowny(wyodrebnijLiczbyIDaty(pl), wyodrebnijLiczbyIDaty(en))) {
@@ -963,4 +1002,4 @@ function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
   return { ok: true };
 }
 
-module.exports = { KNOWN_ENTITY_ALIAS_PATTERNS, CAUSAL_RE, CAUSAL_EVIDENCE_RE, wyglądaNaAngielski, spojnoscTlumaczeniaClaimu, czyOgraniczenieDowodowe, normalizujClaim, tokenyClaim, czyRelacjaPrzyczynowaPokrywaClaim, wyodrebnijLiczbyIDaty, wyodrebnijJednostkoweWartosci, wyodrebnijNazwyWlasne, zbudujWyroczniaNazw, zgodnoscStrukturalna, sprawdzTwardeKonflikty, sprawdzSprzecznosciSemantyczne, dopasowanieSemantyczne, sprawdzPokrycieClaimamiOdpowiedzi, czyDowodSemantyczniePokrywaClaim, tokenyPokrywajaSie };
+module.exports = { KNOWN_ENTITY_ALIAS_PATTERNS, CAUSAL_RE, CAUSAL_EVIDENCE_RE, wyglądaNaAngielski, spojnoscTlumaczeniaClaimu, czyOgraniczenieDowodowe, normalizujClaim, tokenyClaim, liczbyDoPorownania, czyRelacjaPrzyczynowaPokrywaClaim, wyodrebnijLiczbyIDaty, wyodrebnijJednostkoweWartosci, wyodrebnijNazwyWlasne, zbudujWyroczniaNazw, zgodnoscStrukturalna, sprawdzTwardeKonflikty, sprawdzSprzecznosciSemantyczne, dopasowanieSemantyczne, sprawdzPokrycieClaimamiOdpowiedzi, czyDowodSemantyczniePokrywaClaim, tokenyPokrywajaSie };
