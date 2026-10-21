@@ -524,9 +524,26 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
     Array.isArray(c.source_ids) ? c.source_ids.map(normalizujIdZrodla) : []
   );
 
-  const evidenceEvaluations = claims.map((c, index) =>
-    czyDowodPotwierdzaClaim(dane, effectiveClaimSourceIds[index], c.evidence_quote, c.claim, { claimEn: c.claim_en, nameOracle })
-  );
+  // A claim has one evidence_quote, so the audit unit must be one claim + one cited source.
+  // Evaluate each cited source separately and bind the claim to the first cited source that
+  // independently verifies that exact quote. A different source must never lend support to it.
+  const evidenceEvaluations = claims.map((claim, index) => {
+    const sourceIds = effectiveClaimSourceIds[index];
+    const evaluations = sourceIds.map(sourceId => ({
+      sourceId,
+      result: czyDowodPotwierdzaClaim(dane, [sourceId], claim.evidence_quote, claim.claim, {
+        claimEn: claim.claim_en,
+        nameOracle,
+      }),
+    }));
+    const verified = evaluations.find(item => item.result.ok === true);
+    if (verified) {
+      effectiveClaimSourceIds[index] = [verified.sourceId];
+      claim.source_ids = [verified.sourceId];
+      return { ...verified.result, sourceId: verified.sourceId };
+    }
+    return evaluations[0]?.result || { ok: false, reason: 'brak pojedynczego źródła do przypisanego cytatu' };
+  });
   // Rozdzielamy dwie rzeczy, które wcześniej były jedną zmienną: (1) czy cytat w ogóle występuje
   // dosłownie we wskazanym źródle, (2) czy cały dowód przeszedł lokalne bramki (negacja, nazwy, liczby...).
   // Dzięki temu `evidence_quote_not_exact` w diagnostyce znaczy dokładnie to, co mówi.
