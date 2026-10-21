@@ -167,6 +167,15 @@ test('claim_en copied from the evidence quote must still agree with the Polish c
     { evidenceQuote: quote },
   );
   assert.equal(faithful.ok, true, JSON.stringify(faithful));
+
+  const expandedQuote = 'Wheatley took control of Aperture and destroyed the core.';
+  const expandedClaim = spojnoscTlumaczeniaClaimu(
+    'Wheatley przejął kontrolę nad Aperture.',
+    expandedQuote,
+    { evidenceQuote: expandedQuote },
+  );
+  assert.equal(expandedClaim.ok, false, JSON.stringify(expandedClaim));
+  assert.match(expandedClaim.reason, /nie odpowiada treści claimu/);
 });
 
 test('claim_en still fails when a source-backed name is dropped from the translation', () => {
