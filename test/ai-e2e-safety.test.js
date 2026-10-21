@@ -126,8 +126,9 @@ test('validator rejects an answer sentence omitted from the claims list', () => 
     complete: true, hallucination: false, confidence: 0.99,
     claims: [{ claim: 'Wheatley przeniósł się do ciała GLaDOS.', supported: true, source_ids: ['SOURCE 1'], evidence_quote: 'Wheatley przeniósł się do ciała GLaDOS.' }],
   }, 'test', 'test', new Set(['SOURCE 1']), data, answer);
-  assert.notEqual(result.status, 'accepted');
-  assert.match(result.reason, /nie pokrywają całej odpowiedzi/);
+  assert.equal(result.status, 'rejected');
+  assert.equal(result.partialAnswer, null);
+  assert.equal(result.diagnostics.answerCoverage.ok, false);
 });
 
 test('validator never silently truncates a claim list above its contract limit', () => {
