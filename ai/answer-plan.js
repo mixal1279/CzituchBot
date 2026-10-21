@@ -223,7 +223,11 @@ function assessAnswerCompleteness(answer, plan) {
       ? containsRequiredEntityContext(answer, plan)
       : id === 'clause_coverage'
         ? coversQuestionClauses(answer, plan.clauses)
-        : Boolean(signals[id]);
+        : id === 'causal_explanation'
+          // Jawnie podany motyw może odpowiedzieć na „dlaczego?”, ale nie zmienia go
+          // w twierdzenie o faktycznie zrealizowanym łańcuchu przyczynowym.
+          ? Boolean(signals.causal_explanation || (signals.motive_explanation && plan.requirements.some(item => item?.id === 'why')))
+          : Boolean(signals[id]);
     checked.push({ id, ok });
     if (!ok) missing.push(id);
   }
