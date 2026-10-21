@@ -28,7 +28,8 @@ const CROSS_LANGUAGE_CONCEPTS = [
   ['zwiazek', /relationship\w*|girlfriend\w*|boyfriend\w*|partner\w*|romanc\w*|romantic\w*|involved|zwi[aą]zk\w*|zwiaz\w*|relacj\w*|dziewczyn\w*|chlopak\w*/i],
   ['pomoc', /help\w*|assist\w*|save\w*|rescu\w*|pomog\w*|pomaga\w*|urat\w*|ocal\w*/i],
   ['kontrola', /control\w*|take[s]?\s+over|command\w*|manipulat\w*|kontrol\w*|przej[a]l\w*|manipul\w*/i],
-  ['szef', /\bboss\b|szef\w*|leader\w*|przywodc\w*/i],
+  // „bossem”, „bossa”, „bosses”: odmiana nie może zerwać zgodności pojęcia PL↔EN.
+  ['szef', /\bboss\w*|szef\w*|leader\w*|przywodc\w*/i],
   ['porazka', /defeat\w*|beaten|overcome\w*|pokon\w*|pora[zż]k\w*/i],
   ['zdrada', /betray\w*|traitor\w*|zdradz\w*|zdrajc\w*/i],
   ['tworzenie', /creat\w*|develop\w*|build\w*|made\b|stworz\w*|tworz\w*|opracow\w*/i],
@@ -419,6 +420,11 @@ function wariantyNazwyDoDopasowania(entity) {
   const apostropheBase = token.replace(/['’]\p{L}+$/u, '');
   if (apostropheBase.length >= 4 && apostropheBase !== token) variants.add(apostropheBase);
 
+  // Angielska forma dzierżawcza: Alt’s -> Alt. Nazwy mają co najmniej 3 znaki,
+  // więc rdzeń krótszy niż 4 znaki (np. „Alt”) też musi być rozpoznany.
+  const possessive = token.match(/^(.{3,})['’]s$/u);
+  if (possessive) variants.add(possessive[1]);
+
   // Ograniczona obsługa odmiany nazw obcych: wymagamy dokładnego rdzenia
   // w źródle zamiast ryzykownego dopasowania dowolnego prefiksu.
   const suffixes = ['owego', 'owej', 'owym', 'owie', 'ami', 'ach', 'ego', 'emu', 'owi', 'iego', 'iej', 'ów', 'om', 'em', 'ie', 'a', 'ę', 'ą', 'y', 'i', 'u', 'e'];
@@ -427,6 +433,11 @@ function wariantyNazwyDoDopasowania(entity) {
       variants.add(token.slice(0, -suffix.length));
     }
   }
+  // Mianownik rzeczowników żeńskich na -a: Arasakę/Arasaki -> Arasaka, Arasace -> Arasaka.
+  // Znaki diakrytyczne są już usunięte, więc „ę” widać jako „e”. Samo odcięcie końcówki
+  // dawało rdzeń („arasak”), którego nie ma w tekście źródłowym jako osobnego tokenu.
+  if (/[eyi]$/u.test(token) && token.length - 1 >= 4) variants.add(token.slice(0, -1) + 'a');
+  if (token.endsWith('ie') && token.length - 2 >= 4) variants.add(token.slice(0, -2) + 'a');
   // Miejscownik z przemianą spółgłoski: Novigradzie -> Novigrad, Velenie -> Velen (już obsłużone), Hindarsfjalle itp.
   const alternations = [['ście', 'st'], ['scie', 'st'], ['dzie', 'd'], ['cie', 't'], ['rze', 'r'], ['sie', 's'], ['zie', 'g']];
   for (const [from, to] of alternations) {
@@ -524,7 +535,9 @@ function sprawdzSprzecznosciSemantyczne(evidence, claim) {
   };
   if (cAction.killed && eAction.captured && !eAction.killed) return { ok: false, reason: 'claim zawiera zabójstwo, a dowód potwierdza jedynie schwytanie/porwanie' };
   if (cAction.captured && eAction.killed && !eAction.captured) return { ok: false, reason: 'claim zawiera schwytanie/porwanie, a dowód potwierdza zabójstwo' };
-  const opposites = [['porwanie','zabojstwo'], ['obrazenia','zabojstwo'], ['pomoc','kontrola'], ['porazka','kontrola']];
+  // Przejęcie kontroli nie jest zniszczeniem (i odwrotnie): para działa w obu kierunkach,
+  // więc „przejął kontrolę” ↔ „destroyed” jest wykrywane ogólnie, bez wyjątków dla konkretnych zdań.
+  const opposites = [['porwanie','zabojstwo'], ['obrazenia','zabojstwo'], ['pomoc','kontrola'], ['porazka','kontrola'], ['kontrola','destrukcja']];
   for (const [a,b] of opposites) {
     if (cConcepts.has(b) && eConcepts.has(a) && !eConcepts.has(b)) return { ok: false, reason: 'claim zawiera sprzeczne działanie względem dowodu' };
     if (cConcepts.has(a) && eConcepts.has(b) && !eConcepts.has(a)) return { ok: false, reason: 'claim zawiera sprzeczne działanie względem dowodu' };
@@ -898,7 +911,7 @@ function wycinAliasowaneEncje(text, names) {
   return out.replace(/\s+/g, ' ').trim();
 }
 
-// Liczby do porównania w obrębie jednego języku (odpowiedź ↔ claim).
+// Liczby do porównania w obrębie jednego języka (odpowiedź ↔ claim).
 // Łączy zapis cyfrowy i słowny, bo model miesza oba zapisy w jednym tekście.
 // Nie wolno używać tego do porównania claimu z angielskim dowodem.
 function liczbyDoPorownania(tekst) {
@@ -918,6 +931,12 @@ function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
   const quoteNorm = normalizujClaim(options.evidenceQuote || '');
   const copiedQuote = Boolean(quoteNorm) && normalizujClaim(en) === quoteNorm;
   if (copiedQuote) {
+    // Powód odrzucenia zachowuje diagnostykę sprzeczności (np. zabójstwo vs schwytanie),
+    // zamiast ją zastępować ogólnym komunikatem.
+    const konfliktCytatu = sprawdzSprzecznosciSemantyczne(pl, en);
+    const powodNiezgodnosci = konfliktCytatu.ok
+      ? 'claim_en kopiuje cytat, ale nie odpowiada treści claimu'
+      : 'claim_en kopiuje cytat, ale nie odpowiada treści claimu: ' + konfliktCytatu.reason;
     // Wycinamy aliasowane encje z obu stron i porównujemy RESZTĘ treści.
     // Bez tego kopiowanie cytatu czyniło weryfikację tautologiczną: claim_en
     // jest wtedy cytatem, więc „dowód zgodny z claim_en” niczego nie dowodzi,
@@ -934,14 +953,14 @@ function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
     // Entity/name overlap alone is not positive evidence that the action agrees:
     // „zniszczył Aperture” must not pass against „took control of Aperture”.
     if ((polishConcepts.size || englishConcepts.size) && sharedConcepts.length === 0) {
-      return { ok: false, reason: 'claim_en kopiuje cytat, ale nie odpowiada treści claimu' };
+      return { ok: false, reason: powodNiezgodnosci };
     }
     // Do not let one shared concept excuse extra source facts in claim_en.
     // Improve the cross-language dictionary instead when a faithful equivalent
     // (such as Polish "schwytał" and English "captured") is missing.
     const addedConcepts = [...englishConcepts].filter(concept => !polishConcepts.has(concept));
     if (addedConcepts.length) {
-      return { ok: false, reason: 'claim_en kopiuje cytat, ale nie odpowiada treści claimu' };
+      return { ok: false, reason: powodNiezgodnosci };
     }
     // Po wycięciu encji pojęcia muszą zgodzić się w OBIE strony. Wcześniej
     // sprawdzano tylko, że cytat nie dodaje pojęcia, którego nie ma w claimie —
@@ -950,7 +969,7 @@ function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
     // usprawiedliwiało resztę.
     const missingConcepts = [...polishConcepts].filter(concept => !englishConcepts.has(concept));
     if (missingConcepts.length) {
-      return { ok: false, reason: 'claim_en kopiuje cytat, ale nie odpowiada treści claimu' };
+      return { ok: false, reason: powodNiezgodnosci };
     }
     // Zgodności leksykalnej PL↔EN tutaj nie wymagamy: nazwy własne są w tych
     // językach tłumaczone („Kościoła Palącego się” → „Smoldering Church”), więc
@@ -975,16 +994,10 @@ function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
   if (wyodrebnijMarkery(pl, NEGATION_RE) !== wyodrebnijMarkery(en, NEGATION_RE)) {
     return { ok: false, reason: 'tłumaczenie claimu zmienia negację' };
   }
+  // Zmianę zdarzenia (np. „przejął kontrolę” → „destroyed”) wykrywają ogólne pary
+  // przeciwstawnych pojęć w sprawdzSprzecznosciSemantyczne; tu nie ma wyjątków dla konkretnych fraz.
   const semanticConflict = sprawdzSprzecznosciSemantyczne(pl, en);
   if (!semanticConflict.ok) return { ok: false, reason: 'tłumaczenie claimu zmienia zdarzenie lub relację' };
-  // Guard a high-impact event substitution that the generic lexical matcher
-  // cannot currently distinguish: taking control is not destroying the target.
-  if ((/\bprzejął\s+kontrolę\b|\bprzej[eę][łl]a\s+kontrol[eę]\b/iu.test(pl)
-      && /\b(?:destroy|destroyed|destroys|destroying)\b/iu.test(en))
-    || (/\b(?:destroy|destroyed|destroys|destroying)\b/iu.test(pl)
-      && /\b(?:take|took|takes)\s+control\b/iu.test(en))) {
-    return { ok: false, reason: 'tłumaczenie claimu zmienia zdarzenie lub relację' };
-  }
   if (wyodrebnijMarkery(pl, CAUSAL_RE) !== wyodrebnijMarkery(en, CAUSAL_RE)) {
     return { ok: false, reason: 'tłumaczenie claimu zmienia relację przyczynową' };
   }
@@ -1010,4 +1023,4 @@ function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
   return { ok: true };
 }
 
-module.exports = { KNOWN_ENTITY_ALIAS_PATTERNS, CAUSAL_RE, CAUSAL_EVIDENCE_RE, wyglądaNaAngielski, spojnoscTlumaczeniaClaimu, czyOgraniczenieDowodowe, normalizujClaim, tokenyClaim, liczbyDoPorownania, czyRelacjaPrzyczynowaPokrywaClaim, wyodrebnijLiczbyIDaty, wyodrebnijJednostkoweWartosci, wyodrebnijNazwyWlasne, zbudujWyroczniaNazw, zgodnoscStrukturalna, sprawdzTwardeKonflikty, sprawdzSprzecznosciSemantyczne, dopasowanieSemantyczne, sprawdzPokrycieClaimamiOdpowiedzi, czyDowodSemantyczniePokrywaClaim, tokenyPokrywajaSie };
+module.exports = { KNOWN_ENTITY_ALIAS_PATTERNS, CAUSAL_RE, CAUSAL_EVIDENCE_RE, wyglądaNaAngielski, spojnoscTlumaczeniaClaimu, czyOgraniczenieDowodowe, normalizujClaim, tokenyClaim, liczbyDoPorownania, czyRelacjaPrzyczynowaPokrywaClaim, wyodrebnijLiczbyIDaty, wyodrebnijJednostkoweWartosci, wyodrebnijNazwyWlasne, zbudujWyroczniaNazw, zgodnoscStrukturalna, sprawdzTwardeKonflikty, sprawdzSprzecznosciSemantyczne, dopasowanieSemantyczne, sprawdzPokrycieClaimamiOdpowiedzi, czyDowodSemantyczniePokrywaClaim, tokenyPokrywajaSie, czyNazwaWlasnaWystepuje };
