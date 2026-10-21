@@ -555,7 +555,13 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
     evidence_quote: typeof claim?.evidence_quote === 'string' ? claim.evidence_quote.trim().slice(0, 500) : '',
     claim_en: typeof claim?.claim_en === 'string' ? claim.claim_en.trim().slice(0, 600) : '',
     reason: typeof claim?.reason === 'string' ? claim.reason.trim().slice(0, 240) : '',
-  })).filter(c => c.claim);
+  }))
+    // Source-scoped uncertainty ("sources do not specify an exact date") is not
+    // a world fact and cannot be validated against a positive event quote.
+    // Keep it out of claim/evidence matching in mixed answers; factual sentences
+    // remain subject to the full strict contract below. Limitation-only answers
+    // are handled by limitationOnlyAccepted later in the pipeline.
+    .filter(c => c.claim && !czyOgraniczenieDowodowe(c.claim));
 
   const allowed = allowedSourceIds instanceof Set ? allowedSourceIds : null;
   const evidenceAssessment = assessEvidence(parseEvidenceBlocks(dane), answer || '', {
