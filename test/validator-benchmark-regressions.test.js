@@ -72,6 +72,15 @@ test('a purpose clause cannot prove that the intended outcome actually occurred'
   assert.equal(escapeResult.status, 'rejected');
 });
 
+test('lack of stability is not confused with sentence negation but contradicts a positive stability claim', () => {
+  const { zgodnoscStrukturalna } = require('../ai/claimValidation');
+  const evidence = 'The lack of stability will cause destruction.';
+  assert.equal(zgodnoscStrukturalna(evidence, 'Instability will cause destruction.').ok, true);
+  const contradiction = zgodnoscStrukturalna(evidence, 'Stability will cause destruction.');
+  assert.equal(contradiction.ok, false, JSON.stringify(contradiction));
+  assert.match(contradiction.reason, /brak stabilności/);
+});
+
 test('conditional-only evidence cannot support an unconditional claim', () => {
   const { zgodnoscStrukturalna } = require('../ai/claimValidation');
   const conditionalEvidence = 'The door opens only when the switch is off.';
