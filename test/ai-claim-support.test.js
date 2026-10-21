@@ -7,6 +7,7 @@ const {
   buildClaimSupportAudit,
   summarizeClaimSupportAudits,
 } = require('../ai/claim-support');
+const { extractClaimSupportAudit } = require('../scripts/ai-live-benchmark');
 
 test('claim-support audit distinguishes exact entailment, bounded-context partial support, and unsupported evidence', () => {
   const audit = buildClaimSupportAudit({
