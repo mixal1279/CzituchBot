@@ -52,7 +52,7 @@ jobs:
           node-version: 24
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
       - name: Preflight Tavily
         run: node scripts/tavily-preflight.js
       - name: Preflight Groq
