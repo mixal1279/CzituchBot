@@ -35,6 +35,13 @@ jobs:
           npm install
           npm test
 
+      - name: Export resolved lockfile for one-time repository pinning
+        if: github.event_name == 'pull_request'
+        run: |
+          echo "LOCKFILE_BEGIN"
+          cat package-lock.json
+          echo "LOCKFILE_END"
+
       - name: Syntax check AI modules
         run: |
           node --check test/ai.adversarial.test.js
