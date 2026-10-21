@@ -410,7 +410,7 @@ function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '', opt
 }
 
 const POLISH_CLAIM_LANGUAGE_CUES = /(?<![\p{L}])(?:jest|są|sa|się|sie|nie|że|ze|przez|oraz|który|która|które|jego|jej|ich|dla|gdy|bo|był|była|było|ponieważ|poniewaz|dzięki|dzieki|może|mogą|moga|można|mozna|aby|żeby|zeby|został|została|zostal|zostala|będzie|bedzie|wtedy|potem|dlatego|więc|wiec)(?![\p{L}])/giu;
-const ENGLISH_CLAIM_LANGUAGE_CUES = /(?<![\p{L}])(?:the|of|and|is|was|were|are|to|in|for|with|that|he|she|his|her|by|on|as|at|it|its|from|after|before|during|has|had|have|an|this|these|those|their|be|been|not|which|who|can|will|may|only|also|than|then|but|or|if|when|where|took|takes|does|did|there|into|because)(?![\p{L}])/giu;
+const ENGLISH_CLAIM_LANGUAGE_CUES = /(?<![\p{L}])(?:the|of|and|is|was|were|are|in|for|with|that|he|she|his|her|as|at|it|its|from|after|before|during|has|had|have|an|this|these|those|their|be|been|not|which|who|can|will|may|only|also|than|then|but|or|if|when|where|took|takes|does|did|there|into|because)(?![\p{L}])/giu;
 
 function countLanguageCues(value, pattern) {
   const flags = pattern.flags.includes('g') ? pattern.flags : pattern.flags + 'g';
@@ -428,7 +428,9 @@ function wykryjJezykClaimu(value) {
   const englishCues = countLanguageCues(text, ENGLISH_CLAIM_LANGUAGE_CUES);
   const hasPolishDiacritics = /[ąćęłńóśźż]/iu.test(text);
 
-  if (polishCues > englishCues) return 'pl';
+  // Proper nouns/titles can contain many English function words; one clear Polish
+  // grammatical cue is stronger evidence of the surrounding sentence language.
+  if (polishCues > 0) return 'pl';
   // Require multiple English signals to avoid classifying an English sentence
   // solely from a short ambiguous token such as "in" or "is".
   if (englishCues > polishCues && englishCues >= 2) return 'en';
