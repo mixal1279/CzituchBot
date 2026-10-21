@@ -50,7 +50,7 @@ test('gold facts accept grounded alternative landmarks and Polish cart inflectio
     factual,
   );
   assert.equal(missingLandmark.passed, false);
-  assert.deepEqual(missingLandmark.missing, [['Caelem Ruins', 'Cathedral of Dragon Communion']]);
+  assert.deepEqual(missingLandmark.missing, [['Caelem Ruins', 'Cathedral of Dragon Communion', 'Katedra Komunii Smoka', 'Katedry Komunii Smoka']]);
 });
 
 test('false-reject metric requires a discarded answer to pass independent gold facts', () => {
