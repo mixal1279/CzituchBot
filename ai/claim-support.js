@@ -36,8 +36,18 @@ function detectOverclaimTypes(claim, evidence) {
   const claimHedged = /\b(?:may|might|could|possibly|potentially|suggests?|appears? to|moze|mozliwe|prawdopodobnie|sugeruje|wydaje sie)\b/u.test(c);
   // A source hedge alone does not make an ordinary declarative claim absolute.
   // Hard-fail only when the claim itself adds an explicit absolute/guarantee cue.
-  const claimStatesOutcome = /\b(?:improves?|increases?|reduces?|shows?|means?|proves?|guarantees?|causes?|prevents?|zwieksza|poprawia|zmniejsza|oznacza|pokazuje|powoduje|zapobiega)\b/u.test(c);
-  if (sourceHedged && !claimHedged && (claimAbsolute || claimStatesOutcome)) types.push('hedge_to_absolute');
+  const outcomeVerbPatterns = [
+    /\b(?:improv\w*|popraw\w*)\b/u,
+    /\b(?:increas\w*|zwieksz\w*)\b/u,
+    /\b(?:reduc\w*|zmniejsz\w*)\b/u,
+    /\b(?:caus\w*|powoduj\w*|spowod\w*)\b/u,
+    /\b(?:prevent\w*|zapobieg\w*)\b/u,
+  ];
+  // A hedge plus a generic reporting verb ('shows', 'means') is not enough.
+  // Require the unhedged claim and source to refer to the same outcome/action.
+  const claimStatesSameOutcome = outcomeVerbPatterns.some(pattern => pattern.test(c) && pattern.test(e));
+  const claimAddsUnqualifiedNumber = /\d+(?:[.,]\d+)?\s*%?/u.test(c) && !claimHedged;
+  if (sourceHedged && !claimHedged && (claimAbsolute || claimStatesSameOutcome || claimAddsUnqualifiedNumber)) types.push('hedge_to_absolute');
 
   // Preserve qualifiers attached to numeric claims. "Up to 30%" is not the
   // same as an unqualified "30%". The numeric value must occur on both sides.
@@ -49,7 +59,7 @@ function detectOverclaimTypes(claim, evidence) {
   const quantifierPatterns = [
     ['all', /\b(?:all|every|everyone|entirely|wszyscy|wszystkie|kazdy|kazda|calosc)\b/u],
     ['most', /\b(?:most|majority|predominantly|wiekszosc|przewaznie|zdecydowana wiekszosc)\b/u],
-    ['only', /\b(?:only|solely|exclusively|wyłącznie|wylacznie|jedynie|tylko)\b/u],
+    ['only', /\b(?:only|solely|exclusively|wylacznie|jedynie|tylko)\b/u],
     ['always', /\b(?:always|never|zawsze|nigdy)\b/u],
   ];
   for (const [, pattern] of quantifierPatterns) {
