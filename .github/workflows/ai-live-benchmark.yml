@@ -23,6 +23,7 @@ jobs:
 
     env:
       AI_LIVE_BENCHMARK: "1"
+      AI_ALLOW_PARTIAL_ANSWERS: "1"
       AI_BENCHMARK_LIMIT: "5"
       AI_BENCHMARK_DELAY_MS: "5000"
       AI_BENCHMARK_SEED: ${{ inputs.seed || '0' }}
