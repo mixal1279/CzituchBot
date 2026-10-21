@@ -54,8 +54,6 @@ const CROSS_LANGUAGE_CONCEPTS = [
   ['walka_konna', /horseback|mounted combat|on horseback|konskiego grzbietu|na koniu|z konia|walczac z konia/i],
   ['pozycja_zdystansu', /far back|high up|at range|dystans\w*|z daleka|na dystans/i],
   ['gigantyczne_zwierzeta', /giant (?:zombie[- ]?)?dogs?|gigantyczn\w*\s+(?:zombie\s+)?ps\w*|wielkie (?:zombie\s+)?psy/i],
-  ['woz', /\bcarts?\b|\bcarriages?\b|\bwagons?\b|\bwoz(?:u|em|ie|y|ow|ami|ach)?\b|\bwozek\b|\bwozka\b|\bwozkiem\b|\bwozki\b|\bwozkow\b|\bwozkami\b|\bwozkach\b/i],
-  ['kosz', /\bbaskets?\b|\bkosz\w*\b/i],
   ['ochrona_miejsca', /guard\w*|strzez\w*|pilnow\w*/i],
   ['atak', /\b(?:attack\w*|atak\w*)\b/i],
   ['okrzyk', /\b(?:shout\w*|okrzyk\w*)\b/i],
@@ -515,6 +513,16 @@ function sprawdzTwardeKonflikty(evidence, claim, options = {}) {
 function sprawdzSprzecznosciSemantyczne(evidence, claim) {
   const normalizedEvidence = normalizujClaim(evidence);
   const normalizedClaim = normalizujClaim(claim);
+  // Catch a concrete translation mismatch (cart vs basket) without treating
+  // every mention of a cart as a required cross-language concept. In route
+  // instructions, Polish "wózek" may be naturally rendered as "get there".
+  const evidenceCart = /\b(?:cart|carriage|wagon)\b|\bwoz(?:u|em|ie|y|ow|ami|ach)?\b|\bwozek\b|\bwozka\b|\bwozkiem\b|\bwozki\b|\bwozkow\b|\bwozkami\b|\bwozkach\b/i.test(normalizedEvidence);
+  const claimCart = /\b(?:cart|carriage|wagon)\b|\bwoz(?:u|em|ie|y|ow|ami|ach)?\b|\bwozek\b|\bwozka\b|\bwozkiem\b|\bwozki\b|\bwozkow\b|\bwozkami\b|\bwozkach\b/i.test(normalizedClaim);
+  const evidenceBasket = /\bbaskets?\b|\bkosz\w*\b/i.test(normalizedEvidence);
+  const claimBasket = /\bbaskets?\b|\bkosz\w*\b/i.test(normalizedClaim);
+  if ((evidenceCart && claimBasket && !claimCart) || (evidenceBasket && claimCart && !claimBasket)) {
+    return { ok: false, reason: 'claim błędnie tłumaczy wóz/wózek jako kosz/basket lub odwrotnie' };
+  }
   const negativeStabilityRe = /\b(?:lack of stability|absence of stability|instabil\w*|unstable|niestabiln\w*|brak stabiln\w*)\b/u;
   const positiveStabilityRe = /\b(?:stability|stable|stabiln\w*)\b/u;
   const evidenceLacksStability = negativeStabilityRe.test(normalizedEvidence);
@@ -542,7 +550,7 @@ function sprawdzSprzecznosciSemantyczne(evidence, claim) {
   if (cAction.captured && eAction.killed && !eAction.captured) return { ok: false, reason: 'claim zawiera schwytanie/porwanie, a dowód potwierdza zabójstwo' };
   // Przejęcie kontroli nie jest zniszczeniem (i odwrotnie): para działa w obu kierunkach,
   // więc „przejął kontrolę” ↔ „destroyed” jest wykrywane ogólnie, bez wyjątków dla konkretnych zdań.
-  const opposites = [['porwanie','zabojstwo'], ['obrazenia','zabojstwo'], ['pomoc','kontrola'], ['porazka','kontrola'], ['kontrola','destrukcja'], ['woz','kosz']];
+  const opposites = [['porwanie','zabojstwo'], ['obrazenia','zabojstwo'], ['pomoc','kontrola'], ['porazka','kontrola'], ['kontrola','destrukcja']];
   for (const [a,b] of opposites) {
     if (cConcepts.has(b) && eConcepts.has(a) && !eConcepts.has(b)) return { ok: false, reason: 'claim zawiera sprzeczne działanie względem dowodu' };
     if (cConcepts.has(a) && eConcepts.has(b) && !eConcepts.has(a)) return { ok: false, reason: 'claim zawiera sprzeczne działanie względem dowodu' };
