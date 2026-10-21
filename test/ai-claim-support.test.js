@@ -63,6 +63,20 @@ test('claim-support audit flags a hedge upgraded to an absolute', () => {
   ).includes('hedge_to_absolute'));
 });
 
+test('a source hedge does not reject an ordinary declarative claim by itself', () => {
+  assert.deepEqual(detectOverclaimTypes(
+    'The method is effective.',
+    'The method may improve the chance of success.',
+  ), []);
+});
+
+test('date ranges do not trigger the dropped upper-bound guard', () => {
+  assert.ok(!detectOverclaimTypes(
+    'The game was released in 2015.',
+    'The studio operated from 2011 to 2015.',
+  ).includes('up_to_qualifier_dropped'));
+});
+
 test('claim-support audit flags a dropped upper-bound qualifier', () => {
   const types = detectOverclaimTypes(
     'The system improves performance by 30%.',
