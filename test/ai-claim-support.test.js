@@ -37,6 +37,16 @@ test('claim-support audit distinguishes exact entailment, bounded-context partia
   assert.equal(audit.claimSupportUsableRate, 0.5);
   assert.equal(audit.verdictCounts.contradicted, 1);
   assert.equal(audit.verdictCounts.unverifiable, 1);
+  assert.deepEqual(audit.records.map(record => record.claimSourceVerdict), [
+    'supported', 'partial', 'contradicted', 'not_enough_evidence',
+  ]);
+  assert.deepEqual(audit.claimSourceVerdictCounts, {
+    supported: 1,
+    partial: 1,
+    contradicted: 1,
+    not_enough_evidence: 1,
+    unsupported_by_cited_source: 0,
+  });
 });
 
 test('claim-support audit flags correlation-to-causation overclaim', () => {
@@ -76,6 +86,26 @@ test('claim-support audit warns when an old dated source is presented as current
   ).includes('stale_source_as_current'));
 });
 
+test('overclaim audit uses the exact cited span rather than unrelated neighboring context', () => {
+  const audit = buildClaimSupportAudit({
+    claims: [{
+      claim: 'The method improves outcomes.',
+      source_ids: ['SOURCE 1'],
+      evidence_quote: 'The method improves outcomes.',
+      supported: true,
+    }],
+    evidenceEvaluations: [{ ok: true, mode: 'exact_quote', reason: 'exact cited span supports claim' }],
+    evidenceQuoteVerified: [true],
+    evidenceQuotes: ['The method improves outcomes.'],
+    evidenceContexts: [
+      'The method improves outcomes. A separate experimental feature may reduce latency.',
+    ],
+  });
+
+  assert.deepEqual(audit.records[0].overclaimTypes, []);
+  assert.equal(audit.records[0].claimSourceVerdict, 'supported');
+});
+
 test('live benchmark extracts claim support audits from validator diagnostics', () => {
   const audit = buildClaimSupportAudit({
     claims: [{ claim: 'The game launched in 2011.', source_ids: ['SOURCE 1'], evidence_quote: 'The game launched in 2011.', supported: true }],
@@ -111,4 +141,5 @@ test('aggregate metric preserves per-claim verdicts and overclaim diagnostics', 
   assert.equal(aggregate.verdictCounts.unsupported, 1);
   assert.equal(aggregate.records.length, 2);
   assert.equal(aggregate.overclaimCounts.hedge_to_absolute, 1);
+  assert.equal(aggregate.claimSourceVerdictCounts.unsupported_by_cited_source, 1);
 });
