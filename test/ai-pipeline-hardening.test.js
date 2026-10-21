@@ -37,7 +37,7 @@ test('request budget enforces both global deadline and per-kind call caps', () =
 });
 
 test('request text sanitizer strips invisible controls and never exceeds the configured limit', () => {
-  assert.equal(sanitizeRequestText('ab\\u200Bcd', 10), 'abcd');
+  assert.equal(sanitizeRequestText('ab\u200Bcd', 10), 'abcd');
   assert.equal(sanitizeRequestText('abcdef', 4), 'abcd');
 });
 
