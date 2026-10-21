@@ -509,7 +509,6 @@ function wykryjNiezgodnyJezykClaimow(answer, claims) {
 function isAtomicPartialClaimText(value) {
   const claim = String(value || '').trim();
   if (!claim || /[;—–/]/u.test(claim)) return false;
-  if (/,\s*(?:co|ktory|ktora|ktore|which|who|that)\b/iu.test(claim)) return false;
   if (/^\s*(?:i|oraz|and|but|co|which|ktory|ktora|ktore)\b/iu.test(claim)) return false;
   if (/\b(?:and|oraz|as well as|a takze|jak rowniez)\b/iu.test(claim)) return false;
   return true;
