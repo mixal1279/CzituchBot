@@ -2,7 +2,7 @@
 
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { createGroqCompletion, createGroqCompletionWithSchemaFallback, isGroqSchemaValidationError, awaitWithAbortTimeout, computeValidatorTimeout, computeValidatorReserveMs, computeGenerationTimeout } = require('../ai/provider-runtime');
+const { createGroqCompletion, createGroqCompletionWithSchemaFallback, isGroqSchemaValidationError, awaitWithAbortTimeout, computeValidatorTimeout, computeValidatorReserveMs, computeGenerationTimeout, INITIAL_VALIDATOR_REPAIR_RESERVE_MS, shouldAttemptUnavailableRepair } = require('../ai/provider-runtime');
 const { classifyFailure, shouldRetryFailure, nextFallbacks, selectRepairFallbacks, filterAvailableFallbacks, repairBudgetBlockReason, resetProviderQuotaCooldowns, markProviderQuota, isProviderQuotaBlocked, quotaCooldownMsFromError, retryAfterHint, configuredMaxFallbackSteps, shouldOpenQuotaCircuit } = require('../ai/fallback');
 
 test('Groq request body never contains signal; AbortSignal is passed in SDK transport options', async () => {
@@ -79,6 +79,15 @@ test('hard timeout releases the pipeline when a provider ignores AbortSignal', a
   );
   assert.equal(controller.signal.aborted, true);
   assert.ok(Date.now() - startedAt < 250, 'pipeline should not wait for the provider’s own timeout');
+});
+
+test('unavailable-validator repair requires evidence, one attempt, and enough remaining time', () => {
+  assert.equal(INITIAL_VALIDATOR_REPAIR_RESERVE_MS, 24000);
+  assert.equal(shouldAttemptUnavailableRepair({ remainingMs: 18000, hasEvidence: true, alreadyAttempted: false }), true);
+  assert.equal(shouldAttemptUnavailableRepair({ remainingMs: 17999, hasEvidence: true, alreadyAttempted: false }), false);
+  assert.equal(shouldAttemptUnavailableRepair({ remainingMs: 30000, hasEvidence: false, alreadyAttempted: false }), false);
+  assert.equal(shouldAttemptUnavailableRepair({ remainingMs: 30000, hasEvidence: true, alreadyAttempted: true }), false);
+  assert.equal(shouldAttemptUnavailableRepair({ remainingMs: Infinity, hasEvidence: true, alreadyAttempted: false }), false);
 });
 
 test('initial validation can reserve one repair plus final validation budget', () => {
