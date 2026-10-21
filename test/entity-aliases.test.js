@@ -66,3 +66,38 @@ test('claim_en may match source wording when faithful, but cannot turn purpose i
   );
   assert.equal(faithful.ok, true, faithful.reason);
 });
+
+test('copied source wording cannot add a second fact, flip negation, or change the action target', () => {
+  const quote = 'Chell and Wheatley forced a core transfer so that Wheatley could take control of Aperture.';
+
+  const omittedPurpose = spojnoscTlumaczeniaClaimu(
+    'Chell i Wheatley wymusili transfer rdzenia.',
+    quote,
+    { evidenceQuote: quote },
+  );
+  assert.equal(omittedPurpose.ok, false, 'claim_en must not smuggle in the purpose/outcome absent from claim_pl');
+
+  const changedNegation = spojnoscTlumaczeniaClaimu(
+    'Chell i Wheatley nie wymusili transferu rdzenia, aby Wheatley mógł przejąć kontrolę nad Aperture.',
+    quote,
+    { evidenceQuote: quote },
+  );
+  assert.equal(changedNegation.ok, false);
+
+  const changedObject = spojnoscTlumaczeniaClaimu(
+    'Wheatley przejął kontrolę nad Chell.',
+    'Wheatley took control of Aperture.',
+    { evidenceQuote: 'Wheatley took control of Aperture.' },
+  );
+  assert.equal(changedObject.ok, false);
+});
+
+test('faithful translation accepts different Polish and English names through explicit aliases', () => {
+  const quote = 'The Wild Hunt captured the Bloody Baron.';
+  const result = spojnoscTlumaczeniaClaimu(
+    'Dziki Gon schwytał Krwawego Barona.',
+    quote,
+    { evidenceQuote: quote },
+  );
+  assert.equal(result.ok, true, result.reason);
+});
