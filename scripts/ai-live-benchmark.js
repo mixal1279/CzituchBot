@@ -235,19 +235,38 @@ function buildBenchmarkDiagnostics(results, allCases = benchmark.cases, selected
   );
   const goldCases = allCases.filter(item => item.expected?.factual?.independentGold === true);
   const selectedGoldCases = selectedCases.filter(item => item.expected?.factual?.independentGold === true);
-  // Awaria providera to nie tylko awaria Groq: w live benchmarku Gemini było
-  // niedostępne w 5/5 przypadków, a detektor patrzył wyłącznie na Groq i
-  // raportował providerOutage=false. Benchmark, w którym kluczowy provider
-  // leży, nie mierzy kodu — musi to być widoczne w raporcie.
-  const providerAttempts = results.flatMap(result => [
-    ...(result.generationAttempts || []).map(attempt => ({ provider: String(attempt.provider || ''), status: attempt.status, skipped: attempt.skipped === true })),
-    ...(result.validatorResults || []).map(row => ({ provider: String(row.provider || ''), status: row.status, skipped: row.skipped === true })),
-  ]).filter(attempt => attempt.provider && !attempt.skipped);
-  const providersWithAttempts = [...new Set(providerAttempts.map(attempt => attempt.provider))];
-  const failedOutageProviders = providersWithAttempts.filter(provider => {
-    const attempts = providerAttempts.filter(attempt => attempt.provider === provider);
-    return attempts.length > 0 && attempts.every(attempt => attempt.status === 'error' || attempt.status === 'unavailable');
-  });
+  // Only primary roles make the run invalid: Groq is the generation primary,
+  // Gemini is the primary validator. Failures of secondary/fallback providers
+  // are reported as degraded capability, not mistaken for a broken benchmark.
+  const generationAttempts = results.flatMap(result =>
+    (result.generationAttempts || [])
+      .filter(attempt => attempt.skipped !== true && attempt.provider)
+      .map(attempt => ({ provider: String(attempt.provider), status: attempt.status }))
+  );
+  const validatorAttempts = results.flatMap(result =>
+    (result.validatorResults || [])
+      .filter(row => row.skipped !== true && row.provider)
+      .map(row => ({ provider: String(row.provider), status: row.status }))
+  );
+  const failedProvidersInRole = attempts => {
+    const providers = [...new Set(attempts.map(attempt => attempt.provider))];
+    return providers.filter(provider => {
+      const providerRows = attempts.filter(attempt => attempt.provider === provider);
+      return providerRows.length > 0 && providerRows.every(attempt =>
+        attempt.status === 'error' || attempt.status === 'unavailable'
+      );
+    });
+  };
+  const failedGenerationProviders = failedProvidersInRole(generationAttempts);
+  const failedValidatorProviders = failedProvidersInRole(validatorAttempts);
+  const failedOutageProviders = [...new Set([
+    ...failedGenerationProviders.filter(provider => provider === 'groq'),
+    ...failedValidatorProviders.filter(provider => provider === 'gemini'),
+  ])].sort();
+  const degradedProviders = [...new Set([
+    ...failedGenerationProviders.filter(provider => provider !== 'groq').map(provider => `${provider}:generation`),
+    ...failedValidatorProviders.filter(provider => provider !== 'gemini').map(provider => `${provider}:validator`),
+  ])].sort();
   const categories = [...new Set(allCases.map(item => item.category || 'uncategorized'))].sort();
   const goldCoverageByCategory = Object.fromEntries(categories.map(category => [
     category,
@@ -278,6 +297,7 @@ function buildBenchmarkDiagnostics(results, allCases = benchmark.cases, selected
       .map(row => ({ provider: row.provider || 'unknown', model: row.model || null, status: row.status || 'unknown', reason: row.reason || null })),
     providerOutage: failedOutageProviders.length > 0,
     outageProviders: failedOutageProviders,
+    degradedProviders,
     validatorSecondOpinions: results.reduce((sum, result) =>
       sum + (result.timingTrace || []).filter(event => event.stage === 'validator_second_opinion').length, 0),
     tavilyHttpCalls: tavilyHttpEvents.length,
