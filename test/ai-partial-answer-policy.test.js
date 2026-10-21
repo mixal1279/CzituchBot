@@ -66,6 +66,50 @@ test('partial answer keeps only locally verified claims when another quote is mi
   assert.match(r.partialAnswer, /Nie wszystkie szczegóły da się potwierdzić/);
 });
 
+test('partial answer can retain a fifth verified identity claim without leaking an unsupported sixth', () => {
+  const facts = [
+    'Astarion jest wysokim elfem.',
+    'Astarion jest łotrzykiem.',
+    'Astarion jest postacią początkową.',
+    'Astarion jest towarzyszem do zrekrutowania.',
+    'Astarion jest pomiotem wampirów.',
+  ];
+  const data = '[SOURCE 1]\\nTYTUŁ: Baldur’s Gate 3\\nTREŚĆ: ' + facts.join(' ') + '\\n';
+  const unsupported = 'Ciri jest królową Nilfgaardu.';
+  const claims = facts.map(claim => ({
+    claim,
+    claim_en: '',
+    supported: true,
+    source_ids: ['SOURCE 1'],
+    evidence_quote: claim,
+    reason: 'ok',
+  }));
+  claims.push({
+    claim: unsupported,
+    claim_en: '',
+    supported: true,
+    source_ids: ['SOURCE 1'],
+    evidence_quote: unsupported,
+    reason: 'ok',
+  });
+  const answer = facts.join(' ') + ' ' + unsupported;
+  const r = withPartialAnswersEnabled(() => normalizujWynikWalidatora({
+    valid: true,
+    reason: 'ok',
+    unsupported_claims: [],
+    supported: true,
+    relevant: true,
+    complete: true,
+    hallucination: false,
+    confidence: 0.96,
+    claims,
+  }, 'test-model', 'test', new Set(['SOURCE 1']), data, answer));
+
+  assert.equal(r.status, 'soft_accepted', JSON.stringify(r.diagnostics));
+  assert.match(r.partialAnswer, /pomiotem wampirów/);
+  assert.doesNotMatch(r.partialAnswer, /Ciri|królową Nilfgaardu/);
+});
+
 test('partial answer never includes a claim with an unknown source ID', () => {
   const answer = 'Geralt jest wiedźminem z Kaer Morhen. Yennefer jest królową Nilfgaardu.';
   const r = withPartialAnswersEnabled(() => normalizujWynikWalidatora({
