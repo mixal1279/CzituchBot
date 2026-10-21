@@ -245,7 +245,7 @@ function wyodrebnijNazwyWlasne(value, options = {}) {
     'nie', 'brak', 'bez', 'dla', 'pod', 'nad', 'przy', 'zeby', 'ale', 'lub', 'czy', 'tak', 'tylko', 'nawet', 'juz', 'nadal', 'wciaz',
     'rowniez', 'takze', 'zatem', 'wiec', 'natomiast', 'lecz', 'jezeli', 'skoro', 'pomimo', 'trzeba', 'smok',
     'zrobil', 'zrobila', 'zrobili', 'strzelaj', 'atakuj', 'unikaj', 'zaatakuj', 'skorzystaj', 'wykorzystaj', 'pamietaj', 'sprobuj',
-    'zacznij', 'pokonaj', 'zabij', 'walcz', 'trzymaj', 'zwieksz',
+    'zacznij', 'pokonaj', 'zabij', 'walcz', 'trzymaj', 'zwieksz', 'powtarzaj', 'powtorz',
     'najpierw', 'jednoczesnie', 'takie', 'kontynuuj', 'zastosuj', 'miecz', 'wozek', 'wozka',
     // Przysłówki i okoliczniki na początku zdania były zliczane jako encje,
     // przez co tłumaczenie poprawnej nazwy wyglądało jak utrata encji
