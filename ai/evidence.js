@@ -366,7 +366,7 @@ function buildEvidenceRepairContext(claims, blocks, allowedSourceIds = null, max
     })
       .filter(candidate => Number(candidate.score) >= 0.10)
       .filter(candidate => !claimIsCausal
-        || (candidate.relationMatch && evidenceRelationSignals(candidate.evidence_quote).causal))
+        || evidenceRelationSignals(candidate.evidence_quote).causal)
 
       .filter(candidate => !claimIsSourceMeta)
       .slice(0, 2);
