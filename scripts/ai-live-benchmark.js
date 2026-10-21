@@ -272,6 +272,8 @@ function buildBenchmarkDiagnostics(results, allCases = benchmark.cases, selected
   const validatorUnavailableRate = validatorCalls ? validatorUnavailable / validatorCalls : 0;
   const qualityDegradationReasons = [];
   if (failedOutageProviders.length > 0) qualityDegradationReasons.push('primary_provider_outage');
+  if (validatorCalls === 0) qualityDegradationReasons.push('no_validator_calls');
+  else if (validatorCalls < results.length) qualityDegradationReasons.push('validator_calls_below_case_count');
   if (validatorUnavailableRate > 0.25) qualityDegradationReasons.push('validator_unavailable_rate_above_25_percent');
   if (degradedProviders.length > 0) qualityDegradationReasons.push('fallback_provider_degradation');
   if (generationProviderFailures.length > 0) qualityDegradationReasons.push('generation_provider_errors');
