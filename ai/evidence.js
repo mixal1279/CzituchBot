@@ -394,7 +394,7 @@ function buildEvidenceRepairContext(claims, blocks, allowedSourceIds = null, max
     })
       // Defense in depth: never pass a disconnected source fragment to repair.
       // The final validator still checks exact source binding independently.
-      .filter(candidate => !/\\[\\s*(?:\\.{3}|…)\\s*\\]|\\.{3}|…/u.test(String(candidate.quote || '')))
+      .filter(candidate => !/\[\s*(?:\.{3}|…)\s*\]|\.\.\.|…/u.test(String(candidate.quote || '')))
       .filter(candidate => Number(candidate.score) >= 0.10)
       .filter(candidate => !claimIsCausal
         || (candidate.relationMatch === true
