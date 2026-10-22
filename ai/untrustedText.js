@@ -4,37 +4,33 @@ function replaceUntrustedBlockTags(text) {
   const marker = 'UNTRUSTED_';
   let output = '';
   let cursor = 0;
-  let close = -1;
+  let i = 0;
 
-  while (cursor < text.length) {
-    const open = text.indexOf('<', cursor);
-    if (open === -1) {
-      output += text.slice(cursor);
-      break;
+  while (i < text.length) {
+    if (text[i] !== '<') {
+      i++;
+      continue;
     }
 
-    if (close < open) close = text.indexOf('>', open + 1);
-    if (close === -1) {
-      output += text.slice(cursor);
-      break;
+    let nameStart = i + 1;
+    while (nameStart < text.length && /\s/.test(text[nameStart])) nameStart++;
+    if (text[nameStart] === '/') nameStart++;
+    while (nameStart < text.length && /\s/.test(text[nameStart])) nameStart++;
+
+    if (text.slice(nameStart, nameStart + marker.length).toUpperCase() !== marker) {
+      i++;
+      continue;
     }
 
-    let i = open + 1;
-    while (i < close && /\s/.test(text[i])) i++;
-    if (text[i] === '/') i++;
-    while (i < close && /\s/.test(text[i])) i++;
+    const close = text.indexOf('>', nameStart + marker.length);
+    if (close === -1) break;
 
-    if (text.slice(i, i + marker.length).toUpperCase() === marker) {
-      output += text.slice(cursor, open) + '[USUNIĘTY_ZNACZNIK_BLOKU]';
-      cursor = close + 1;
-      close = -1;
-    } else {
-      output += text.slice(cursor, open + 1);
-      cursor = open + 1;
-    }
+    output += text.slice(cursor, i) + '[USUNIĘTY_ZNACZNIK_BLOKU]';
+    cursor = close + 1;
+    i = cursor;
   }
 
-  return output;
+  return output + text.slice(cursor);
 }
 
 function sanitizeUntrustedText(material) {
