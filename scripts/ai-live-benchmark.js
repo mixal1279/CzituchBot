@@ -263,7 +263,7 @@ function formatBenchmarkFailureDiagnostics(results, limit = 20) {
           record && !['entailed', 'supported'].includes(String(record.verdict || '').toLowerCase())
         ).slice(0, 2);
         for (const record of problematic) {
-          const claim = String(record.claim || '').replace(/\\s+/g, ' ').slice(0, 90);
+          const claim = String(record.claim || '').replace(/\s+/g, ' ').slice(0, 90);
           const why = String(record.reason || record.claimSourceVerdict || record.verdict || 'brak szczegółów').slice(0, 140);
           reasons.push(`claim#${record.claimIndex ?? '?'} ${record.verdict || 'unknown'}: ${why}${claim ? ` — ${claim}` : ''}`);
         }
