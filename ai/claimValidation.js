@@ -883,7 +883,7 @@ function sprawdzPokrycieClaimamiOdpowiedzi(answer, claims) {
     ok: uncovered.length === 0,
     totalSentences: sentences.length,
     checkedSentences,
-    uncoveredSentenceIndexes: uncovered.slice(0, 8).map(item => item.index),
+    uncoveredSentenceIndexes: [...new Set(uncovered.map(item => item.index))].slice(0, 8),
     uncovered: uncovered.slice(0, 4).map(item => item.text),
   };
 }
@@ -1003,7 +1003,11 @@ function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
     // bezpośrednio przez późniejsze kontrole liczb, negacji, relacji i nazw.
     // Dla polskiego claimu kopiowanie angielskiego cytatu wymaga jednak
     // przynajmniej jednego wspólnego pojęcia działania; sama encja nie wystarcza.
-    if (sharedConcepts.length === 0 && !wyglądaNaAngielski(pl)) {
+    const normalizedClaim = normalizujClaim(pl);
+    const directSameLanguageEvidence = wyglądaNaAngielski(pl)
+      && normalizedClaim.length > 0
+      && quoteNorm.includes(normalizedClaim);
+    if (sharedConcepts.length === 0 && !directSameLanguageEvidence) {
       return { ok: false, reason: powodNiezgodnosci };
     }
     // Do not let one shared concept excuse extra source facts in claim_en.
