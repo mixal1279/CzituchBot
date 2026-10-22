@@ -118,10 +118,15 @@ test('reason-why wording remains equivalent in an abstention translation', () =>
 test('Cyberpunk Relik/Relic is a contextual translation alias, not a global entity alias', () => {
   const result = spojnoscTlumaczeniaClaimu(
     'Po śmierci V Relik aktywuje engram Johnny’ego Silverhanda.',
-    'After V dies, the Relic activates Johnny’s engram.',
+    'After V dies, the Relic activates Johnny Silverhand’s engram.',
   );
   assert.equal(result.ok, true, result.reason);
   assert.equal(KNOWN_ENTITY_ALIAS_PATTERNS.some(entry => entry.canonical === 'relic'), false);
+});
+
+test('generic sentence quantifiers are not extracted as proper names', () => {
+  const names = wyodrebnijNazwyWlasne('Wszystkie te działania są opisane w przewodniku.');
+  assert.equal(names.includes('wszystkie'), false);
 });
 
 test('faithful translation accepts different Polish and English names through explicit aliases', () => {
