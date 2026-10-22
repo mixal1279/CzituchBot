@@ -408,7 +408,13 @@ test('odrzucenie dotyczące cytatu uruchamia drugą opinię, ale lokalna weryfik
     }],
   };
   mockFetch(async url => {
-    if (url.includes('generativelanguage.googleapis.com')) {
+    let parsedUrl;
+    try {
+      parsedUrl = new URL(url);
+    } catch {
+      throw new Error('Nieprawidłowy URL w mockFetch: ' + url);
+    }
+    if (parsedUrl.protocol === 'https:' && parsedUrl.hostname === 'generativelanguage.googleapis.com') {
       order.push('gemini');
       return jsonResponse({
         candidates: [{ content: { parts: [{ text: JSON.stringify(badQuoteVerdict) }] } }],
@@ -446,11 +452,17 @@ test('po rzeczywistym odrzuceniu Groq pipeline nie zużywa budżetu na wolne trz
     }],
   };
   mockFetch(async url => {
-    if (url.includes('generativelanguage.googleapis.com')) {
+    let parsedUrl;
+    try {
+      parsedUrl = new URL(url);
+    } catch {
+      throw new Error('Nieprawidłowy URL w mockFetch: ' + url);
+    }
+    if (parsedUrl.protocol === 'https:' && parsedUrl.hostname === 'generativelanguage.googleapis.com') {
       order.push('gemini');
       return jsonResponse({ candidates: [{ content: { parts: [{ text: JSON.stringify(badQuoteVerdict) }] } }] });
     }
-    order.push(url.includes('xkiro') ? 'xkiro' : 'openrouter');
+    order.push(parsedUrl.hostname === 'xkiro.example' ? 'xkiro' : 'openrouter');
     throw new Error('slow third opinion should not be called after Groq rejection');
   });
   mockGroq(() => {
