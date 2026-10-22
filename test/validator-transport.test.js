@@ -125,7 +125,8 @@ test('Gemini GenerateContent uses the documented systemInstruction and responseF
   hooks.KONFIGURACJA.xkiroKey = '';
   let call;
   mockFetch(async (url, options) => {
-    if (!url.includes('generativelanguage.googleapis.com')) throw new Error('Unexpected provider request: ' + url);
+    const parsedUrl = new URL(url);
+    if (parsedUrl.hostname !== 'generativelanguage.googleapis.com') throw new Error('Unexpected provider request: ' + url);
     call = { url, options, body: JSON.parse(options.body) };
     return jsonResponse({ candidates: [{ content: { parts: [{ text: JSON.stringify(VALID_VERDICT) }] } }] });
   });
