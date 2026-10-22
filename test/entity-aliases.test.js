@@ -107,6 +107,23 @@ test('copied source wording cannot add a second fact, flip negation, or change t
   assert.equal(changedObject.ok, false);
 });
 
+test('reason-why wording remains equivalent in an abstention translation', () => {
+  const result = spojnoscTlumaczeniaClaimu(
+    'Nie ma dostępnych danych potwierdzających przyczynę, dla której Dragonborn został wciągnięty w konflikt ze smokami.',
+    'There is no available data confirming the reason why the Dragonborn was drawn into a conflict with dragons.',
+  );
+  assert.equal(result.ok, true, result.reason);
+});
+
+test('Cyberpunk Relik/Relic is a contextual translation alias, not a global entity alias', () => {
+  const result = spojnoscTlumaczeniaClaimu(
+    'Po śmierci V Relik aktywuje engram Johnny’ego Silverhanda.',
+    'After V dies, the Relic activates Johnny’s engram.',
+  );
+  assert.equal(result.ok, true, result.reason);
+  assert.equal(KNOWN_ENTITY_ALIAS_PATTERNS.some(entry => entry.canonical === 'relic'), false);
+});
+
 test('faithful translation accepts different Polish and English names through explicit aliases', () => {
   const quote = 'The Wild Hunt captured the Bloody Baron.';
   const result = spojnoscTlumaczeniaClaimu(
