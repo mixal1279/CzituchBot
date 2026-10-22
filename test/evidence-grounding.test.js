@@ -490,6 +490,24 @@ test('evidence repair context returns verbatim candidates from authorized source
   assert.match(repair, /Wheatley przejął kontrolę/);
 });
 
+test('repair context never offers a quote spanning an omitted source fragment', () => {
+  const sourceText = 'The Greatsword is in northwestern Caelid, on the road that leads south toward the Cathedral of Dragon Communion. [...] The Greatsword is in an abandoned treasure cart off the side of the road.';
+  const blocks = parseEvidenceBlocks(
+    '[SOURCE 6]\\nTREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>\\n' + sourceText + '\\n<<<END_UNTRUSTED_SOURCE_CONTENT>>>',
+  );
+  const repair = buildEvidenceRepairContext(
+    [{ claim: 'The Greatsword is in an abandoned treasure cart off the side of the road.' }],
+    blocks,
+    new Set(['SOURCE 6']),
+  );
+  const quotes = [...repair.matchAll(/CANDIDATE EVIDENCE QUOTE: ([^\\n]+)/g)].map(match => match[1]);
+  assert.ok(quotes.length > 0, repair);
+  for (const quote of quotes) {
+    assert.equal(quoteExists(blocks[0].content, quote), true, quote);
+    assert.doesNotMatch(quote, /\\[\\s*(?:\\.{3}|…)\\s*\\]|\\.{3}|…/u, quote);
+  }
+});
+
 test('evidence quote verification rejects disconnected fragments joined by ellipses', () => {
   const source = 'Wheatley was transferred into GLaDOS body. He later gained control of Aperture.';
   assert.equal(quoteExists(source, 'Wheatley was transferred into GLaDOS body. ... He later gained control of Aperture.'), false);
