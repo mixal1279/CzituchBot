@@ -11,6 +11,9 @@ const ENTITY_ALIAS_GROUPS = Object.freeze([
   // nazw opisowych ani tłumaczeń zgadywanych na podstawie samego kontekstu.
   { canonical: 'wild hunt', names: ['Wild Hunt', 'Dziki Gon'] },
   { canonical: 'bloody baron', names: ['Bloody Baron', 'Krwawy Baron', 'Baron Krwawy'] },
+  // Keep the Skyrim item separate from Dragonrend; only the English item name is unambiguous.
+  { canonical: 'dragonbane', names: ['Dragonbane'] },
+  { canonical: "alduin's wall", names: ["Alduin's Wall", 'Alduins Wall'] },
   // „Smocza Zguba” is ambiguous in Skyrim: it can refer to the Dragonbane sword,
   // while Dragonrend is a shout. Do not map the localized phrase globally to the
   // shout, or evidence about the sword is falsely rejected as missing Dragonrend.
