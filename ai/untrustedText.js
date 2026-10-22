@@ -40,6 +40,42 @@ function replaceUntrustedBlockTags(text) {
   return output;
 }
 
+function replaceUntrustedBlockTags(text) {
+  const marker = 'UNTRUSTED_';
+  let output = '';
+  let cursor = 0;
+
+  while (cursor < text.length) {
+    const open = text.indexOf('<', cursor);
+    if (open === -1) {
+      output += text.slice(cursor);
+      break;
+    }
+
+    const close = text.indexOf('>', open + 1);
+    if (close === -1) {
+      output += text.slice(cursor);
+      break;
+    }
+
+    const inside = text.slice(open + 1, close);
+    let i = 0;
+    while (i < inside.length && /\\s/.test(inside[i])) i++;
+    if (inside[i] === '/') i++;
+    while (i < inside.length && /\\s/.test(inside[i])) i++;
+
+    if (inside.slice(i, i + marker.length).toUpperCase() === marker) {
+      output += text.slice(cursor, open) + '[USUNIĘTY_ZNACZNIK_BLOKU]';
+      cursor = close + 1;
+    } else {
+      output += text.slice(cursor, open + 1);
+      cursor = open + 1;
+    }
+  }
+
+  return output;
+}
+
 function sanitizeUntrustedText(material) {
   let text = String(material || '');
   text = text
@@ -57,7 +93,7 @@ function sanitizeUntrustedText(material) {
     .replace(/\\b(?:wiadomość|wiadomosc|prompt|instrukcja)\\s+(?:systemowa|deweloperska|developera)\\s*:/gi, '[USUNIĘTY_MARKER_ŹRÓDŁA:]')
     .replace(/\\b(?:you are|act as|jesteś|działaj jako)\\s+(?:an?\\s+)?(?:assistant|system|developer|model|ai|bot|asystent|systemem|modelem|botem)\\b/gi, '[USUNIĘTA_INSTRUKCJA_ROLI]');
   text = replaceUntrustedBlockTags(text);
-  return text.replace(/\\s{2,}/g, ' ').trim();
+  text = replaceUntrustedBlockTags(text);\n  return text.replace(/\\s{2,}/g, ' ').trim();
 }
 
 module.exports = { sanitizeUntrustedText };
