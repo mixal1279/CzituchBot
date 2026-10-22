@@ -4806,10 +4806,29 @@ async function odtworzLokatyPoStarcie() {
   }
 }
 
+// Pomocnicza funkcja: normalizuje i waliduje subdomenę Fandom (ochrona SSRF)
+function normalizujSubdomeneFandom(input) {
+  if (typeof input !== 'string') return null;
+  let v = input.trim().toLowerCase();
+  if (!v) return null;
+
+  // Pozwól na wejścia typu "https://x.fandom.com" lub "x.fandom.com"
+  v = v.replace(/^https?:\/\//, '');
+  v = v.replace(/\/.*$/, '');
+  if (v.endsWith('.fandom.com')) v = v.slice(0, -'.fandom.com'.length);
+
+  // Tylko pojedyncza etykieta DNS: litery/cyfry/myślnik, bez kropek i znaków specjalnych.
+  if (!/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(v)) return null;
+  return v;
+}
+
 // Pomocnicza funkcja: szuka frazy na konkretnej subdomenie Fandom
 async function szukajNaWiki(domena, fraza) {
   try {
-    const url = `https://${domena}.fandom.com/api.php` +
+    const bezpiecznaDomena = normalizujSubdomeneFandom(domena);
+    if (!bezpiecznaDomena) return null;
+
+    const url = `https://${bezpiecznaDomena}.fandom.com/api.php` +
       `?action=query&list=search&srsearch=${encodeURIComponent(fraza)}` +
       `&format=json&srlimit=1`;
     const res  = await fetchZTimeout(url, { headers: { 'User-Agent': 'CzituchBot/1.0' } }, 8000);
@@ -5019,8 +5038,8 @@ async function obslugaEkonomii(nick, message, wyslijFn, walutaNadpis = null) {
 
     try {
       // 1. Spróbuj bezpośrednio: gra.fandom.com
-      let domena = gra;
-      let wynik  = await szukajNaWiki(domena, fraza);
+      let domena = normalizujSubdomeneFandom(gra);
+      let wynik  = domena ? await szukajNaWiki(domena, fraza) : null;
 
       // 2. Jeśli nic nie znaleziono, spróbuj namierzyć właściwą wiki przez Discover API
       if (!wynik) {
@@ -5031,12 +5050,15 @@ async function obslugaEkonomii(nick, message, wyslijFn, walutaNadpis = null) {
         const trafienie = discData?.items?.[0];
 
         if (trafienie?.domain) {
-          domena = trafienie.domain.replace('.fandom.com', '');
-          wynik  = await szukajNaWiki(domena, fraza);
+          const odkrytaDomena = normalizujSubdomeneFandom(trafienie.domain);
+          if (odkrytaDomena) {
+            domena = odkrytaDomena;
+            wynik  = await szukajNaWiki(domena, fraza);
+          }
         }
       }
 
-      if (!wynik) return wyslijFn(`@${nick} Nie znalazłem poradnika "${fraza}" dla gry "${gra}".`);
+      if (!wynik || !domena) return wyslijFn(`@${nick} Nie znalazłem poradnika "${fraza}" dla gry "${gra}".`);
 
       const link = `https://${domena}.fandom.com/wiki/${encodeURIComponent(wynik.title.replace(/ /g, '_'))}`;
       return wyslijFn(`@${nick} 📖 ${wynik.title}: ${link}`);
