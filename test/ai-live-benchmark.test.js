@@ -344,6 +344,20 @@ test('benchmark failure diagnostics explain gate failures per case', () => {
   assert.match(lines[0], /brakujące fakty: portal location/);
   assert.match(lines[0], /generator gemini=timeout/);
   assert.match(lines[0], /walidator groq=HTTP 429 rate limit/);
+
+  const crowded = formatBenchmarkFailureDiagnostics([{
+    id: 'crowded-diagnostics',
+    judgeStatus: 'abstained',
+    finalStatus: 'rejected',
+    rejectionReason: 'semantic_rejection',
+    missing: ['a', 'b', 'c'],
+    factualMissing: ['d', 'e'],
+    fallbackReasons: ['fallback-1', 'fallback-2'],
+    generationAttempts: [{ provider: 'gemini', status: 'error', failure: 'timeout' }],
+    validatorResults: [{ provider: 'groq', status: 'unavailable', reason: 'HTTP 429 rate limit' }],
+  }]);
+  assert.match(crowded[0], /generator gemini=timeout/);
+  assert.match(crowded[0], /walidator groq=HTTP 429 rate limit/);
   assert.deepEqual(formatBenchmarkFailureDiagnostics([{ judgeStatus: 'accepted', factualPassed: true }]), ['Brak niezaliczonych przypadków.']);
 });
 
