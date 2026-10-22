@@ -59,7 +59,8 @@ test('Dragonbane and Alduins Wall resolve as their own entities without mapping 
   assert.equal(dragonbane.pattern.test('Dragonbane'), true);
   assert.equal(dragonbane.pattern.test('drgon bane'), true, 'accept the exact one-letter source typo');
   assert.equal(wall.pattern.test('alduins wall'), true);
-  const names = wyodrebnijNazwyWlasne('Smoczą Zgubę (Dragonbane) można znaleźć przy Alduins Wall.');
+  assert.equal(wall.pattern.test("Alduin's Wall"), true);
+  const names = wyodrebnijNazwyWlasne("Smoczą Zgubę (Dragonbane) można znaleźć przy Alduin's Wall.");
   assert.ok(names.includes('dragonbane'), JSON.stringify(names));
   assert.ok(names.includes("alduin's wall"), JSON.stringify(names));
   assert.equal(names.includes('dragonrend'), false, JSON.stringify(names));
