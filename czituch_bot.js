@@ -8227,7 +8227,7 @@ function podepnijHandleryEventSubBilly(ws) {
       // czat i reszta bota działają normalnie. Zamiast tylko logować, resubskrybujemy od razu.
       const sub = msg.payload.subscription;
       const rewardId = sub?.condition?.reward_id;
-      console.warn(`[EventSub-Billy] ⚠️ Subskrypcja odwołana (reason: ${sub?.status}):`, JSON.stringify(sub));
+      console.warn('[EventSub-Billy] ⚠️ Subskrypcja odwołana (reason: %s): %s', sub?.status ?? 'unknown', JSON.stringify(sub));
 
       const userId = await pobierzUserId('billybulka', TWITCH_CONFIG_BILLYBULKA);
       if (userId) {
