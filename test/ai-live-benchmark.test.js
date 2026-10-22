@@ -338,7 +338,7 @@ test('benchmark failure diagnostics explain gate failures per case', () => {
 
   assert.equal(lines.length, 1);
   assert.match(lines[0], /how-058/);
-  assert.match(lines[0], /abstention/);
+  assert.match(lines[0], /provider_quota/);
   assert.match(lines[0], /correlation_to_causation/);
   assert.match(lines[0], /braki: cause/);
   assert.match(lines[0], /brakujące fakty: portal location/);
