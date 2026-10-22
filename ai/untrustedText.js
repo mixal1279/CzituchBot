@@ -19,13 +19,12 @@ function replaceUntrustedBlockTags(text) {
       break;
     }
 
-    const inside = text.slice(open + 1, close);
-    let i = 0;
-    while (i < inside.length && /\\s/.test(inside[i])) i++;
-    if (inside[i] === '/') i++;
-    while (i < inside.length && /\\s/.test(inside[i])) i++;
+    let i = open + 1;
+    while (i < close && /\\s/.test(text[i])) i++;
+    if (text[i] === '/') i++;
+    while (i < close && /\\s/.test(text[i])) i++;
 
-    if (inside.slice(i, i + marker.length).toUpperCase() === marker) {
+    if (text.slice(i, i + marker.length).toUpperCase() === marker) {
       output += text.slice(cursor, open) + '[USUNIĘTY_ZNACZNIK_BLOKU]';
       cursor = close + 1;
       close = -1;
