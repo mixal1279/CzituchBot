@@ -220,8 +220,8 @@ test('gameplay answer guidance names the scoped encounter instead of overgeneral
   const plan = buildAnswerPlan('Jak pokonać smoka?', {
     intent: 'web_fact', is_gameplay: true, game: 'Skyrim',
   });
-  assert.match(plan.responseShapeGuidance, /konkretnego bossa/);
-  assert.match(plan.responseShapeGuidance, /Skyrim/);
+  assert.match(plan.instruction, /konkretnego bossa/);
+  assert.match(plan.instruction, /Skyrim/);
 });
 
 test('v26 judge rejects generic relationship answer', () => {
