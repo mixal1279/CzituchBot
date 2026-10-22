@@ -20,9 +20,9 @@ function replaceUntrustedBlockTags(text) {
     }
 
     let i = open + 1;
-    while (i < close && /\\s/.test(text[i])) i++;
+    while (i < close && /\s/.test(text[i])) i++;
     if (text[i] === '/') i++;
-    while (i < close && /\\s/.test(text[i])) i++;
+    while (i < close && /\s/.test(text[i])) i++;
 
     if (text.slice(i, i + marker.length).toUpperCase() === marker) {
       output += text.slice(cursor, open) + '[USUNIĘTY_ZNACZNIK_BLOKU]';
@@ -53,6 +53,7 @@ function sanitizeUntrustedText(material) {
     .replace(/\b(?:zignoruj|ignoruj|pomiń|pomijaj)\s+(?:wszystkie\s+|te\s+)?(?:poprzednie|wcześniejsze|wczesniejsze|powyższe|powyzsze)\s+(?:instrukcje|zasady|wiadomości|wiadomosci|polecenia)\b/gi, '[USUNIĘTA_INSTRUKCJA_ŹRÓDŁA]')
     .replace(/\b(?:wiadomość|wiadomosc|prompt|instrukcja)\s+(?:systemowa|deweloperska|developera)\s*:/gi, '[USUNIĘTY_MARKER_ŹRÓDŁA:]')
     .replace(/\b(?:you are|act as|jesteś|działaj jako)\s+(?:an?\s+)?(?:assistant|system|developer|model|ai|bot|asystent|systemem|modelem|botem)\b/gi, '[USUNIĘTA_INSTRUKCJA_ROLI]');
+  text = replaceUntrustedBlockTags(text);
   return text.replace(/\s{2,}/g, ' ').trim();
 }
 
