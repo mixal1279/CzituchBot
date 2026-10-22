@@ -18,9 +18,24 @@ function czyPytanieOLore(pytanie, domeny = null) {
   return GAME_CONTEXT_RE.test(p) || GAME_TITLE_RE.test(p) || gamingDomain || Boolean(resolved);
 }
 
+function normalizujHost(wartosc) {
+  const surowe = String(wartosc || '').trim().toLowerCase();
+  if (!surowe) return '';
+  try {
+    return new URL(surowe).hostname.toLowerCase();
+  } catch (_) {
+    return surowe
+      .replace(/^[a-z][a-z0-9+.-]*:\/\//i, '')
+      .replace(/[\/?#].*$/, '')
+      .replace(/:\d+$/, '')
+      .toLowerCase();
+  }
+}
+
 function dodajGameLoreDomenę(domeny) {
   const lista = Array.isArray(domeny) ? [...domeny] : [];
-  if (!lista.includes(GAMELORE_DOMAIN)) lista.unshift(GAMELORE_DOMAIN);
+  const maGameLore = lista.some((d) => normalizujHost(d) === GAMELORE_DOMAIN);
+  if (!maGameLore) lista.unshift(GAMELORE_DOMAIN);
   return lista;
 }
 
