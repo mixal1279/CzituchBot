@@ -8106,9 +8106,25 @@ function podepnijHandleryEventSubBilly(ws) {
 
     if (type === 'session_reconnect') {
       const reconnectUrl = msg.payload.session.reconnect_url;
+      let bezpiecznyReconnectUrl;
+      try {
+        const parsed = new URL(reconnectUrl);
+        const dozwolonyHost = 'eventsub.wss.twitch.tv';
+        const czyDozwolony = parsed.protocol === 'wss:' &&
+          parsed.hostname === dozwolonyHost &&
+          parsed.pathname.startsWith('/ws');
+        if (!czyDozwolony) {
+          console.warn('[EventSub-Billy] ⚠️ Odrzucono nieprawidłowy reconnect_url:', reconnectUrl);
+          return;
+        }
+        bezpiecznyReconnectUrl = parsed.toString();
+      } catch (_) {
+        console.warn('[EventSub-Billy] ⚠️ Odrzucono nieparsowalny reconnect_url:', reconnectUrl);
+        return;
+      }
       console.log('[EventSub-Billy] 🔄 Reconnect URL otrzymany, przełączam...');
       getEventSubState('billy_redemption').reconnecting = true;
-      const nowyWs = new WebSocket(reconnectUrl);
+      const nowyWs = new WebSocket(bezpiecznyReconnectUrl);
       podepnijHandleryEventSubBilly(nowyWs);
       getEventSubState('billy_redemption').ws = nowyWs;
     }
