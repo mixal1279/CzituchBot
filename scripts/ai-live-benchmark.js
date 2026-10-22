@@ -486,9 +486,11 @@ async function run() {
     }
 
     if ((i + 1) % 10 === 0 || i + 1 === cases.length) {
-      const answered = results.filter(x => x.answered).length / results.length;
-      const complete = results.filter(x => x.judgeStatus === 'accepted').length / results.length;
-      console.error(`[LIVE BENCHMARK] ${i + 1}/${cases.length} answered=${(answered * 100).toFixed(1)}% complete=${(complete * 100).toFixed(1)}%`);
+      const answeredCount = results.filter(x => x.answered).length;
+      const completeCount = results.filter(x => x.judgeStatus === 'accepted').length;
+      const answered = answeredCount / results.length;
+      const complete = completeCount / results.length;
+      console.error(`[LIVE BENCHMARK] ${i + 1}/${cases.length} answered=${answeredCount}/${results.length} (${(answered * 100).toFixed(1)}%) complete=${completeCount}/${results.length} (${(complete * 100).toFixed(1)}%)`);
     }
     await sleep(delayMs);
   }
