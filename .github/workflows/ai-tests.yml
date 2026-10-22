@@ -17,6 +17,9 @@ on:
       - 'package.json'
       - '.github/workflows/ai-tests.yml'
 
+permissions:
+  contents: read
+
 jobs:
   ai-tests:
     runs-on: ubuntu-latest
