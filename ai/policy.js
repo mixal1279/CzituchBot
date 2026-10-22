@@ -94,16 +94,35 @@ function czyOdpowiedzToJednoznacznaOdmowa(tekst) {
 // Treść użytkownika/strony nie może zamknąć bloku niezaufanych danych ani otworzyć
 // własnego. Usuwamy każdy tag UNTRUSTED_* (także z ukośnikiem i spacjami).
 function neutralizujZnacznikiBloku(text) {
-  return String(text || '').replace(/<[^>]*>/g, tag => {
-    const body = tag.slice(1, -1).trimStart();
-    const content = body.startsWith('/')
-      ? body.slice(1).trimStart()
-      : body;
+  const input = String(text || '');
+  let output = '';
+  let cursor = 0;
 
-    return /^UNTRUSTED_[A-Z_]*/i.test(content)
+  while (cursor < input.length) {
+    const open = input.indexOf('<', cursor);
+    if (open === -1) {
+      output += input.slice(cursor);
+      break;
+    }
+
+    output += input.slice(cursor, open);
+    const close = input.indexOf('>', open + 1);
+    if (close === -1) {
+      output += input.slice(open);
+      break;
+    }
+
+    const tag = input.slice(open, close + 1);
+    let body = input.slice(open + 1, close).trimStart();
+    if (body.startsWith('/')) body = body.slice(1).trimStart();
+
+    output += /^UNTRUSTED_[A-Z_]*/i.test(body)
       ? '[tag usunięty]'
       : tag;
-  });
+    cursor = close + 1;
+  }
+
+  return output;
 }
 
 function przygotujHistorieDoModelu(historia = [], maxMessages = 4) {
