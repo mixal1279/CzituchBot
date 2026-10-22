@@ -172,3 +172,12 @@ test('repair generation is not reserved below the 8.5 second time floor', () => 
   assert.equal(ctx.repairGeneracje, 0);
   assert.equal(ctx.modelCalls, 0);
 });
+
+test('repair preflight matches the minimum generation timeout and fallback reserve', () => {
+  const insufficient = createAIRequestContext({ startedAt: Date.now(), maxCzasMs: 13000 });
+  assert.equal(insufficient.canReserveGeneration('repair'), false);
+  assert.equal(insufficient.repairGeneracje, 0);
+  const sufficient = createAIRequestContext({ startedAt: Date.now(), maxCzasMs: 14000 });
+  assert.equal(sufficient.canReserveGeneration('repair'), true);
+  assert.equal(sufficient.repairGeneracje, 0);
+});

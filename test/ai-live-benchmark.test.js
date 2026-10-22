@@ -92,6 +92,7 @@ test('benchmark detects common refusal variants as abstentions', () => {
     "I don't have enough information to answer confidently.",
     "I can't confirm this information, so I won't guess.",
     'Insufficient information.',
+    '⚠️ Odpowiedź niezweryfikowana — walidator jest niedostępny.',
   ]) {
     assert.equal(isFailureText(refusal), true, refusal);
   }

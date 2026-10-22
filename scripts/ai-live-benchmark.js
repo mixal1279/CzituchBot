@@ -87,6 +87,7 @@ function isFailureText(text) {
     /^(?:benchmark\s+)?i (?:do not|don t) know$/i,
     /^(?:benchmark\s+)?i cannot answer that confidently$/i,
     /^(?:benchmark\s+)?insufficient (?:data|information)$/i,
+    /^(?:benchmark\s+)?odpowiedz niezweryfikowana walidator jest niedostepny$/i,
   ];
   return refusalPatterns.some(pattern => pattern.test(normalized));
 }
