@@ -5,12 +5,11 @@ const assert = require('node:assert/strict');
 const { buildSupplementalRetrievalQuery, isMultiPartQuestion, selectRetrievalQueries, initialRetrievalQueryLimit } = require('../ai/retrieval');
 
 
-test('single causal question reserves time for validation; multi-part questions can use three searches', () => {
-  assert.equal(initialRetrievalQueryLimit({ causalQuestion: true, multiPart: false, availableSlots: 3 }), 2);
-  assert.equal(initialRetrievalQueryLimit({ causalQuestion: false, multiPart: false, availableSlots: 3 }), 2);
-  assert.equal(initialRetrievalQueryLimit({ causalQuestion: true, multiPart: true, availableSlots: 3 }), 3);
-  assert.equal(initialRetrievalQueryLimit({ causalQuestion: true, multiPart: true, availableSlots: 1 }), 1);
-  assert.equal(initialRetrievalQueryLimit({ causalQuestion: true, multiPart: true, availableSlots: 0 }), 0);
+test('single-question retrieval reserves time for validation; multi-part questions can use three searches', () => {
+  assert.equal(initialRetrievalQueryLimit({ multiPart: false, availableSlots: 3 }), 2);
+  assert.equal(initialRetrievalQueryLimit({ multiPart: true, availableSlots: 3 }), 3);
+  assert.equal(initialRetrievalQueryLimit({ multiPart: true, availableSlots: 1 }), 1);
+  assert.equal(initialRetrievalQueryLimit({ multiPart: true, availableSlots: 0 }), 0);
 });
 
 test('a single question mark does not classify a question as multi-part', () => {
