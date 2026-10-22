@@ -3161,9 +3161,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
       const weakRetrieval = !retrievalText
         || retrievalText.length < 1200
         || retrievalSourceCount < 2;
-      if (weakRetrieval && (pytanieOLore || pytanieOGameplay)
-        && !personaDomains
-        && indexZapytania < kolejkaTavily.length) {
+      if (weakRetrieval && (pytanieOLore || pytanieOGameplay) && !personaDomains) {
         useGeneralDomainsForNextQuery = true;
         console.log('[Tavily] 🔁 Słabe źródła specjalistyczne — następne zapytanie poszerzy domeny.');
       }
