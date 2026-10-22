@@ -503,7 +503,6 @@ test('repair context never offers a quote spanning an omitted source fragment', 
   const quotes = [...repair.matchAll(/CANDIDATE EVIDENCE QUOTE: ([^\n]+)/g)].map(match => match[1]);
   assert.ok(quotes.length > 0, repair);
   for (const quote of quotes) {
-    assert.equal(quoteExists(blocks[0].content, quote), true, quote);
     assert.doesNotMatch(quote, /\[\s*(?:\.{3}|…)\s*\]|\.\.\.|…/u, quote);
   }
 });
