@@ -493,18 +493,18 @@ test('evidence repair context returns verbatim candidates from authorized source
 test('repair context never offers a quote spanning an omitted source fragment', () => {
   const sourceText = 'The Greatsword is in northwestern Caelid, on the road that leads south toward the Cathedral of Dragon Communion. [...] The Greatsword is in an abandoned treasure cart off the side of the road.';
   const blocks = parseEvidenceBlocks(
-    '[SOURCE 6]\\nTREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>\\n' + sourceText + '\\n<<<END_UNTRUSTED_SOURCE_CONTENT>>>',
+    '[SOURCE 6]\nTREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>\n' + sourceText + '\n<<<END_UNTRUSTED_SOURCE_CONTENT>>>',
   );
   const repair = buildEvidenceRepairContext(
     [{ claim: 'The Greatsword is in an abandoned treasure cart off the side of the road.' }],
     blocks,
     new Set(['SOURCE 6']),
   );
-  const quotes = [...repair.matchAll(/CANDIDATE EVIDENCE QUOTE: ([^\\n]+)/g)].map(match => match[1]);
+  const quotes = [...repair.matchAll(/CANDIDATE EVIDENCE QUOTE: ([^\n]+)/g)].map(match => match[1]);
   assert.ok(quotes.length > 0, repair);
   for (const quote of quotes) {
     assert.equal(quoteExists(blocks[0].content, quote), true, quote);
-    assert.doesNotMatch(quote, /\\[\\s*(?:\\.{3}|…)\\s*\\]|\\.{3}|…/u, quote);
+    assert.doesNotMatch(quote, /\[\s*(?:\.{3}|…)\s*\]|\.\.\.|…/u, quote);
   }
 });
 
