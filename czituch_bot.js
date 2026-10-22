@@ -7943,11 +7943,17 @@ function walidujEventSubReconnectUrl(reconnectUrl) {
   if (typeof reconnectUrl !== 'string' || !reconnectUrl) return null;
   try {
     const parsed = new URL(reconnectUrl);
-    const DOZWOLONE_HOSTY = new Set(['eventsub.wss.twitch.tv']);
+    const DOZWOLONY_HOST = 'eventsub.wss.twitch.tv';
+    const DOZWOLONY_ORIGIN = 'wss://eventsub.wss.twitch.tv';
+
     if (parsed.protocol !== 'wss:') return null;
-    if (!DOZWOLONE_HOSTY.has(parsed.hostname)) return null;
+    if (parsed.hostname !== DOZWOLONY_HOST) return null;
     if (parsed.username || parsed.password) return null;
-    return parsed.toString();
+    if (parsed.port && parsed.port !== '443') return null;
+
+    // Rekonstruujemy URL na bazie stałego, zaufanego originu, aby nie używać
+    // bezpośrednio nieufnego stringa jako celu połączenia.
+    return new URL(`${parsed.pathname}${parsed.search}`, DOZWOLONY_ORIGIN).toString();
   } catch (_) {
     return null;
   }
