@@ -2,6 +2,13 @@
 
 // Modele gpt-oss liczą tokeny rozumowania do max_completion_tokens. Bez zapasu
 // reasoning potrafi zjeść cały budżet i zostaje pusta odpowiedź (finish_reason=length).
+function normalizeGroqBaseUrl(value) {
+  const fallback = 'https://api.groq.com/openai/v1';
+  let base = String(value || fallback).trim().replace(/\/+$/, '');
+  if (!base) base = fallback;
+  return base.replace(/(?:\/openai\/v1){2,}$/i, '/openai/v1');
+}
+
 const REASONING_HEADROOM_TOKENS = { 'openai/gpt-oss-120b': 1500, default: 800 };
 const REASONING_MIN_ANSWER_TOKENS = 300;
 const REASONING_TOKEN_CEILING = 4000;
@@ -207,6 +214,7 @@ async function createGroqCompletionWithSchemaFallback(groqClient, payload, {
 }
 
 module.exports = {
+  normalizeGroqBaseUrl,
   createGroqCompletion,
   createGroqCompletionWithSchemaFallback,
   isGroqSchemaValidationError,
