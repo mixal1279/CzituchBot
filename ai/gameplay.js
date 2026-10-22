@@ -15,9 +15,24 @@ function czyPytanieOGameplay(pytanie, domeny = null) {
   return GAME_CONTEXT_RE.test(p) || gamingDomain || Boolean(resolved);
 }
 
+function extractHostname(value) {
+  const raw = String(value || '').trim().toLowerCase();
+  if (!raw) return null;
+  try {
+    return new URL(raw).hostname.toLowerCase();
+  } catch (_) {
+    try {
+      return new URL(`http://${raw}`).hostname.toLowerCase();
+    } catch (__) {
+      return null;
+    }
+  }
+}
+
 function dodajGameFAQsDomenę(domeny) {
   const lista = Array.isArray(domeny) ? [...domeny] : [];
-  if (!lista.includes(GAMEFAQS_DOMAIN)) lista.unshift(GAMEFAQS_DOMAIN);
+  const hasGameFAQs = lista.some((d) => extractHostname(d) === GAMEFAQS_DOMAIN);
+  if (!hasGameFAQs) lista.unshift(GAMEFAQS_DOMAIN);
   return lista;
 }
 
