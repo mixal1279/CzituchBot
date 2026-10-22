@@ -11,6 +11,7 @@ delete process.env.AI_VALIDATOR_BREAKER_MS;
 
 const { __validatorTestHooks: hooks } = require('../czituch_bot');
 const { createAIRequestContext } = require('../ai/requestContext');
+const { normalizeGroqBaseUrl } = require('../ai/provider-runtime');
 const { resetProviderQuotaCooldowns, quotaCooldownMsFromError, shouldOpenQuotaCircuit } = require('../ai/fallback');
 const { GROQ_VALIDATOR_JSON_SCHEMA, buildGroqValidatorResponseFormat, buildOpenRouterValidatorResponseFormat } = require('../ai/validator');
 
@@ -788,4 +789,17 @@ test('HTTP circuit breakery xKiro i OpenRouter otwierają się po dwóch mockowa
     }
     assert.equal(hooks.validatorBreakerIsOpen(provider), true, provider);
   }
+});
+
+test('normalizeGroqBaseUrl supplies the canonical default and trims trailing slashes', () => {
+  assert.equal(normalizeGroqBaseUrl(), 'https://api.groq.com/openai/v1');
+  assert.equal(normalizeGroqBaseUrl(' https://api.groq.com/openai/v1/// '), 'https://api.groq.com/openai/v1');
+});
+
+test('normalizeGroqBaseUrl collapses duplicate OpenAI API suffixes without changing proxy paths', () => {
+  assert.equal(
+    normalizeGroqBaseUrl('https://api.groq.com/openai/v1/openai/v1'),
+    'https://api.groq.com/openai/v1',
+  );
+  assert.equal(normalizeGroqBaseUrl('https://proxy.example/v1'), 'https://proxy.example/v1');
 });
