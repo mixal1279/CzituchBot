@@ -234,7 +234,12 @@ function formatBenchmarkFailureDiagnostics(results, limit = 20) {
       reasons.push(`walidator ${row.provider || 'unknown'}=${detail || row.status}`);
     }
     if (result.factualPassed === false) reasons.push(`gold facts ${result.factualScore ?? 0}`);
-    const uniqueReasons = [...new Set(reasons)].slice(0, 8);
+    const unique = [...new Set(reasons)];
+    // Provider failures are actionable and must not be truncated behind
+    // semantic/gold-fact details when a case has many diagnostics.
+    const providerReasons = unique.filter(reason => /^(?:generator|walidator) /.test(reason));
+    const otherReasons = unique.filter(reason => !/^(?:generator|walidator) /.test(reason));
+    const uniqueReasons = [...otherReasons.slice(0, Math.max(0, 8 - providerReasons.length)), ...providerReasons].slice(0, 8);
     const detail = (uniqueReasons.length ? uniqueReasons : ['brak szczegółowej przyczyny w śladzie diagnostycznym']).join(' | ');
     lines.push(`- [${result.id || 'unknown'}] ${outcome}: ${detail}`.slice(0, 1200));
   }
