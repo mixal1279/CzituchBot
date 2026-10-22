@@ -9,7 +9,7 @@ function sanitizeUntrustedText(material) {
     .replace(/<<<\s*(?:END_)?UNTRUSTED[^>\r\n]*>>>/gi, '[USUNIĘTY_ZNACZNIK_BLOKU]')
     .replace(/<\s*\/?\s*UNTRUSTED_[A-Z_]*[^>\r\n]*>/gi, '[USUNIĘTY_ZNACZNIK_BLOKU]')
     .replace(/<!--[\s\S]*?-->/g, '[USUNIĘTY_KOMENTARZ_HTML]')
-    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '[USUNIĘTY_SKRYPT_HTML]')
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script\b[^>]*>/gi, '[USUNIĘTY_SKRYPT_HTML]')
     .replace(/<\/?(?:system|developer|assistant|user|tool|instructions?|prompt|context)\b[^>]*>/gi, '[USUNIĘTY_MARKER_ZRODŁA]')
     .replace(/\[\s*(?:system|developer|assistant|user|tool|instructions?|prompt)\s*\]/gi, '[USUNIĘTY_MARKER_ZRODŁA]')
     .replace(/\b(?:ignore|disregard|forget)\s+(?:all\s+|any\s+|the\s+)?(?:previous|prior|above|earlier)\s+(?:instructions?|rules?|messages?)\b/gi, '[USUNIĘTA_INSTRUKCJA_ZRODŁA]')
