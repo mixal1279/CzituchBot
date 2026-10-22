@@ -4,6 +4,7 @@ function replaceUntrustedBlockTags(text) {
   const marker = 'UNTRUSTED_';
   let output = '';
   let cursor = 0;
+  let close = -1;
 
   while (cursor < text.length) {
     const open = text.indexOf('<', cursor);
@@ -12,7 +13,7 @@ function replaceUntrustedBlockTags(text) {
       break;
     }
 
-    const close = text.indexOf('>', open + 1);
+    if (close < open) close = text.indexOf('>', open + 1);
     if (close === -1) {
       output += text.slice(cursor);
       break;
@@ -27,6 +28,7 @@ function replaceUntrustedBlockTags(text) {
     if (inside.slice(i, i + marker.length).toUpperCase() === marker) {
       output += text.slice(cursor, open) + '[USUNIĘTY_ZNACZNIK_BLOKU]';
       cursor = close + 1;
+      close = -1;
     } else {
       output += text.slice(cursor, open + 1);
       cursor = open + 1;
