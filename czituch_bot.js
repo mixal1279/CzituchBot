@@ -2751,6 +2751,10 @@ function formatProviderError(provider, model, err, extra = {}) {
   return JSON.stringify(details);
 }
 
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn, opcje = {}) {
   AI_METRYKI.requests++;
   let { temperature = 0.5, max_tokens = 200, tavilyOptions = {}, aiProfile = 'generic', memoryUserId = null } = opcje;
@@ -3040,7 +3044,8 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
         if (wynikHLTB) wynikiHLTB.push(wynikHLTB);
       }
       if (wynikiHLTB.length) {
-        const odpowiedziHLTB = wynikiHLTB.map(w => przygotujOdpowiedzHLTB(nick, w, pytanie).replace(new RegExp(`^@${nick}\\s*`), ''));
+        const safeNickPattern = escapeRegExp(nick);
+        const odpowiedziHLTB = wynikiHLTB.map(w => przygotujOdpowiedzHLTB(nick, w, pytanie).replace(new RegExp(`^@${safeNickPattern}\\s*`), ''));
         await wyslijFn(`@${nick} ${odpowiedziHLTB.join(' | ')}`);
         return;
       }
