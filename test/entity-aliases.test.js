@@ -51,6 +51,13 @@ test('produkcyjne aliasy PL/EN normalizują znane encje do jednego kanonicznego 
   assert.equal(ambiguousName.includes('dragonrend'), false, 'ambiguous item name must not be forced to the Dragonrend shout');
 });
 
+test('legacy validator aliases do not map ambiguous Smocza Zguba to Dragonrend', () => {
+  const dragonrend = KNOWN_ENTITY_ALIAS_PATTERNS.find(entry => entry.canonical === 'dragonrend');
+  assert.ok(dragonrend);
+  assert.equal(dragonrend.pattern.test('Dragonrend'), true);
+  assert.equal(dragonrend.pattern.test('Smocza Zguba'), false);
+});
+
 test('Greatsword has a verified Polish item-name alias', () => {
   const entry = ENTITY_ALIAS_GROUPS.find(item => item.canonical === 'greatsword');
   assert.ok(entry);
