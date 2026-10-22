@@ -378,6 +378,9 @@ function causalRelationAnchorsMatch(claim, quote) {
 }
 
 function buildEvidenceRepairContext(claims, blocks, allowedSourceIds = null, maxClaims = 4) {
+  const sourceById = new Map((Array.isArray(blocks) ? blocks : [])
+    .map(block => [ensureEvidenceSourceId(block), block])
+    .filter(([sourceId, block]) => sourceId && block?.content));
   const rows = [];
   for (const claim of (Array.isArray(claims) ? claims : []).slice(0, maxClaims)) {
     if (!claim?.claim) continue;
@@ -392,6 +395,14 @@ function buildEvidenceRepairContext(claims, blocks, allowedSourceIds = null, max
       allowedSourceIds,
       limit: 6,
     })
+      // Defense in depth: only give the repair model quotes that the exact-source
+      // verifier accepts. This prevents an ellipsis-joined or otherwise stale
+      // candidate from being reintroduced into the repair prompt.
+      .filter(candidate => {
+        const sourceId = ensureEvidenceSourceId(candidate);
+        const source = sourceById.get(sourceId);
+        return Boolean(source && quoteExists(source.content, candidate.quote));
+      })
       .filter(candidate => Number(candidate.score) >= 0.10)
       .filter(candidate => !claimIsCausal
         || (candidate.relationMatch === true
