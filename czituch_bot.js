@@ -8117,7 +8117,10 @@ function podepnijHandleryEventSubBilly(ws) {
           console.warn('[EventSub-Billy] ⚠️ Odrzucono nieprawidłowy reconnect_url:', reconnectUrl);
           return;
         }
-        bezpiecznyReconnectUrl = parsed.toString();
+        const bezpiecznyUrl = new URL(`wss://${dozwolonyHost}`);
+        bezpiecznyUrl.pathname = parsed.pathname;
+        bezpiecznyUrl.search = parsed.search;
+        bezpiecznyReconnectUrl = bezpiecznyUrl.toString();
       } catch (_) {
         console.warn('[EventSub-Billy] ⚠️ Odrzucono nieparsowalny reconnect_url:', reconnectUrl);
         return;
