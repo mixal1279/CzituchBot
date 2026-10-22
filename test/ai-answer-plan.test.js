@@ -216,6 +216,14 @@ test('location-only gameplay exemption recognizes inflected procedure terms', ()
   assert.ok(!locationOnly.requirements.some(x => x.id === 'steps'));
 });
 
+test('gameplay answer guidance names the scoped encounter instead of overgeneralizing', () => {
+  const plan = buildAnswerPlan('Jak pokonać smoka?', {
+    intent: 'web_fact', is_gameplay: true, game: 'Skyrim',
+  });
+  assert.match(plan.responseShapeGuidance, /konkretnego bossa/);
+  assert.match(plan.responseShapeGuidance, /Skyrim/);
+});
+
 test('v26 judge rejects generic relationship answer', () => {
   const plan = buildAnswerPlan('Jaka jest relacja Geralta i Yennefer?', {
     intent:'web_fact', is_lore:true, entity:'Geralt', game:'The Witcher 3',
