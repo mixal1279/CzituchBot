@@ -3,6 +3,9 @@ name: Mistral API check
 on:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   mistral-check:
     runs-on: ubuntu-latest
