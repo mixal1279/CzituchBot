@@ -2,6 +2,15 @@
 
 const { buildRetrievalPlan: buildCoreRetrievalPlan } = require('./core');
 
+function initialRetrievalQueryLimit({ causalQuestion = false, multiPart = false, availableSlots = 3 } = {}) {
+  const available = Math.max(0, Math.min(3, Math.floor(Number(availableSlots) || 0)));
+  // A causal single-question needs the direct question plus one dedicated causal
+  // query. A third network request costs ~3-5 seconds and can leave insufficient
+  // time for validation/repair; reserve it for genuinely multi-part questions.
+  const intended = multiPart ? 3 : (causalQuestion ? 2 : 2);
+  return Math.min(intended, available);
+}
+
 function selectRetrievalQueries({
   atomicQueries = [],
   causalQuery = null,
@@ -158,4 +167,4 @@ for(const result of list){const tokens=sourceTokens(result);const tokenSet=new S
 const independentHosts=new Set(independent.map(x=>x.host).filter(Boolean));return {hosts:hosts.size,providers:providers.size,independentSources:independent.length,independentHosts:independentHosts.size,duplicatePairs};}
 function shouldRunAdditionalRetrieval({status='ok',text='',sourceCount=0,queryCount=1,results=[],requireDiversity=false}={}){const list=Array.isArray(results)?results:[];if(status!=='ok'||!String(text).trim()||String(text).length<900||sourceCount<2)return true;if(requireDiversity){const d=sourceDiversity(list);if(d.independentHosts<2)return true;}const strong=list.filter(r=>sourceQualityScore(r)>=0.55).length;if(strong<1)return true;return false;}
 function rankRetrievalNeed({routing={},sourceCount=0,textLength=0,validatorStatus=null,results=[]}={}){let score=0;if(routing.needs_fresh_data)score+=3;if(routing.is_lore||routing.is_gameplay)score+=2;if(sourceCount<2)score+=2;if(textLength<900)score++;if(validatorStatus==='rejected'||validatorStatus==='inconclusive')score+=3;const d=sourceDiversity(results);if(sourceCount>=2&&d.independentHosts<2)score+=2;return score>=5?'high':score>=3?'medium':'low';}
-module.exports={decomposeQuestion,isMultiPartQuestion,extractCarryoverEntities,buildAdvancedRetrievalPlan,buildSupplementalRetrievalQuery,selectRetrievalQueries,shouldRunAdditionalRetrieval,rankRetrievalNeed,sourceDiversity,sourceQualityScore,normalizujToken};
+module.exports={decomposeQuestion,isMultiPartQuestion,extractCarryoverEntities,buildAdvancedRetrievalPlan,buildSupplementalRetrievalQuery,selectRetrievalQueries,initialRetrievalQueryLimit,shouldRunAdditionalRetrieval,rankRetrievalNeed,sourceDiversity,sourceQualityScore,normalizujToken};
