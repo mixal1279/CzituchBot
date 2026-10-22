@@ -35,6 +35,8 @@ const CROSS_LANGUAGE_CONCEPTS = [
   ['destrukcja', /destroy\w*|destruct\w*|demolish\w*|ruin\w*|zniszcz\w*|zniszczen\w*|rozbij\w*/i],
   ['praca', /work\w*|employ\w*|job\w*|prac\w*|zatrud\w*/i],
   ['lokalizacja', /found|find\w*|locat\w*|location\w*|znalezc\w*|znajduj\w*|lokaliz\w*|lezy|polozen\w*/i],
+  ['wydanie', /release\w*|launch\w*|publish\w*|premier\w*|wydan\w*|ukaz\w*|debiut\w*/i],
+  ['podroz', /travel\w*|arriv\w*|visit\w*|reach\w*|journey\w*|get there|follow\w*\s+(?:the\s+)?(?:road|route|path)|head\w*\s+to|udaj\w*\s+si[eę]|dotrze\w*|dotrz\w*|pod[aą][żz]\w*|szlak\w*|odwiedz\w*|przybyw\w*/i],
   ['rodzina', /family|families|wife|daughter|son|missing\s+(?:wife|daughter|son|family)|rodzin\w*|zaginion\w*|zona|corka|syn\w*/i],
   ['wymiana_informacji', /in\s+exchange\s+for|in\s+return\s+for|exchange\w*|w\s+zamian\s+za|w\s+zamian\w*|wzajemn\w*/i],
   ['poscig', /chas\w*|pursu\w*|hunt(?:ed|ing|s)\b|flee\w*|escap\w*|uciek\w*|gonil\w*|scig\w*|ucieczk\w*/i],
@@ -734,7 +736,7 @@ function czyOgraniczenieDowodowe(sentence) {
 
 function sprawdzPokrycieClaimamiOdpowiedzi(answer, claims) {
   const sourceSentences = String(answer || '').split(/(?<=[.!?])\s+|\n+/).map(x => x.trim()).filter(Boolean);
-  const sentences = sourceSentences.flatMap(sentence => {
+  const sentences = sourceSentences.flatMap((sentence, sourceSentenceIndex) => {
     // Wskazanie źródła w nawiasie („(Źródło: opis lokalizacji…)”) to metadane,
     // nie twierdzenie o świecie. Bez tego zdanie nigdy nie ma pokrycia, bo
     // żaden claim nie opisuje metadanych.
@@ -752,10 +754,12 @@ function sprawdzPokrycieClaimamiOdpowiedzi(answer, claims) {
       .split(/;\s*|,\s*(?=(?:and\s+then|and|but|then|while|or|a\s+potem|ale|jednak|następnie|nastepnie|oraz)\b)/iu)
       .map(part => part.trim())
       .filter(Boolean);
-    if (clauses.length > 1) return clauses;
+    if (clauses.length > 1) return clauses.map(text => ({ text, sourceSentenceIndex }));
     const match = base.match(/^(.*?)[,;]?\s+(?:ale|jednak)\s+(.+)$/iu);
-    if (match && czyOgraniczenieDowodowe(match[2])) return [match[1].trim(), match[2].trim()].filter(Boolean);
-    return [base];
+    if (match && czyOgraniczenieDowodowe(match[2])) {
+      return [match[1].trim(), match[2].trim()].filter(Boolean).map(text => ({ text, sourceSentenceIndex }));
+    }
+    return [{ text: base, sourceSentenceIndex }];
   });
   const claimRows = (Array.isArray(claims) ? claims : [])
     .map(c => ({
@@ -776,7 +780,9 @@ function sprawdzPokrycieClaimamiOdpowiedzi(answer, claims) {
   // rzeczownik w tym samym zdaniu („Te ziemie…”), a nie podmiot poprzedniego.
   const ANAPHORA = /^\s*(?:jego|jej|ich|oni|on|ona|one|he|she|they|it|his|her|their|its)\b/iu;
 
-  for (const [sentenceIndex, sentence] of sentences.entries()) {
+  for (const [sentenceIndex, sentenceRow] of sentences.entries()) {
+    const sentence = sentenceRow.text;
+    const sourceSentenceIndex = sentenceRow.sourceSentenceIndex;
     // Retrieval-scoped uncertainty is not a world fact and does not need to be
     // forced into a fabricated claim/citation. Keep factual clauses checked.
     if (czyOgraniczenieDowodowe(sentence)) continue;
@@ -794,7 +800,7 @@ function sprawdzPokrycieClaimamiOdpowiedzi(answer, claims) {
       // nazywa wprost. Zdania też zaimiennicze („Jest postacią Origin…”) podmiotu
       // nie wskazują, więc je pomijamy i szukamy dalej.
       for (let back = sentenceIndex - 1; back >= 0; back--) {
-        const previous = sentences[back];
+        const previous = sentences[back]?.text;
         if (!previous || czyOgraniczenieDowodowe(previous)) continue;
         const previousEntities = wyodrebnijNazwyWlasne(previous);
         if (!previousEntities.length) continue;
@@ -870,7 +876,7 @@ function sprawdzPokrycieClaimamiOdpowiedzi(answer, claims) {
         ? tokenCoverage
         : (hasStrongSemanticCoverage || hasStrongEntityCoverage || hasAnaphoricEntityCoverage ? 0.56 : tokenCoverage));
 
-    if (coverage < 0.55) uncovered.push({ index: sentenceIndex, text: sentence.slice(0, 180) });
+    if (coverage < 0.55) uncovered.push({ index: sourceSentenceIndex, text: sentence.slice(0, 180) });
   }
 
   return {
@@ -993,7 +999,11 @@ function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
     // if claim_en is a verbatim quote, the quote cannot validate its own translation.
     // In that case we abstain until the PL↔EN action can be checked, rather than
     // silently treating a shared character/place name as proof of semantic equivalence.
-    if (sharedConcepts.length === 0) {
+    // Gdy sam claim jest już po angielsku, cytat może być weryfikowany
+    // bezpośrednio przez późniejsze kontrole liczb, negacji, relacji i nazw.
+    // Dla polskiego claimu kopiowanie angielskiego cytatu wymaga jednak
+    // przynajmniej jednego wspólnego pojęcia działania; sama encja nie wystarcza.
+    if (sharedConcepts.length === 0 && !wyglądaNaAngielski(pl)) {
       return { ok: false, reason: powodNiezgodnosci };
     }
     // Do not let one shared concept excuse extra source facts in claim_en.

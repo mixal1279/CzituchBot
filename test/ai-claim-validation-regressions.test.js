@@ -39,3 +39,18 @@ test('answer coverage checks coordinated factual clauses independently', () => {
   assert.equal(result.ok, false, JSON.stringify(result));
   assert.ok(result.uncovered.length > 0, JSON.stringify(result));
 });
+
+test('cross-language translation recognizes release and travel concepts without weakening unknown-action rejection', () => {
+  const release = spojnoscTlumaczeniaClaimu(
+    'Portal 2 został wydany w 2011 roku.',
+    'Portal 2 was released in 2011.',
+    { evidenceQuote: 'Portal 2 was released in 2011.' },
+  );
+  assert.equal(release.ok, true, release.reason);
+  const travel = spojnoscTlumaczeniaClaimu(
+    'Geralt udaje się do Novigradu.',
+    'Geralt travels to Novigrad.',
+    { evidenceQuote: 'Geralt travels to Novigrad.' },
+  );
+  assert.equal(travel.ok, true, travel.reason);
+});
