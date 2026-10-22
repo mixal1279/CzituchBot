@@ -2,12 +2,12 @@
 
 const { buildRetrievalPlan: buildCoreRetrievalPlan } = require('./core');
 
-function initialRetrievalQueryLimit({ causalQuestion = false, multiPart = false, availableSlots = 3 } = {}) {
+function initialRetrievalQueryLimit({ multiPart = false, availableSlots = 3 } = {}) {
   const available = Math.max(0, Math.min(3, Math.floor(Number(availableSlots) || 0)));
-  // A causal single-question needs the direct question plus one dedicated causal
-  // query. A third network request costs ~3-5 seconds and can leave insufficient
-  // time for validation/repair; reserve it for genuinely multi-part questions.
-  const intended = multiPart ? 3 : (causalQuestion ? 2 : 2);
+  // Two searches are enough for a single question. A third network request costs
+  // ~3-5 seconds and can leave insufficient time for validation/repair; reserve
+  // it for genuinely multi-part questions that need evidence for separate clauses.
+  const intended = multiPart ? 3 : 2;
   return Math.min(intended, available);
 }
 
