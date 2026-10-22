@@ -61,3 +61,14 @@ test('ten sam claim z wiernym tłumaczeniem (nie kopią cytatu) też przechodzi'
   );
   assert.equal(wynik.ok, true, JSON.stringify(wynik));
 });
+
+test('copied quote is rejected when it shares an entity but no verifiable action concept', () => {
+  const quote = 'Geralt was born in the city.';
+  const wynik = spojnoscTlumaczeniaClaimu(
+    'Geralt odwiedza miasto.',
+    quote,
+    { evidenceQuote: quote },
+  );
+  assert.equal(wynik.ok, false);
+  assert.match(wynik.reason, /kopiuje cytat/);
+});

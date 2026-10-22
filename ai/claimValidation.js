@@ -980,7 +980,11 @@ function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
     const sharedConcepts = [...polishConcepts].filter(concept => englishConcepts.has(concept));
     // Entity/name overlap alone is not positive evidence that the action agrees:
     // „zniszczył Aperture” must not pass against „took control of Aperture”.
-    if ((polishConcepts.size || englishConcepts.size) && sharedConcepts.length === 0) {
+    // The same applies when the concept dictionary recognizes neither action:
+    // if claim_en is a verbatim quote, the quote cannot validate its own translation.
+    // In that case we abstain until the PL↔EN action can be checked, rather than
+    // silently treating a shared character/place name as proof of semantic equivalence.
+    if (sharedConcepts.length === 0) {
       return { ok: false, reason: powodNiezgodnosci };
     }
     // Do not let one shared concept excuse extra source facts in claim_en.
