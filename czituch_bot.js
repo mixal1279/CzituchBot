@@ -8012,9 +8012,11 @@ function podepnijHandleryEventSub(ws, twitchClient, config) {
         console.warn('[EventSub] ⚠️ Odrzucono nieprawidłowy reconnect_url:', reconnectUrl);
         return;
       }
-      console.log('[EventSub] 🔄 Reconnect URL otrzymany, przełączam...');
+      console.log('[EventSub] 🔄 Reconnect URL otrzymany (zaakceptowany), przełączam...');
       getEventSubState(config.botNick).reconnecting = true;
-      const nowyWs = new WebSocket(bezpiecznyReconnectUrl);
+      // Hardened SSRF fix: endpoint połączenia jest stały i zaufany.
+      // reconnect_url traktujemy wyłącznie jako sygnał/proof od Twitcha, nie jako URL docelowy.
+      const nowyWs = new WebSocket('wss://eventsub.wss.twitch.tv/ws');
       podepnijHandleryEventSub(nowyWs, twitchClient, config);
       getEventSubState(config.botNick).ws = nowyWs;
     }
