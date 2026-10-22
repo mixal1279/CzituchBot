@@ -1,0 +1,216 @@
+'use strict';
+
+// First-class per-claim citation-support audit. This is deliberately separate
+// from answer completeness and factual gold scoring: it measures whether each
+// claim is supported by its own cited span and records why it was not.
+const HARD_OVERCLAIM_TYPES = new Set([
+  'correlation_to_causation',
+  'hedge_to_absolute',
+  'up_to_qualifier_dropped',
+  'unsupported_quantifier',
+]);
+
+function normalizeText(value) {
+  return String(value || '')
+    .toLocaleLowerCase('pl-PL')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/ł/g, 'l')
+    .replace(/[^\p{L}\p{N}%+.\s-]/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function detectOverclaimTypes(claim, evidence, options = {}) {
+  const c = normalizeText(claim);
+  const e = normalizeText(evidence);
+  const context = normalizeText(options.context || '');
+  const types = [];
+  if (!c || !e) return types;
+
+  const causalClaim = /\b(?:because|therefore|caused? by|caus\w*|leads? to|resulted? in|as a result|dzieki temu|z powodu|poniewaz|dlatego|spowod\w*|doprowadz\w*|umozliw\w*)\b/u.test(c);
+  const causalEvidencePattern = /\b(?:because|therefore|caused? by|caus\w*|leads? to|resulted? in|as a result|due to|dzieki temu|z powodu|poniewaz|dlatego|spowod\w*|doprowadz\w*|umozliw\w*|w wyniku|w ten sposob|przez co|co umozliw\w*|putting him in control|put him in control|giving (?:him|her|them|it) control|force(?:s|d|ing)? (?:the )?[\p{L}\p{N}]+(?: [\p{L}\p{N}]+){0,1} to [\p{L}\p{N}]+|allow(?:ed|s)?|enabl\w*|in exchange(?: for)?|in return(?: for)?|w zamian(?: za)?|w rewan[zż]u)\b/u;
+  const causalEvidence = causalEvidencePattern.test(e)
+    || (options.allowContextForCausality === true && causalEvidencePattern.test(context));
+  if (causalClaim && !causalEvidence) types.push('correlation_to_causation');
+
+  const sourceHedged = /\b(?:may|might|could|possibly|potentially|suggests?|appears? to|limited evidence|small study|moze|mozliwe|prawdopodobnie|sugeruje|wstepne dane|niewielkim badaniu)\b/u.test(e);
+  const claimAbsolute = /\b(?:always|never|proves?|guarantees?|definitely|certainly|undoubtedly|all|every|none|must|zawsze|nigdy|dowodzi|udowodniono|gwarantuje|bez watpienia|na pewno|wszyscy|wszystkie|kazdy|kazda|zaden|zadna)\b/u.test(c);
+  const claimHedged = /\b(?:may|might|could|possibly|potentially|suggests?|appears? to|moze|mozliwe|prawdopodobnie|sugeruje|wydaje sie)\b/u.test(c);
+  // A source hedge alone does not make an ordinary declarative claim absolute.
+  // Hard-fail only when the claim itself adds an explicit absolute/guarantee cue.
+  const outcomeVerbPatterns = [
+    /\b(?:improv\w*|popraw\w*)\b/u,
+    /\b(?:increas\w*|zwieksz\w*)\b/u,
+    /\b(?:reduc\w*|zmniejsz\w*)\b/u,
+    /\b(?:caus\w*|powoduj\w*|spowod\w*)\b/u,
+    /\b(?:prevent\w*|zapobieg\w*)\b/u,
+  ];
+  // A hedge plus a generic reporting verb ('shows', 'means') is not enough.
+  // Require the unhedged claim and source to refer to the same outcome/action.
+  const claimStatesSameOutcome = outcomeVerbPatterns.some(pattern => pattern.test(c) && pattern.test(e));
+  const claimAddsUnqualifiedNumber = /\d+(?:[.,]\d+)?\s*%?/u.test(c) && !claimHedged;
+  if (sourceHedged && !claimHedged && (claimAbsolute || claimStatesSameOutcome || claimAddsUnqualifiedNumber)) types.push('hedge_to_absolute');
+
+  // Preserve qualifiers attached to numeric claims. "Up to 30%" is not the
+  // same as an unqualified "30%". The numeric value must occur on both sides.
+  const sourceUpTo = /\b(?:up to|at most|no more than|maximum of|do maksymalnie|maksymalnie do|maksymalnie)\s*\d+(?:[.,]\d+)?\s*%?|\bdo\s+\d+(?:[.,]\d+)?\s*%/u.test(e);
+  const claimHasNumber = /\d+(?:[.,]\d+)?\s*%?/u.test(c);
+  const claimPreservesUpperBound = /\b(?:up to|at most|no more than|maximum of|do maksymalnie|maksymalnie do|maksymalnie)\b|\bdo\s+\d+(?:[.,]\d+)?\s*%/u.test(c);
+  if (sourceUpTo && claimHasNumber && !claimPreservesUpperBound) types.push('up_to_qualifier_dropped');
+
+  const quantifierPatterns = [
+    ['all', /\b(?:all|every|each|everyone|entirely|wszyscy|wszystkie|kazdy|kazda|calosc)\b/u],
+    ['most', /\b(?:most|majority|predominantly|wiekszosc|przewaznie|zdecydowana wiekszosc)\b/u],
+    ['only', /\b(?:only|solely|exclusively|wylacznie|jedynie|tylko)\b/u],
+    ['always', /\b(?:always|never|zawsze|nigdy)\b/u],
+  ];
+  for (const [, pattern] of quantifierPatterns) {
+    if (pattern.test(c) && !pattern.test(e)) {
+      types.push('unsupported_quantifier');
+      break;
+    }
+  }
+
+  const currentClaim = /\b(?:currently|today|as of now|latest|current|nowadays|obecnie|aktualnie|dzisiaj|najnowsz\w*)\b/u.test(c);
+  const years = [...e.matchAll(/\b(?:19|20)\d{2}\b/g)].map(match => Number(match[0]));
+  const newestYear = years.length ? Math.max(...years) : null;
+  const currentEvidence = /\b(?:currently|as of \d{4}|updated|latest|obecnie|aktualizowan\w*|stan na \d{4})\b/u.test(e);
+  if (currentClaim && newestYear !== null && newestYear <= new Date().getUTCFullYear() - 2 && !currentEvidence) {
+    types.push('stale_source_as_current');
+  }
+
+  return [...new Set(types)];
+}
+
+function buildClaimSupportAudit({ claims = [], evidenceEvaluations = [], evidenceQuoteVerified = [], evidenceQuotes = [], evidenceContexts = [] } = {}) {
+  const records = claims.map((claim, index) => {
+    const evaluation = evidenceEvaluations[index] || { ok: false, reason: 'brak lokalnej oceny dowodu' };
+    const quoteVerified = evidenceQuoteVerified[index] === true;
+    // Overclaim rules must inspect the exact cited span, not neighbouring sentences.
+    // A nearby hedge or qualifier about another fact must not change this claim's verdict.
+    const evidence = String(evidenceQuotes[index] || claim?.evidence_quote || '');
+    const evidenceContext = String(evidenceContexts[index] || evidence);
+    const overclaimTypes = detectOverclaimTypes(claim?.claim, evidence, {
+      context: evidenceContext,
+      // Same-source bounded context may resolve a causal relation only when the
+      // structural verifier already accepted that exact claim as source_context.
+      // Never let neighbouring text rescue an exact-quote overclaim.
+      allowContextForCausality: evaluation.ok === true && evaluation.mode === 'source_context',
+    });
+    const hardOverclaims = overclaimTypes.filter(type => HARD_OVERCLAIM_TYPES.has(type));
+    const reason = String(evaluation.reason || claim?.reason || '').slice(0, 500);
+
+    let verdict;
+    if (!claim?.source_ids?.length || !claim?.evidence_quote || !quoteVerified) {
+      verdict = 'unverifiable';
+    } else if (hardOverclaims.length) {
+      verdict = 'unsupported';
+    } else if (evaluation.ok === true) {
+      verdict = evaluation.mode === 'exact_quote' ? 'entailed' : 'partial';
+    } else if (/negacj|sprzeczn|konflikt liczbow|warto[sś][cć] liczbow|relacj[eę] przyczynow[aą]/iu.test(reason)) {
+      verdict = 'contradicted';
+    } else {
+      verdict = 'unsupported';
+    }
+
+    // Normalized citation-level outcome for downstream RAG evaluation.
+    // Keep the legacy verdict above to avoid breaking existing dashboards.
+    const claimSourceVerdict = verdict === 'entailed'
+      ? 'supported'
+      : verdict === 'partial'
+        ? 'partial'
+        : verdict === 'contradicted'
+          ? 'contradicted'
+          : verdict === 'unverifiable'
+            ? 'not_enough_evidence'
+            : 'unsupported_by_cited_source';
+
+    const warnings = overclaimTypes.map(type => ({ type, severity: HARD_OVERCLAIM_TYPES.has(type) ? 'error' : 'warning' }));
+    return {
+      claimIndex: index,
+      claim: String(claim?.claim || '').slice(0, 500),
+      sourceIds: Array.isArray(claim?.source_ids) ? claim.source_ids.slice(0, 5) : [],
+      evidenceQuote: String(claim?.evidence_quote || '').slice(0, 500),
+      evidenceContext: evidenceContext.slice(0, 1200),
+      modelSupported: claim?.supported === true,
+      quoteVerified,
+      localEvidenceVerified: evaluation.ok === true,
+      supportMode: evaluation.mode || null,
+      verdict,
+      claimSourceVerdict,
+      reason: hardOverclaims.length
+        ? 'claim zawiera możliwe nadmierne wnioskowanie: ' + hardOverclaims.join(', ')
+        : reason || (verdict === 'entailed' ? 'cytat bezpośrednio wspiera claim' : 'brak wystarczającego wsparcia w przypisanym cytacie'),
+      overclaimTypes,
+      warnings,
+    };
+  });
+
+  const total = records.length;
+  const count = verdict => records.filter(record => record.verdict === verdict).length;
+  const entailed = count('entailed');
+  const partial = count('partial');
+  const unsupported = count('unsupported');
+  const contradicted = count('contradicted');
+  const unverifiable = count('unverifiable');
+  return {
+    version: 1,
+    unit: 'claim_cited_span',
+    totalClaims: total,
+    verdictCounts: { entailed, partial, unsupported, contradicted, unverifiable },
+    claimSourceVerdictCounts: {
+      supported: records.filter(record => record.claimSourceVerdict === 'supported').length,
+      partial: records.filter(record => record.claimSourceVerdict === 'partial').length,
+      contradicted: records.filter(record => record.claimSourceVerdict === 'contradicted').length,
+      not_enough_evidence: records.filter(record => record.claimSourceVerdict === 'not_enough_evidence').length,
+      unsupported_by_cited_source: records.filter(record => record.claimSourceVerdict === 'unsupported_by_cited_source').length,
+    },
+    // Strict pass rate counts only claims directly entailed by their exact span.
+    claimSupportPassRate: total ? Number((entailed / total).toFixed(4)) : null,
+    // Usable rate is reported separately so bounded-context/paraphrase support
+    // never gets silently mixed into strict citation support.
+    claimSupportUsableRate: total ? Number(((entailed + partial) / total).toFixed(4)) : null,
+    overclaimCounts: Object.fromEntries([...new Set(records.flatMap(record => record.overclaimTypes))].sort().map(type => [
+      type, records.filter(record => record.overclaimTypes.includes(type)).length,
+    ])),
+    records,
+  };
+}
+
+function summarizeClaimSupportAudits(audits) {
+  const valid = (Array.isArray(audits) ? audits : []).filter(audit => audit && Number.isFinite(audit.totalClaims));
+  const records = valid.flatMap(audit => Array.isArray(audit.records) ? audit.records : []);
+  const count = verdict => records.filter(record => record.verdict === verdict).length;
+  const total = records.length;
+  const overclaimTypes = [...new Set(records.flatMap(record => record.overclaimTypes || []))].sort();
+  return {
+    version: 1,
+    unit: 'claim_cited_span',
+    totalClaims: total,
+    verdictCounts: {
+      entailed: count('entailed'),
+      partial: count('partial'),
+      unsupported: count('unsupported'),
+      contradicted: count('contradicted'),
+      unverifiable: count('unverifiable'),
+    },
+    claimSourceVerdictCounts: Object.fromEntries(
+      ['supported', 'partial', 'contradicted', 'not_enough_evidence', 'unsupported_by_cited_source'].map(verdict => [
+        verdict, records.filter(record => record.claimSourceVerdict === verdict).length,
+      ]),
+    ),
+    claimSupportPassRate: total ? Number((count('entailed') / total).toFixed(4)) : null,
+    claimSupportUsableRate: total ? Number(((count('entailed') + count('partial')) / total).toFixed(4)) : null,
+    overclaimCounts: Object.fromEntries(overclaimTypes.map(type => [type, records.filter(record => (record.overclaimTypes || []).includes(type)).length])),
+    records,
+  };
+}
+
+module.exports = {
+  HARD_OVERCLAIM_TYPES,
+  normalizeText,
+  detectOverclaimTypes,
+  buildClaimSupportAudit,
+  summarizeClaimSupportAudits,
+};

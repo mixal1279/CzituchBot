@@ -93,6 +93,33 @@ const GENERATION_FALLBACK_CHAIN = [
   'xkiro:default',
   'openrouter:default',
 ];
+// Semantic repair is latency- and budget-sensitive. The normal generation
+// chain above stays unchanged; only the repair path uses this preference.
+//
+// Kolejność ma tu znaczenie wykonawcze: na cykl repairu mieści się JEDNA próba
+// dostawcy (próg 13,5 s = 3 s na próbę + 10,5 s rezerwy na walidator), więc
+// pierwszy kandydat musi być tym, który faktycznie odpowiada.
+//
+// UWAGA: to hipoteza oparta na JEDNYM przebiegu live benchmarku (2026-10-21,
+// 5 przypadków), a nie zmierzony ranking. W tym przebiegu Gemini nie zwrócił
+// żadnego werdyktu (5× „unavailable”, 3× błąd; wywołania 5,0–29,5 s), xKiro
+// również (3× błąd, 1× „unavailable”; 4,5–29,5 s), a jedynym dostawcą, który
+// odpowiadał, był Groq (5× sukces). Liczby te pochodzą z logu tego przebiegu;
+// nie należy do nich odnosić „12 s”, które było SKONFIGUROWANYM limitem
+// Gemini, a nie zmierzonym czasem.
+//
+// Właściwym zabezpieczeniem jest circuit breaker (Gemini raportuje teraz wynik
+// do breakera), a nie sama kolejność. Kolejność porządkuje jedynie to, który
+// kandydat dostanie szansę w pierwszej próbie — po awarii providera breaker
+// przeskakuje go niezależnie od pozycji na liście.
+const REPAIR_FALLBACK_PREFERENCE = [
+  'groq:openai/gpt-oss-20b',
+  'groq:openai/gpt-oss-120b',
+  'gemini:gemini-3.5-flash-lite',
+  'xkiro:default',
+  'openrouter:default',
+  'gemini:gemini-3.8-flash',
+];
 
 function configuredMaxFallbackSteps(value = process.env.AI_MAX_FALLBACK_STEPS) {
   if (value == null || String(value).trim() === '') return GENERATION_FALLBACK_CHAIN.length;
@@ -247,6 +274,18 @@ function markProviderQuota(provider, cooldownMs = Number(process.env.AI_PROVIDER
   return [endpoint];
 }
 
+function shouldBlockProviderQuotaWide(provider, error) {
+  const endpoint = normalizeProviderEndpoint(provider);
+  if (!endpoint) return false;
+  const providerName = endpoint.slice(0, endpoint.indexOf(':'));
+  if (providerName !== 'groq') return false;
+  const message = String(error?.message || error || '');
+  // Groq TPM/TPD limits are shared across model IDs. Blocking only the 120B
+  // endpoint causes the fallback chain to immediately hit the same exhausted
+  // account quota on 20B. Keep model-specific errors endpoint-scoped.
+  return /tokens?\s*(?:per|\/)\s*(?:minute|day)|\bTP[MD]\b|(?:organization|account|project).{0,40}(?:quota|rate.?limit)/i.test(message);
+}
+
 function isProviderQuotaBlocked(provider, now = Date.now()) {
   const endpoint = normalizeProviderEndpoint(provider);
   if (!endpoint) return false;
@@ -281,12 +320,15 @@ function nextFallbacks({ failure = 'unknown', attempted = [], failedProviders = 
 function selectRepairFallbacks({ failedProviders = [], exclude = [], availableProviders = null, maxFallbacks = 1 } = {}) {
   const blocked = new Set([...(failedProviders || []), ...(exclude || [])]);
   const available = Array.isArray(availableProviders) ? new Set(availableProviders) : null;
-  return nextFallbacks({
+  const candidates = nextFallbacks({
     failure: 'grounded_reject',
     failedProviders: [...blocked],
     maxFallbacks: GENERATION_FALLBACK_CHAIN.length,
   })
-    .filter(provider => !available || available.has(provider))
+    .filter(provider => !available || available.has(provider));
+  const preference = new Map(REPAIR_FALLBACK_PREFERENCE.map((provider, index) => [provider, index]));
+  return candidates
+    .sort((a, b) => (preference.get(a) ?? REPAIR_FALLBACK_PREFERENCE.length) - (preference.get(b) ?? REPAIR_FALLBACK_PREFERENCE.length))
     .slice(0, Math.max(0, Number(maxFallbacks) || 0));
 }
 
@@ -339,6 +381,7 @@ function shouldRetryFailure(failure) {
 
 module.exports = {
   GENERATION_FALLBACK_CHAIN,
+  REPAIR_FALLBACK_PREFERENCE,
   configuredMaxFallbackSteps,
   resetProviderQuotaCooldowns,
   quotaCooldownMsFromError,
@@ -348,6 +391,7 @@ module.exports = {
   shouldOpenQuotaCircuit,
   markProviderQuota,
   isProviderQuotaBlocked,
+  shouldBlockProviderQuotaWide,
   classifyFailure,
   nextFallbacks,
   selectRepairFallbacks,

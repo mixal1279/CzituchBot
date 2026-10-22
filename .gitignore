@@ -7,3 +7,4 @@ credentials*.json
 ai_verified_memory.json
 tavily_cache.json
 tavily_cache.json.tmp-*
+node_modules/

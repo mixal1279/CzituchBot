@@ -213,6 +213,10 @@ function resolveGameEntity(text) {
       name: character.entry.name,
       confidence: Math.max(0.65, character.confidence - ambiguityPenalty),
       game: character.entry.game,
+      // Typ rozpoznanej GRY (nie typ dopasowanego aliasu). Gdy encją raportowaną
+      // jest gra, entity_type musi ją opisywać — inaczej routing traktuje tytuł
+      // gry jak postać i traci profil domen oraz twardą encję docelową.
+      game_type: game?.entry?.type || 'game',
       matchedAlias: character.alias,
       resolution: ambiguityPenalty ? 'deterministic_ambiguous' : 'deterministic',
     };

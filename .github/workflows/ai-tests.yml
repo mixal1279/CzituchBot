@@ -32,7 +32,7 @@ jobs:
 
       - name: Run AI regression tests
         run: |
-          npm install
+          npm ci
           npm test
 
       - name: Syntax check AI modules
@@ -72,8 +72,16 @@ jobs:
             git ls-tree -r --name-only "$HEAD_SHA" > /tmp/changed-files.txt
             : > artifact/deleted-files.txt
           else
-            git diff --name-only --diff-filter=ACMR "$BASE_SHA" "$HEAD_SHA" > /tmp/changed-files.txt
-            git diff --name-only --diff-filter=D "$BASE_SHA" "$HEAD_SHA" > artifact/deleted-files.txt
+            # Force-push może unieważnić bazowy SHA (exit 128); w takim wypadku
+            # traktujemy jak pierwszy push i pakujemy całe drzewo.
+            if ! git cat-file -e "$BASE_SHA^{commit}" 2>/dev/null; then
+              echo "::warning::Base SHA $BASE_SHA nie istnieje w repo (prawdopodobnie force-push); pakuję całe drzewo."
+              git ls-tree -r --name-only "$HEAD_SHA" > /tmp/changed-files.txt
+              : > artifact/deleted-files.txt
+            else
+              git diff --name-only --diff-filter=ACMR "$BASE_SHA" "$HEAD_SHA" > /tmp/changed-files.txt
+              git diff --name-only --diff-filter=D "$BASE_SHA" "$HEAD_SHA" > artifact/deleted-files.txt
+            fi
           fi
 
           while IFS= read -r file; do

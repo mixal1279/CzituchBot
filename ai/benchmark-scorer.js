@@ -42,8 +42,15 @@ function scoreGoldenFacts(answer, factual) {
     const ok = group.every(phrase => phraseMatches(text, phrase));
     if (!ok) missing.push(group);
   }
+  // Some facts have several equally valid source-grounded descriptions (e.g.
+  // two nearby landmarks or inflected forms of the same item). Each group in
+  // mustIncludeAny is one requirement; any phrase in that group satisfies it.
+  for (const group of factual.mustIncludeAny || []) {
+    const ok = group.some(phrase => phraseMatches(text, phrase));
+    if (!ok) missing.push(group);
+  }
   const forbidden = (factual.mustNot || []).filter(phrase => phraseMatches(text, phrase));
-  const includedTotal = (factual.mustInclude || []).length;
+  const includedTotal = (factual.mustInclude || []).length + (factual.mustIncludeAny || []).length;
   const forbiddenTotal = (factual.mustNot || []).length;
   const total = includedTotal + forbiddenTotal;
   const score = total

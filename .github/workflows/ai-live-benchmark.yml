@@ -23,6 +23,7 @@ jobs:
 
     env:
       AI_LIVE_BENCHMARK: "1"
+      AI_ALLOW_PARTIAL_ANSWERS: "1"
       AI_BENCHMARK_LIMIT: "5"
       AI_BENCHMARK_DELAY_MS: "5000"
       AI_BENCHMARK_SEED: ${{ inputs.seed || '0' }}
@@ -52,7 +53,7 @@ jobs:
           node-version: 24
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
       - name: Preflight Tavily
         run: node scripts/tavily-preflight.js
       - name: Preflight Groq
@@ -75,11 +76,19 @@ jobs:
             const d = r.diagnostics || {};
             const lines = [
               "## AI live benchmark",
-              r.valid === false ? "**WYNIK NIEWAŻNY: Groq niedostępny lub limit dzienny wyczerpany.**" : "",
+              r.valid === false ? "**WYNIK NIEWAŻNY: niedostępność dostawcy: " + ((d.outageProviders || []).join(", ") || "nieustalony") + ".**" : "",
               "- przypadków: " + r.total + " (ziarno " + (r.seed || 0) + ")",
               "- odpowiedzi: " + r.answeredAccuracy + ", kompletność: " + r.completenessAccuracy + ", factual: " + r.factualAccuracy,
-              "- błędy providerów: " + ((d.providerFailures || []).join(", ") || "brak"),
+              "- claim-source support: ścisłe=" + r.claimSupportPassRate + ", użyteczne=" + r.claimSupportUsableRate,
+              "- claim-source werdykty: " + Object.entries((r.claimSupport || {}).claimSourceVerdictCounts || {}).map(([k, v]) => k + "=" + v).join(", "),
+              "- błędy generatora: " + ((d.generationProviderFailures || []).join(", ") || "brak"),
+              "- dostawcy zdegradowani: " + ((d.degradedProviders || []).join(", ") || "brak"),
+              "- porównywalność jakości: " + (d.qualityComparable ? "tak" : "nie — metryki ograniczone przez dostawców"),
+              "- ograniczenia jakości: " + ((d.qualityDegradationReasons || []).join(", ") || "brak"),
               "- odrzucone przez walidator: " + d.validatorRejected + ", niejednoznaczne: " + d.validatorInconclusive,
+              "- odrzucone odpowiedzi zaakceptowane przez judge: " + (r.discardedJudgeAcceptedCount || 0) + " (" + ((r.discardedJudgeAcceptedCaseIds || []).join(", ") || "brak") + "), z poprawnymi gold facts: " + (r.discardedJudgeAcceptedFactualPassedCount || 0),
+              "- wywołania walidatora: " + d.validatorCalls + ", pominięte: " + (d.validatorSkipped || 0) + ", niedostępne: " + d.validatorUnavailable,
+              "- klasy wyników: " + Object.entries(d.outcomeCounts || {}).map(([k, v]) => k + "=" + v).join(", "),
               "",
               "| przypadek | odpowiedź | judge | status końcowy |",
               "|---|---|---|---|",

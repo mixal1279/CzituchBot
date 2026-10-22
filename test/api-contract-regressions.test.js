@@ -30,14 +30,34 @@ test('Gemini validator and generation fallbacks use documented GenerateContent f
   assert.match(source, /systemInstruction:\s*\{\s*parts:/s);
   assert.equal((source.match(/systemInstruction:\s*\{\s*parts:\s*\[\{\s*text:\s*overrideSystemPrompt\s*\}\]\s*\}/g) || []).length, 2, 'both Gemini generation fallbacks must send the system instruction');
   assert.doesNotMatch(source, /system_instruction:/);
-  assert.match(source, /responseFormat:\s*\{\s*text:\s*\{\s*mimeType:\s*'application\/json',\s*schema:\s*GEMINI_VALIDATOR_JSON_SCHEMA/s);
+  // Gemini v1beta TextResponseFormat.MimeType jest polem enum (UPPER_SNAKE_CASE)
+  assert.match(source, /responseFormat:\s*\{\s*text:\s*\{\s*mimeType:\s*'APPLICATION_JSON',\s*schema:\s*GEMINI_VALIDATOR_JSON_SCHEMA/s);
   assert.doesNotMatch(source, /responseMimeType:\s*'application\/json'/);
   assert.doesNotMatch(source, /responseSchema:\s*GEMINI_VALIDATOR_JSON_SCHEMA/);
+  assert.doesNotMatch(source, /mimeType:\s*'application\/json'/);  // enum wymaga wielkich liter
   assert.doesNotMatch(source, /generationConfig:\s*\{\s*temperature:/, 'Gemini 3.x GenerateContent requests must omit deprecated sampling parameters');
   const webRetrieval = read('ai/webRetrieval.js');
   assert.doesNotMatch(webRetrieval, /generationConfig:\s*\{\s*temperature:/, 'Gemini web retrieval must omit deprecated sampling parameters');
   assert.match(source, /model === 'gemini-3\.8-flash'[\s\S]{0,100}\{ thinkingLevel: 'low' \}/);
   assert.match(source, /model === 'gemini-3\.5-flash-lite'[\s\S]{0,120}\{ thinkingLevel: 'minimal' \}/);
+});
+
+test('repair budget matches the provider timeout and logs never expose generated text', () => {
+  const source = read('czituch_bot.js');
+  assert.match(source, /const minRepairGenerationBudgetMs = 13_500/);
+  assert.doesNotMatch(source, /końcówka surowego tekstu=/);
+  assert.match(source, /generator zwrócił etykietę EVIDENCE CANDIDATE/);
+});
+
+test('validator repair prompt uses real newline separators and asks for a faithful claim_en translation', () => {
+  const source = read('czituch_bot.js');
+  const start = source.indexOf('const feedback = [', source.indexOf('const evidenceRepairContext'));
+  const end = source.indexOf('const promptRetry =', start);
+  assert.ok(start >= 0 && end > start, 'validator repair prompt should exist');
+  const branch = source.slice(start, end);
+  assert.match(branch, /Pole claim_en musi być wiernym tłumaczeniem/);
+  assert.match(branch, /\]\.join\('\\n'\);/);
+  assert.doesNotMatch(branch, /\]\.join\('\\\\n'\);/, 'validator repair prompt must not contain literal backslash-n separators');
 });
 
 test('answer-completeness repair includes the prior answer and uses real line separators', () => {
@@ -77,7 +97,7 @@ test('primary generation honors AI_GENERATOR_MODEL and checks quota cooldown bef
 
 test('validator provider preflight uses production timeout budgets', () => {
   const source = read('scripts/validator-providers-preflight.js');
-  assert.match(source, /xKiro:\s*Number\(process\.env\.AI_XKIRO_VALIDATOR_TIMEOUT_MS\)\s*\|\|\s*3000/);
+  assert.match(source, /xKiro:\s*Number\(process\.env\.AI_XKIRO_VALIDATOR_TIMEOUT_MS\)\s*\|\|\s*4500/);
   assert.match(source, /OpenRouter:\s*3000/);
   assert.match(source, /Groq:\s*3000/);
   assert.match(source, /result\.ms > productionTimeoutMs/);
@@ -160,7 +180,9 @@ test('Groq SDK and preflight honor GROQ_BASE_URL with the documented default', (
   const source = read('czituch_bot.js');
   const preflight = read('scripts/groq-preflight.js');
   assert.ok(source.includes('groqBaseUrl: String(process.env.GROQ_BASE_URL'));
-  assert.ok(source.includes('baseURL: KONFIGURACJA.groqBaseUrl'));
+  assert.ok(source.includes('baseURL: normalizeGroqSdkBaseUrl(KONFIGURACJA.groqBaseUrl)'));
+  const runtime = read('ai/provider-runtime.js');
+  assert.ok(runtime.includes(".replace(/\\/openai\\/v1$/i, '')"), 'SDK base URL strips /openai/v1 to avoid a duplicated endpoint path');
   assert.ok(preflight.includes('process.env.GROQ_BASE_URL'));
   assert.ok(preflight.includes('/chat/completions'));
 });

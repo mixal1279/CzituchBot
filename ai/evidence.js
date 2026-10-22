@@ -186,7 +186,7 @@ function tokenOverlap(a, b) {
 
 function classifyClaimType(claim) {
   const text = normalizeEvidenceText(claim);
-  if (/(?:dlaczego|why|powod\w*|przyczyn\w*|motyw\w*|doprowadz\w*|spowod\w*|zmusz\w*|umożliw\w*|umozliw\w*|poniewa[zż]|dlatego|bo |z powodu|w celu|po tym\s*,?\s*jak|wskutek|w efekcie|przez pomylk\w*|przez przypadek|because|due to|therefore|accidentally|by mistake)/i.test(text)) return 'causal';
+  if (/(?:dlaczego|why|powod\w*|przyczyn\w*|motyw\w*|doprowadz\w*|spowod\w*|zmusz\w*|umożliw\w*|umozliw\w*|poniewa[zż]|dlatego|bo |z powodu|po tym\s*,?\s*jak|wskutek|w efekcie|przez pomylk\w*|przez przypadek|because|due to|therefore|caus\w*|led to|resulted in|resulting in|accidentally|by mistake)/i.test(text)) return 'causal';
   if (/(?:jak |w jaki sposób|how |sposob\w*|instrukcj\w*|krok\w*|walkthrough|guide)/i.test(text)) return 'procedural';
   if (/(?:kiedy|when |rok\b|data|dzien\w*|today|yesterday|tomorrow)/i.test(text)) return 'temporal';
   if (/(?:gdzie|where |lokacj\w*|miejsce)/i.test(text)) return 'location';
@@ -199,7 +199,7 @@ function classifyClaimType(claim) {
 function evidenceRelationSignals(value) {
   const text = normalizeEvidenceText(value);
   return {
-    causal: /\b(?:bo|poniewaz|gdyz|dlatego|przez|dzieki|because|therefore|accidentally)\b|\bz powodu\b|\b(?:spowod\w*|doprowadz\w*|umozliw\w*|caus\w*|regain\w*|reactivat\w*)\b|\bdue to\b|\bled to\b|\blead\w*(?:\s+\w+){0,3}\s+to\b|\bso that\b|\bso\s+(?:approach|use|avoid|keep|stay|choose|take|do|be)\b|\bby mistake\b|\bodzysk\w*\s+kontrol\w*\b|\buruchom\w*\s+ponownie\b/i.test(text),
+    causal: /\b(?:bo|poniewaz|gdyz|dlatego|przez|dzieki|because|therefore|accidentally)\b|\bz powodu\b|\b(?:spowod\w*|doprowadz\w*|umozliw\w*|caus\w*|regain\w*|reactivat\w*|w ten sposob|przez co|co umozliw\w*|which in turn|motyw\w*|zmusz\w*|powoduj\w*|przyczyn\w*|wskutek|w efekcie)\b|\bdue to\b|\bled to\b|\blead\w*(?:\s+\w+){0,3}\s+to\b|\bso\s+(?:approach|use|avoid|keep|stay|choose|take|do|be)\b|\bby mistake\b|\bodzysk\w*\s+kontrol\w*\b|\buruchom\w*\s+ponownie\b/i.test(text),
     procedural: /\b(?:najpierw|nastepnie|potem|krok\w*|steps?|first|then|after|before|use|uzyj|kliknij|click|walkthrough)\b|\binstrukcj\w*\b/i.test(text),
     temporal: /\b(?:19|20)\d{2}\b|\b(?:(?:stycz|lut|marz|marc|kwiet|kwiec|maj|czerw|lip|sierp|wrzes|pazdz|listopad|grudzi|grudn|grudz)\w*|wczoraj|dzis\w*|jutro|today|yesterday|tomorrow)\b/i.test(text),
     location: /\b(?:w|na|near|located|location|area|region|city|miasto)\b|\b(?:znajduj\w*|lokacj\w*|miejsce\w*)\b/i.test(text),
@@ -349,6 +349,34 @@ function buildEvidenceCandidatesFromSources(sources, question = '', options = {}
     }));
 }
 
+function causalRelationAnchorsMatch(claim, quote) {
+  const normalizedClaim = normalizeEvidenceText(claim);
+  const normalizedQuote = normalizeEvidenceText(quote);
+  const marker = /\b(?:because of|because|due to|therefore|as a result|caused? by|caus\w*|led to|resulted in|poniewaz|bo|dlatego|spowod\w*|doprowadz\w*|dzieki temu|w wyniku|w ten sposob|przez co|co umozliw\w*|which in turn|motyw\w*|zmusz\w*|powoduj\w*|przyczyn\w*|wskutek|w efekcie)\b/u;
+  const match = marker.exec(normalizedClaim);
+  if (!match) return false;
+  let claimLeft = '';
+  let claimRight = '';
+  if (/^(?:because|because of|due to|poniewaz|bo)\b/u.test(normalizedClaim)) {
+    const parts = normalizedClaim.split(/,|;|\bthen\b|\bto\b/u, 2);
+    claimLeft = parts[0].replace(marker, ' ');
+    claimRight = parts[1] || '';
+  } else {
+    claimLeft = normalizedClaim.slice(0, match.index);
+    claimRight = normalizedClaim.slice(match.index + match[0].length);
+  }
+  const stop = new Set(['that','this','with','from','into','then','than','when','what','which','were','was','have','has','had','the','and','for','but','not','because']);
+  const tokens = value => [...new Set(normalizeEvidenceText(value).split(' ').filter(token => token.length >= 4 && !stop.has(token)))];
+  const left = tokens(claimLeft);
+  const right = tokens(claimRight);
+  const quoteTokens = new Set(tokens(normalizedQuote));
+  const leftMatches = left.filter(token => quoteTokens.has(token));
+  const rightMatches = right.filter(token => quoteTokens.has(token));
+  // Require at least one anchor from each side and two material anchors total;
+  // a nearby but unrelated "because..." sentence cannot borrow the claim's nouns.
+  return leftMatches.length > 0 && rightMatches.length > 0 && leftMatches.length + rightMatches.length >= 3;
+}
+
 function buildEvidenceRepairContext(claims, blocks, allowedSourceIds = null, maxClaims = 4) {
   const rows = [];
   for (const claim of (Array.isArray(claims) ? claims : []).slice(0, maxClaims)) {
@@ -364,10 +392,14 @@ function buildEvidenceRepairContext(claims, blocks, allowedSourceIds = null, max
       allowedSourceIds,
       limit: 6,
     })
+      // Defense in depth: never pass a disconnected source fragment to repair.
+      // The final validator still checks exact source binding independently.
+      .filter(candidate => !/\[\s*(?:\.{3}|…)\s*\]|\.\.\.|…/u.test(String(candidate.quote || '')))
       .filter(candidate => Number(candidate.score) >= 0.10)
       .filter(candidate => !claimIsCausal
-        || (candidate.relationMatch && evidenceRelationSignals(candidate.evidence_quote).causal)
-        || Number(candidate.semanticMatches) >= 1)
+        || (candidate.relationMatch === true
+          && evidenceRelationSignals(candidate.evidence_quote).causal
+          && causalRelationAnchorsMatch(claimText, candidate.evidence_quote)))
 
       .filter(candidate => !claimIsSourceMeta)
       .slice(0, 2);
