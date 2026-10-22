@@ -77,7 +77,7 @@ const { planAIRequest, responseContract, RESPONSE_PROFILES, buildRetrievalQuerie
 const { resolveGameEntity, scoreExternalGameCandidate, externalGameCandidateMatchesQuery } = require('./ai/entities');
 const { extractExplicitUserMemories, mergeMemoryRecords, buildVerifiedMemoryContext, pruneExpiredMemories } = require('./ai/memory');
 const { parseMemoryCommand, forgetMemories, describeMemories } = require('./ai/memory_manager');
-const { decomposeQuestion, isMultiPartQuestion, buildAdvancedRetrievalPlan, buildSupplementalRetrievalQuery, selectRetrievalQueries } = require('./ai/retrieval');
+const { decomposeQuestion, isMultiPartQuestion, buildAdvancedRetrievalPlan, buildSupplementalRetrievalQuery, selectRetrievalQueries, initialRetrievalQueryLimit } = require('./ai/retrieval');
 const { classifyFailure, nextFallbacks, selectRepairFallbacks, filterAvailableFallbacks, repairBudgetBlockReason, GENERATION_FALLBACK_CHAIN, configuredMaxFallbackSteps, markProviderQuota, isProviderQuotaBlocked, shouldBlockProviderQuotaWide, quotaCooldownMsFromError, geminiGenerationCooldownMsFromError, retryAfterHint, openRouterErrorMessage, shouldOpenQuotaCircuit } = require('./ai/fallback');
 const { normalizeGroqBaseUrl, createGroqCompletion, createGroqCompletionWithSchemaFallback, awaitWithAbortTimeout, computeValidatorTimeout, computeValidatorReserveMs, computeGenerationTimeout, normalizeGroqSdkBaseUrl, INITIAL_VALIDATOR_REPAIR_RESERVE_MS, shouldAttemptUnavailableRepair } = require('./ai/provider-runtime');
 const { createAIMetrics, recordAIMetric, snapshotAIMetrics } = require('./ai/metrics');
@@ -3110,10 +3110,11 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
       // Proste pytania nie potrzebują trzech kosztownych wyszukiwań. Trzecie
       // zapytanie zachowujemy tylko dla pytań przyczynowych lub wieloczęściowych,
       // gdzie osobne evidence realnie poprawia kompletność odpowiedzi.
-      maxQueries: Math.min(3,
-        (answerPlan.causalQuestion || pytanieWieloczlonowe) ? 3 : 2,
-        Math.max(0, aiState.maxWyszukanTavily - aiState.tavilySearches),
-      ),
+      maxQueries: initialRetrievalQueryLimit({
+        causalQuestion: answerPlan.causalQuestion,
+        multiPart: pytanieWieloczlonowe,
+        availableSlots: Math.max(0, aiState.maxWyszukanTavily - aiState.tavilySearches),
+      }),
     });
     const kolejkaTavily = planowaneQueryRetrieval.length
       ? planowaneQueryRetrieval
