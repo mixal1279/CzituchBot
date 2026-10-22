@@ -274,6 +274,18 @@ function markProviderQuota(provider, cooldownMs = Number(process.env.AI_PROVIDER
   return [endpoint];
 }
 
+function shouldBlockProviderQuotaWide(provider, error) {
+  const endpoint = normalizeProviderEndpoint(provider);
+  if (!endpoint) return false;
+  const providerName = endpoint.slice(0, endpoint.indexOf(':'));
+  if (providerName !== 'groq') return false;
+  const message = String(error?.message || error || '');
+  // Groq TPM/TPD limits are shared across model IDs. Blocking only the 120B
+  // endpoint causes the fallback chain to immediately hit the same exhausted
+  // account quota on 20B. Keep model-specific errors endpoint-scoped.
+  return /tokens?\s*(?:per|\/)\s*(?:minute|day)|\bTP[MD]\b|(?:organization|account|project).{0,40}(?:quota|rate.?limit)/i.test(message);
+}
+
 function isProviderQuotaBlocked(provider, now = Date.now()) {
   const endpoint = normalizeProviderEndpoint(provider);
   if (!endpoint) return false;
@@ -379,6 +391,7 @@ module.exports = {
   shouldOpenQuotaCircuit,
   markProviderQuota,
   isProviderQuotaBlocked,
+  shouldBlockProviderQuotaWide,
   classifyFailure,
   nextFallbacks,
   selectRepairFallbacks,

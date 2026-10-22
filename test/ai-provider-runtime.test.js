@@ -3,7 +3,7 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
 const { createGroqCompletion, createGroqCompletionWithSchemaFallback, isGroqSchemaValidationError, awaitWithAbortTimeout, computeValidatorTimeout, computeValidatorReserveMs, computeGenerationTimeout, INITIAL_VALIDATOR_REPAIR_RESERVE_MS, shouldAttemptUnavailableRepair } = require('../ai/provider-runtime');
-const { classifyFailure, shouldRetryFailure, nextFallbacks, selectRepairFallbacks, filterAvailableFallbacks, repairBudgetBlockReason, resetProviderQuotaCooldowns, markProviderQuota, isProviderQuotaBlocked, quotaCooldownMsFromError, retryAfterHint, configuredMaxFallbackSteps, shouldOpenQuotaCircuit } = require('../ai/fallback');
+const { classifyFailure, shouldRetryFailure, nextFallbacks, selectRepairFallbacks, filterAvailableFallbacks, repairBudgetBlockReason, resetProviderQuotaCooldowns, markProviderQuota, isProviderQuotaBlocked, shouldBlockProviderQuotaWide, quotaCooldownMsFromError, retryAfterHint, configuredMaxFallbackSteps, shouldOpenQuotaCircuit } = require('../ai/fallback');
 
 test('Groq request body never contains signal; AbortSignal is passed in SDK transport options', async () => {
   const controller = new AbortController();
@@ -396,4 +396,11 @@ test('a shorter later quota error cannot shorten an active provider cooldown', (
   markProviderQuota(provider, 1000);
   assert.equal(isProviderQuotaBlocked(provider, checkAt), true);
   resetProviderQuotaCooldowns();
+});
+
+test('shared Groq TPM/TPD quota blocks sibling model fallbacks, model-specific quota does not', () => {
+  assert.equal(shouldBlockProviderQuotaWide('groq:openai/gpt-oss-120b', 'Rate limit exceeded: 6000 TPM'), true);
+  assert.equal(shouldBlockProviderQuotaWide('groq:openai/gpt-oss-20b', 'tokens per minute quota exceeded'), true);
+  assert.equal(shouldBlockProviderQuotaWide('groq:openai/gpt-oss-120b', 'model-specific quota exceeded'), false);
+  assert.equal(shouldBlockProviderQuotaWide('openrouter:default', 'TPM quota exceeded'), false);
 });
