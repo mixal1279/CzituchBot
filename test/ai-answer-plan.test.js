@@ -216,6 +216,14 @@ test('location-only gameplay exemption recognizes inflected procedure terms', ()
   assert.ok(!locationOnly.requirements.some(x => x.id === 'steps'));
 });
 
+test('gameplay answer guidance names the scoped encounter instead of overgeneralizing', () => {
+  const plan = buildAnswerPlan('Jak pokonać smoka?', {
+    intent: 'web_fact', is_gameplay: true, game: 'Skyrim',
+  });
+  assert.match(plan.instruction, /konkretnego bossa/);
+  assert.match(plan.instruction, /Skyrim/);
+});
+
 test('v26 judge rejects generic relationship answer', () => {
   const plan = buildAnswerPlan('Jaka jest relacja Geralta i Yennefer?', {
     intent:'web_fact', is_lore:true, entity:'Geralt', game:'The Witcher 3',
@@ -226,10 +234,12 @@ test('v26 judge rejects generic relationship answer', () => {
 });
 
 
-test('response contract forbids redundant source narration that creates uncovered sentences', () => {
+test('response contract forbids redundant narration and preserves scope and uncertainty', () => {
   const contract = responseContract('lore');
   assert.match(contract, /Nie dodawaj metakomentarzy.*źródło potwierdza/s);
   assert.match(contract, /nie dopisuj końcowego podsumowania/s);
+  assert.match(contract, /dokładny zakres źródła/);
+  assert.match(contract, /Zachowuj niepewność źródła/);
 });
 
 test('retrieval planner adds location-specific queries for landmark answers', () => {
@@ -254,11 +264,17 @@ test('retrieval planner targets character identity for who questions', () => {
   assert.ok(queries.some(q => /character identity background role companion/i.test(q)), JSON.stringify(queries));
 });
 
-test('retrieval planner targets cause and motivation for why questions', () => {
-  const queries = buildRetrievalQueries('Dlaczego Wheatley przejął kontrolę nad GLaDOS?', {
+test('retrieval planner targets Portal core-transfer lore only in its own game context', () => {
+  const portalQueries = buildRetrievalQueries('Dlaczego Wheatley przejął kontrolę nad GLaDOS?', {
     intent: 'web_fact', is_lore: true, entity: 'Wheatley', game: 'Portal 2', needs_web: true,
   });
-  assert.ok(queries.some(q => /cause reason motivation event core transfer/i.test(q)), JSON.stringify(queries));
+  assert.ok(portalQueries.some(q => /cause reason motivation event core transfer/i.test(q)), JSON.stringify(portalQueries));
+
+  const skyrimQueries = buildRetrievalQueries('Dlaczego Dragonborn został wciągnięty w konflikt ze smokami?', {
+    intent: 'web_fact', is_lore: true, entity: 'Dragonborn', game: 'Skyrim', needs_web: true,
+  });
+  assert.ok(skyrimQueries.some(q => /cause reason motivation story conflict lore/i.test(q)), JSON.stringify(skyrimQueries));
+  assert.ok(!skyrimQueries.some(q => /core transfer/i.test(q)), JSON.stringify(skyrimQueries));
 });
 
 test('retrieval selection prioritizes intent-specific evidence over generic profile queries', () => {

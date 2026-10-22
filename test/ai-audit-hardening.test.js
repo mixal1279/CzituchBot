@@ -218,10 +218,10 @@ test('quality gate accepts a concise complete lore answer but rejects a content-
 });
 
 
-test('cross-language game evidence recognizes Dragonrend and its Polish name', () => {
+test('cross-language game evidence recognizes Dragonrend without ambiguous localized item aliases', () => {
   const result = zgodnoscStrukturalna(
     'Dragonrend shout you get from the main storyline. It forcibly causes the target dragon to stay on the ground.',
-    'Warto użyć krzyku Smocza Zguba, który zmusza smoka do wylądowania na ziemi.',
+    'Warto użyć krzyku Dragonrend, który zmusza smoka do wylądowania na ziemi.',
     { allowCrossLanguageExactEvidence: true },
   );
   assert.equal(result.ok, true, JSON.stringify(result));

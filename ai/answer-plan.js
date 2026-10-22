@@ -87,12 +87,15 @@ function buildAnswerPlan(question, routing = {}) {
       ? 'Zachowuj modalność i etap zdarzenia opisany w źródle: „zaprojektowano/przeznaczono do”, „miało nastąpić” i „może” nie znaczą, że zdarzenie faktycznie nastąpiło. Na przykład „designed to be attached” nie dowodzi, że obiekt rzeczywiście podłączono. Nie przedstawiaj celu projektu jako dokonanego faktu.'
       : '',
     slots.has('steps')
-      ? 'Dla instrukcji i poradnika używaj wyłącznie kroków, które są bezpośrednio potwierdzone w pobranych źródłach. Nie dopisuj typowych porad z własnej wiedzy o grze, nawet jeśli brzmią wiarygodnie. Jeśli źródła potwierdzają tylko część procedury, podaj tę część i jasno zaznacz, że dostępne źródła nie potwierdzają dalszych kroków; nie wymyślaj brakujących działań.'
+      ? 'Dla instrukcji i poradnika używaj wyłącznie kroków, które są bezpośrednio potwierdzone w pobranych źródłach. Nie dopisuj typowych porad z własnej wiedzy o grze, nawet jeśli brzmią wiarygodnie. Jeśli źródła potwierdzają tylko część procedury, podaj tę część i jasno zaznacz, że dostępne źródła nie potwierdzają dalszych kroków; nie wymyślaj brakujących działań. Jeśli źródło opisuje konkretnego bossa, postać, zadanie lub wersję gry, nazwij ten przypadek i nie uogólniaj jego mechaniki na wszystkich przeciwników.'
+      : '',
+    (routing.game || routing.resolved_entity?.game || routing.entity)
+      ? `Jeśli kontekst tego pytania wymaga wskazania gry lub encji, nazwij ją wprost (np. ${routing.game || routing.resolved_entity?.game || routing.entity}); zachowuj dokładny zakres faktu i nie przenoś szczegółów z jednej postaci lub zadania na inne.`
       : '',
   ].filter(Boolean).join(' ');
 
   return {
-    version: 26,
+    version: 27,
     question: q,
     intent: routing.intent || 'conversation',
     entity: routing.entity || routing.resolved_entity?.name || null,

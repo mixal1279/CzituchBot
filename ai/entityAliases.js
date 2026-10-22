@@ -11,7 +11,13 @@ const ENTITY_ALIAS_GROUPS = Object.freeze([
   // nazw opisowych ani tłumaczeń zgadywanych na podstawie samego kontekstu.
   { canonical: 'wild hunt', names: ['Wild Hunt', 'Dziki Gon'] },
   { canonical: 'bloody baron', names: ['Bloody Baron', 'Krwawy Baron', 'Baron Krwawy'] },
-  { canonical: 'dragonrend', names: ['Dragonrend', 'Smocza Zguba'] },
+  // Keep the Skyrim item separate from Dragonrend; only the English item name is unambiguous.
+  { canonical: 'dragonbane', names: ['Dragonbane'] },
+  { canonical: "alduin's wall", names: ['Alduins Wall'] },
+  // „Smocza Zguba” is ambiguous in Skyrim: it can refer to the Dragonbane sword,
+  // while Dragonrend is a shout. Do not map the localized phrase globally to the
+  // shout, or evidence about the sword is falsely rejected as missing Dragonrend.
+  { canonical: 'dragonrend', names: ['Dragonrend'] },
   { canonical: 'cathedral of dragon communion', names: ['Cathedral of Dragon Communion', 'Katedra Smoczej Komunii', 'Katedra Komunii Smoka'] },
   { canonical: 'greatsword', names: ['Greatsword', 'Wielki Miecz'] },
   { canonical: 'eternal fire', names: ['Eternal Fire', 'Wieczny Ogień', 'Wiecznego Ognia', 'Wiecznym Ogniem', 'Wiecznemu Ogniowi'] },

@@ -2,8 +2,48 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { buildSupplementalRetrievalQuery, isMultiPartQuestion, selectRetrievalQueries } = require('../ai/retrieval');
+const { buildSupplementalRetrievalQuery, isMultiPartQuestion, selectRetrievalQueries, selectRetrievalDomains, initialRetrievalQueryLimit } = require('../ai/retrieval');
 
+
+test('preferred lore domains can broaden after weak evidence while persona allowlists remain strict', () => {
+  assert.deepEqual(
+    selectRetrievalDomains({
+      specializedDomains: ['gamelore.fandom.com', 'games.example'],
+      generalDomains: ['ign.com', 'fandom.com'],
+      useGeneralFallback: false,
+    }),
+    ['gamelore.fandom.com', 'games.example'],
+  );
+  assert.deepEqual(
+    selectRetrievalDomains({
+      specializedDomains: ['gamelore.fandom.com'],
+      generalDomains: ['ign.com', 'fandom.com'],
+      useGeneralFallback: true,
+    }),
+    ['ign.com', 'fandom.com'],
+  );
+  assert.deepEqual(
+    selectRetrievalDomains({
+      personaDomains: ['trusted-channel.example'],
+      specializedDomains: ['gamelore.fandom.com'],
+      generalDomains: ['ign.com'],
+      useGeneralFallback: true,
+    }),
+    ['trusted-channel.example'],
+  );
+  assert.equal(selectRetrievalDomains({
+    specializedDomains: ['gamelore.fandom.com'],
+    generalDomains: null,
+    useGeneralFallback: true,
+  }), null);
+});
+
+test('single-question retrieval reserves time for validation; multi-part questions can use three searches', () => {
+  assert.equal(initialRetrievalQueryLimit({ multiPart: false, availableSlots: 3 }), 2);
+  assert.equal(initialRetrievalQueryLimit({ multiPart: true, availableSlots: 3 }), 3);
+  assert.equal(initialRetrievalQueryLimit({ multiPart: true, availableSlots: 1 }), 1);
+  assert.equal(initialRetrievalQueryLimit({ multiPart: true, availableSlots: 0 }), 0);
+});
 
 test('a single question mark does not classify a question as multi-part', () => {
   assert.equal(isMultiPartQuestion('W grze Skyrim: Jak pokonać smoka?'), false);

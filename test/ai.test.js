@@ -355,7 +355,8 @@ console.log('AI regression tests: OK');
   assert.match(source, /planowaneQueryRetrieval/);
   assert.match(source, /item\?\.reason === 'lore'/);
   assert.match(source, /selectRetrievalQueries\(/);
-  assert.match(source, /maxQueries: Math\.min\(3,/);
+  assert.match(source, /initialRetrievalQueryLimit/);
+  assert.match(source, /maxQueries: initialRetrievalQueryLimit\(/);
 }
 
 {

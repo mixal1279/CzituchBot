@@ -46,7 +46,31 @@ test('produkcyjne aliasy PL/EN normalizują znane encje do jednego kanonicznego 
   assert.ok(KNOWN_ENTITY_ALIAS_PATTERNS.some(entry => entry.canonical === 'bloody baron'));
   assert.deepEqual(wyodrebnijNazwyWlasne('Geralt spotyka Dzikim Gonem na szlaku.'), ['wild hunt', 'geralt']);
   assert.deepEqual(wyodrebnijNazwyWlasne('Geralt rozmawia z Krwawym Baronem.'), ['bloody baron', 'geralt']);
-  assert.deepEqual(wyodrebnijNazwyWlasne('Dragonborn używa Smoczej Zguby.'), ['dragonrend', 'dragonborn']);
+  const ambiguousName = wyodrebnijNazwyWlasne('Dragonborn używa Smoczej Zguby.');
+  assert.ok(ambiguousName.includes('dragonborn'));
+  assert.equal(ambiguousName.includes('dragonrend'), false, 'ambiguous item name must not be forced to the Dragonrend shout');
+});
+
+test('Dragonbane and Alduins Wall resolve as their own entities without mapping Smocza Zguba to Dragonrend', () => {
+  const dragonbane = KNOWN_ENTITY_ALIAS_PATTERNS.find(entry => entry.canonical === 'dragonbane');
+  const wall = KNOWN_ENTITY_ALIAS_PATTERNS.find(entry => entry.canonical === "alduin's wall");
+  assert.ok(dragonbane);
+  assert.ok(wall);
+  assert.equal(dragonbane.pattern.test('Dragonbane'), true);
+  assert.equal(dragonbane.pattern.test('drgon bane'), true, 'accept the exact one-letter source typo');
+  assert.equal(wall.pattern.test('alduins wall'), true);
+  assert.equal(wall.pattern.test("Alduin's Wall"), true);
+  const names = wyodrebnijNazwyWlasne("Smoczą Zgubę (Dragonbane) można znaleźć przy Alduin's Wall.");
+  assert.ok(names.includes('dragonbane'), JSON.stringify(names));
+  assert.ok(names.includes("alduin's wall"), JSON.stringify(names));
+  assert.equal(names.includes('dragonrend'), false, JSON.stringify(names));
+});
+
+test('legacy validator aliases do not map ambiguous Smocza Zguba to Dragonrend', () => {
+  const dragonrend = KNOWN_ENTITY_ALIAS_PATTERNS.find(entry => entry.canonical === 'dragonrend');
+  assert.ok(dragonrend);
+  assert.equal(dragonrend.pattern.test('Dragonrend'), true);
+  assert.equal(dragonrend.pattern.test('Smocza Zguba'), false);
 });
 
 test('Greatsword has a verified Polish item-name alias', () => {
@@ -103,6 +127,28 @@ test('copied source wording cannot add a second fact, flip negation, or change t
     { evidenceQuote: 'Wheatley took control of Aperture.' },
   );
   assert.equal(changedObject.ok, false);
+});
+
+test('reason-why wording remains equivalent in an abstention translation', () => {
+  const result = spojnoscTlumaczeniaClaimu(
+    'Nie ma dostępnych danych potwierdzających przyczynę, dla której Dragonborn został wciągnięty w konflikt ze smokami.',
+    'There is no available data confirming the reason why the Dragonborn was drawn into a conflict with dragons.',
+  );
+  assert.equal(result.ok, true, result.reason);
+});
+
+test('Cyberpunk Relik/Relic is a contextual translation alias, not a global entity alias', () => {
+  const result = spojnoscTlumaczeniaClaimu(
+    'Po śmierci głównego bohatera Relik aktywuje engram Johnny’ego Silverhanda.',
+    'After the protagonist dies, the Relic activates Johnny Silverhand’s engram.',
+  );
+  assert.equal(result.ok, true, result.reason);
+  assert.equal(KNOWN_ENTITY_ALIAS_PATTERNS.some(entry => entry.canonical === 'relic'), false);
+});
+
+test('generic sentence quantifiers are not extracted as proper names', () => {
+  const names = wyodrebnijNazwyWlasne('Wszystkie te działania są opisane w przewodniku.');
+  assert.equal(names.includes('wszystkie'), false);
 });
 
 test('faithful translation accepts different Polish and English names through explicit aliases', () => {

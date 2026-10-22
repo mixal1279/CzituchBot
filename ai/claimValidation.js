@@ -75,7 +75,10 @@ function pojeciaCrossLanguage(value) {
 const COVERAGE_STOPWORDS = new Set(['jest','byla','bylo','byli','zostal','zostala','zostalo','oraz','ktory','ktora','ktore','przez','jako','jego','jej','this','that','with','from','were','was','have','has']);
 const KNOWN_ENTITY_ALIAS_PATTERNS = [
   { canonical: 'greatsword', pattern: /\b(?:greatsword|wielk(?:i|iego|iemu|im|imi)\s+miec(?:z|za|zem|zowi|zu))\b/iu },
-  { canonical: 'dragonrend', pattern: /\b(?:dragonrend|smocza\s+zguba)\b/iu },
+  // Accept the benchmark source's one-letter misspelling `drgon bane` only for the known item.
+  { canonical: 'dragonbane', pattern: /\bdr(?:a)?gon\s*bane\b/iu },
+  { canonical: "alduin's wall", pattern: /\b(?:alduin['’]?s|alduins)\s+wall\b/iu },
+  { canonical: 'dragonrend', pattern: /\bdragonrend\b/iu },
   { canonical: 'spellbreaker', pattern: /\b(?:spellbreaker|zaklinacz\s+spellbreaker|łamacz(?:a|owi|em|u)?\s+zakl(?:ę|e)ć)\b/iu },
   { canonical: 'extended relaxation center', pattern: /\b(?:extended\s+relaxation\s+center|centrum\s+(?:przedluzonego|rozszerzonego)\s+relaksu)\b/iu },
   { canonical: 'aperture laboratories', pattern: /\b(?:aperture\s+laboratories|laboratori(?:a|ach|ami|ow|ów)\s+aperture)\b/iu },
@@ -259,6 +262,8 @@ function wyodrebnijNazwyWlasne(value, options = {}) {
     'dokladny', 'dokladna', 'dokladne', 'dokladnego', 'dokladnej', 'dokladnym',
     // Liczba mnoga rzeczownika pospolitego: „postać” była na liście, „postacie” nie.
     'postacie', 'postaci', 'bohaterzy', 'bohaterowie',
+    // Kwantyfikatory na początku zdania nie są nazwami własnymi (np. „Wszystkie te działania…”).
+    'wszystkie', 'wszystkich', 'wszystko', 'wszelkie', 'wszyscy', 'wszystkim', 'każde', 'kazde', 'każda', 'kazda', 'każdy', 'kazdy', 'każdym', 'kazdym',
     // Rzeczownik pospolity na początku claimu nie może zostać uznany za encję.
     // W live benchmark „Przejęcie kontroli przez Wheatleya…” było błędnie
     // odrzucane, bo „Przejęcie” nie występowało w angielskim claim_en jako nazwa.
@@ -1064,7 +1069,14 @@ function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
   // przeciwstawnych pojęć w sprawdzSprzecznosciSemantyczne; tu nie ma wyjątków dla konkretnych fraz.
   const semanticConflict = sprawdzSprzecznosciSemantyczne(pl, en);
   if (!semanticConflict.ok) return { ok: false, reason: 'tłumaczenie claimu zmienia zdarzenie lub relację' };
-  if (wyodrebnijMarkery(pl, CAUSAL_RE) !== wyodrebnijMarkery(en, CAUSAL_RE)) {
+  const polishReasonClause = /\bprzyczyn\w*\s+(?:dla\s+)?ktorej\b/u.test(normalizujClaim(pl));
+  const englishReasonClause = /\b(?:the\s+)?reason\s+why\b/u.test(normalizujClaim(en));
+  // „Nie ma danych potwierdzających przyczynę, dla której…” ↔
+  // “There is no data confirming the reason why…” opisuje brak wiedzy,
+  // a nie dokonuje nowego twierdzenia przyczynowego. CAUSAL_RE pozostaje
+  // bez zmian; wyjątek dotyczy wyłącznie równoważnej konstrukcji w tłumaczeniu.
+  if (wyodrebnijMarkery(pl, CAUSAL_RE) !== wyodrebnijMarkery(en, CAUSAL_RE)
+    && !(polishReasonClause && englishReasonClause)) {
     return { ok: false, reason: 'tłumaczenie claimu zmienia relację przyczynową' };
   }
   if (wyodrebnijMarkery(pl, REDUCTION_RE) !== wyodrebnijMarkery(en, REDUCTION_RE)) {
@@ -1083,9 +1095,17 @@ function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
   // („Malenia” → „Radahn”) i utrata encji („Wheatley” → „He”) nadal padają.
   // Te dwie ostatnie własności
   // są pilnawcami podmiany podmiotu, więc nie mogą zostać rozluźnione.
-  const missing = claimNames
-    .filter(name => !czyNazwaWlasnaWystepuje(name, enNormalized));
-  if (missing.length) return { ok: false, reason: 'tłumaczenie claimu gubi nazwy własne: ' + missing.slice(0, 3).join(', ') };
+  // „Relik” jest zlokalizowaną nazwą przedmiotu w Cyberpunk 2077; w angielskim
+  // zapisie występuje jako „Relic”. Nie dodajemy tego do globalnej tabeli aliasów,
+  // bo zwykłe słowo „relic” poza kontekstem gry nie jest nazwą własną.
+  const cyberpunkRelicContext = /\b(?:cyberpunk(?:\s+2077)?|johnny\s+silverhand|dexter\s+deshawn|night\s+city|engram|robert\s+john\s+linder)\b/iu.test(pl + ' ' + en);
+  const missing = claimNames.filter(name => {
+    if (normalizujClaim(name) === 'relik'
+      && cyberpunkRelicContext
+      && /\brelic\b/u.test(enNormalized)) return false;
+    return !czyNazwaWlasnaWystepuje(name, enNormalized);
+  });
+  if (missing.length) return { ok: false, reason: 'tłumaczenie claimu gubi nazwy własne: ' + missing.slice(0, 3).join(', ')};
   return { ok: true };
 }
 

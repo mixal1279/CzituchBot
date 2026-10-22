@@ -417,3 +417,40 @@ test('odrzucona odpowiedź pochodzi z ostatniego werdyktu walidatora, nie z pier
   };
   assert.equal(wybierzOdrzuconaOdpowiedz(zPustym, false), 'wczesniejsza odpowiedź');
 });
+
+
+test('benchmark failure diagnostics include rejected claims and deterministic evidence gates', () => {
+  const lines = formatBenchmarkFailureDiagnostics([{
+    id: 'where-182',
+    judgeStatus: 'abstained',
+    finalStatus: 'rejected',
+    rejectionReason: 'validator_rejection',
+    missing: ['where'],
+    validatorResults: [{
+      provider: 'gemini',
+      status: 'rejected',
+      validationDiagnostics: {
+        localRejectReasons: ['evidence_not_verified', 'answer_not_covered_by_claims'],
+        unsupportedEvidenceClaims: [{
+          claimIndex: 0,
+          sourceIds: ['SOURCE 4'],
+          reasons: ['tłumaczenie claimu gubi nazwy własne: dragonrend'],
+        }],
+        claimSupport: {
+          records: [{
+            claimIndex: 0,
+            verdict: 'unsupported',
+            reason: 'tłumaczenie claimu gubi nazwy własne: dragonrend',
+            claim: 'Smoczą Zgubę (Dragonbane) można znaleźć przy Alduin Wall',
+          }],
+        },
+      },
+    }],
+  }]);
+
+  assert.equal(lines.length, 1);
+  assert.match(lines[0], /where-182/);
+  assert.match(lines[0], /evidence_not_verified/);
+  assert.match(lines[0], /SOURCE 4/);
+  assert.match(lines[0], /Dragonbane/);
+});

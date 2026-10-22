@@ -227,11 +227,47 @@ function formatBenchmarkFailureDiagnostics(results, limit = 20) {
       reasons.push(`generator ${attempt.provider || 'unknown'}=${detail || attempt.status}`);
     }
     for (const row of (result.validatorResults || [])) {
-      if (row.skipped === true || !['error', 'unavailable'].includes(String(row.status || '').toLowerCase())) continue;
-      const detail = [row.reason, row.error, row.statusCode, row.code]
-        .filter(value => value !== undefined && value !== null && value !== '')
-        .join(': ');
-      reasons.push(`walidator ${row.provider || 'unknown'}=${detail || row.status}`);
+      if (row.skipped === true) continue;
+      const status = String(row.status || '').toLowerCase();
+      const diagnostics = row.validationDiagnostics || row.diagnostics || {};
+      if (['error', 'unavailable'].includes(status)) {
+        const detail = [row.reason, row.error, row.statusCode, row.code]
+          .filter(value => value !== undefined && value !== null && value !== '')
+          .join(': ');
+        reasons.push(`walidator ${row.provider || 'unknown'}=${detail || row.status}`);
+      }
+
+      // Rejected validators are the most useful part of a benchmark failure:
+      // expose deterministic local gates and claim-level evidence problems,
+      // not only transport failures. Keep each item short for Actions logs.
+      if (status === 'rejected' || status === 'soft_accepted') {
+        const localReasons = Array.isArray(diagnostics.localRejectReasons)
+          ? diagnostics.localRejectReasons.filter(Boolean).slice(0, 4)
+          : [];
+        if (localReasons.length) {
+          reasons.push(`walidator ${row.provider || 'unknown'} lokalne=${localReasons.join(', ')}`);
+        }
+        const unsupported = Array.isArray(diagnostics.unsupportedEvidenceClaims)
+          ? diagnostics.unsupportedEvidenceClaims.slice(0, 3).map(item => {
+            const ids = Array.isArray(item.sourceIds) ? item.sourceIds.join('/') : '';
+            const why = Array.isArray(item.reasons) ? item.reasons.join(', ') : '';
+            return `claim#${item.claimIndex ?? '?'}${ids ? ` [${ids}]` : ''}: ${why || 'dowód odrzucony'}`;
+          })
+          : [];
+        for (const item of unsupported) reasons.push(`dowód ${item}`);
+
+        const records = Array.isArray(diagnostics.claimSupport?.records)
+          ? diagnostics.claimSupport.records
+          : [];
+        const problematic = records.filter(record =>
+          record && !['entailed', 'supported'].includes(String(record.verdict || '').toLowerCase())
+        ).slice(0, 2);
+        for (const record of problematic) {
+          const claim = String(record.claim || '').replace(/\s+/g, ' ').slice(0, 90);
+          const why = String(record.reason || record.claimSourceVerdict || record.verdict || 'brak szczegółów').slice(0, 140);
+          reasons.push(`claim#${record.claimIndex ?? '?'} ${record.verdict || 'unknown'}: ${why}${claim ? ` — ${claim}` : ''}`);
+        }
+      }
     }
     if (result.factualPassed === false) reasons.push(`gold facts ${result.factualScore ?? 0}`);
     const unique = [...new Set(reasons)];
