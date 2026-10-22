@@ -6,7 +6,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { normalizeFactText, scoreGoldenFacts } = require('../ai/benchmark-scorer');
-const { buildQuestionForBot, evaluateBenchmarkAnswer, classifyBenchmarkOutcome, buildBenchmarkDiagnostics, stratifiedCases, isFailureText, writeBenchmarkReport, writeStdoutAndWait, wybierzOdrzuconaOdpowiedz, isFalseReject } = require('../scripts/ai-live-benchmark');
+const { buildQuestionForBot, evaluateBenchmarkAnswer, classifyBenchmarkOutcome, buildBenchmarkDiagnostics, formatBenchmarkFailureDiagnostics, stratifiedCases, isFailureText, writeBenchmarkReport, writeStdoutAndWait, wybierzOdrzuconaOdpowiedz, isFalseReject } = require('../scripts/ai-live-benchmark');
 
 test('benchmark factual normalization preserves words with Polish diacritics and collapses whitespace', () => {
   assert.equal(normalizeFactText('Święty Łukasz  —  przejął kontrolę.'), 'swiety lukasz przejal kontrole');
@@ -309,6 +309,42 @@ test('benchmark classifies provider HTTP status and pipeline errors separately',
     judgeStatus: 'error',
     validatorResults: [{ status: 'unavailable', reason: 'timeout' }],
   }), 'provider_timeout');
+});
+
+test('benchmark failure diagnostics explain gate failures per case', () => {
+  const lines = formatBenchmarkFailureDiagnostics([
+    {
+      id: 'how-058',
+      judgeStatus: 'abstained',
+      finalStatus: 'rejected',
+      rejectionReason: 'correlation_to_causation',
+      missing: ['cause'],
+      factualPassed: false,
+      factualScore: 0.5,
+      factualMissing: ['portal location'],
+      validatorResults: [
+        { provider: 'groq', status: 'unavailable', reason: 'HTTP 429 rate limit' },
+      ],
+      generationAttempts: [
+        { provider: 'gemini', status: 'error', failure: 'timeout' },
+      ],
+    },
+    {
+      id: 'where-170',
+      judgeStatus: 'accepted',
+      factualPassed: true,
+    },
+  ]);
+
+  assert.equal(lines.length, 1);
+  assert.match(lines[0], /how-058/);
+  assert.match(lines[0], /abstention/);
+  assert.match(lines[0], /correlation_to_causation/);
+  assert.match(lines[0], /braki: cause/);
+  assert.match(lines[0], /brakujące fakty: portal location/);
+  assert.match(lines[0], /generator gemini=timeout/);
+  assert.match(lines[0], /walidator groq=HTTP 429 rate limit/);
+  assert.deepEqual(formatBenchmarkFailureDiagnostics([{ judgeStatus: 'accepted', factualPassed: true }]), ['Brak niezaliczonych przypadków.']);
 });
 
 test('benchmark report is written atomically as valid JSON at the configured path', () => {
