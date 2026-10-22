@@ -207,3 +207,18 @@ test('aggregate metric preserves per-claim verdicts and overclaim diagnostics', 
   assert.equal(aggregate.overclaimCounts.hedge_to_absolute, 1);
   assert.equal(aggregate.claimSourceVerdictCounts.unsupported_by_cited_source, 1);
 });
+
+test('explicit reciprocal exchange supports a reason without excusing unrelated causal claims', () => {
+  const polishClaim = 'Geralt zgodził się odnaleźć rodzinę Barona, ponieważ obiecał mu informacje o Ciri w zamian za pomoc.';
+  const polishEvidence = 'Geralt zgadza się odnaleźć zaginioną żonę i córkę Barona w zamian za informacje o Ciri.';
+  assert.deepEqual(detectOverclaimTypes(polishClaim, polishEvidence), []);
+
+  const englishClaim = "Geralt agreed to find the Baron's missing family because the Baron offered information about Ciri in exchange for the search.";
+  const englishEvidence = "Geralt agrees to locate the missing wife and daughter of the Baron in exchange for information about Ciri.";
+  assert.deepEqual(detectOverclaimTypes(englishClaim, englishEvidence), []);
+
+  assert.ok(detectOverclaimTypes(
+    'The Baron gave Geralt information because Geralt found his family.',
+    'Geralt searched for the Baron’s missing family. The Baron had information about Ciri.',
+  ).includes('correlation_to_causation'));
+});
