@@ -1,5 +1,6 @@
 'use strict';
 
+const crypto = require('crypto');
 const { parseEvidenceBlocks } = require('./evidence');
 
 const {
@@ -20,7 +21,7 @@ const STATUS = Object.freeze({
 
 function createRequestId(randomUUID = null) {
   if (typeof randomUUID === 'function') return String(randomUUID()).slice(0, 12);
-  return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  return `${Date.now()}-${crypto.randomBytes(6).toString('hex')}`;
 }
 
 function sanitizeQuestion(question, sanitizeFn, maxLength = 500) {
