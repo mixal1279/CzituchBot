@@ -5,6 +5,7 @@ const path = require('node:path');
 const { buildAnswerPlan } = require('../ai/answer-plan');
 const { judgeAnswer } = require('../ai/answer-judge');
 const { normalizeFactText, scoreGoldenFacts } = require('../ai/benchmark-scorer');
+const { summarizeClaimSupportAudits } = require('../ai/claim-support');
 const { resetProviderQuotaCooldowns } = require('../ai/fallback');
 
 if (require.main === module && process.env.AI_LIVE_BENCHMARK !== '1') {
@@ -86,8 +87,24 @@ function isFailureText(text) {
     /^(?:benchmark\s+)?i (?:do not|don t) know$/i,
     /^(?:benchmark\s+)?i cannot answer that confidently$/i,
     /^(?:benchmark\s+)?insufficient (?:data|information)$/i,
+    /^(?:benchmark\s+)?odpowiedz niezweryfikowana walidator jest niedostepny$/i,
   ];
   return refusalPatterns.some(pattern => pattern.test(normalized));
+}
+
+// Odrzucona treść: to, co pipeline wyrzucił w zamian za odmowę.
+// Ostatni wynik walidatora, nie pierwszy — cykl naprawczy może przepisać
+// odpowiedź, a to, co pipeline faktycznie wyrzucił, pochodzi z ostatniego
+// werdyktu. Bot (czituch_bot.js) iteruje wstecz; benchmark musi tak samo,
+// inaczej fałszywe odrzucenia byłyby liczone na innym tekście niż odrzucony.
+function wybierzOdrzuconaOdpowiedz(summary, answered) {
+  if (answered) return null;
+  const rows = summary?.validatorResults || [];
+  for (let i = rows.length - 1; i >= 0; i--) {
+    const candidate = rows[i]?.validationDiagnostics?.benchmarkTrace?.answer;
+    if (typeof candidate === 'string' && candidate.trim()) return candidate;
+  }
+  return null;
 }
 
 function evaluateBenchmarkAnswer(answer, item) {
@@ -105,6 +122,29 @@ function evaluateBenchmarkAnswer(answer, item) {
     missing: answered ? judge.missing : plan.requirements.map(requirement => requirement.id),
     judge,
   };
+}
+
+function isFalseReject(discardedEvaluation, discardedFactual, evaluation, item) {
+  const hasIndependentGold = item?.expected?.factual?.independentGold === true;
+  const discardedFactsPass = hasIndependentGold && discardedFactual?.passed === true;
+  return Boolean(
+    discardedEvaluation
+    && discardedEvaluation.answered
+    && discardedEvaluation.judgeStatus === 'accepted'
+    && !evaluation.answered
+    && discardedFactsPass
+  );
+}
+
+function extractClaimSupportAudit(summary) {
+  const audits = [];
+  for (const row of summary?.validatorResults || []) {
+    const audit = row?.validationDiagnostics?.claimSupport
+      || row?.diagnostics?.claimSupport
+      || row?.claimSupport;
+    if (audit && Array.isArray(audit.records)) audits.push(audit);
+  }
+  return summarizeClaimSupportAudits(audits);
 }
 
 function writeBenchmarkReport(report, destination = process.env.AI_BENCHMARK_JSON_PATH) {
@@ -139,14 +179,37 @@ async function sleep(ms) {
   if (ms > 0) await new Promise(resolve => setTimeout(resolve, ms));
 }
 
+function classifyBenchmarkOutcome(result = {}) {
+  const attempts = Array.isArray(result.generationAttempts) ? result.generationAttempts : [];
+  const validatorResults = Array.isArray(result.validatorResults) ? result.validatorResults : [];
+  const details = [
+    result.rejectionReason,
+    ...(Array.isArray(result.fallbackReasons) ? result.fallbackReasons : []),
+    ...attempts.flatMap(attempt => [attempt.failure, attempt.error, attempt.reason, attempt.statusCode, attempt.code, attempt.message, attempt.timeoutAbort]),
+    ...validatorResults.flatMap(row => [row.status, row.reason, row.error]),
+  ].filter(Boolean).join(' ').toLowerCase();
+  if (result.judgeStatus === 'accepted' && result.factualPassed !== false) return 'accepted';
+  if (/(?:quota|rate.?limit|resource.?exhausted|tokens? per (?:day|minute)|\b429\b|\b402\b)/i.test(details)) return 'provider_quota';
+  if (/(?:timeout|timed.?out|deadline|abort(?:ed)?|etimedout)/i.test(details)) return 'provider_timeout';
+  if (/(?:budget_exhausted|budget|budżet|no_healthy_provider|request_deadline|model_calls_exhausted|generation_budget_exhausted)/i.test(details)) return 'no_fallback_budget';
+  if (result.judgeStatus === 'error' || result.finalStatus === 'error') return 'pipeline_error';
+  if (result.judgeStatus === 'abstained') return 'abstention';
+  const evidenceRejected = /(?:evidence|quote|claim|unsupported|unverified|validator_reject|coverage|coarse)/i.test(details)
+    || (result.finalStatus === 'rejected' && validatorResults.some(row =>
+      /rejected/i.test(String(row.status || '')) && /(?:evidence|quote|claim|unsupported|unverified|negacj|sprzeczn|liczb|source.?id)/i.test(String(row.reason || '') + ' ' + JSON.stringify(row.localRejectReasons || []))
+    ));
+  if (evidenceRejected) return 'evidence_rejection';
+  return 'semantic_rejection';
+}
+
 function buildBenchmarkDiagnostics(results, allCases = benchmark.cases, selectedCases = cases) {
   const validatorRows = results.flatMap(result => result.validatorResults || []);
   const validatorProviderCalls = {};
   const validatorStatusCounts = {};
   for (const row of validatorRows) {
     const provider = String(row.provider || 'unknown');
-    const status = String(row.status || 'unknown');
-    validatorProviderCalls[provider] = (validatorProviderCalls[provider] || 0) + 1;
+    const status = row.skipped === true ? 'skipped' : String(row.status || 'unknown');
+    if (row.skipped !== true) validatorProviderCalls[provider] = (validatorProviderCalls[provider] || 0) + 1;
     validatorStatusCounts[status] = (validatorStatusCounts[status] || 0) + 1;
   }
   const classifyGenerationFailure = attempt => {
@@ -173,6 +236,49 @@ function buildBenchmarkDiagnostics(results, allCases = benchmark.cases, selected
   );
   const goldCases = allCases.filter(item => item.expected?.factual?.independentGold === true);
   const selectedGoldCases = selectedCases.filter(item => item.expected?.factual?.independentGold === true);
+  // Only primary roles make the run invalid: Groq is the generation primary,
+  // Gemini is the primary validator. Failures of secondary/fallback providers
+  // are reported as degraded capability, not mistaken for a broken benchmark.
+  const generationAttempts = results.flatMap(result =>
+    (result.generationAttempts || [])
+      .filter(attempt => attempt.skipped !== true && attempt.provider)
+      .map(attempt => ({ provider: String(attempt.provider), status: attempt.status }))
+  );
+  const validatorAttempts = results.flatMap(result =>
+    (result.validatorResults || [])
+      .filter(row => row.skipped !== true && row.provider)
+      .map(row => ({ provider: String(row.provider), status: row.status }))
+  );
+  const failedProvidersInRole = attempts => {
+    const providers = [...new Set(attempts.map(attempt => attempt.provider))];
+    return providers.filter(provider => {
+      const providerRows = attempts.filter(attempt => attempt.provider === provider);
+      return providerRows.length > 0 && providerRows.every(attempt =>
+        attempt.status === 'error' || attempt.status === 'unavailable'
+      );
+    });
+  };
+  const failedGenerationProviders = failedProvidersInRole(generationAttempts);
+  const failedValidatorProviders = failedProvidersInRole(validatorAttempts);
+  const failedOutageProviders = [...new Set([
+    ...failedGenerationProviders.filter(provider => provider === 'groq'),
+    ...failedValidatorProviders.filter(provider => provider === 'gemini'),
+  ])].sort();
+  const degradedProviders = [...new Set([
+    ...failedGenerationProviders.filter(provider => provider !== 'groq').map(provider => `${provider}:generation`),
+    ...failedValidatorProviders.filter(provider => provider !== 'gemini').map(provider => `${provider}:validator`),
+  ])].sort();
+  const validatorCalls = validatorRows.filter(row => row.skipped !== true).length;
+  const validatorUnavailable = validatorRows.filter(row => row.status === 'unavailable' && row.skipped !== true).length;
+  const validatorUnavailableRate = validatorCalls ? validatorUnavailable / validatorCalls : 0;
+  const qualityDegradationReasons = [];
+  if (failedOutageProviders.length > 0) qualityDegradationReasons.push('primary_provider_outage');
+  if (validatorCalls === 0) qualityDegradationReasons.push('no_validator_calls');
+  else if (validatorCalls < results.length) qualityDegradationReasons.push('validator_calls_below_case_count');
+  if (validatorUnavailableRate > 0.25) qualityDegradationReasons.push('validator_unavailable_rate_above_25_percent');
+  if (degradedProviders.length > 0) qualityDegradationReasons.push('fallback_provider_degradation');
+  if (generationProviderFailures.length > 0) qualityDegradationReasons.push('generation_provider_errors');
+  const qualityComparable = qualityDegradationReasons.length === 0;
   const categories = [...new Set(allCases.map(item => item.category || 'uncategorized'))].sort();
   const goldCoverageByCategory = Object.fromEntries(categories.map(category => [
     category,
@@ -181,16 +287,32 @@ function buildBenchmarkDiagnostics(results, allCases = benchmark.cases, selected
       independentGold: allCases.filter(item => (item.category || 'uncategorized') === category && item.expected?.factual?.independentGold === true).length,
     },
   ]));
+  const outcomeCounts = {};
+  for (const result of results) {
+    const outcome = classifyBenchmarkOutcome(result);
+    outcomeCounts[outcome] = (outcomeCounts[outcome] || 0) + 1;
+  }
   return {
     validatorRejected: results.filter(result => result.finalStatus === 'rejected').length,
     validatorInconclusive: results.filter(result => result.finalStatus === 'inconclusive').length,
-    validatorUnavailable: results.filter(result => result.finalStatus === 'unavailable').length,
-    validatorCalls: validatorRows.length,
+    // Licznik dotyczył końca REQUESTU, a nie wywołań walidatora: przy 5
+    // odrzuconych przypadkach raportował 0, mimo że 7 z 12 wywołań walidatora
+    // zakończyło się statusem 'unavailable'.
+    validatorUnavailable,
+    validatorSkipped: validatorRows.filter(row => row.skipped === true).length,
+    requestsUnavailable: results.filter(result => result.finalStatus === 'unavailable').length,
+    validatorCalls,
+    validatorUnavailableRate: Number(validatorUnavailableRate.toFixed(3)),
+    qualityComparable,
+    qualityDegradationReasons,
     validatorProviderCalls,
     validatorStatusCounts,
     validatorTransportFailures: validatorRows
-      .filter(row => row.status === 'unavailable' || row.status === 'error' || row.technicalError === true)
+      .filter(row => row.skipped !== true && (row.status === 'unavailable' || row.status === 'error' || row.technicalError === true))
       .map(row => ({ provider: row.provider || 'unknown', model: row.model || null, status: row.status || 'unknown', reason: row.reason || null })),
+    providerOutage: failedOutageProviders.length > 0,
+    outageProviders: failedOutageProviders,
+    degradedProviders,
     validatorSecondOpinions: results.reduce((sum, result) =>
       sum + (result.timingTrace || []).filter(event => event.stage === 'validator_second_opinion').length, 0),
     tavilyHttpCalls: tavilyHttpEvents.length,
@@ -209,6 +331,7 @@ function buildBenchmarkDiagnostics(results, allCases = benchmark.cases, selected
     // Zachowujemy nazwę historyczną dla kompatybilności raportów; to są błędy generatora.
     providerFailures: generationProviderFailures,
     generationProviderFailures,
+    outcomeCounts,
     goldCoverageByCategory,
     independentGoldCasesInBenchmark: goldCases.length,
     independentGoldCasesInSample: selectedGoldCases.map(item => item.id),
@@ -245,6 +368,18 @@ async function run() {
       const evaluation = evaluateBenchmarkAnswer(answer, item);
       const { judge } = evaluation;
       const factual = scoreGoldenFacts(answer, item.expected?.factual);
+      // Odrzucona treść: jeśli pipeline wyrzucił odpowiedź w zamian za odmowę,
+      // odpowiedź tę nadal mamy w diagnostyce walidatora. Oceniamy ją tym samym
+      // sędzią — to jedyna podstawa, żeby policzyć FALSSZYWE odrzucenia
+      // (wcześniej licznik był martwy, bo nic go nie wypełniało).
+      const discardedAnswer = wybierzOdrzuconaOdpowiedz(summary, evaluation.answered);
+      const discardedEvaluation = discardedAnswer
+        ? evaluateBenchmarkAnswer(discardedAnswer, item)
+        : null;
+      const discardedFactual = discardedAnswer
+        ? scoreGoldenFacts(discardedAnswer, item.expected?.factual)
+        : null;
+      const falseReject = isFalseReject(discardedEvaluation, discardedFactual, evaluation, item);
       results.push({
         id: item.id,
         category: item.category,
@@ -253,6 +388,11 @@ async function run() {
         abstained: evaluation.abstained,
         completeness: evaluation.completeness,
         judgeStatus: evaluation.judgeStatus,
+        discardedAnswer,
+        discardedJudgeStatus: discardedEvaluation ? discardedEvaluation.judgeStatus : null,
+        discardedFactualScore: discardedFactual?.score ?? null,
+        discardedFactualPassed: discardedFactual?.passed ?? null,
+        falseReject,
         rejectionReason: [
           evaluation.judgeStatus !== 'accepted' ? evaluation.judgeReason : null,
           ...(summary?.validatorResults || [])
@@ -270,6 +410,7 @@ async function run() {
         generationAttempts: summary?.generationAttempts || [],
         generationBudget: summary?.generationBudget || null,
         validatorResults: summary?.validatorResults || [],
+        claimSupport: extractClaimSupportAudit(summary),
         timingTrace: summary?.timingTrace || [],
         fallbackReasons: summary?.fallbackReasons || [],
         tavilySearches: summary?.tavilySearches ?? null,
@@ -295,6 +436,7 @@ async function run() {
         generationAttempts: summary?.generationAttempts || [],
         generationBudget: summary?.generationBudget || null,
         validatorResults: summary?.validatorResults || [],
+        claimSupport: extractClaimSupportAudit(summary),
         timingTrace: summary?.timingTrace || [],
         fallbackReasons: summary?.fallbackReasons || [],
         tavilySearches: summary?.tavilySearches ?? null,
@@ -317,10 +459,17 @@ async function run() {
   const factualPassed = factualCases.filter(x => x.factualPassed).length;
   const factualAverage = factualCases.length ? factualCases.reduce((sum, x) => sum + x.factualScore, 0) / factualCases.length : null;
   const diagnostic = buildBenchmarkDiagnostics(results, benchmark.cases, cases);
-  // Jeśli Groq nie odpowiedział ani razu (limit dzienny, awaria), wynik mierzy limity, nie kod.
-  const groqAttempts = results.flatMap(x => (x.generationAttempts || []).filter(a => /groq/i.test(String(a.provider || ''))));
-  const providerOutage = groqAttempts.length > 0 && groqAttempts.every(a => a.status === 'error');
-  diagnostic.providerOutage = providerOutage;
+  const providerOutage = Boolean(diagnostic.providerOutage);
+  const claimSupport = summarizeClaimSupportAudits(results.map(result => result.claimSupport).filter(Boolean));
+  // Fałszywe odrzucenia policzone tu, a nie w pipeline: to benchmark zna złoty
+  // plan i sędziego, więc tylko on może orzec, że odrzucona odpowiedź była
+  // poprawna. Pipeline tego nie wie i nie może wiedzieć.
+  const falseRejects = results.filter(result => result.falseReject);
+  const discardedAnswers = results.filter(result => result.discardedAnswer);
+  // Keep semantic candidate acceptance visible even when independent gold facts
+  // are incomplete. This is not counted as a false reject unless the strict
+  // false-reject criteria (including independent gold facts) also pass.
+  const discardedJudgeAccepted = discardedAnswers.filter(result => result.discardedJudgeStatus === 'accepted');
   const report = {
     benchmark: benchmark.name,
     mode: 'live',
@@ -329,11 +478,21 @@ async function run() {
     total: results.length,
     answeredAccuracy: Number((answered / results.length).toFixed(4)),
     completenessAccuracy: Number((complete / results.length).toFixed(4)),
+    falseRejects: falseRejects.length,
+    falseRejectCaseIds: falseRejects.map(result => result.id),
+    discardedAnswers: discardedAnswers.length,
+    discardedAnswerCaseIds: discardedAnswers.map(result => result.id),
+    discardedJudgeAcceptedCount: discardedJudgeAccepted.length,
+    discardedJudgeAcceptedCaseIds: discardedJudgeAccepted.map(result => result.id),
+    discardedJudgeAcceptedFactualPassedCount: discardedJudgeAccepted.filter(result => result.discardedFactualPassed === true).length,
     factualGoldCases: factualCases.length,
     factualAccuracy: factualCases.length ? Number((factualPassed / factualCases.length).toFixed(4)) : null,
     factualAverageScore: factualAverage === null ? null : Number(factualAverage.toFixed(4)),
+    claimSupportPassRate: claimSupport.claimSupportPassRate,
+    claimSupportUsableRate: claimSupport.claimSupportUsableRate,
+    claimSupport,
     durationMs: Date.now() - started,
-    note: 'Ten testuje produkcyjny pipeline i kompletność odpowiedzi. Nie jest niezależnym pomiarem factual accuracy; do tego potrzebny jest ręcznie zweryfikowany gold answer/fact set.',
+    note: 'Ten testuje produkcyjny pipeline, kompletność odpowiedzi i osobny audyt wsparcia claim-cytat. Nie jest niezależnym pomiarem factual accuracy; do tego potrzebny jest ręcznie zweryfikowany gold answer/fact set.',
     categories: [...new Set(results.map(x => x.category))].sort(),
     diagnostics: diagnostic,
     failures: results.filter(x => !x.answered || x.judgeStatus !== 'accepted' || x.factualPassed === false).slice(0, 100),
@@ -341,7 +500,8 @@ async function run() {
   const serializedReport = writeBenchmarkReport(report);
   if (!process.env.AI_BENCHMARK_JSON_PATH) await writeStdoutAndWait(serializedReport);
   if (providerOutage) {
-    console.error('[LIVE BENCHMARK] WYNIK NIEWAŻNY: Groq nie zwrócił żadnej odpowiedzi (limit dzienny lub awaria). Nie oceniaj jakości kodu po tym runie.');
+    const outageProviders = (diagnostic.outageProviders || []).join(', ') || 'nieustalony dostawca';
+    console.error(`[LIVE BENCHMARK] WYNIK NIEWAŻNY: wszystkie próby dla dostawcy niedostępne lub zakończone błędem: ${outageProviders}. Nie oceniaj jakości kodu po tym runie.`);
     process.exitCode = 3;
     return;
   }
@@ -355,7 +515,8 @@ async function run() {
   }
 }
 
-module.exports = { normalizeFactText, scoreGoldenFacts, stratifiedCases, buildQuestionForBot, isFailureText, evaluateBenchmarkAnswer, buildBenchmarkDiagnostics, writeBenchmarkReport, writeStdoutAndWait, run };
+module.exports = {
+  wybierzOdrzuconaOdpowiedz, normalizeFactText, scoreGoldenFacts, stratifiedCases, buildQuestionForBot, isFailureText, evaluateBenchmarkAnswer, isFalseReject, extractClaimSupportAudit, classifyBenchmarkOutcome, buildBenchmarkDiagnostics, writeBenchmarkReport, writeStdoutAndWait, run };
 
 if (require.main === module) {
   run().catch(error => {

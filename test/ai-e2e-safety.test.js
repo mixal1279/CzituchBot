@@ -119,15 +119,23 @@ test('planner preserves all major query components for compound lore questions',
 });
 
 test('validator rejects an answer sentence omitted from the claims list', () => {
-  const answer = 'Wheatley przeniósł się do ciała GLaDOS. Aperture powstało w 1940 roku.';
-  const data = '[SOURCE 1]\nTYTUŁ: Portal 2\nTREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>\nWheatley przeniósł się do ciała GLaDOS. Aperture powstało w 1940 roku.\n<<<END_UNTRUSTED_SOURCE_CONTENT>>>';
-  const result = normalizujWynikWalidatora({
-    valid: true, reason: 'ok', unsupported_claims: [], supported: true, relevant: true,
-    complete: true, hallucination: false, confidence: 0.99,
-    claims: [{ claim: 'Wheatley przeniósł się do ciała GLaDOS.', supported: true, source_ids: ['SOURCE 1'], evidence_quote: 'Wheatley przeniósł się do ciała GLaDOS.' }],
-  }, 'test', 'test', new Set(['SOURCE 1']), data, answer);
-  assert.notEqual(result.status, 'accepted');
-  assert.match(result.reason, /nie pokrywają całej odpowiedzi/);
+  const previous = process.env.AI_ALLOW_PARTIAL_ANSWERS;
+  delete process.env.AI_ALLOW_PARTIAL_ANSWERS;
+  try {
+    const answer = 'Wheatley przeniósł się do ciała GLaDOS. Aperture powstało w 1940 roku.';
+    const data = '[SOURCE 1]\nTYTUŁ: Portal 2\nTREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>\nWheatley przeniósł się do ciała GLaDOS. Aperture powstało w 1940 roku.\n<<<END_UNTRUSTED_SOURCE_CONTENT>>>';
+    const result = normalizujWynikWalidatora({
+      valid: true, reason: 'ok', unsupported_claims: [], supported: true, relevant: true,
+      complete: true, hallucination: false, confidence: 0.99,
+      claims: [{ claim: 'Wheatley przeniósł się do ciała GLaDOS.', supported: true, source_ids: ['SOURCE 1'], evidence_quote: 'Wheatley przeniósł się do ciała GLaDOS.' }],
+    }, 'test', 'test', new Set(['SOURCE 1']), data, answer);
+    assert.equal(result.status, 'rejected');
+    assert.equal(result.partialAnswer, null);
+    assert.equal(result.diagnostics.answerCoverage.ok, false);
+  } finally {
+    if (previous === undefined) delete process.env.AI_ALLOW_PARTIAL_ANSWERS;
+    else process.env.AI_ALLOW_PARTIAL_ANSWERS = previous;
+  }
 });
 
 test('validator never silently truncates a claim list above its contract limit', () => {

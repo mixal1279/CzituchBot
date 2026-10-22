@@ -9,7 +9,7 @@
 const fs = require('fs');
 
 const PROD_TIMEOUT_BY_PROVIDER = Object.freeze({
-  xKiro: Number(process.env.AI_XKIRO_VALIDATOR_TIMEOUT_MS) || 3000,
+  xKiro: Number(process.env.AI_XKIRO_VALIDATOR_TIMEOUT_MS) || 4500,
   OpenRouter: 3000,
   Groq: 3000,
 });

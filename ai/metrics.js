@@ -15,7 +15,7 @@ function boundedIncrement(map, key) {
 function createAIMetrics() {
   return {
     requests: 0, accepted: 0, rejected: 0, inconclusive: 0, unavailable: 0, errors: 0,
-    retries: 0, retryAccepted: 0, retryRejected: 0, supplementalRetrievals: 0, supplementalSuccesses: 0, sourceDiversityFailures: 0, falseAccepts: 0, falseRejects: 0, claimCoverageSum: 0, claimCoverageSamples: 0, answerQualitySum: 0, qualitySamples: 0,
+    retries: 0, retryAccepted: 0, retryRejected: 0, supplementalRetrievals: 0, supplementalSuccesses: 0, sourceDiversityFailures: 0, falseAccepts: 0, falseRejects: 0, discardedAnswers: 0, discardedAnswerSamples: 0, claimCoverageSum: 0, claimCoverageSamples: 0, answerQualitySum: 0, qualitySamples: 0, validatorConfidenceSum: 0, validatorConfidenceSamples: 0,
     totalLatencyMs: 0, totalModelCalls: 0, totalTavilySearches: 0,
     providerCalls: {}, fallbackReasons: {}, validatorStatuses: {}, retrievalStatuses: {},
     generationAttempts: [], recent: [],
@@ -39,11 +39,20 @@ function recordAIMetric(metrics, event = {}) {
   if (event.sourceDiversityFailure) m.sourceDiversityFailures++;
   if (event.falseAccept) m.falseAccepts++;
   if (event.falseReject) m.falseRejects++;
-  if (Number.isFinite(Number(event.claimCoverage))) {
+  // Odrzucona treść: pipeline wyrzucił odpowiedź w zamian za odmowę.
+  if (event.discardedAnswer) m.discardedAnswers++;
+  if (typeof event.discardedAnswerText === 'string' && event.discardedAnswerText.trim()) m.discardedAnswerSamples++;
+  // Number(null) === 0, a Number.isFinite(0) === true — brak wartości byłby więc
+  // liczony jako 0, czyli „jakość tylko dla wydanych odpowiedzi” nie działałoby:
+  // brak jakości zaniżałby średnią tak samo jak odpowiedź o jakości zero.
+  if (event.claimCoverage != null && Number.isFinite(Number(event.claimCoverage))) {
     m.claimCoverageSum += Math.max(0, Math.min(1, Number(event.claimCoverage)));
     m.claimCoverageSamples++;
   }
-  if (Number.isFinite(Number(event.answerQuality))) { m.answerQualitySum += Math.max(0, Math.min(1, Number(event.answerQuality))); m.qualitySamples++; }
+  if (event.answerQuality != null && Number.isFinite(Number(event.answerQuality))) { m.answerQualitySum += Math.max(0, Math.min(1, Number(event.answerQuality))); m.qualitySamples++; }
+  // Confidence walidatora to osobna wielkość niż jakość odpowiedzi: opisuje
+  // werdykt, a nie to, co trafiło do użytkownika.
+  if (event.validatorConfidence != null && Number.isFinite(Number(event.validatorConfidence))) { m.validatorConfidenceSum += Math.max(0, Math.min(1, Number(event.validatorConfidence))); m.validatorConfidenceSamples++; }
 
   for (const provider of Array.isArray(event.providers) ? event.providers : []) boundedIncrement(m.providerCalls, provider);
   for (const reason of Array.isArray(event.fallbackReasons) ? event.fallbackReasons : []) boundedIncrement(m.fallbackReasons, reason);
@@ -70,8 +79,8 @@ function recordAIMetric(metrics, event = {}) {
     fallbackReasons: Array.isArray(event.fallbackReasons) ? event.fallbackReasons.slice(0, 8) : [],
     validatorStatuses: Array.isArray(event.validatorStatuses) ? event.validatorStatuses.slice(0, 8) : [],
     retrievalStatuses: Array.isArray(event.retrievalStatuses) ? event.retrievalStatuses.slice(0, 8) : [],
-    claimCoverage: Number.isFinite(Number(event.claimCoverage)) ? Number(event.claimCoverage) : null,
-    answerQuality: Number.isFinite(Number(event.answerQuality)) ? Number(event.answerQuality) : null,
+    claimCoverage: event.claimCoverage != null && Number.isFinite(Number(event.claimCoverage)) ? Number(event.claimCoverage) : null,
+    answerQuality: event.answerQuality != null && Number.isFinite(Number(event.answerQuality)) ? Number(event.answerQuality) : null,
     generationAttempts: Array.isArray(event.generationAttempts) ? event.generationAttempts.slice(-20) : [],
   });
   if (m.recent.length > MAX_RECENT) m.recent.splice(0, m.recent.length - MAX_RECENT);
@@ -87,6 +96,7 @@ function snapshotAIMetrics(metrics) {
     avgTavilySearches: m.requests ? Number((m.totalTavilySearches / m.requests).toFixed(2)) : 0,
     avgClaimCoverage: m.claimCoverageSamples ? Number((m.claimCoverageSum / m.claimCoverageSamples).toFixed(3)) : null,
     avgAnswerQuality: m.qualitySamples ? Number((m.answerQualitySum / m.qualitySamples).toFixed(3)) : null,
+    avgValidatorConfidence: m.validatorConfidenceSamples ? Number((m.validatorConfidenceSum / m.validatorConfidenceSamples).toFixed(3)) : null,
   };
 }
 

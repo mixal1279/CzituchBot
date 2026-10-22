@@ -2,8 +2,8 @@
 
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { createGroqCompletion, awaitWithAbortTimeout, computeValidatorTimeout, computeValidatorReserveMs, computeGenerationTimeout } = require('../ai/provider-runtime');
-const { classifyFailure, shouldRetryFailure, nextFallbacks, selectRepairFallbacks, filterAvailableFallbacks, repairBudgetBlockReason, resetProviderQuotaCooldowns, markProviderQuota, isProviderQuotaBlocked, quotaCooldownMsFromError, retryAfterHint, configuredMaxFallbackSteps, shouldOpenQuotaCircuit } = require('../ai/fallback');
+const { createGroqCompletion, createGroqCompletionWithSchemaFallback, isGroqSchemaValidationError, awaitWithAbortTimeout, computeValidatorTimeout, computeValidatorReserveMs, computeGenerationTimeout, INITIAL_VALIDATOR_REPAIR_RESERVE_MS, shouldAttemptUnavailableRepair } = require('../ai/provider-runtime');
+const { classifyFailure, shouldRetryFailure, nextFallbacks, selectRepairFallbacks, filterAvailableFallbacks, repairBudgetBlockReason, resetProviderQuotaCooldowns, markProviderQuota, isProviderQuotaBlocked, shouldBlockProviderQuotaWide, quotaCooldownMsFromError, retryAfterHint, configuredMaxFallbackSteps, shouldOpenQuotaCircuit } = require('../ai/fallback');
 
 test('Groq request body never contains signal; AbortSignal is passed in SDK transport options', async () => {
   const controller = new AbortController();
@@ -40,6 +40,35 @@ test('Groq request body never contains signal; AbortSignal is passed in SDK tran
   assert.equal(timedOut, true, 'aborting the request must still cancel the in-flight SDK request');
 });
 
+test('Groq schema-validation 400 retries once in JSON mode and remains subject to local validation', async () => {
+  const controller = new AbortController();
+  const payloads = [];
+  let calls = 0;
+  const groqClient = {
+    chat: { completions: { async create(payload) {
+      payloads.push(payload);
+      calls++;
+      if (calls === 1) {
+        throw Object.assign(new Error("400 json_validate_failed: '/claims/0' missing properties: 'supported'"), { status: 400 });
+      }
+      return { choices: [{ message: { content: '{"valid":true,"claims":[]}' } }] };
+    } } },
+  };
+  assert.equal(isGroqSchemaValidationError(Object.assign(new Error('400 json_validate_failed'), { status: 400 })), true);
+  assert.equal(isGroqSchemaValidationError(Object.assign(new Error('400 bad request'), { status: 400 })), false);
+  const result = await createGroqCompletionWithSchemaFallback(groqClient, {
+    model: 'openai/gpt-oss-20b',
+    messages: [{ role: 'user', content: 'validate' }],
+    max_completion_tokens: 300,
+    reasoning_effort: 'low',
+    response_format: { type: 'json_schema', json_schema: { strict: true } },
+  }, { signal: controller.signal, controller, timeoutMs: 2000, fallbackTimeoutMs: 1000 });
+  assert.equal(calls, 2);
+  assert.equal(payloads[0].response_format.type, 'json_schema');
+  assert.equal(payloads[1].response_format.type, 'json_object');
+  assert.equal(result.choices[0].message.content, '{"valid":true,"claims":[]}');
+});
+
 test('hard timeout releases the pipeline when a provider ignores AbortSignal', async () => {
   const controller = new AbortController();
   const startedAt = Date.now();
@@ -50,6 +79,26 @@ test('hard timeout releases the pipeline when a provider ignores AbortSignal', a
   );
   assert.equal(controller.signal.aborted, true);
   assert.ok(Date.now() - startedAt < 250, 'pipeline should not wait for the provider’s own timeout');
+});
+
+test('unavailable-validator repair requires evidence, one attempt, and enough remaining time', () => {
+  assert.equal(INITIAL_VALIDATOR_REPAIR_RESERVE_MS, 24000);
+  assert.equal(shouldAttemptUnavailableRepair({ remainingMs: 18000, hasEvidence: true, alreadyAttempted: false }), true);
+  assert.equal(shouldAttemptUnavailableRepair({ remainingMs: 17999, hasEvidence: true, alreadyAttempted: false }), false);
+  assert.equal(shouldAttemptUnavailableRepair({ remainingMs: 30000, hasEvidence: false, alreadyAttempted: false }), false);
+  assert.equal(shouldAttemptUnavailableRepair({ remainingMs: 30000, hasEvidence: true, alreadyAttempted: true }), false);
+  assert.equal(shouldAttemptUnavailableRepair({ remainingMs: Infinity, hasEvidence: true, alreadyAttempted: false }), false);
+});
+
+test('initial validation can reserve one repair plus final validation budget', () => {
+  assert.equal(computeValidatorReserveMs(25000, 3, 4, 24000), 24000);
+  assert.equal(computeValidatorReserveMs(16000, 4, 4, 24000), 24000);
+  assert.equal(computeValidatorReserveMs(16000, 4, 4), 2500);
+  assert.equal(computeValidatorTimeout(22500, {
+    maxTimeoutMs: 3000,
+    reserveMs: computeValidatorReserveMs(22500, 4, 4, 24000),
+    minTimeoutMs: 2000,
+  }), null, 'skip final fallback when it would consume the reserved repair budget');
 });
 
 test('validator timeout is capped and reserves time for fallback', () => {
@@ -235,6 +284,29 @@ test('repair after validator rejection selects only configured healthy providers
   }), []);
 });
 
+test('semantic repair prefers fast configured providers over slow endpoints', () => {
+  // Preferencja repairu ma dawać NAJPIERWSZEGO kandydata temu, kto odpowiada
+  // najszybciej i najbardziej przewidywalnie. W live benchmarku (2026-10-21)
+  // Gemini zajął 12 s i nie zwrócił werdyktu w 5/5 przypadków, a xKiro nigdy
+  // nie zdążył — obaj stali na początku listy, przez co cykl repairu nigdy nie
+  // wyprodukował odpowiedzi. Groq gpt-oss-20b odpowiadał w 1,3–2,3 s.
+  assert.deepEqual(selectRepairFallbacks({
+    failedProviders: ['groq:openai/gpt-oss-120b'],
+    availableProviders: [
+      'groq:openai/gpt-oss-20b',
+      'gemini:gemini-3.8-flash',
+      'gemini:gemini-3.5-flash-lite',
+      'xkiro:default',
+      'openrouter:default',
+    ],
+    maxFallbacks: 3,
+  }), [
+    'groq:openai/gpt-oss-20b',
+    'gemini:gemini-3.5-flash-lite',
+    'xkiro:default',
+  ]);
+});
+
 test('repair checks shared model-call, generation and time limits before selecting a provider', () => {
   const budget = {
     // Naprawa wymaga co najmniej 13,5 s (3 s generowania + 10,5 s rezerwy).
@@ -324,4 +396,11 @@ test('a shorter later quota error cannot shorten an active provider cooldown', (
   markProviderQuota(provider, 1000);
   assert.equal(isProviderQuotaBlocked(provider, checkAt), true);
   resetProviderQuotaCooldowns();
+});
+
+test('shared Groq TPM/TPD quota blocks sibling model fallbacks, model-specific quota does not', () => {
+  assert.equal(shouldBlockProviderQuotaWide('groq:openai/gpt-oss-120b', 'Rate limit exceeded: 6000 TPM'), true);
+  assert.equal(shouldBlockProviderQuotaWide('groq:openai/gpt-oss-20b', 'tokens per minute quota exceeded'), true);
+  assert.equal(shouldBlockProviderQuotaWide('groq:openai/gpt-oss-120b', 'model-specific quota exceeded'), false);
+  assert.equal(shouldBlockProviderQuotaWide('openrouter:default', 'TPM quota exceeded'), false);
 });

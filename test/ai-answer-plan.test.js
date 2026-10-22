@@ -3,7 +3,28 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { buildAnswerPlan, extractAnswerSignals, assessAnswerCompleteness } = require('../ai/answer-plan');
-const { judgeAnswer } = require('../ai/answer-judge');
+const { buildRetrievalQueries, responseContract } = require('../ai/planner');
+const { selectRetrievalQueries } = require('../ai/retrieval');
+const { judgeAnswer, partialAnswerPreservesCoreIntent } = require('../ai/answer-judge');
+
+test('partial answers may omit game context but must preserve the core question intent', () => {
+  assert.equal(partialAnswerPreservesCoreIntent({
+    status: 'repair',
+    missing: ['entity_context'],
+  }), true);
+  assert.equal(partialAnswerPreservesCoreIntent({
+    status: 'repair',
+    missing: ['why', 'causal_explanation'],
+  }), false);
+  assert.equal(partialAnswerPreservesCoreIntent({
+    status: 'repair',
+    missing: ['steps', 'entity_context'],
+  }), false);
+  assert.equal(partialAnswerPreservesCoreIntent({
+    status: 'rejected',
+    missing: [],
+  }), false);
+});
 
 test('v26 answer plan identifies causal lore requirements', () => {
   const plan = buildAnswerPlan('Dlaczego Wheatley przejął kontrolę nad GLaDOS?', {
@@ -12,6 +33,45 @@ test('v26 answer plan identifies causal lore requirements', () => {
   assert.ok(plan.requirements.some(x => x.id === 'why'));
   assert.ok(plan.requirements.some(x => x.id === 'causal_explanation'));
   assert.ok(plan.requirements.some(x => x.id === 'entity_context'));
+  assert.match(plan.instruction, /jawnie podaje motyw lub cel działania/);
+  assert.match(plan.instruction, /nie zastępuj go domniemaną przyczyną/);
+  assert.match(plan.instruction, /„designed to be attached” nie dowodzi/);
+});
+
+test('a stated motive phrased as "miało na celu" satisfies a why answer plan', () => {
+  const plan = buildAnswerPlan('Dlaczego Wheatley przejął kontrolę nad GLaDOS?', {
+    intent:'web_fact', is_lore:true, entity:'Wheatley', game:'Portal 2',
+  });
+  const answer = 'Wheatley przeniósł rdzeń GLaDOS do układu z baterią ziemniaczaną, co miało na celu upokorzenie jej.';
+  const result = judgeAnswer(answer, plan);
+  assert.equal(result.status, 'accepted', JSON.stringify(result));
+  assert.deepEqual(result.missing, []);
+});
+
+test('procedural guidance forbids generic game advice without retrieved evidence', () => {
+  const plan = buildAnswerPlan('Jak pokonać smoka w Skyrim?', {
+    intent: 'gameplay', is_gameplay: true, entity: 'dragon', game: 'Skyrim',
+  });
+  assert.match(plan.instruction, /wyłącznie kroków, które są bezpośrednio potwierdzone/);
+  assert.match(plan.instruction, /Nie dopisuj typowych porad z własnej wiedzy/);
+  assert.match(plan.instruction, /nie wymyślaj brakujących działań/);
+});
+
+test('where-answer guidance requests a named landmark rather than direction alone', () => {
+  const plan = buildAnswerPlan('Gdzie znajduje się Wielki Miecz?', {
+    intent: 'web_fact', is_gameplay: true, entity: 'Greatsword', game: 'Elden Ring',
+  });
+  assert.match(plan.instruction, /precyzyjny punkt orientacyjny/);
+  assert.match(plan.instruction, /ruiny, budowla lub konkretny obiekt/);
+});
+
+test('who-answer guidance prioritizes source-defined identity over secondary traits', () => {
+  const plan = buildAnswerPlan('Kim jest Astarion?', {
+    intent:'web_fact', entity:'Astarion', game:"Baldur's Gate 3",
+  });
+  assert.match(plan.instruction, /głównej tożsamości lub definiującego statusu postaci/);
+  assert.match(plan.instruction, /nie mogą zastąpić definiującej tożsamości/);
+  assert.match(plan.instruction, /wampirzy pomiot/);
 });
 
 test('v26 answer plan detects and enforces coverage for multiple clauses', () => {
@@ -103,8 +163,14 @@ test('answer completeness requires the planned entity and avoids purpose/locatio
 
   const purpose = extractAnswerSignals('Wheatley przejął kontrolę, aby uciec z laboratorium.');
   assert.equal(purpose.why, true);
-  assert.equal(purpose.causal_explanation, true);
+  assert.equal(purpose.motive_explanation, true);
+  assert.equal(purpose.causal_explanation, false);
   assert.equal(purpose.steps, false);
+
+  const explicitCause = extractAnswerSignals('Wheatley przejął kontrolę z powodu awarii systemu.');
+  assert.equal(explicitCause.why, true);
+  assert.equal(explicitCause.motive_explanation, false);
+  assert.equal(explicitCause.causal_explanation, true);
   assert.equal(extractAnswerSignals('Z powodu awarii system przestał działać.').where, false);
   assert.equal(extractAnswerSignals('Cena wynosi 100 zł.').quantity, true);
 });
@@ -132,6 +198,24 @@ test('answer plan classifies how-to combat questions as procedural', () => {
   assert.ok(plan.requirements.some(x => x.id === 'how'));
 });
 
+test('location-only gameplay exemption recognizes inflected procedure terms', () => {
+  for (const question of [
+    'Gdzie znaleźć bossa w Elden Ring?',
+    'Gdzie znaleźć questy w Skyrim?',
+    'Gdzie są misje poboczne?',
+    'Gdzie szukać poradnika do gry?',
+    'Gdzie znaleźć solucję do questa?',
+  ]) {
+    const plan = buildAnswerPlan(question, { intent: 'web_fact', is_gameplay: true });
+    assert.ok(plan.requirements.some(x => x.id === 'steps'), question);
+  }
+
+  const locationOnly = buildAnswerPlan('Gdzie znaleźć Wielki Miecz?', {
+    intent: 'web_fact', is_gameplay: true,
+  });
+  assert.ok(!locationOnly.requirements.some(x => x.id === 'steps'));
+});
+
 test('v26 judge rejects generic relationship answer', () => {
   const plan = buildAnswerPlan('Jaka jest relacja Geralta i Yennefer?', {
     intent:'web_fact', is_lore:true, entity:'Geralt', game:'The Witcher 3',
@@ -140,3 +224,58 @@ test('v26 judge rejects generic relationship answer', () => {
   assert.equal(result.status, 'repair');
   assert.ok(result.missing.includes('relationship'));
 });
+
+
+test('response contract forbids redundant source narration that creates uncovered sentences', () => {
+  const contract = responseContract('lore');
+  assert.match(contract, /Nie dodawaj metakomentarzy.*źródło potwierdza/s);
+  assert.match(contract, /nie dopisuj końcowego podsumowania/s);
+});
+
+test('retrieval planner adds location-specific queries for landmark answers', () => {
+  const queries = buildRetrievalQueries('Gdzie znaleźć Wielki Miecz?', {
+    intent: 'web_fact', entity: 'Greatsword', game: 'Elden Ring', needs_web: true,
+  });
+  assert.ok(queries.some(q => /exact location landmark nearby map/i.test(q)), JSON.stringify(queries));
+  assert.ok(queries.some(q => /Elden Ring/i.test(q)), JSON.stringify(queries));
+});
+
+test('retrieval planner adds timeline and quest-order queries for when questions', () => {
+  const queries = buildRetrievalQueries('Kiedy Geralt przybywa do Novigradu?', {
+    intent: 'web_fact', entity: 'Geralt', game: 'The Witcher 3', needs_web: true,
+  });
+  assert.ok(queries.some(q => /story timeline quest order arrival/i.test(q)), JSON.stringify(queries));
+});
+
+test('retrieval planner targets character identity for who questions', () => {
+  const queries = buildRetrievalQueries('Kim jest Astarion?', {
+    intent: 'web_fact', is_lore: true, entity: 'Astarion', game: "Baldur's Gate 3", needs_web: true,
+  });
+  assert.ok(queries.some(q => /character identity background role companion/i.test(q)), JSON.stringify(queries));
+});
+
+test('retrieval planner targets cause and motivation for why questions', () => {
+  const queries = buildRetrievalQueries('Dlaczego Wheatley przejął kontrolę nad GLaDOS?', {
+    intent: 'web_fact', is_lore: true, entity: 'Wheatley', game: 'Portal 2', needs_web: true,
+  });
+  assert.ok(queries.some(q => /cause reason motivation event core transfer/i.test(q)), JSON.stringify(queries));
+});
+
+test('retrieval selection prioritizes intent-specific evidence over generic profile queries', () => {
+  const causalQuery = 'Dlaczego Wheatley przejął kontrolę nad GLaDOS? powód przyczyna motywacja why reason cause motivation';
+  const targetedQuery = 'Wheatley Portal 2 cause reason motivation event core transfer lore';
+  const genericLoreQuery = 'Portal 2 lore plot canon story';
+  const atomicQuery = 'W grze Portal 2: Dlaczego Wheatley przejął kontrolę nad GLaDOS?';
+
+  const selected = selectRetrievalQueries({
+    atomicQueries: [atomicQuery],
+    causalQuery,
+    specializedQueries: [targetedQuery, genericLoreQuery],
+    fallbackQueries: [],
+    maxQueries: 3,
+  });
+
+  assert.deepEqual(selected, [causalQuery, targetedQuery, atomicQuery]);
+  assert.ok(!selected.includes(genericLoreQuery));
+});
+

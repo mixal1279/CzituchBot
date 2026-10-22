@@ -10,7 +10,19 @@ const {
   sprawdzSprzecznosciSemantyczne,
   sprawdzTwardeKonflikty,
   spojnoscTlumaczeniaClaimu,
+  pojeciaCrossLanguage,
 } = require('../ai/claimValidation');
+
+test('dragon landing concept does not match generic land or lands wording', () => {
+  assert.equal(pojeciaCrossLanguage('The lands around the castle are fertile.').has('smok_na_ziemi'), false);
+  assert.equal(pojeciaCrossLanguage('They are landing at the airport.').has('smok_na_ziemi'), false);
+  assert.equal(pojeciaCrossLanguage('The dragon lands after the spell.').has('smok_na_ziemi'), true);
+  assert.equal(pojeciaCrossLanguage('Dragonrend forces him to land.').has('smok_na_ziemi'), false);
+  assert.equal(pojeciaCrossLanguage('Dragonrend forces the dragon to land.').has('smok_na_ziemi'), true);
+  assert.equal(pojeciaCrossLanguage('Dragonrend is an ancient shout.').has('smok_na_ziemi'), false);
+  assert.equal(pojeciaCrossLanguage('Smok wylądował na ziemi.').has('smok_na_ziemi'), true);
+});
+
 
 test('sentence-initial generic words are not treated as proper names', () => {
   for (const claim of [
@@ -19,9 +31,24 @@ test('sentence-initial generic words are not treated as proper names', () => {
     'Nowo uzyskana potęga zmienia sytuację.',
     'Aby rozpocząć romans, zwiększ poziom aprobaty.',
     'Dodatkowo pojawia się nowa, ważna postać.',
+    'Źródło opisuje wymianę rdzeni.',
+    'Source describes the core transfer.',
+    'Powtarzaj te czynności, aż przeciwnik zostanie wyeliminowany.',
+    'Udaje się tam po zakończeniu zadań.',
   ]) {
     assert.deepEqual(wyodrebnijNazwyWlasne(claim), []);
   }
+});
+
+test('English cart cannot be mistranslated as a Polish basket', () => {
+  assert.equal(sprawdzSprzecznosciSemantyczne(
+    'The Greatsword is in an abandoned treasure cart.',
+    'Wielki Miecz leży w opuszczonym koszu ze skarbem.',
+  ).ok, false);
+  assert.equal(sprawdzSprzecznosciSemantyczne(
+    'The Greatsword is in an abandoned treasure cart.',
+    'Wielki Miecz leży w opuszczonym wozie ze skarbem.',
+  ).ok, true);
 });
 
 test('diacritics-normalized generic first words are not extracted as names', () => {
@@ -29,6 +56,18 @@ test('diacritics-normalized generic first words are not extracted as names', () 
   assert.equal(wyodrebnijNazwyWlasne('Najpierw użyj krzyku Dragonrend…').includes('najpierw'), false);
   assert.equal(wyodrebnijNazwyWlasne('Kontynuuj ataki…').includes('kontynuuj'), false);
   assert.equal(wyodrebnijNazwyWlasne('Nie ma potwierdzenia…').includes('nie'), false);
+});
+
+test('sentence-initial inflections of przejęcie are common nouns, not proper names', () => {
+  for (const claim of [
+    'Przejęcie kontroli przez Wheatleya nastąpiło po transferze rdzenia.',
+    'Przejęcia kontroli przez Wheatleya nie opisano dokładnie.',
+    'Przejęciu kontroli towarzyszył transfer rdzenia.',
+    'Przejęciem kontroli zakończyła się procedura.',
+  ]) {
+    assert.equal(wyodrebnijNazwyWlasne(claim).some(name => /^przejec/.test(name)), false, claim);
+  }
+  assert.ok(wyodrebnijNazwyWlasne('Wheatley przejął kontrolę.').includes('wheatley'));
 });
 
 test('real first-word names Artur and Arthur remain detectable', () => {
@@ -125,6 +164,27 @@ test('negation mismatch remains a hard failure', () => {
   assert.match(result.reason, /negację/);
 });
 
+test('rhetorical "do not forget" does not invert the polarity of a factual claim', () => {
+  const evidence = 'Nie możemy zapomnieć o naszych wiernych towarzyszach podróży - w akcie pierwszym możemy zrekrutować szóstkę fantastycznych kolegów i koleżanek, w tym Astariona.';
+  const claim = 'Astarion jest jednym z sześciu początkowych towarzyszy.';
+  const result = sprawdzTwardeKonflikty(evidence, claim);
+  assert.equal(result.ok, true, result.reason);
+});
+
+test('an unrelated “never explained” subordinate clause does not negate the main event', () => {
+  const evidence = 'Although it was never explained, Wheatley was disconnected from GLaDOS and given other jobs.';
+  assert.equal(sprawdzTwardeKonflikty(evidence, 'Wheatley was disconnected from GLaDOS.').ok, true);
+  assert.equal(sprawdzTwardeKonflikty('Wheatley was never disconnected from GLaDOS.', 'Wheatley was disconnected from GLaDOS.').ok, false);
+});
+
+test('lack of stability is a negative noun phrase, not negation of the destruction event', () => {
+  const result = sprawdzTwardeKonflikty(
+    "Wheatley's lack of stability is going to cause the destruction of Aperture Science.",
+    "Wheatley's instability will cause the destruction of Aperture Science.",
+  );
+  assert.equal(result.ok, true, result.reason);
+});
+
 test('English damage vocabulary does not create a false semantic conflict and zero damage still supports reduction', () => {
   const evidence = "You'll take no damage from their breath when blocking. You can kill dragons.";
   const claim = 'Blokowanie redukuje obrażenia od ich oddechu.';
@@ -181,6 +241,14 @@ test('the zero-quantifier exception does not erase an unrelated no-siblings conf
   const result = sprawdzTwardeKonflikty('He has no siblings.', 'Ma rodzeństwo.');
   assert.equal(result.ok, false);
   assert.match(result.reason, /negację/);
+});
+
+test('Polish inflection "spowoduje" is recognized as an explicit causal relation', () => {
+  const result = zgodnoscStrukturalna(
+    'Brak stabilności Wheatleya spowoduje zniszczenie Aperture.',
+    'Brak stabilności Wheatleya doprowadzi do zniszczenia Aperture.',
+  );
+  assert.equal(result.ok, true, result.reason);
 });
 
 test('unsupported causal relation remains a hard failure', () => {

@@ -94,10 +94,13 @@ function decideValidation(status, options = {}) {
   const s = String(status || '').toLowerCase();
   if (s === STATUS.ACCEPTED) return { finalStatus: STATUS.ACCEPTED, retry: false };
   if (s === STATUS.SOFT_ACCEPTED) {
+    // Odpowiedź częściowa jest już zweryfikowana lokalnie: walidator buduje ją
+    // wyłącznie z claimów, których cytat przeszedł kontrolę dowodową (partialAnswer).
+    // Nie wolno jej zamieniać na odmowę — zamiana niszczyła poprawne odpowiedzi.
     return {
-      finalStatus: STATUS.REJECTED,
+      finalStatus: STATUS.SOFT_ACCEPTED,
       retry: false,
-      reason: 'soft_acceptance_disabled',
+      reason: 'partial_answer_delivered',
     };
   }
   if (s === STATUS.REJECTED) {
@@ -122,7 +125,20 @@ function decideValidation(status, options = {}) {
 
 function finalText(text, status, helpers = {}) {
   if (status === STATUS.REJECTED) return helpers.rejectedMessage || 'Nie mam wystarczających danych, żeby odpowiedzieć na to pewnie.';
-  if (status === STATUS.SOFT_ACCEPTED) return helpers.rejectedMessage || 'Nie mam wystarczających danych, żeby odpowiedzieć na to pewnie.';
+  if (status === STATUS.SOFT_ACCEPTED) {
+    // NIE ufamy tekstowi przekazanyemu z zewnątrz. Jedynym źródłem prawdy jest
+    // partialAnswer zbudowany przez walidator wyłącznie z claimów, których cytat
+    // przeszedł kontrolę dowodową; jest zakończony zastrzeżeniem „Nie wszystkie
+    // szczegóły da się potwierdzić…". To odpowiedź zweryfikowana częściowo —
+    // nie odrzucona (tę nadal zastępuje odmowa powyżej).
+    //
+    // Gdy caller nie poda partialAnswer, publikujemy odmowę: brak partialAnswer
+    // nigdy nie może oznaczać „wypuść pełną, niezweryfikowaną odpowiedź”.
+    let value = String(helpers.partialAnswer || '');
+    if (typeof helpers.sanitizeResponse === 'function') value = helpers.sanitizeResponse(value);
+    value = value.trim();
+    return value || (helpers.rejectedMessage || 'Nie mam wystarczających danych, żeby odpowiedzieć na to pewnie.');
+  }
   if (status === STATUS.INCONCLUSIVE) return helpers.inconclusiveMessage || 'Chwilowo nie mogę wiarygodnie potwierdzić tej informacji, więc nie będę zgadywać.';
   if (status === STATUS.UNAVAILABLE) return helpers.unavailableMessage || 'Chwilowo nie mogę potwierdzić tej informacji, więc nie będę zgadywać.';
   if (status === STATUS.UNVERIFIED) {

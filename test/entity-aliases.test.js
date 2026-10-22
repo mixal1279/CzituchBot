@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { buildAliasPattern, buildEntityAliasPatterns } = require('../ai/entityAliases');
+const { ENTITY_ALIAS_GROUPS, buildAliasPattern, buildEntityAliasPatterns } = require('../ai/entityAliases');
 const {
   KNOWN_ENTITY_ALIAS_PATTERNS,
   wyodrebnijNazwyWlasne,
@@ -49,11 +49,68 @@ test('produkcyjne aliasy PL/EN normalizują znane encje do jednego kanonicznego 
   assert.deepEqual(wyodrebnijNazwyWlasne('Dragonborn używa Smoczej Zguby.'), ['dragonrend', 'dragonborn']);
 });
 
-test('claim_en przepisany z evidence_quote jest odrzucany, prawdziwe tłumaczenie nie', () => {
-  const quote = 'Malenia is an optional boss located in Haligtree Elphael.';
-  const copy = spojnoscTlumaczeniaClaimu('Malenia jest opcjonalnym bossem w Haligtree Elphael.', quote, { evidenceQuote: quote });
-  assert.equal(copy.ok, false);
-  assert.match(copy.reason, /kopią evidence_quote/);
-  const real = spojnoscTlumaczeniaClaimu('Malenia jest opcjonalnym bossem w Haligtree Elphael.', 'Malenia is an optional boss in Haligtree Elphael.', { evidenceQuote: quote });
-  assert.equal(real.ok, true);
+test('Greatsword has a verified Polish item-name alias', () => {
+  const entry = ENTITY_ALIAS_GROUPS.find(item => item.canonical === 'greatsword');
+  assert.ok(entry);
+  const pattern = buildAliasPattern(entry.names);
+  assert.match('Wielki Miecz', pattern);
+  assert.match('Greatsword', pattern);
+});
+
+test('production alias table excludes unverified Smoldering Church translation', () => {
+  assert.equal(ENTITY_ALIAS_GROUPS.some(entry => entry.canonical === 'smoldering church'), false);
+  assert.equal(KNOWN_ENTITY_ALIAS_PATTERNS.some(entry => entry.canonical === 'smoldering church'), false);
+});
+
+test('claim_en may match source wording when faithful, but cannot turn purpose into cause', () => {
+  const quote = 'Chell and Wheatley forced a core transfer so that Wheatley could take control of Aperture.';
+  const changedRelation = spojnoscTlumaczeniaClaimu(
+    'Chell i Wheatley wymusili transfer rdzenia, ponieważ Wheatley mógł przejąć kontrolę nad Aperture.',
+    quote,
+    { evidenceQuote: quote },
+  );
+  assert.equal(changedRelation.ok, false);
+  assert.match(changedRelation.reason, /przyczynow|zdarzenie|relacj/i);
+
+  const faithful = spojnoscTlumaczeniaClaimu(
+    'Chell i Wheatley wymusili transfer rdzenia, aby Wheatley mógł przejąć kontrolę nad Aperture.',
+    quote,
+    { evidenceQuote: quote },
+  );
+  assert.equal(faithful.ok, true, faithful.reason);
+});
+
+test('copied source wording cannot add a second fact, flip negation, or change the action target', () => {
+  const quote = 'Chell and Wheatley forced a core transfer so that Wheatley could take control of Aperture.';
+
+  const omittedPurpose = spojnoscTlumaczeniaClaimu(
+    'Chell i Wheatley wymusili transfer rdzenia.',
+    quote,
+    { evidenceQuote: quote },
+  );
+  assert.equal(omittedPurpose.ok, false, 'claim_en must not smuggle in the purpose/outcome absent from claim_pl');
+
+  const changedNegation = spojnoscTlumaczeniaClaimu(
+    'Chell i Wheatley nie wymusili transferu rdzenia, aby Wheatley mógł przejąć kontrolę nad Aperture.',
+    quote,
+    { evidenceQuote: quote },
+  );
+  assert.equal(changedNegation.ok, false);
+
+  const changedObject = spojnoscTlumaczeniaClaimu(
+    'Wheatley przejął kontrolę nad Chell.',
+    'Wheatley took control of Aperture.',
+    { evidenceQuote: 'Wheatley took control of Aperture.' },
+  );
+  assert.equal(changedObject.ok, false);
+});
+
+test('faithful translation accepts different Polish and English names through explicit aliases', () => {
+  const quote = 'The Wild Hunt captured the Bloody Baron.';
+  const result = spojnoscTlumaczeniaClaimu(
+    'Dziki Gon schwytał Krwawego Barona.',
+    quote,
+    { evidenceQuote: quote },
+  );
+  assert.equal(result.ok, true, result.reason);
 });

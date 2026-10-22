@@ -90,7 +90,9 @@ function createAIRequestContext(options = {}) {
     if (ctx.isExpired() || ctx.generacje >= ctx.maxGeneracji || ctx.modelCalls >= ctx.maxModelCalls) return false;
     const isRepair = phase === 'repair';
 
-    if (isRepair && ctx.remainingMs() < 8500) return false;
+    // Repair generation has a 4.5s cap, a 10.5s validation/fallback reserve,
+    // and a 3s minimum request. Do not advertise a slot that cannot run.
+    if (isRepair && ctx.remainingMs() < 13500) return false;
     if (isRepair && ctx.repairGeneracje >= ctx.maxRepairGeneracji) return false;
     if (!isRepair && ctx.initialGeneracje >= ctx.maxInitialGeneracji) return false;
     return true;

@@ -4,6 +4,7 @@ const assert = require('node:assert/strict');
 const { classifyAIRequest } = require('../ai/router');
 const { planAIRequest } = require('../ai/planner');
 const { okreslKategorieAI } = require('../ai/policy');
+const { dodajGameFAQsDomenę } = require('../ai/gameplay');
 
 const policy = (q, recipe) => {
   if (/czy warto|co myślisz|co sadzisz|opinia/i.test(q)) return 'conversation';
@@ -69,6 +70,9 @@ for (const [question, expectedIntent, expectedEntity, expectedType] of cases) {
   if (expectedEntity) assert.equal(routing.entity, expectedEntity, question);
   if (expectedType) assert.equal(routing.entity_type, expectedType, question);
 }
+
+const selectedDomains = dodajGameFAQsDomenę(['youtube.com', 'example.com']);
+assert.deepEqual(selectedDomains, ['gamefaqs.gamespot.com', 'youtube.com', 'example.com']);
 
 for (const question of [
   'Ile trwa fight w Elden Ring?',

@@ -33,6 +33,11 @@ function dodajGameFAQsDomenę(domeny) {
   const lista = Array.isArray(domeny) ? [...domeny] : [];
   const hasGameFAQs = lista.some((d) => extractHostname(d) === GAMEFAQS_DOMAIN);
   if (!hasGameFAQs) lista.unshift(GAMEFAQS_DOMAIN);
+  // Keep the specialist domain as a preference, not as a global include_domains
+  // union. Adding Fandom, IGN, PC Gamer and YouTube here broadens every gameplay
+  // search equally and does not implement an ordered fallback. Other domains
+  // already selected by the caller are preserved; weak-result fallback must be
+  // decided after retrieval, when result quality is available.
   return lista;
 }
 

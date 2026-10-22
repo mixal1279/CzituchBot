@@ -37,4 +37,14 @@ function judgeAnswer(answer, plan, options = {}) {
   };
 }
 
-module.exports = { judgeAnswer };
+
+function partialAnswerPreservesCoreIntent(judgement) {
+  if (!judgement || judgement.status === 'rejected') return false;
+  const missing = Array.isArray(judgement.missing) ? judgement.missing : [];
+  // Context/game-name metadata may be omitted in a partial answer; the question's
+  // primary intent (why/how/where/when/who, required steps, causal links, clauses)
+  // may not be omitted just because some other claims were verified.
+  return missing.every(requirement => requirement === 'entity_context');
+}
+
+module.exports = { judgeAnswer, partialAnswerPreservesCoreIntent };

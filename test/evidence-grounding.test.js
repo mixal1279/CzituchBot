@@ -20,6 +20,46 @@ function base(claim, sourceId, quote, answer = claim) {
   }, 'test-model', 'test', new Set([sourceId]), answer && `[${sourceId}]\nTREŚĆ: ${quote}`);
 }
 
+test('validator rejects a hedged source upgraded to an absolute and emits claim support audit', () => {
+  const result = base(
+    'The method improves outcomes.',
+    'SOURCE 1',
+    'The method may improve outcomes.',
+  );
+  assert.equal(result.status, 'rejected');
+  assert.equal(result.diagnostics.claimSupport.records[0].verdict, 'unsupported');
+  assert.ok(result.diagnostics.localRejectReasons.includes('claim_support_overclaim'));
+  assert.ok(result.diagnostics.claimSupport.records[0].overclaimTypes.includes('hedge_to_absolute'));
+});
+
+test('one claim is bound to one source that contains its exact cited quote', () => {
+  const data = [
+    '[SOURCE 1]',
+    'TREŚĆ: An unrelated statement.',
+    '[SOURCE 2]',
+    'TREŚĆ: The supported fact is present.',
+  ].join('\n');
+  const result = normalizujWynikWalidatora({
+    valid: true,
+    reason: 'ok',
+    unsupported_claims: [],
+    supported: true,
+    relevant: true,
+    complete: true,
+    hallucination: false,
+    confidence: 0.95,
+    claims: [{
+      claim: 'The supported fact is present.',
+      supported: true,
+      source_ids: ['SOURCE 1', 'SOURCE 2'],
+      evidence_quote: 'The supported fact is present.',
+    }],
+  }, 'test-model', 'test', new Set(['SOURCE 1', 'SOURCE 2']), data, 'The supported fact is present.');
+  assert.equal(result.status, 'accepted');
+  assert.deepEqual(result.claims[0].source_ids, ['SOURCE 2']);
+  assert.deepEqual(result.diagnostics.claimSupport.records[0].sourceIds, ['SOURCE 2']);
+});
+
 test('evidence parser preserves source identity and exact content', () => {
   const data = '[SOURCE 1]\nTYTUŁ: Test\nURL: https://example.com/a\nTREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>\nArthur returned to camp.\n<<<END_UNTRUSTED_SOURCE_CONTENT>>>';
   const blocks = parseEvidenceBlocks(data);
@@ -99,6 +139,82 @@ test('unmarked evidence blocks do not treat Polish title or URL metadata as sour
   );
 });
 
+test('causal repair excludes semantically related quotes without an explicit causal relation', () => {
+  const unrelated = {
+    sourceId: 'SOURCE 1',
+    title: 'Portal 2 unrelated detail',
+    url: 'https://example.test/unrelated',
+    content: 'Wheatley was unstable. He took control of Aperture.',
+  };
+  const supported = {
+    sourceId: 'SOURCE 2',
+    title: 'Portal 2 causal detail',
+    url: 'https://example.test/causal',
+    content: "Wheatley's instability caused the destruction of Aperture.",
+  };
+  const repair = buildEvidenceRepairContext(
+    [{ claim: "Wheatley's instability caused the destruction of Aperture." }],
+    [unrelated, supported],
+    new Set(['SOURCE 1', 'SOURCE 2']),
+  );
+  assert.match(repair, /SOURCE 2/);
+  assert.match(repair, /caused the destruction of Aperture/);
+  assert.doesNotMatch(repair, /SOURCE 1|He took control of Aperture/);
+});
+
+test('causal repair does not use an unrelated sentence merely because it contains a causal marker', () => {
+  const unrelated = {
+    sourceId: 'SOURCE 1',
+    title: 'Unrelated cause',
+    url: 'https://example.test/unrelated',
+    content: 'Because the reactor failed, the lights went out. Wheatley took control of Aperture.',
+  };
+  const supported = {
+    sourceId: 'SOURCE 2',
+    title: 'Related cause',
+    url: 'https://example.test/related',
+    content: "Wheatley's instability caused the destruction of Aperture.",
+  };
+  const repair = buildEvidenceRepairContext(
+    [{ claim: "Wheatley's instability caused the destruction of Aperture." }],
+    [unrelated, supported],
+    new Set(['SOURCE 1', 'SOURCE 2']),
+  );
+  assert.match(repair, /SOURCE 2/);
+  assert.doesNotMatch(repair, /SOURCE 1|reactor failed/);
+});
+
+test('purpose clauses are not classified as proof of a causal outcome', () => {
+  const { evidenceRelationSignals, classifyClaimType } = require('../ai/evidence');
+  assert.equal(evidenceRelationSignals('Chell pushed the button so that Wheatley could take control.').causal, false);
+  assert.equal(classifyClaimType('Wheatley could take control so that Chell could escape.'), 'factual');
+  assert.equal(evidenceRelationSignals('The button caused Wheatley to take control.').causal, true);
+});
+
+test('causal repair recognizes explicit Polish outcome links without borrowing unrelated causal sentences', () => {
+  const source = {
+    sourceId: 'SOURCE 1',
+    title: 'Portal 2 core transfer',
+    url: 'https://example.test/portal-2-transfer',
+    content: 'Chell nacisnęła przycisk, który w ten sposób oddaje Wheatleyowi kontrolę nad obiektem.',
+  };
+  const claim = 'Chell nacisnęła przycisk, co umożliwiło Wheatleyowi przejęcie kontroli nad obiektem.';
+  const repair = buildEvidenceRepairContext([{ claim }], [source], new Set(['SOURCE 1']));
+  assert.match(repair, /w ten sposób oddaje Wheatleyowi kontrolę/);
+});
+
+test('causal repair relation signals include motivation and coercion claims', () => {
+  const source = {
+    sourceId: 'SOURCE 1',
+    title: 'Geralt and the bandits',
+    url: 'https://example.test/geralt-bandits',
+    content: 'Geralt zmusił bandytów do ucieczki, przejmując kontrolę nad mostem.',
+  };
+  const claim = 'Geralt zmusił bandytów do ucieczki.';
+  const repair = buildEvidenceRepairContext([{ claim }], [source], new Set(['SOURCE 1']));
+  assert.match(repair, /Geralt zmusił bandytów do ucieczki/);
+});
+
 test('evidence ranking strips leading image filenames but preserves verbatim source quotes', () => {
   const content = 'BG3 Astarion.png BG3 Astarion.png Astarion is an Origin character in Baldur’s Gate 3. You can play as Astarion or recruit him as a companion.';
   const blocks = parseEvidenceBlocks(`[SOURCE 1]
@@ -145,6 +261,32 @@ test('quote verification preserves sentence boundaries after punctuation normali
   assert.equal(quoteExists('Pi is 3.14 units.', 'Pi is 3.14 units.'), true);
 });
 
+test('validator still rejects a translation that changes killing into capture', () => {
+  const quote = 'Wheatley captured Chell.';
+  const data = '[SOURCE 1]\nTREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>\n' + quote + '\n<<<END_UNTRUSTED_SOURCE_CONTENT>>>';
+  const claim = 'Wheatley zabił Chella.';
+  const result = normalizujWynikWalidatora({
+    valid: true,
+    reason: 'ok',
+    unsupported_claims: [],
+    supported: true,
+    relevant: true,
+    complete: true,
+    hallucination: false,
+    confidence: 0.95,
+    claims: [{
+      claim,
+      claim_en: quote,
+      supported: true,
+      source_ids: ['SOURCE 1'],
+      evidence_quote: quote,
+    }],
+  }, 'test-model', 'test', new Set(['SOURCE 1']), data, claim);
+
+  assert.equal(result.status, 'rejected');
+  assert.match(JSON.stringify(result.diagnostics.unsupportedEvidenceClaims), /zabójstwo|zabojstwo|schwytanie/);
+});
+
 test('validator accepts an exact quoted span without requiring the whole source block to match', () => {
   const data = '[SOURCE 1]\nTYTUŁ: Portal 2\nTREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>\nWheatley zostaje przeniesiony do ciała GLaDOS.\nPóźniej uzyskuje kontrolę nad systemem Aperture.\n<<<END_UNTRUSTED_SOURCE_CONTENT>>>';
   const result = normalizujWynikWalidatora({
@@ -161,7 +303,7 @@ test('validator accepts the original Elden Ring Greatsword location claim agains
   const data = `[SOURCE 1]\nTYTUŁ: Elden Ring guide\nTREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>\n${quote}\n<<<END_UNTRUSTED_SOURCE_CONTENT>>>`;
   const result = normalizujWynikWalidatora({
     valid: true, reason: 'ok', unsupported_claims: [], supported: true, relevant: true, complete: true, hallucination: false, confidence: 0.99,
-    claims: [{ claim, supported: true, source_ids: ['SOURCE 1'], evidence_quote: quote }],
+    claims: [{ claim, claim_en: 'The Greatsword is in the Caelid region, on the western side, by the road past Rotview Balcony and northwest of the Caelem Ruins.', supported: true, source_ids: ['SOURCE 1'], evidence_quote: quote }],
   }, 'test-model', 'test', new Set(['SOURCE 1']), data, claim);
   assert.equal(result.status, 'accepted', JSON.stringify(result.diagnostics));
   assert.equal(result.diagnostics.evidenceBindings[0].mode, 'exact_quote');
@@ -191,6 +333,31 @@ test('validator tolerates one source typo in an otherwise strongly supported par
   assert.ok(['exact_quote', 'source_context'].includes(result.diagnostics.evidenceBindings[0].mode));
 });
 
+test('validator accepts the supported Polish causal inflection spowoduje in the evidence context', () => {
+  const quote = 'Mówi też, że jego niestabilność spowoduje zniszczenie Aperture, zabijając wszystkich i wszystko, co znajduje się w obiekcie.';
+  const data = '[SOURCE 1]\nTYTUŁ: Portal 2\nTREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>\nGLaDOS informuje Chell, że Wheatley jest niestabilny.\n' + quote + '\n<<<END_UNTRUSTED_SOURCE_CONTENT>>>';
+  const claim = 'GLaDOS ostrzega, że niestabilność Wheatleya doprowadzi do zniszczenia Aperture.';
+  const result = normalizujWynikWalidatora({
+    valid: true,
+    reason: 'ok',
+    unsupported_claims: [],
+    supported: true,
+    relevant: true,
+    complete: true,
+    hallucination: false,
+    confidence: 0.95,
+    claims: [{
+      claim,
+      supported: true,
+      source_ids: ['SOURCE 1'],
+      evidence_quote: quote,
+    }],
+  }, 'test-model', 'test', new Set(['SOURCE 1']), data, claim);
+
+  assert.equal(result.status, 'accepted', JSON.stringify(result.diagnostics));
+  assert.equal(result.diagnostics.evidenceBindings[0].supportVerified, true);
+});
+
 test('validator rejects a real quote when the claim adds an unsupported causal relationship', () => {
   const data = '[SOURCE 1]\nTYTUŁ: RDR2\nTREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>\nArthur zdradził Dutcha podczas wydarzeń w obozie.\n<<<END_UNTRUSTED_SOURCE_CONTENT>>>';
   const result = normalizujWynikWalidatora({
@@ -201,12 +368,12 @@ test('validator rejects a real quote when the claim adds an unsupported causal r
 });
 
 test('validator recognizes an English so-that source relation for a Polish Portal 2 causal claim', () => {
-  const quote = 'Chell and Wheatley force a core transfer on GLaDOS so that Wheatley can take control of the facility so they can both escape.';
+  const quote = "Chell and Wheatley force a core transfer on GLaDOS so that Wheatley can take control of the facility so they can both escape. GLaDOS' head is removed from her body and Wheatley is put in its place, putting him in control of the facility.";
   const data = `[SOURCE 15]\nTYTUŁ: Portal 2 walkthrough\nTREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>\n${quote}\n<<<END_UNTRUSTED_SOURCE_CONTENT>>>`;
   const claim = 'Chell i Wheatley wymusili transfer rdzenia z GLaDOS, co umożliwiło Wheatleyowi przejęcie kontroli nad całym ośrodkiem.';
   const result = normalizujWynikWalidatora({
     valid: true, reason: 'confirmed', unsupported_claims: [], supported: true, relevant: true, complete: true, hallucination: false, confidence: 0.99,
-    claims: [{ claim, supported: true, source_ids: ['SOURCE 15'], evidence_quote: quote }],
+    claims: [{ claim, claim_en: 'Chell and Wheatley forced a core transfer from GLaDOS, enabling Wheatley to take control of the facility.', supported: true, source_ids: ['SOURCE 15'], evidence_quote: quote }],
   }, 'test-model', 'test', new Set(['SOURCE 15']), data, claim);
   assert.equal(result.status, 'accepted', JSON.stringify(result.diagnostics));
   assert.equal(result.diagnostics.evidenceBindings[0].mode, 'exact_quote');
@@ -321,6 +488,23 @@ test('evidence repair context returns verbatim candidates from authorized source
   const repair = buildEvidenceRepairContext([{ claim: 'Wheatley uzyskał kontrolę nad Aperture.' }], blocks, new Set(['SOURCE 1']));
   assert.match(repair, /CANDIDATE SOURCE: SOURCE 1/);
   assert.match(repair, /Wheatley przejął kontrolę/);
+});
+
+test('repair context never offers a quote spanning an omitted source fragment', () => {
+  const sourceText = 'The Greatsword is in northwestern Caelid, on the road that leads south toward the Cathedral of Dragon Communion. [...] The Greatsword is in an abandoned treasure cart off the side of the road.';
+  const blocks = parseEvidenceBlocks(
+    '[SOURCE 6]\nTREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>\n' + sourceText + '\n<<<END_UNTRUSTED_SOURCE_CONTENT>>>',
+  );
+  const repair = buildEvidenceRepairContext(
+    [{ claim: 'The Greatsword is in an abandoned treasure cart off the side of the road.' }],
+    blocks,
+    new Set(['SOURCE 6']),
+  );
+  const quotes = [...repair.matchAll(/CANDIDATE EVIDENCE QUOTE: ([^\n]+)/g)].map(match => match[1]);
+  assert.ok(quotes.length > 0, repair);
+  for (const quote of quotes) {
+    assert.doesNotMatch(quote, /\[\s*(?:\.{3}|…)\s*\]|\.\.\.|…/u, quote);
+  }
 });
 
 test('evidence quote verification rejects disconnected fragments joined by ellipses', () => {

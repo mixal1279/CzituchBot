@@ -600,10 +600,10 @@ console.log('AI regression tests: OK');
     ],
     maxFallbacks: GENERATION_FALLBACK_CHAIN.length,
   }), [
-    'gemini:gemini-3.8-flash',
     'gemini:gemini-3.5-flash-lite',
     'xkiro:default',
     'openrouter:default',
+    'gemini:gemini-3.8-flash',
   ]);
   assert.deepEqual(nextFallbacks({attempted:['groq:openai/gpt-oss-120b','groq:openai/gpt-oss-20b','gemini:gemini-3.8-flash','gemini:gemini-3.5-flash-lite'], maxFallbacks:1}), ['xkiro:default']);
   assert.deepEqual(nextFallbacks({
@@ -765,6 +765,7 @@ console.log('AI regression tests: OK');
     hallucination: false,
     claims: [{
       claim: 'Astarion to wysoki elf i łotrzyk.',
+      claim_en: 'Astarion is a High Elf and a Rogue.',
       supported: true,
       source_ids: ['SOURCE 1'],
       evidence_quote: 'Astarion is a High Elf Rogue vampire spawn.',

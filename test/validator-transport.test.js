@@ -105,13 +105,6 @@ function mockGroq(responseOrFactory) {
   return calls;
 }
 
-test('Groq base URL usuwa powielony suffix OpenAI-compatible API', () => {
-  assert.equal(normalizeGroqBaseUrl(undefined), 'https://api.groq.com/openai/v1');
-  assert.equal(normalizeGroqBaseUrl('https://api.groq.com/openai/v1/'), 'https://api.groq.com/openai/v1');
-  assert.equal(normalizeGroqBaseUrl('https://api.groq.com/openai/v1/openai/v1'), 'https://api.groq.com/openai/v1');
-  assert.equal(normalizeGroqBaseUrl('https://proxy.example/v1'), 'https://proxy.example/v1');
-});
-
 test('wspólny prompt zachowuje claim_en, metadane, pytanie, odpowiedź i źródła', () => {
   const meta = { entity: 'Portal 2', intent: 'web_fact' };
   const prompt = hooks.zbudujPromptWalidatora(QUESTION, ANSWER, EVIDENCE, meta);
@@ -145,6 +138,7 @@ test('Gemini GenerateContent uses the documented systemInstruction and responseF
   assert.ok(call.body.systemInstruction?.parts?.[0]?.text);
   assert.equal(Object.hasOwn(call.body, 'system_instruction'), false);
   assert.equal(Object.hasOwn(call.body.generationConfig, 'temperature'), false);
+  // Gemini v1beta TextResponseFormat.MimeType to enum — wymaga UPPER_SNAKE_CASE
   assert.equal(call.body.generationConfig.responseFormat.text.mimeType, 'APPLICATION_JSON');
   assert.equal(call.body.generationConfig.responseFormat.text.schema.type, 'object');
   assert.ok(call.body.generationConfig.responseFormat.text.schema.properties.claims.items.properties.claim_en);
@@ -377,9 +371,8 @@ test('kolejność walidatorów to Gemini, Groq, potem dalsze fallbacki; brak pra
   hooks.KONFIGURACJA.xkiroKey = '';
   const order = [];
   mockFetch(async (url) => {
-    const requestUrl = typeof url === 'string' ? url : url?.url;
-    const hostname = requestUrl ? new URL(requestUrl).hostname : '';
-    if (hostname === 'generativelanguage.googleapis.com') {
+    const parsedUrl = new URL(url);
+    if (parsedUrl.hostname === 'generativelanguage.googleapis.com') {
       order.push('gemini');
       return jsonResponse({
         candidates: [{ content: { parts: [{ text: 'not JSON' }] } }],
@@ -402,7 +395,7 @@ test('kolejność walidatorów to Gemini, Groq, potem dalsze fallbacki; brak pra
   assert.ok(requestState.timingTrace.some(row => row.stage === 'validator_provider_end' && row.provider === 'groq'));
 });
 
-test('odrzucenie dotyczące cytatu uruchamia drugą opinię, ale lokalna weryfikacja nadal obowiązuje', async () => {
+test('niepoprawny cytat kończy walidację bez drugiej opinii, bo wymaga naprawy odpowiedzi', async () => {
   hooks.KONFIGURACJA.geminiKey = 'test-gemini-key';
   hooks.KONFIGURACJA.openrouterKey = '';
   hooks.KONFIGURACJA.xkiroKey = '';
@@ -416,12 +409,7 @@ test('odrzucenie dotyczące cytatu uruchamia drugą opinię, ale lokalna weryfik
     }],
   };
   mockFetch(async url => {
-    let parsedUrl;
-    try {
-      parsedUrl = new URL(url);
-    } catch {
-      throw new Error('Nieprawidłowy URL w mockFetch: ' + url);
-    }
+    const parsedUrl = new URL(url);
     if (parsedUrl.protocol === 'https:' && parsedUrl.hostname === 'generativelanguage.googleapis.com') {
       order.push('gemini');
       return jsonResponse({
@@ -438,14 +426,14 @@ test('odrzucenie dotyczące cytatu uruchamia drugą opinię, ale lokalna weryfik
   const result = await hooks.walidujOdpowiedzAIBezCache(
     'generic', QUESTION, ANSWER, EVIDENCE, [], 'test-evidence-second-opinion', requestState, { entity: 'Portal 2' },
   );
-  assert.deepEqual(order, ['gemini', 'groq']);
-  assert.equal(groqCalls.length, 1);
-  assert.equal(result.status, 'accepted');
-  assert.deepEqual(requestState.validatorResults.map(row => row.provider), ['gemini', 'groq']);
-  assert.ok(requestState.timingTrace.some(row => row.stage === 'validator_second_opinion'));
+  assert.deepEqual(order, ['gemini']);
+  assert.equal(groqCalls.length, 0);
+  assert.equal(result.status, 'rejected');
+  assert.deepEqual(requestState.validatorResults.map(row => row.provider), ['gemini']);
+  assert.ok(!requestState.timingTrace.some(row => row.stage === 'validator_second_opinion'));
 });
 
-test('po rzeczywistym odrzuceniu Groq pipeline nie zużywa budżetu na wolne trzecie opinie', async () => {
+test('po deterministycznym odrzuceniu cytatu pipeline nie zużywa budżetu na kolejne opinie', async () => {
   hooks.KONFIGURACJA.geminiKey = 'test-gemini-key';
   hooks.KONFIGURACJA.xkiroKey = 'test-xkiro-key';
   hooks.KONFIGURACJA.xkiroModel = 'qwen/qwen3.5-397b-a17b:free';
@@ -460,17 +448,12 @@ test('po rzeczywistym odrzuceniu Groq pipeline nie zużywa budżetu na wolne trz
     }],
   };
   mockFetch(async url => {
-    let parsedUrl;
-    try {
-      parsedUrl = new URL(url);
-    } catch {
-      throw new Error('Nieprawidłowy URL w mockFetch: ' + url);
-    }
+    const parsedUrl = new URL(url);
     if (parsedUrl.protocol === 'https:' && parsedUrl.hostname === 'generativelanguage.googleapis.com') {
       order.push('gemini');
       return jsonResponse({ candidates: [{ content: { parts: [{ text: JSON.stringify(badQuoteVerdict) }] } }] });
     }
-    order.push(parsedUrl.hostname === 'xkiro.example' ? 'xkiro' : 'openrouter');
+    order.push(url.includes('xkiro') ? 'xkiro' : 'openrouter');
     throw new Error('slow third opinion should not be called after Groq rejection');
   });
   mockGroq(() => {
@@ -482,12 +465,12 @@ test('po rzeczywistym odrzuceniu Groq pipeline nie zużywa budżetu na wolne trz
     'generic', QUESTION, ANSWER, EVIDENCE, [], 'test-stop-after-groq-rejection', requestState, { entity: 'Portal 2' },
   );
   assert.equal(result.status, 'rejected');
-  assert.deepEqual(order, ['gemini', 'groq']);
-  assert.deepEqual(requestState.validatorResults.map(row => row.provider), ['gemini', 'groq']);
+  assert.deepEqual(order, ['gemini']);
+  assert.deepEqual(requestState.validatorResults.map(row => row.provider), ['gemini']);
 });
 
-test('circuit breaker dla Groq, xKiro i OpenRouter otwiera się po dwóch timeoutach i resetuje po sukcesie', () => {
-  for (const provider of ['groq', 'xkiro', 'openrouter']) {
+test('circuit breaker dla Groq, xKiro, OpenRouter i Gemini otwiera się po dwóch timeoutach i resetuje po sukcesie', () => {
+  for (const provider of ['groq', 'xkiro', 'openrouter', 'gemini']) {
     hooks.resetValidatorBreakers();
     assert.equal(hooks.validatorBreakerIsOpen(provider), false);
     hooks.recordValidatorTransportResult(provider, { timeoutAbort: true }, 'breaker-test-1');
@@ -809,4 +792,17 @@ test('HTTP circuit breakery xKiro i OpenRouter otwierają się po dwóch mockowa
     }
     assert.equal(hooks.validatorBreakerIsOpen(provider), true, provider);
   }
+});
+
+test('normalizeGroqBaseUrl supplies the canonical default and trims trailing slashes', () => {
+  assert.equal(normalizeGroqBaseUrl(), 'https://api.groq.com/openai/v1');
+  assert.equal(normalizeGroqBaseUrl(' https://api.groq.com/openai/v1/// '), 'https://api.groq.com/openai/v1');
+});
+
+test('normalizeGroqBaseUrl collapses duplicate OpenAI API suffixes without changing proxy paths', () => {
+  assert.equal(
+    normalizeGroqBaseUrl('https://api.groq.com/openai/v1/openai/v1'),
+    'https://api.groq.com/openai/v1',
+  );
+  assert.equal(normalizeGroqBaseUrl('https://proxy.example/v1'), 'https://proxy.example/v1');
 });

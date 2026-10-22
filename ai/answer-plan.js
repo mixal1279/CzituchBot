@@ -43,7 +43,16 @@ function buildAnswerPlan(question, routing = {}) {
     }
   }
   if (routing.is_lore) slots.add('entity_context');
-  if (routing.is_gameplay) slots.add('steps');
+  // Pytanie o gameplay nie zawsze wymaga kroków: czysto lokalizacyjne pytania
+  // typu „gdzie znaleźć X”, „gdzie jest X” wymagają tylko lokalizacji (where),
+  // a nie procedury. Wymaganie steps/how dla nich powoduje, że poprawna
+  // odpowiedź „znajduje się w Y” zostaje odrzucona przez answer-judge
+  // jako „brakujące kroki” (np. Elden Ring Wielki Miecz).
+  const isGameplay = routing.is_gameplay === true || routing.intent === 'gameplay';
+  const isLocationOnlyGameplay = isGameplay && slots.has('where')
+    && !slots.has('why') && !/jak\s+(?:przej|zrobi|pokona|zdoby|odblokowa|rozwiąza|ukoncz|uzyc|użyc|aktywow|napraw)/i.test(q)
+    && !/(?<![\p{L}\p{N}_])(?:walkthrough\p{L}*|solucj\p{L}*|poradnik\p{L}*|boss\p{L}*|quest\p{L}*|misj\p{L}*)(?![\p{L}\p{N}_])/iu.test(q);
+  if (isGameplay && !isLocationOnlyGameplay) slots.add('steps');
   // Procedural questions satisfy the broad how-intent as well as the steps slot.
   if (slots.has('steps')) slots.add('how');
   if (slots.has('why')) {
@@ -64,6 +73,23 @@ function buildAnswerPlan(question, routing = {}) {
     required: true,
     reason: slot === 'clause_coverage' ? 'multiple_question_clauses' : (matched.includes(slot) ? 'question_signal' : 'intent_contract'),
   }));
+  const responseShapeGuidance = [
+    slots.has('who')
+      ? 'Dla pytań „kto/kim jest” zacznij od głównej tożsamości lub definiującego statusu postaci, który źródło wyraźnie podaje (np. wampirzy pomiot, nieumarły, bóstwo); następnie podaj istotną rolę lub relację (np. towarzysz lub antagonista). Rasa, klasa i profesja są dodatkowymi atrybutami — nie mogą zastąpić definiującej tożsamości. Nie dopisuj etykiety, której źródło nie potwierdza.'
+      : '',
+    slots.has('where')
+      ? 'Dla pytań „gdzie” podaj nazwane miejsce docelowe oraz precyzyjny punkt orientacyjny, taki jak ruiny, budowla lub konkretny obiekt, jeśli źródła potwierdzają te szczegóły; nie zastępuj ich samym kierunkiem geograficznym.'
+      : '',
+    slots.has('when')
+      ? 'Dla pytań „kiedy” nie zgaduj daty ani kolejności wydarzeń. Jeśli źródła nie podają dokładnego momentu, zaznacz to wprost i podaj tylko potwierdzony kontekst.'
+      : '',
+    slots.has('why')
+      ? 'Zachowuj modalność i etap zdarzenia opisany w źródle: „zaprojektowano/przeznaczono do”, „miało nastąpić” i „może” nie znaczą, że zdarzenie faktycznie nastąpiło. Na przykład „designed to be attached” nie dowodzi, że obiekt rzeczywiście podłączono. Nie przedstawiaj celu projektu jako dokonanego faktu.'
+      : '',
+    slots.has('steps')
+      ? 'Dla instrukcji i poradnika używaj wyłącznie kroków, które są bezpośrednio potwierdzone w pobranych źródłach. Nie dopisuj typowych porad z własnej wiedzy o grze, nawet jeśli brzmią wiarygodnie. Jeśli źródła potwierdzają tylko część procedury, podaj tę część i jasno zaznacz, że dostępne źródła nie potwierdzają dalszych kroków; nie wymyślaj brakujących działań.'
+      : '',
+  ].filter(Boolean).join(' ');
 
   return {
     version: 26,
@@ -78,8 +104,8 @@ function buildAnswerPlan(question, routing = {}) {
       : requirements.length >= 2 ? 'medium' : 'low',
     causalQuestion,
     instruction: requirements.length
-      ? 'Odpowiedź musi pokryć: ' + requirements.map(r => r.id).join(', ') + '. Każde zdanie faktograficzne ma być atomowym claimem opartym na jednym zweryfikowanym fragmencie evidence. Dla pytania „dlaczego/czemu” oddziel fakt od przyczyny: podaj przyczynę tylko wtedy, gdy konkretny evidence quote wyraźnie łączy przyczynę ze skutkiem. Nie traktuj kolejności wydarzeń jako przyczynowości. Jeśli brak takiego dowodu, powiedz wprost, że źródła nie potwierdzają przyczyny.'
-      : 'Odpowiedz bezpośrednio i nie dodawaj niepotwierdzonych faktów.',
+      ? 'Odpowiedź musi pokryć: ' + requirements.map(r => r.id).join(', ') + '. Każde zdanie faktograficzne ma być atomowym claimem opartym na jednym zweryfikowanym fragmencie evidence. Dla pytania „dlaczego/czemu” oddziel fakt od przyczyny: podaj przyczynę tylko wtedy, gdy konkretny evidence quote wyraźnie łączy przyczynę ze skutkiem. Nie traktuj kolejności wydarzeń jako przyczynowości. Jeśli źródło jawnie podaje motyw lub cel działania (np. próbę upokorzenia), podaj ten motyw wprost i nie zastępuj go domniemaną przyczyną z sąsiednich zdań. Nie zamieniaj celu działania na przyczynę zdarzenia. Jeśli brak takiego dowodu, powiedz wprost, że źródła nie potwierdzają przyczyny.' + (responseShapeGuidance ? ' ' + responseShapeGuidance : '')
+      : 'Odpowiedz bezpośrednio i nie dodawaj niepotwierdzonych faktów.' + (responseShapeGuidance ? ' ' + responseShapeGuidance : ''),
   };
 }
 
@@ -93,18 +119,28 @@ function hasMeaningfulTail(text, marker) {
 function extractAnswerSignals(answer) {
   const text = normalize(answer);
   const where = /\b(?:w(?!\s+(?:wyniku|rezultacie|celu|zamian|zwiazku|odpowiedni\w*|okreslon\w*|miejsc\w*))|we(?!\s+wzgledu)|na(?!\s+(?:skutek|podstawie|poczatku|koncu))|do(?!\s+tego)|z(?!\s+(?:powodu|przyczyny|uwagi|tego))|ze(?!\s+wzgledu))\s+[a-z0-9-]+/.test(text);
-  const causalMarker = /\b(dlaczego|czemu|powod|z powodu|z przyczyny|ze wzgledu na|z uwagi na|poniewaz|dlatego|gdyz|bo|aby|zeby|w zamian|w wyniku|w rezultacie|dzieki|because|because of|due to)\b/.exec(text)?.[0] || '';
+  // Przyczyna i motyw to odrębne sygnały: „aby/w celu” opisuje intencję, a nie dowodzi, że skutek nastąpił.
+  const causalMarker = /\b(dlaczego|czemu|powod|z powodu|z przyczyny|ze wzgledu na|z uwagi na|poniewaz|dlatego|gdyz|bo|w zamian|w wyniku|w rezultacie|dzieki|because|because of|due to|caused by|led to|resulted in)\b/.exec(text)?.[0] || '';
+  const motiveMarker = /\b(?:aby|zeby|w celu|na celu|po to(?:,)? zeby|z zamiarem|w zamiarze|w intencji|so that|in order to|so as to)\b/.exec(text)?.[0] || '';
   // Instrukcja planu każe napisać „źródła nie potwierdzają przyczyny”, gdy materiał
   // jej nie podaje. Taka uczciwa odpowiedź spełnia wymaganie „dlaczego”.
   const causeUnconfirmed = /\b(?:zrodla|zrodlo|materialy|dane)\b.{0,60}\bnie\s+(?:potwierdza\w*|wskazuja|podaja|precyzuja|wyjasniaja)\b|\bbrak\s+potwierdzon\w*\s+(?:przyczyn|powod)\w*|\bnie\s+wynika\b.{0,40}\b(?:przyczyn|powod|dlaczego)\w*/.test(text);
+  const motiveExplanation = Boolean(motiveMarker) && hasMeaningfulTail(text, motiveMarker);
+  const causalExplanation = (Boolean(causalMarker) && hasMeaningfulTail(text, causalMarker)) || causeUnconfirmed;
+  const whyExplanation = causalExplanation || motiveExplanation;
   const procedural = /\b(nalezy|trzeba|mozna|sposob|krok|najpierw|potem|nastepnie|first|then|step|wystarczy|uzyj|uzywaj|wykorzystaj|skorzystaj|wybierz|zdobadz|znajdz|idz|wejdz|pokonaj|unikaj|zabij|atakuj|zbuduj|stworz|wez|kup|otworz|podejdz|poczekaj)\b/.exec(text)?.[0] || '';
   const mechanism = /\b(dziala|funkcjonuje|polega|mechanizm|umozliw\w*|pozwala)\b/.exec(text)?.[0] || '';
   const relationshipMarker = /\b(?:relacj\p{L}*|zwiazk\p{L}*|przyjac\p{L}*|wrog\p{L}*|sojusz\p{L}*|zdrad\p{L}*|partner\p{L}*)\b/u.exec(text)?.[0] || '';
 
+  const whenUnconfirmed = /\b(?:zrodla?\w*|materialy|dane|sources?|evidence)\b.{0,120}\bnie\s+(?:podaj\w*|precyzuj\w*|okresl\w*|wskazuj\w*|potwierdz\w*|zawier\w*)\b.{0,80}\b(?:dat\w*|moment\w*|czas\w*|rok\w*)\b/.test(text);
+
   return {
-    why: (Boolean(causalMarker) && hasMeaningfulTail(text, causalMarker)) || causeUnconfirmed,
+    why: whyExplanation,
+    motive_explanation: motiveExplanation,
     how: Boolean(mechanism || procedural) && hasMeaningfulTail(text, mechanism || procedural),
-    when: /\b(?:1\d{3}|20\d{2})\b|\b(?:po|przed|podczas|w trakcie|pod koniec|na poczatku)\s+\w+|\b(?:w|od|do)\s+(?:styczniu|lutym|marcu|kwietniu|maju|czerwcu|lipcu|sierpniu|wrzesniu|pazdzierniku|listopadzie|grudniu)\b|\b(?:wtedy|nastepnie|pozniej|wcześniej|wczesniej)\b/.test(text),
+    // A bounded statement that the retrieved sources omit a date is a valid
+    // epistemic answer to a temporal query; it must not be mistaken for silence.
+    when: /\b(?:1\d{3}|20\d{2})\b|\b(?:po|przed|podczas|w trakcie|pod koniec|na poczatku)\s+\w+|\b(?:w|od|do)\s+(?:styczniu|lutym|marcu|kwietniu|maju|czerwcu|lipcu|sierpniu|wrzesniu|pazdzierniku|listopadzie|grudniu)\b|\b(?:wtedy|nastepnie|pozniej|wcześniej|wczesniej)\b/.test(text) || whenUnconfirmed,
     where,
     location: where,
     // Po polsku typowa definicja to „X to Y” („Astarion to wampirzy łotrzyk”), nie tylko „X jest Y”.
@@ -122,7 +158,8 @@ function extractAnswerSignals(answer) {
     relationship: Boolean(relationshipMarker)
       && /\b(?:wspolprac|wspolpracy|konflikt|przyjazn|zauf|zdrad|sojusz|wrog|partner|lacz|dziel)\p{L}*/u.test(text),
     entity_context: text.length > 0,
-    causal_explanation: (Boolean(causalMarker) && hasMeaningfulTail(text, causalMarker)) || causeUnconfirmed,
+    // Dla slotu „dlaczego” jawnie podany motyw jest wyjaśnieniem, ale pozostaje oznaczony osobno.
+    causal_explanation: causalExplanation,
   };
 }
 
@@ -192,7 +229,11 @@ function assessAnswerCompleteness(answer, plan) {
       ? containsRequiredEntityContext(answer, plan)
       : id === 'clause_coverage'
         ? coversQuestionClauses(answer, plan.clauses)
-        : Boolean(signals[id]);
+        : id === 'causal_explanation'
+          // Jawnie podany motyw może odpowiedzieć na „dlaczego?”, ale nie zmienia go
+          // w twierdzenie o faktycznie zrealizowanym łańcuchu przyczynowym.
+          ? Boolean(signals.causal_explanation || (signals.motive_explanation && plan.requirements.some(item => item?.id === 'why')))
+          : Boolean(signals[id]);
     checked.push({ id, ok });
     if (!ok) missing.push(id);
   }
