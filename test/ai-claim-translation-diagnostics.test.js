@@ -49,7 +49,7 @@ test('marker ograniczenia nie pozwala ukryć sprzecznego wzrostu', () => {
 test('opisowe „Dokładny” na początku claimu nie jest nazwą własną', () => {
   const names = wyodrebnijNazwyWlasne('Dokładny moment jego przybycia do miasta następuje przed walką z Dzikim Gonem.');
   assert.equal(names.includes('dokładny'), false, JSON.stringify(names));
-  assert.equal(names.includes('dziki gon'), true, JSON.stringify(names));
+  assert.equal(names.includes('wild hunt'), true, JSON.stringify(names));
 });
 
 test('polski zwrot „dając mu władzę” odpowiada angielskiemu „giving him control”', () => {
