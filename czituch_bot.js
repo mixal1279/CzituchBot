@@ -79,7 +79,7 @@ const { extractExplicitUserMemories, mergeMemoryRecords, buildVerifiedMemoryCont
 const { parseMemoryCommand, forgetMemories, describeMemories } = require('./ai/memory_manager');
 const { decomposeQuestion, isMultiPartQuestion, buildAdvancedRetrievalPlan, buildSupplementalRetrievalQuery, selectRetrievalQueries } = require('./ai/retrieval');
 const { classifyFailure, nextFallbacks, selectRepairFallbacks, filterAvailableFallbacks, repairBudgetBlockReason, GENERATION_FALLBACK_CHAIN, configuredMaxFallbackSteps, markProviderQuota, isProviderQuotaBlocked, quotaCooldownMsFromError, geminiGenerationCooldownMsFromError, retryAfterHint, openRouterErrorMessage, shouldOpenQuotaCircuit } = require('./ai/fallback');
-const { createGroqCompletion, awaitWithAbortTimeout, computeValidatorTimeout, computeValidatorReserveMs, computeGenerationTimeout } = require('./ai/provider-runtime');
+const { normalizeGroqBaseUrl, createGroqCompletion, awaitWithAbortTimeout, computeValidatorTimeout, computeValidatorReserveMs, computeGenerationTimeout } = require('./ai/provider-runtime');
 const { createAIMetrics, recordAIMetric, snapshotAIMetrics } = require('./ai/metrics');
 const { DEFAULTS, sanitizeRequestText } = require('./ai/limits');
 const { createAIRequestContext } = require('./ai/requestContext');
@@ -652,7 +652,7 @@ const KONFIGURACJA = {
 
   // ---- Groq AI ----
   groqKey: process.env.GROQ_API_KEY,
-  groqBaseUrl: String(process.env.GROQ_BASE_URL || 'https://api.groq.com/openai/v1').replace(/\/+$/, ''),
+  groqBaseUrl: normalizeGroqBaseUrl(process.env.GROQ_BASE_URL),
 
   // ---- xKiro (fallback po Groq 20B) ----
   xkiroKey: typeof process.env.XKIRO_API_KEY === 'string' ? process.env.XKIRO_API_KEY.replace(/[\r\n]/g, '').trim() : process.env.XKIRO_API_KEY,
@@ -1699,7 +1699,7 @@ async function walidujOdpowiedzGeminiModel(model, persona, pytanie, odpowiedz, d
           contents: [{ role: 'user', parts: [{ text: user }] }],
           generationConfig: {
             maxOutputTokens: 1400,
-            responseFormat: { text: { mimeType: 'application/json', schema: GEMINI_VALIDATOR_JSON_SCHEMA } },
+            responseFormat: { text: { mimeType: 'APPLICATION_JSON', schema: GEMINI_VALIDATOR_JSON_SCHEMA } },
             ...(model === 'gemini-3.8-flash'
               ? { thinkingConfig: { thinkingLevel: 'low' } }
               : model === 'gemini-3.5-flash-lite'
