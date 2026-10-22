@@ -78,7 +78,7 @@ function buildRetrievalQueries(question, routing = {}, options = {}) {
     // The Gathering dla pytania o Skyrim). Dobieramy termin tylko, gdy kontekst
     // pytania rzeczywiście wskazuje ten wątek; pozostałe pytania dostają neutralne,
     // ale tematycznie sensowne frazy do wyszukiwarki.
-    const portalCoreTransferContext = /\b(?:portal(?:\s*2)?|wheatley|glados|core\s+transfer|transfer\s+rdzenia|rdzen\w*)\b/iu.test([original, entity, game].join(' '));
+    const portalCoreTransferContext = /\b(?:portal\s*2|wheatley|glados|core\s+transfer|transfer\s+rdzenia|rdzen\w*)\b/iu.test([original, entity, game].join(' '));
     const causalHints = portalCoreTransferContext
       ? 'cause reason motivation event core transfer lore'
       : 'cause reason motivation story conflict lore';
@@ -152,6 +152,7 @@ function responseContract(profile) {
     'Nie zastępuj odpowiedzi ogólnym komunikatem o braku danych, jeśli źródła zawierają odpowiedź na pytanie.',
     'Każde zdanie musi mieć bezpośrednie oparcie w źródłach: pomiń niepotwierdzone szczegóły zamiast dopisywać zdania o braku danych albo domysły — walidator odrzuca całą odpowiedź, jeśli choć jedno zdanie nie ma pokrycia.',
     'Zachowuj dokładny zakres źródła: opis konkretnego bossa, postaci, zadania lub wersji gry nie dowodzi, że ta sama reguła dotyczy wszystkich wrogów albo całej gry. Nazwij opisywany przypadek w odpowiedzi; nie uogólniaj go bez osobnego dowodu.',
+    'Zachowuj niepewność źródła: „I think”, „I do not think”, „may”, „possibly” i ich odpowiedniki nie są kategorycznym potwierdzeniem. Nie zamieniaj opinii ani przypuszczenia w fakt; pomiń szczegół albo wyraźnie zachowaj zastrzeżenie.',
     'Jeśli metadane requestu jednoznacznie podają grę i jest ona potrzebna do odróżnienia kontekstu, nazwij grę w odpowiedzi. Nie zastępuj tym jednak dowodu dla konkretnego faktu.',
     'Nie dodawaj metakomentarzy typu „źródło potwierdza”, nie cytuj ponownie źródeł w treści odpowiedzi i nie dopisuj końcowego podsumowania, które powtarza poprzednie zdanie. Odpowiadaj bezpośrednio na pytanie, wyłącznie potrzebnymi faktami.',
     'Dla pytań gameplay podawaj kolejność działań, jeśli jest potrzebna do wykonania zadania.',
