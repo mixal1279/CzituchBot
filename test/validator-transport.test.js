@@ -369,7 +369,9 @@ test('kolejność walidatorów to Gemini, Groq, potem dalsze fallbacki; brak pra
   hooks.KONFIGURACJA.xkiroKey = '';
   const order = [];
   mockFetch(async (url) => {
-    if (url.includes('generativelanguage.googleapis.com')) {
+    const requestUrl = typeof url === 'string' ? url : url?.url;
+    const hostname = requestUrl ? new URL(requestUrl).hostname : '';
+    if (hostname === 'generativelanguage.googleapis.com') {
       order.push('gemini');
       return jsonResponse({
         candidates: [{ content: { parts: [{ text: 'not JSON' }] } }],
