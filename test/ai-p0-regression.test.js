@@ -216,8 +216,14 @@ test('P0-B secondary retrieval keeps a one-to-one mapping between source blocks 
     exaKey: 'exa-test-key',
     groq: { chat: { completions: { create: async () => { throw new Error('rewrite should be skipped'); } } } },
     fetchZTimeout: async (url) => {
-      if (String(url).includes('api.tavily.com')) return mockTavilyResponse();
-      if (String(url).includes('api.exa.ai')) {
+      let host = '';
+      try {
+        host = new URL(String(url)).hostname;
+      } catch (_) {
+        host = '';
+      }
+      if (host === 'api.tavily.com') return mockTavilyResponse();
+      if (host === 'api.exa.ai') {
         return {
           ok: true,
           status: 200,
