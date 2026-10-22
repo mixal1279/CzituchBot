@@ -46,7 +46,9 @@ test('produkcyjne aliasy PL/EN normalizują znane encje do jednego kanonicznego 
   assert.ok(KNOWN_ENTITY_ALIAS_PATTERNS.some(entry => entry.canonical === 'bloody baron'));
   assert.deepEqual(wyodrebnijNazwyWlasne('Geralt spotyka Dzikim Gonem na szlaku.'), ['wild hunt', 'geralt']);
   assert.deepEqual(wyodrebnijNazwyWlasne('Geralt rozmawia z Krwawym Baronem.'), ['bloody baron', 'geralt']);
-  assert.deepEqual(wyodrebnijNazwyWlasne('Dragonborn używa Smoczej Zguby.'), ['dragonrend', 'dragonborn']);
+  const ambiguousName = wyodrebnijNazwyWlasne('Dragonborn używa Smoczej Zguby.');
+  assert.ok(ambiguousName.includes('dragonborn'));
+  assert.equal(ambiguousName.includes('dragonrend'), false, 'ambiguous item name must not be forced to the Dragonrend shout');
 });
 
 test('Greatsword has a verified Polish item-name alias', () => {
