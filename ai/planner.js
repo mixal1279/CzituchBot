@@ -73,7 +73,16 @@ function buildRetrievalQueries(question, routing = {}, options = {}) {
   } else if (isWhoQuestion) {
     dodajUnikalneQuery(queries, [entity, game, 'character identity background role companion lore'].filter(Boolean).join(' '));
   } else if (isWhyQuestion) {
-    dodajUnikalneQuery(queries, [entity, game, 'cause reason motivation event core transfer lore'].filter(Boolean).join(' '));
+    // Core transfer jest bardzo charakterystyczny dla wątku Portal 2/Wheatleya.
+    // Dodawanie go do KAŻDEGO pytania „dlaczego” tworzy szum (np. wyniki Magic:
+    // The Gathering dla pytania o Skyrim). Dobieramy termin tylko, gdy kontekst
+    // pytania rzeczywiście wskazuje ten wątek; pozostałe pytania dostają neutralne,
+    // ale tematycznie sensowne frazy do wyszukiwarki.
+    const portalCoreTransferContext = /\\b(?:portal(?:\\s*2)?|wheatley|glados|core\\s+transfer|transfer\\s+rdzenia|rdzen\\w*)\\b/iu.test([original, entity, game].join(' '));
+    const causalHints = portalCoreTransferContext
+      ? 'cause reason motivation event core transfer lore'
+      : 'cause reason motivation story conflict lore';
+    dodajUnikalneQuery(queries, [entity, game, causalHints].filter(Boolean).join(' '));
   } else if (routing?.is_lore) {
     dodajUnikalneQuery(queries, [entity || original, game, 'character history story lore'].filter(Boolean).join(' '));
   } else if (routing?.is_gameplay) {
@@ -142,6 +151,8 @@ function responseContract(profile) {
     'Jeśli materiał pozwala odpowiedzieć częściowo, odpowiedz na potwierdzoną część zamiast automatycznie odmawiać.',
     'Nie zastępuj odpowiedzi ogólnym komunikatem o braku danych, jeśli źródła zawierają odpowiedź na pytanie.',
     'Każde zdanie musi mieć bezpośrednie oparcie w źródłach: pomiń niepotwierdzone szczegóły zamiast dopisywać zdania o braku danych albo domysły — walidator odrzuca całą odpowiedź, jeśli choć jedno zdanie nie ma pokrycia.',
+    'Zachowuj dokładny zakres źródła: opis konkretnego bossa, postaci, zadania lub wersji gry nie dowodzi, że ta sama reguła dotyczy wszystkich wrogów albo całej gry. Nazwij opisywany przypadek w odpowiedzi; nie uogólniaj go bez osobnego dowodu.',
+    'Jeśli metadane requestu jednoznacznie podają grę i jest ona potrzebna do odróżnienia kontekstu, nazwij grę w odpowiedzi. Nie zastępuj tym jednak dowodu dla konkretnego faktu.',
     'Nie dodawaj metakomentarzy typu „źródło potwierdza”, nie cytuj ponownie źródeł w treści odpowiedzi i nie dopisuj końcowego podsumowania, które powtarza poprzednie zdanie. Odpowiadaj bezpośrednio na pytanie, wyłącznie potrzebnymi faktami.',
     'Dla pytań gameplay podawaj kolejność działań, jeśli jest potrzebna do wykonania zadania.',
     'Dla pytań lore nie dopowiadaj spoilerów, których nie wymaga pytanie; gdy występuje interpretacja lub niepewność, oznacz ją wprost.',
