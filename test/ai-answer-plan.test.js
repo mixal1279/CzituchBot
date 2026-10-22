@@ -234,10 +234,12 @@ test('v26 judge rejects generic relationship answer', () => {
 });
 
 
-test('response contract forbids redundant source narration that creates uncovered sentences', () => {
+test('response contract forbids redundant narration and preserves scope and uncertainty', () => {
   const contract = responseContract('lore');
   assert.match(contract, /Nie dodawaj metakomentarzy.*źródło potwierdza/s);
   assert.match(contract, /nie dopisuj końcowego podsumowania/s);
+  assert.match(contract, /dokładny zakres źródła/);
+  assert.match(contract, /Zachowuj niepewność źródła/);
 });
 
 test('retrieval planner adds location-specific queries for landmark answers', () => {
