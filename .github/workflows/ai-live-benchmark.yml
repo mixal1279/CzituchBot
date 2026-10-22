@@ -10,6 +10,9 @@ on:
   # Benchmark uruchamiamy wyłącznie ręcznie (workflow_dispatch), żeby zwykły push
   # nie zużywał limitów API ani nie uruchamiał kosztownych testów live.
 
+permissions:
+  contents: read
+
 concurrency:
   group: ai-live-benchmark-current
   # A newer commit must benchmark the current code, not wait behind a stale run.
