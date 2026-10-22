@@ -252,6 +252,9 @@ function wyodrebnijNazwyWlasne(value, options = {}) {
     // przez co tłumaczenie poprawnej nazwy wyglądało jak utrata encji
     // („Najłatwiej dotrzeć do wózka…” → „The easiest way to get there…”).
     'najlatwiej', 'najprościej', 'najszybciej', 'najczesciej', 'zazwyczaj', 'przede',
+    // „Dokładny moment…” to opis, nie encja; występował jako fałszywa nazwa własna
+    // i powodował odrzucenie poprawnego angielskiego tłumaczenia „The exact moment…”.
+    'dokladny', 'dokladna', 'dokladne', 'dokladnego', 'dokladnej', 'dokladnym',
     // Liczba mnoga rzeczownika pospolitego: „postać” była na liście, „postacie” nie.
     'postacie', 'postaci', 'bohaterzy', 'bohaterowie',
     // Rzeczownik pospolity na początku claimu nie może zostać uznany za encję.
