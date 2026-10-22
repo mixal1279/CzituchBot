@@ -47,6 +47,15 @@ test('a stated motive phrased as "miało na celu" satisfies a why answer plan', 
   assert.deepEqual(result.missing, []);
 });
 
+test('procedural guidance forbids generic game advice without retrieved evidence', () => {
+  const plan = buildAnswerPlan('Jak pokonać smoka w Skyrim?', {
+    intent: 'gameplay', is_gameplay: true, entity: 'dragon', game: 'Skyrim',
+  });
+  assert.match(plan.instruction, /wyłącznie kroków, które są bezpośrednio potwierdzone/);
+  assert.match(plan.instruction, /Nie dopisuj typowych porad z własnej wiedzy/);
+  assert.match(plan.instruction, /nie wymyślaj brakujących działań/);
+});
+
 test('where-answer guidance requests a named landmark rather than direction alone', () => {
   const plan = buildAnswerPlan('Gdzie znajduje się Wielki Miecz?', {
     intent: 'web_fact', is_gameplay: true, entity: 'Greatsword', game: 'Elden Ring',
