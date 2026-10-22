@@ -77,6 +77,7 @@ const KNOWN_ENTITY_ALIAS_PATTERNS = [
   { canonical: 'greatsword', pattern: /\b(?:greatsword|wielk(?:i|iego|iemu|im|imi)\s+miec(?:z|za|zem|zowi|zu))\b/iu },
   // Accept the benchmark source's one-letter misspelling `drgon bane` only for the known item.
   { canonical: 'dragonbane', pattern: /\bdr(?:a)?gon\s*bane\b/iu },
+  { canonical: "alduin's wall", pattern: /\b(?:alduin['’]?s|alduins)\s+wall\b/iu },
   { canonical: 'dragonrend', pattern: /\bdragonrend\b/iu },
   { canonical: 'spellbreaker', pattern: /\b(?:spellbreaker|zaklinacz\s+spellbreaker|łamacz(?:a|owi|em|u)?\s+zakl(?:ę|e)ć)\b/iu },
   { canonical: 'extended relaxation center', pattern: /\b(?:extended\s+relaxation\s+center|centrum\s+(?:przedluzonego|rozszerzonego)\s+relaksu)\b/iu },
