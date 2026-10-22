@@ -29,3 +29,13 @@ test('sentence-initial Polish modifiers are not treated as proper names', () => 
     'Możesz również zwiększyć odporność na ogień, mróz lub magię.',
   ), []);
 });
+
+test('answer coverage checks coordinated factual clauses independently', () => {
+  const { sprawdzPokrycieClaimamiOdpowiedzi } = require('../ai/claimValidation');
+  const result = sprawdzPokrycieClaimamiOdpowiedzi(
+    'Wheatley przejął kontrolę nad Aperture, a potem odnalazł Chell.',
+    [{ claim: 'Wheatley przejął kontrolę nad Aperture.' }],
+  );
+  assert.equal(result.ok, false, JSON.stringify(result));
+  assert.ok(result.uncovered.length > 0, JSON.stringify(result));
+});

@@ -744,6 +744,15 @@ function sprawdzPokrycieClaimamiOdpowiedzi(answer, claims) {
     // Zdanie bez liter i cyfr po usunięciu źródła (np. sama kropka) nie jest twierdzeniem.
     if (!/[\p{L}\p{N}]/u.test(withoutSource)) return [];
     const base = withoutSource;
+    // Oceniaj osobno koordynowane klauzule faktograficzne. Bez tego jedna
+    // dobrze pokryta część zdania może „zamaskować” drugą, niepopartą część.
+    // Nie rozbijamy zwykłych list rzeczowników (np. „ogień, mróz i magia”):
+    // separator musi być przecinkiem przed spójnikiem albo średnikiem.
+    const clauses = base
+      .split(/;\s*|,\s*(?=(?:and\s+then|and|but|then|while|or|a\s+potem|ale|jednak|następnie|nastepnie|oraz)\b)/iu)
+      .map(part => part.trim())
+      .filter(Boolean);
+    if (clauses.length > 1) return clauses;
     const match = base.match(/^(.*?)[,;]?\s+(?:ale|jednak)\s+(.+)$/iu);
     if (match && czyOgraniczenieDowodowe(match[2])) return [match[1].trim(), match[2].trim()].filter(Boolean);
     return [base];
