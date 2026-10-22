@@ -234,7 +234,7 @@ function formatBenchmarkFailureDiagnostics(results, limit = 20) {
       reasons.push(`walidator ${row.provider || 'unknown'}=${detail || row.status}`);
     }
     if (result.factualPassed === false) reasons.push(`gold facts ${result.factualScore ?? 0}`);
-    const uniqueReasons = [...new Set(reasons)].slice(0, 6);
+    const uniqueReasons = [...new Set(reasons)].slice(0, 8);
     const detail = (uniqueReasons.length ? uniqueReasons : ['brak szczegółowej przyczyny w śladzie diagnostycznym']).join(' | ');
     lines.push(`- [${result.id || 'unknown'}] ${outcome}: ${detail}`.slice(0, 1200));
   }
