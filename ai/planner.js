@@ -78,7 +78,7 @@ function buildRetrievalQueries(question, routing = {}, options = {}) {
     // The Gathering dla pytania o Skyrim). Dobieramy termin tylko, gdy kontekst
     // pytania rzeczywiście wskazuje ten wątek; pozostałe pytania dostają neutralne,
     // ale tematycznie sensowne frazy do wyszukiwarki.
-    const portalCoreTransferContext = /\\b(?:portal(?:\\s*2)?|wheatley|glados|core\\s+transfer|transfer\\s+rdzenia|rdzen\\w*)\\b/iu.test([original, entity, game].join(' '));
+    const portalCoreTransferContext = /\b(?:portal(?:\s*2)?|wheatley|glados|core\s+transfer|transfer\s+rdzenia|rdzen\w*)\b/iu.test([original, entity, game].join(' '));
     const causalHints = portalCoreTransferContext
       ? 'cause reason motivation event core transfer lore'
       : 'cause reason motivation story conflict lore';
