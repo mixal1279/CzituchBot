@@ -4782,7 +4782,7 @@ function zaplanujRozliczenieLokaty(nick, waluta, stmt, wyslijFn = null, opoznien
       if (wyslijFn) await wyslijFn(tekst);
       else console.log(`[Ekonomia] Lokata @${nick} rozliczona po odzyskaniu stanu: ${wynik.netto}${waluta.symbol}`);
     } catch (err) {
-      console.error(`[Ekonomia] Błąd rozliczania lokaty @${nick}:`, err.message);
+      console.error('[Ekonomia] Błąd rozliczania lokaty @%s:', nick, err.message);
     }
   }, Math.max(0, opoznienieMs));
 }
