@@ -7,7 +7,7 @@ const { sanitizeUntrustedText } = require('../ai/untrustedText');
 test('removes opening and closing untrusted block tags with whitespace and mixed case', () => {
   const input = 'before <  UNTRUSTED_SOURCE  >payload< / untrusted_source > after';
   const output = sanitizeUntrustedText(input);
-  assert.equal(output, 'before [USUNIĘTY_ZNACZNIK_BLOKU] payload[USUNIĘTY_ZNACZNIK_BLOKU] after');
+  assert.equal(output, 'before [USUNIĘTY_ZNACZNIK_BLOKU]payload[USUNIĘTY_ZNACZNIK_BLOKU] after');
 });
 
 test('preserves ordinary HTML tags and removes untrusted tags embedded in text', () => {
