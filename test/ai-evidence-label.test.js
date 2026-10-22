@@ -28,7 +28,7 @@ test('candidate labels do not become uncovered factual clauses', () => {
   const answer = 'Wheatley przejął kontrolę nad GLaDOS.';
   const claims = [{ claim: 'Wheatley przejął kontrolę nad GLaDOS.' }];
   const clean = sprawdzPokrycieClaimamiOdpowiedzi(answer, claims);
-  const labeled = sprawdzPokrycieClaimamiOdpowiedzi(\`\${answer} (EVIDENCE CANDIDATE 4)\`, claims);
+  const labeled = sprawdzPokrycieClaimamiOdpowiedzi(`${answer} (EVIDENCE CANDIDATE 4)`, claims);
   assert.equal(clean.ok, labeled.ok);
   assert.equal(labeled.totalSentences, clean.totalSentences);
   assert.deepEqual(labeled.uncoveredSentenceIndexes, clean.uncoveredSentenceIndexes);
