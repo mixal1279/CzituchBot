@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 
-const { dopasowanieSemantyczne, czyOgraniczenieDowodowe, spojnoscTlumaczeniaClaimu, czyNazwaWlasnaWystepuje } = require('../ai/claimValidation');
+const { dopasowanieSemantyczne, czyOgraniczenieDowodowe, spojnoscTlumaczeniaClaimu, czyNazwaWlasnaWystepuje, wyodrebnijNazwyWlasne } = require('../ai/claimValidation');
 
 test('brak tłumaczenia claimu jest wskazywany wprost, a nie jako brak nazw własnych', () => {
   const withoutTranslation = dopasowanieSemantyczne(
@@ -44,6 +44,12 @@ test('marker ograniczenia nie pozwala ukryć sprzecznego wzrostu', () => {
     'Wheatley was designed to increase GLaDOS’ intelligence.',
   );
   assert.equal(result.ok, false);
+});
+
+test('opisowe „Dokładny” na początku claimu nie jest nazwą własną', () => {
+  const names = wyodrebnijNazwyWlasne('Dokładny moment jego przybycia do miasta następuje przed walką z Dzikim Gonem.');
+  assert.equal(names.includes('dokładny'), false, JSON.stringify(names));
+  assert.equal(names.includes('dziki gon'), true, JSON.stringify(names));
 });
 
 test('polski zwrot „dając mu władzę” odpowiada angielskiemu „giving him control”', () => {
