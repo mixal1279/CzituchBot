@@ -77,7 +77,7 @@ const { planAIRequest, responseContract, RESPONSE_PROFILES, buildRetrievalQuerie
 const { resolveGameEntity, scoreExternalGameCandidate, externalGameCandidateMatchesQuery } = require('./ai/entities');
 const { extractExplicitUserMemories, mergeMemoryRecords, buildVerifiedMemoryContext, pruneExpiredMemories } = require('./ai/memory');
 const { parseMemoryCommand, forgetMemories, describeMemories } = require('./ai/memory_manager');
-const { decomposeQuestion, isMultiPartQuestion, buildAdvancedRetrievalPlan, buildSupplementalRetrievalQuery, selectRetrievalQueries, initialRetrievalQueryLimit } = require('./ai/retrieval');
+const { decomposeQuestion, isMultiPartQuestion, buildAdvancedRetrievalPlan, buildSupplementalRetrievalQuery, selectRetrievalQueries, selectRetrievalDomains, initialRetrievalQueryLimit } = require('./ai/retrieval');
 const { classifyFailure, nextFallbacks, selectRepairFallbacks, filterAvailableFallbacks, repairBudgetBlockReason, GENERATION_FALLBACK_CHAIN, configuredMaxFallbackSteps, markProviderQuota, isProviderQuotaBlocked, shouldBlockProviderQuotaWide, quotaCooldownMsFromError, geminiGenerationCooldownMsFromError, retryAfterHint, openRouterErrorMessage, shouldOpenQuotaCircuit } = require('./ai/fallback');
 const { normalizeGroqBaseUrl, createGroqCompletion, createGroqCompletionWithSchemaFallback, awaitWithAbortTimeout, computeValidatorTimeout, computeValidatorReserveMs, computeGenerationTimeout, normalizeGroqSdkBaseUrl, INITIAL_VALIDATOR_REPAIR_RESERVE_MS, shouldAttemptUnavailableRepair } = require('./ai/provider-runtime');
 const { createAIMetrics, recordAIMetric, snapshotAIMetrics } = require('./ai/metrics');
@@ -3120,21 +3120,25 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
       : [pytaniaAtomoweTavily[0]];
     console.log(`[Retrieval] 🧭 Plan: ${JSON.stringify(kolejkaTavily)}`);
     let indexZapytania = 0;
+    let useGeneralDomainsForNextQuery = false;
     while (indexZapytania < kolejkaTavily.length && aiState.tavilySearches < aiState.maxWyszukanTavily && !budzetPrzekroczony() && pozostalyCzasMs() > 13500) {
       const query = kolejkaTavily[indexZapytania++];
       if (!aiState.reserveTavily('retrieval')) break;
-      console.log(`[Tavily] 🔍 Query: "${query}" | Domeny: ${JSON.stringify(domenySpecjalistyczne)}`);
+      const personaDomains = (pytanieOrazBilly ? domenyTavilyBilly : null)
+        || (pytanieOrazEdzzi ? domenyTavilyEdzzi : null)
+        || (pytanieOrazAngie ? domenyTavilyAngie : null);
+      const searchDomains = selectRetrievalDomains({
+        personaDomains,
+        specializedDomains: domenySpecjalistyczne,
+        generalDomains: domeny || tavilyOptions.domains || null,
+        useGeneralFallback: useGeneralDomainsForNextQuery,
+      });
+      console.log(`[Tavily] 🔍 Query: "${query}" | Domeny: ${JSON.stringify(searchDomains)}`);
       const wynik = await searchTavilyFn(query, {
-        // Persona-specific domain restrictions must take precedence over the
-        // general/specialized game-domain list. The previous order made these
-        // restrictions unreachable whenever domenySpecjalistyczne was an array.
-        domains: (pytanieOrazBilly ? domenyTavilyBilly : null)
-          || (pytanieOrazEdzzi ? domenyTavilyEdzzi : null)
-          || (pytanieOrazAngie ? domenyTavilyAngie : null)
-          || domenySpecjalistyczne
-          || domeny
-          || tavilyOptions.domains
-          || null,
+        // GameLore/GameFAQs are preferred domains, not hard allowlists. When
+        // the first specialist search is weak, broaden the *next planned query*.
+        // Persona/channel restrictions remain strict through personaDomains.
+        domains: searchDomains,
         time_range: aiPlan.retrievalTimeRange || zakresTavilyDlaPytania(pytanie, null),
         _skipRewrite: true,
         // Pierwsze zapytanie planu: tanie `basic`; kolejne (słaby dowód) `advanced`.
@@ -3157,6 +3161,12 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
       const weakRetrieval = !retrievalText
         || retrievalText.length < 1200
         || retrievalSourceCount < 2;
+      if (weakRetrieval && (pytanieOLore || pytanieOGameplay)
+        && !personaDomains
+        && indexZapytania < kolejkaTavily.length) {
+        useGeneralDomainsForNextQuery = true;
+        console.log('[Tavily] 🔁 Słabe źródła specjalistyczne — następne zapytanie poszerzy domeny.');
+      }
       if (weakRetrieval && retrievalText.length < 1200 && retrievalSourceCount < 2 && kolejkaTavily.length === 1 && aiState.tavilySearches < aiState.maxWyszukanTavily) {
         const fallbackQuery = /dying\s*light/i.test(pytanie)
           ? 'Dying Light The Beast loot locations guide wiki'
