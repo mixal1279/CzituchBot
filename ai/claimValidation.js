@@ -734,21 +734,21 @@ function czyOgraniczenieDowodowe(sentence) {
   return limitation && scopedTopic && (sourceMention || inheritedSourceScope);
 }
 
-const EVIDENCE_LABEL_PRESENCE_RE = /EVIDENCE\\s+CANDIDATES?/i;
-const EVIDENCE_LABEL_RE = /\\s*[([]\\s*EVIDENCE\\s+CANDIDATES?\\s*\\d+(?:\\s*(?:,|;|&|\\bi\\b|\\band\\b)\\s*\\d+)*\\s*[)\\]]|\\s*\\bEVIDENCE\\s+CANDIDATES?\\s*\\d+(?:\\s*:\\s*SOURCE\\s*\\d+)?/gi;
+const EVIDENCE_LABEL_PRESENCE_RE = /EVIDENCE\s+CANDIDATES?/i;
+const EVIDENCE_LABEL_RE = /\s*[(\[]\s*EVIDENCE\s+CANDIDATES?\s*\d+(?:\s*(?:,|;|&|\bi\b|\band\b)\s*\d+)*\s*[)\]]|\s*\bEVIDENCE\s+CANDIDATES?\s*\d+(?:\s*:\s*SOURCE\s*\d+)?/gi;
 
 function usunEtykietyDowodow(text) {
   const raw = String(text || '');
   if (!EVIDENCE_LABEL_PRESENCE_RE.test(raw)) return raw;
   return raw
     .replace(EVIDENCE_LABEL_RE, '')
-    .replace(/[ \\t]{2,}/g, ' ')
-    .replace(/[ \\t]+([.,;!?])/g, '$1')
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/[ \t]+([.,;!?])/g, '$1')
     .trim();
 }
 
 function sprawdzPokrycieClaimamiOdpowiedzi(answer, claims) {
-  const sourceSentences = String(answer || '').split(/(?<=[.!?])\s+|\n+/).map(x => x.trim()).filter(Boolean);
+  const sourceSentences = usunEtykietyDowodow(answer).split(/(?<=[.!?])\s+|\n+/).map(x => x.trim()).filter(Boolean);
   const sentences = sourceSentences.flatMap((sentence, sourceSentenceIndex) => {
     // Wskazanie źródła w nawiasie („(Źródło: opis lokalizacji…)”) to metadane,
     // nie twierdzenie o świecie. Bez tego zdanie nigdy nie ma pokrycia, bo
