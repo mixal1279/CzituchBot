@@ -202,6 +202,46 @@ function classifyBenchmarkOutcome(result = {}) {
   return 'semantic_rejection';
 }
 
+function formatBenchmarkFailureDiagnostics(results, limit = 20) {
+  const failures = (Array.isArray(results) ? results : []).filter(result =>
+    result.judgeStatus !== 'accepted' || result.factualPassed === false
+  );
+  if (failures.length === 0) return ['Brak niezaliczonych przypadków.'];
+
+  const lines = [];
+  for (const result of failures.slice(0, Math.max(1, limit))) {
+    const reasons = [];
+    const outcome = classifyBenchmarkOutcome(result);
+    if (result.judgeStatus !== 'accepted') reasons.push(`judge=${result.judgeStatus || 'unknown'}`);
+    if (result.finalStatus) reasons.push(`pipeline=${result.finalStatus}`);
+    if (result.rejectionReason) reasons.push(String(result.rejectionReason));
+    if (Array.isArray(result.missing) && result.missing.length) reasons.push(`braki: ${result.missing.join(', ')}`);
+    if (Array.isArray(result.factualMissing) && result.factualMissing.length) reasons.push(`brakujące fakty: ${result.factualMissing.join(', ')}`);
+    if (Array.isArray(result.factualForbidden) && result.factualForbidden.length) reasons.push(`niedozwolone fakty: ${result.factualForbidden.join(', ')}`);
+    if (Array.isArray(result.fallbackReasons) && result.fallbackReasons.length) reasons.push(`fallback: ${result.fallbackReasons.join(', ')}`);
+    for (const attempt of (result.generationAttempts || [])) {
+      if (attempt.skipped === true || !['error', 'unavailable'].includes(String(attempt.status || '').toLowerCase())) continue;
+      const detail = [attempt.failure, attempt.reason, attempt.message, attempt.statusCode, attempt.code]
+        .filter(value => value !== undefined && value !== null && value !== '')
+        .join(': ');
+      reasons.push(`generator ${attempt.provider || 'unknown'}=${detail || attempt.status}`);
+    }
+    for (const row of (result.validatorResults || [])) {
+      if (row.skipped === true || !['error', 'unavailable'].includes(String(row.status || '').toLowerCase())) continue;
+      const detail = [row.reason, row.error, row.statusCode, row.code]
+        .filter(value => value !== undefined && value !== null && value !== '')
+        .join(': ');
+      reasons.push(`walidator ${row.provider || 'unknown'}=${detail || row.status}`);
+    }
+    if (result.factualPassed === false) reasons.push(`gold facts ${result.factualScore ?? 0}`);
+    const uniqueReasons = [...new Set(reasons)].slice(0, 6);
+    const detail = (uniqueReasons.length ? uniqueReasons : ['brak szczegółowej przyczyny w śladzie diagnostycznym']).join(' | ');
+    lines.push(`- [${result.id || 'unknown'}] ${outcome}: ${detail}`.slice(0, 1200));
+  }
+  if (failures.length > limit) lines.push(`... oraz ${failures.length - limit} kolejnych niezaliczonych przypadków; pełne dane są w raporcie JSON.`);
+  return lines;
+}
+
 function buildBenchmarkDiagnostics(results, allCases = benchmark.cases, selectedCases = cases) {
   const validatorRows = results.flatMap(result => result.validatorResults || []);
   const validatorProviderCalls = {};
@@ -502,6 +542,8 @@ async function run() {
   if (providerOutage) {
     const outageProviders = (diagnostic.outageProviders || []).join(', ') || 'nieustalony dostawca';
     console.error(`[LIVE BENCHMARK] WYNIK NIEWAŻNY: wszystkie próby dla dostawcy niedostępne lub zakończone błędem: ${outageProviders}. Nie oceniaj jakości kodu po tym runie.`);
+    console.error('[LIVE BENCHMARK] Szczegóły niezaliczonych przypadków:');
+    for (const line of formatBenchmarkFailureDiagnostics(results)) console.error(line);
     process.exitCode = 3;
     return;
   }
@@ -510,13 +552,20 @@ async function run() {
     const factualOk = factualCases.length > 0 && factualPassed === factualCases.length;
     if (answered !== results.length || complete !== results.length || !factualOk) {
       console.error(`[LIVE BENCHMARK] wymagane ${results.length}/${results.length}; odpowiedzi=${answered}/${results.length}, kompletność=${complete}/${results.length}, factual=${factualPassed}/${factualCases.length}`);
+      const gateReasons = [];
+      if (answered !== results.length) gateReasons.push(`nieudzielone odpowiedzi ${answered}/${results.length}`);
+      if (complete !== results.length) gateReasons.push(`niekompletne odpowiedzi ${complete}/${results.length}`);
+      if (!factualOk) gateReasons.push(`gold facts niezaliczone lub brak gold case (${factualPassed}/${factualCases.length})`);
+      console.error(`[LIVE BENCHMARK] PRZYCZYNY NIEPOWODZENIA: ${gateReasons.join('; ')}`);
+      console.error('[LIVE BENCHMARK] Szczegóły per przypadek:');
+      for (const line of formatBenchmarkFailureDiagnostics(results)) console.error(line);
       process.exitCode = 1;
     }
   }
 }
 
 module.exports = {
-  wybierzOdrzuconaOdpowiedz, normalizeFactText, scoreGoldenFacts, stratifiedCases, buildQuestionForBot, isFailureText, evaluateBenchmarkAnswer, isFalseReject, extractClaimSupportAudit, classifyBenchmarkOutcome, buildBenchmarkDiagnostics, writeBenchmarkReport, writeStdoutAndWait, run };
+  wybierzOdrzuconaOdpowiedz, normalizeFactText, scoreGoldenFacts, stratifiedCases, buildQuestionForBot, isFailureText, evaluateBenchmarkAnswer, isFalseReject, extractClaimSupportAudit, classifyBenchmarkOutcome, buildBenchmarkDiagnostics, formatBenchmarkFailureDiagnostics, writeBenchmarkReport, writeStdoutAndWait, run };
 
 if (require.main === module) {
   run().catch(error => {
