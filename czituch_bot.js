@@ -8228,7 +8228,7 @@ function podepnijHandleryEventSub(ws, twitchClient, config) {
         if (login) {
           console.log(`[EventSub] 🔴 ${login} kończy stream – wychodzę z czatu`);
           twitchClient.part(login).catch(err =>
-            console.error(`[EventSub] Błąd part #${login}:`, err)
+            console.error('[EventSub] Błąd part #%s:', login, err)
           );
 
           // Zatrzymaj interwał Billy
