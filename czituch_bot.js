@@ -3111,7 +3111,6 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
       // zapytanie zachowujemy tylko dla pytań przyczynowych lub wieloczęściowych,
       // gdzie osobne evidence realnie poprawia kompletność odpowiedzi.
       maxQueries: initialRetrievalQueryLimit({
-        causalQuestion: answerPlan.causalQuestion,
         multiPart: pytanieWieloczlonowe,
         availableSlots: Math.max(0, aiState.maxWyszukanTavily - aiState.tavilySearches),
       }),
