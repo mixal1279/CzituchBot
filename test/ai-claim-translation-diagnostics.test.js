@@ -30,6 +30,22 @@ test('zastrzeżenie o braku danych jest rozpoznawane jako zdanie bez twierdzenia
   assert.equal(czyOgraniczenieDowodowe('W grze The Witcher 3: Wild Hunt: Kiedy Geralt przybywa do Novigradu?'), false);
 });
 
+test('polskie „ograniczyć inteligencję” odpowiada angielskiemu „inhibit mental abilities”', () => {
+  const result = spojnoscTlumaczeniaClaimu(
+    'Wheatley został zaprojektowany jako rdzeń, który miał ograniczać zdolności umysłowe GLaDOS.',
+    'Wheatley was designed as a core intended to inhibit GLaDOS’ mental abilities.',
+  );
+  assert.equal(result.ok, true, JSON.stringify(result));
+});
+
+test('marker ograniczenia nie pozwala ukryć sprzecznego wzrostu', () => {
+  const result = spojnoscTlumaczeniaClaimu(
+    'Wheatley został zaprojektowany, aby ograniczać inteligencję GLaDOS.',
+    'Wheatley was designed to increase GLaDOS’ intelligence.',
+  );
+  assert.equal(result.ok, false);
+});
+
 test('polski zwrot „dając mu władzę” odpowiada angielskiemu „giving him control”', () => {
   const result = spojnoscTlumaczeniaClaimu(
     'Transfer ten przeniósł rdzeń GLaDOS do ciała Wheatleya, dając mu władzę nad obiektem.',
