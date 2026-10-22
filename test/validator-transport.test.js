@@ -11,6 +11,7 @@ delete process.env.AI_VALIDATOR_BREAKER_MS;
 
 const { __validatorTestHooks: hooks } = require('../czituch_bot');
 const { createAIRequestContext } = require('../ai/requestContext');
+const { normalizeGroqBaseUrl } = require('../ai/provider-runtime');
 const { resetProviderQuotaCooldowns, quotaCooldownMsFromError, shouldOpenQuotaCircuit } = require('../ai/fallback');
 const { GROQ_VALIDATOR_JSON_SCHEMA, buildGroqValidatorResponseFormat, buildOpenRouterValidatorResponseFormat } = require('../ai/validator');
 
@@ -104,6 +105,13 @@ function mockGroq(responseOrFactory) {
   return calls;
 }
 
+test('Groq base URL usuwa powielony suffix OpenAI-compatible API', () => {
+  assert.equal(normalizeGroqBaseUrl(undefined), 'https://api.groq.com/openai/v1');
+  assert.equal(normalizeGroqBaseUrl('https://api.groq.com/openai/v1/'), 'https://api.groq.com/openai/v1');
+  assert.equal(normalizeGroqBaseUrl('https://api.groq.com/openai/v1/openai/v1'), 'https://api.groq.com/openai/v1');
+  assert.equal(normalizeGroqBaseUrl('https://proxy.example/v1'), 'https://proxy.example/v1');
+});
+
 test('wspólny prompt zachowuje claim_en, metadane, pytanie, odpowiedź i źródła', () => {
   const meta = { entity: 'Portal 2', intent: 'web_fact' };
   const prompt = hooks.zbudujPromptWalidatora(QUESTION, ANSWER, EVIDENCE, meta);
@@ -137,7 +145,7 @@ test('Gemini GenerateContent uses the documented systemInstruction and responseF
   assert.ok(call.body.systemInstruction?.parts?.[0]?.text);
   assert.equal(Object.hasOwn(call.body, 'system_instruction'), false);
   assert.equal(Object.hasOwn(call.body.generationConfig, 'temperature'), false);
-  assert.equal(call.body.generationConfig.responseFormat.text.mimeType, 'application/json');
+  assert.equal(call.body.generationConfig.responseFormat.text.mimeType, 'APPLICATION_JSON');
   assert.equal(call.body.generationConfig.responseFormat.text.schema.type, 'object');
   assert.ok(call.body.generationConfig.responseFormat.text.schema.properties.claims.items.properties.claim_en);
   assert.equal(Object.hasOwn(call.body.generationConfig, 'responseSchema'), false);
