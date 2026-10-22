@@ -2,6 +2,7 @@
 
 const crypto = require('crypto');
 const { parseEvidenceBlocks } = require('./evidence');
+const { usunEtykietyDowodow } = require('./claimValidation');
 
 const {
   buildRetrievalPlan,
@@ -134,7 +135,7 @@ function finalText(text, status, helpers = {}) {
     //
     // Gdy caller nie poda partialAnswer, publikujemy odmowę: brak partialAnswer
     // nigdy nie może oznaczać „wypuść pełną, niezweryfikowaną odpowiedź”.
-    let value = String(helpers.partialAnswer || '');
+    let value = usunEtykietyDowodow(helpers.partialAnswer || '');
     if (typeof helpers.sanitizeResponse === 'function') value = helpers.sanitizeResponse(value);
     value = value.trim();
     return value || (helpers.rejectedMessage || 'Nie mam wystarczających danych, żeby odpowiedzieć na to pewnie.');
@@ -142,7 +143,7 @@ function finalText(text, status, helpers = {}) {
   if (status === STATUS.INCONCLUSIVE) return helpers.inconclusiveMessage || 'Chwilowo nie mogę wiarygodnie potwierdzić tej informacji, więc nie będę zgadywać.';
   if (status === STATUS.UNAVAILABLE) return helpers.unavailableMessage || 'Chwilowo nie mogę potwierdzić tej informacji, więc nie będę zgadywać.';
   if (status === STATUS.UNVERIFIED) {
-    let value = String(text || '');
+    let value = usunEtykietyDowodow(text || '');
     if (typeof helpers.sanitizeResponse === 'function') value = helpers.sanitizeResponse(value);
     value = value.trim();
     const warning = '⚠️ Odpowiedź niezweryfikowana — walidator jest niedostępny. ';
@@ -151,7 +152,7 @@ function finalText(text, status, helpers = {}) {
       : (helpers.unavailableMessage || 'Chwilowo nie mogę potwierdzić tej informacji, więc nie będę zgadywać.');
   }
 
-  let value = String(text || '');
+  let value = usunEtykietyDowodow(text || '');
   if (typeof helpers.sanitizeResponse === 'function') value = helpers.sanitizeResponse(value);
   return value.trim();
 }
