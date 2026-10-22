@@ -734,6 +734,19 @@ function czyOgraniczenieDowodowe(sentence) {
   return limitation && scopedTopic && (sourceMention || inheritedSourceScope);
 }
 
+const EVIDENCE_LABEL_PRESENCE_RE = /EVIDENCE\\s+CANDIDATES?/i;
+const EVIDENCE_LABEL_RE = /\\s*[([]\\s*EVIDENCE\\s+CANDIDATES?\\s*\\d+(?:\\s*(?:,|;|&|\\bi\\b|\\band\\b)\\s*\\d+)*\\s*[)\\]]|\\s*\\bEVIDENCE\\s+CANDIDATES?\\s*\\d+(?:\\s*:\\s*SOURCE\\s*\\d+)?/gi;
+
+function usunEtykietyDowodow(text) {
+  const raw = String(text || '');
+  if (!EVIDENCE_LABEL_PRESENCE_RE.test(raw)) return raw;
+  return raw
+    .replace(EVIDENCE_LABEL_RE, '')
+    .replace(/[ \\t]{2,}/g, ' ')
+    .replace(/[ \\t]+([.,;!?])/g, '$1')
+    .trim();
+}
+
 function sprawdzPokrycieClaimamiOdpowiedzi(answer, claims) {
   const sourceSentences = String(answer || '').split(/(?<=[.!?])\s+|\n+/).map(x => x.trim()).filter(Boolean);
   const sentences = sourceSentences.flatMap((sentence, sourceSentenceIndex) => {
@@ -1076,4 +1089,4 @@ function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
   return { ok: true };
 }
 
-module.exports = { KNOWN_ENTITY_ALIAS_PATTERNS, pojeciaCrossLanguage, CAUSAL_RE, CAUSAL_EVIDENCE_RE, wyglądaNaAngielski, spojnoscTlumaczeniaClaimu, czyOgraniczenieDowodowe, normalizujClaim, tokenyClaim, liczbyDoPorownania, czyRelacjaPrzyczynowaPokrywaClaim, wyodrebnijLiczbyIDaty, wyodrebnijJednostkoweWartosci, wyodrebnijNazwyWlasne, zbudujWyroczniaNazw, zgodnoscStrukturalna, sprawdzTwardeKonflikty, sprawdzSprzecznosciSemantyczne, dopasowanieSemantyczne, sprawdzPokrycieClaimamiOdpowiedzi, czyDowodSemantyczniePokrywaClaim, tokenyPokrywajaSie, czyNazwaWlasnaWystepuje };
+module.exports = { KNOWN_ENTITY_ALIAS_PATTERNS, pojeciaCrossLanguage, CAUSAL_RE, CAUSAL_EVIDENCE_RE, wyglądaNaAngielski, spojnoscTlumaczeniaClaimu, czyOgraniczenieDowodowe, normalizujClaim, tokenyClaim, liczbyDoPorownania, czyRelacjaPrzyczynowaPokrywaClaim, wyodrebnijLiczbyIDaty, wyodrebnijJednostkoweWartosci, wyodrebnijNazwyWlasne, zbudujWyroczniaNazw, zgodnoscStrukturalna, sprawdzTwardeKonflikty, sprawdzSprzecznosciSemantyczne, dopasowanieSemantyczne, sprawdzPokrycieClaimamiOdpowiedzi, czyDowodSemantyczniePokrywaClaim, tokenyPokrywajaSie, czyNazwaWlasnaWystepuje, usunEtykietyDowodow };
