@@ -371,7 +371,8 @@ test('kolejność walidatorów to Gemini, Groq, potem dalsze fallbacki; brak pra
   hooks.KONFIGURACJA.xkiroKey = '';
   const order = [];
   mockFetch(async (url) => {
-    if (url.includes('generativelanguage.googleapis.com')) {
+    const parsedUrl = new URL(url);
+    if (parsedUrl.hostname === 'generativelanguage.googleapis.com') {
       order.push('gemini');
       return jsonResponse({
         candidates: [{ content: { parts: [{ text: 'not JSON' }] } }],
@@ -408,7 +409,8 @@ test('niepoprawny cytat kończy walidację bez drugiej opinii, bo wymaga naprawy
     }],
   };
   mockFetch(async url => {
-    if (url.includes('generativelanguage.googleapis.com')) {
+    const parsedUrl = new URL(url);
+    if (parsedUrl.protocol === 'https:' && parsedUrl.hostname === 'generativelanguage.googleapis.com') {
       order.push('gemini');
       return jsonResponse({
         candidates: [{ content: { parts: [{ text: JSON.stringify(badQuoteVerdict) }] } }],
@@ -446,7 +448,8 @@ test('po deterministycznym odrzuceniu cytatu pipeline nie zużywa budżetu na ko
     }],
   };
   mockFetch(async url => {
-    if (url.includes('generativelanguage.googleapis.com')) {
+    const parsedUrl = new URL(url);
+    if (parsedUrl.protocol === 'https:' && parsedUrl.hostname === 'generativelanguage.googleapis.com') {
       order.push('gemini');
       return jsonResponse({ candidates: [{ content: { parts: [{ text: JSON.stringify(badQuoteVerdict) }] } }] });
     }
