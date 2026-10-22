@@ -379,7 +379,10 @@ function causalRelationAnchorsMatch(claim, quote) {
 
 function buildEvidenceRepairContext(claims, blocks, allowedSourceIds = null, maxClaims = 4) {
   const sourceById = new Map((Array.isArray(blocks) ? blocks : [])
-    .map(block => [ensureEvidenceSourceId(block), block])
+    .map(block => [
+      String(block?.sourceId ?? block?.source_id ?? block?.id ?? '').trim().toUpperCase().replace(/\\s+/g, ' '),
+      block,
+    ])
     .filter(([sourceId, block]) => sourceId && block?.content));
   const rows = [];
   for (const claim of (Array.isArray(claims) ? claims : []).slice(0, maxClaims)) {
@@ -399,7 +402,8 @@ function buildEvidenceRepairContext(claims, blocks, allowedSourceIds = null, max
       // verifier accepts. This prevents an ellipsis-joined or otherwise stale
       // candidate from being reintroduced into the repair prompt.
       .filter(candidate => {
-        const sourceId = ensureEvidenceSourceId(candidate);
+        const sourceId = String(candidate?.sourceId ?? candidate?.source_id ?? candidate?.id ?? '')
+          .trim().toUpperCase().replace(/\\s+/g, ' ');
         const source = sourceById.get(sourceId);
         return Boolean(source && quoteExists(source.content, candidate.quote));
       })
