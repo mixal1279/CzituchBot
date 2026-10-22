@@ -35,6 +35,7 @@ test('v26 answer plan identifies causal lore requirements', () => {
   assert.ok(plan.requirements.some(x => x.id === 'entity_context'));
   assert.match(plan.instruction, /jawnie podaje motyw lub cel działania/);
   assert.match(plan.instruction, /nie zastępuj go domniemaną przyczyną/);
+  assert.match(plan.instruction, /„designed to be attached” nie dowodzi/);
 });
 
 test('a stated motive phrased as "miało na celu" satisfies a why answer plan', () => {
