@@ -7917,6 +7917,20 @@ async function subskrybujZRetry(funkcjaSubskrypcji, opis, maxProby = 2, opoznien
   return false;
 }
 
+function walidujEventSubReconnectUrl(reconnectUrl) {
+  if (typeof reconnectUrl !== 'string' || !reconnectUrl) return null;
+  try {
+    const parsed = new URL(reconnectUrl);
+    const DOZWOLONE_HOSTY = new Set(['eventsub.wss.twitch.tv']);
+    if (parsed.protocol !== 'wss:') return null;
+    if (!DOZWOLONE_HOSTY.has(parsed.hostname)) return null;
+    if (parsed.username || parsed.password) return null;
+    return parsed.toString();
+  } catch (_) {
+    return null;
+  }
+}
+
 function podepnijHandleryEventSub(ws, twitchClient, config) {
   const WATCHDOG_DOMYSLNY_MS = 15000; // zanim przyjdzie welcome z prawdziwym keepalive_timeout_seconds
   let watchdogTimeoutMs = WATCHDOG_DOMYSLNY_MS;
@@ -7960,9 +7974,14 @@ function podepnijHandleryEventSub(ws, twitchClient, config) {
     if (type === 'session_reconnect') {
       // Twitch prosi o przeniesienie na nowy URL – nie zamykamy starego do czasu nowego welcome
       const reconnectUrl = msg.payload.session.reconnect_url;
+      const bezpiecznyReconnectUrl = walidujEventSubReconnectUrl(reconnectUrl);
+      if (!bezpiecznyReconnectUrl) {
+        console.warn('[EventSub] ⚠️ Odrzucono nieprawidłowy reconnect_url:', reconnectUrl);
+        return;
+      }
       console.log('[EventSub] 🔄 Reconnect URL otrzymany, przełączam...');
       getEventSubState(config.botNick).reconnecting = true;
-      const nowyWs = new WebSocket(reconnectUrl);
+      const nowyWs = new WebSocket(bezpiecznyReconnectUrl);
       podepnijHandleryEventSub(nowyWs, twitchClient, config);
       getEventSubState(config.botNick).ws = nowyWs;
     }
