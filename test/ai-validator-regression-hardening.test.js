@@ -79,6 +79,22 @@ test('appearance in a campaign remains equivalent across Polish and English', ()
   assert.equal(result.ok, true, JSON.stringify(result));
 });
 
+
+test('relative-clause quote can inherit a proper-name subject only from its adjacent source context', () => {
+  const claim = 'Wheatley pojawia się w kampanii jednoosobowej gry Portal 2.';
+  const quote = 'who appears in the single-player campaign of Portal 2.';
+  const context = 'The Intelligence Dampening Sphere, more commonly known as Wheatley, is a personality core of masculine programming and English West Country accent who appears in the single-player campaign of Portal 2.';
+  const withoutContext = spojnoscTlumaczeniaClaimu(claim, quote, { evidenceQuote: quote });
+  assert.equal(withoutContext.ok, false, JSON.stringify(withoutContext));
+
+  const withContext = spojnoscTlumaczeniaClaimu(claim, quote, {
+    evidenceQuote: quote,
+    evidenceContext: context,
+  });
+  assert.equal(withContext.ok, true, JSON.stringify(withContext));
+});
+
+
 test('translation still rejects a changed causal relation', () => {
   const result = spojnoscTlumaczeniaClaimu(
     'Wheatley przejął kontrolę nad Aperture, ponieważ GLaDOS zniknęła.',
