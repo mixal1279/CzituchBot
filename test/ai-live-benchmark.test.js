@@ -152,6 +152,7 @@ test('live diagnostics distinguish validator failures from generation failures a
   assert.equal(diagnostics.validatorStatusCounts.rejected, 1);
   assert.equal(diagnostics.validatorStatusCounts.unavailable, 1);
   assert.equal(diagnostics.validatorTransportFailures.length, 1);
+  assert.equal(diagnostics.validatorTransportFailures[0].reason, 'timeout');
   assert.deepEqual(diagnostics.generationProviderFailures, ['gemini:gemini-3.8-flash:timeout']);
   assert.equal(diagnostics.validatorSecondOpinions, 1);
   assert.equal(diagnostics.tavilyHttpCalls, 1);
