@@ -73,6 +73,24 @@ function pojeciaCrossLanguage(value) {
 }
 
 const COVERAGE_STOPWORDS = new Set(['jest','byla','bylo','byli','zostal','zostala','zostalo','oraz','ktory','ktora','ktore','przez','jako','jego','jej','this','that','with','from','were','was','have','has']);
+const GENERIC_CAPITALIZED_WORDS = new Set([
+  // Zwykłe rzeczowniki, czasowniki i określenia błędnie wyciągane jako nazwy,
+  // gdy autor odpowiedzi zapisze je wielką literą w środku zdania.
+  'rozdzial', 'rozdzialu', 'rozdziale', 'rozdzialem', 'chapter', 'chapters',
+  'oboz', 'obozu', 'obozie', 'obozem', 'camp', 'inside', 'within',
+  'droga', 'drogi', 'droge', 'road', 'route', 'path',
+  'pojawia', 'pojawilo', 'pojawil', 'pojawila', 'pojawiaja', 'appears', 'appeared', 'appear',
+  'pomaga', 'pomagal', 'pomogla', 'pomogli', 'pomagaja', 'helps', 'helped', 'help',
+  'centrum', 'rozbudowy', 'center', 'centre', 'expansion', 'facility',
+  'kampanii', 'kampania', 'campaign', 'gra', 'gry', 'game', 'games',
+  'wioska', 'wioski', 'village', 'villages', 'kierunku', 'direction',
+  'czesc', 'czesci', 'part', 'first', 'main', 'glowna', 'glownej',
+  'zachodnim', 'zachodnia', 'west', 'north', 'south', 'east',
+  'bezposrednio', 'directly', 'initially', 'initial', 'poczatkowo',
+  'deuteragonisty', 'role', 'rola', 'character', 'postac', 'postaci',
+  'trafia', 'przybywa', 'przybyl', 'wystepuje', 'arrives', 'arrived',
+  'znajduje', 'located', 'lezy', 'prowadzi',
+].map(normalizujClaim));
 const KNOWN_ENTITY_ALIAS_PATTERNS = [
   { canonical: 'greatsword', pattern: /\b(?:greatsword|wielk(?:i|iego|iemu|im|imi)\s+miec(?:z|za|zem|zowi|zu))\b/iu },
   // Accept the benchmark source's one-letter misspelling `drgon bane` only for the known item.
@@ -308,6 +326,13 @@ function wyodrebnijNazwyWlasne(value, options = {}) {
       firstCandidate = false;
 
       if (atSentenceStart && genericFirstWords.has(normalizujClaim(token))) continue;
+      const normalizedCandidate = normalizujClaim(token);
+      const knownAliasCandidate = KNOWN_ENTITY_ALIAS_PATTERNS.some(alias => alias.pattern.test(token));
+      const knownOracleCandidate = options.nameOracle instanceof Set
+        && [...new Set([normalizujTokenWyroczni(token), ...wariantyNazwyDoDopasowania(token).map(normalizujTokenWyroczni)])]
+          .some(variant => options.nameOracle.has(variant));
+      if (!atSentenceStart && GENERIC_CAPITALIZED_WORDS.has(normalizedCandidate)
+        && !knownAliasCandidate && !knownOracleCandidate) continue;
       if (atSentenceStart && options.nameOracle instanceof Set) {
         const normalizedToken = normalizujTokenWyroczni(token);
         const isKnownAlias = KNOWN_ENTITY_ALIAS_PATTERNS.some(alias => alias.pattern.test(token));
@@ -498,7 +523,15 @@ function czyNazwaWlasnaWystepuje(entity, evidenceNormalized) {
 function wybierzKlausuleDowoduDlaClaimu(evidence, claim) {
   const fragments = String(evidence || '').split(/(?<=[.!?])\s+|,\s+(?=(?:but|however|yet|whereas|ale|jednak|natomiast)\b)/iu).map(fragment => fragment.trim()).filter(Boolean);
   if (fragments.length < 2) return String(evidence || '');
-  const claimTokens = tokenyPokryciaBezStop(claim).filter(token => !NEGATION_RE.test(token));
+  // Auxiliary verbs and polarity markers should not make an unrelated
+  // negative clause win a tie against the clause describing the claimed event.
+  const scopeStopwords = new Set([
+    'did', 'does', 'do', 'was', 'were', 'is', 'are', 'be', 'been', 'being',
+    'has', 'have', 'had', 'can', 'could', 'will', 'would', 'should', 'may',
+    'might', 'must', 'not', 'never', 'nie', 'nigdy', 'brak', 'bez',
+  ]);
+  const claimTokens = tokenyPokryciaBezStop(claim)
+    .filter(token => !NEGATION_RE.test(token) && !scopeStopwords.has(token));
   if (!claimTokens.length) return String(evidence || '');
   const score = fragment => {
     const fragmentTokens = tokenyPokryciaBezStop(fragment);
@@ -813,7 +846,7 @@ function sprawdzPokrycieClaimamiOdpowiedzi(answer, claims) {
     // Nie rozbijamy zwykłych list rzeczowników (np. „ogień, mróz i magia”):
     // separator musi być przecinkiem przed spójnikiem albo średnikiem.
     const clauses = base
-      .split(/;\s*|,\s*(?=(?:and\s+then|and|but|then|while|or|a\s+potem|ale|jednak|następnie|nastepnie|oraz)\b)/iu)
+      .split(/;\s*|,\s*(?=(?:and\s+then|and|but|then|while|or|a\s+(?:potem|następnie|nastepnie)|ale|jednak|następnie|nastepnie|oraz)\b)/iu)
       .map(part => part.trim())
       .filter(Boolean);
     if (clauses.length > 1) return clauses.map(text => ({ text, sourceSentenceIndex }));
