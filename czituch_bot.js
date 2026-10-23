@@ -94,7 +94,7 @@ const { buildAnswerPlan } = require('./ai/answer-plan');
 const { judgeAnswer, partialAnswerPreservesCoreIntent } = require('./ai/answer-judge');
 const { parseEvidenceBlocks, buildQuestionEvidenceContext, escapeUntrustedEvidenceContent } = require('./ai/evidence');
 const { buildBoundedEvidencePrompt } = require('./ai/prompt-context');
-const { buildRequestMessages, buildOpenRouterMessages: formatOpenRouterMessages } = require('./ai/request-messages');
+const { buildRequestMessages, buildOpenRouterMessages: formatOpenRouterMessages, isMissingQuestionPlaceholder } = require('./ai/request-messages');
 const { parseGeminiGenerationResponse, buildGeminiGenerateContentUrl } = require('./ai/gemini-response');
 
 // Exact source spans help the validator quote evidence accurately. These are
@@ -3699,6 +3699,10 @@ Pytanie użytkownika: ${pytanie}`;
     let result = shouldAttemptPrimary
       ? await zapytajGlowny(effectiveMaxTok, prompt, primaryModel)
       : wynikPusty('groq', primaryModel, allowPrimary ? 'provider cooldown active' : 'primary model skipped for this generation cycle');
+    if (isMissingQuestionPlaceholder(result.tekst)) {
+      result = { ...result, tekst: '', error: 'empty_response: generator returned a missing-question placeholder' };
+      console.warn(`[AI][${requestId}] ${primaryStep} zwrócił placeholder „brak pytania”; traktuję jako pustą odpowiedź i uruchamiam fallback.`);
+    }
     let lastResult = result;
     let failureType = allowPrimary ? classifyFailure(result.error || '') : 'validator_rejection';
 
@@ -3805,7 +3809,11 @@ Pytanie użytkownika: ${pytanie}`;
       attempted.push(step);
       const attemptStartedAt = Date.now();
       aiState.recordTiming('generation_fallback_start', { phase, provider: step.split(':')[0], model: step.split(':').slice(1).join(':') || 'default', step });
-      const candidate = await fn();
+      let candidate = await fn();
+      if (isMissingQuestionPlaceholder(candidate.tekst)) {
+        candidate = { ...candidate, tekst: '', error: 'empty_response: fallback generator returned a missing-question placeholder' };
+        console.warn(`[AI][${requestId}] ${step} zwrócił placeholder „brak pytania”; pomijam wynik i próbuję kolejnego fallbacku.`);
+      }
       lastResult = candidate;
       if (candidate.tekst && !candidate.ucieta) {
         lastSuccessfulGenerationStep = step;
