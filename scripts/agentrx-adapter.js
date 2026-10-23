@@ -125,7 +125,7 @@ for (const item of report.failures) {
   };
 
   const file = path.join(outputDir, `${id}.json`);
-  fs.writeFileSync(file, `${JSON.stringify(trajectory, null, 2)}\\n`, { mode: 0o600 });
+  fs.writeFileSync(file, `${JSON.stringify(trajectory, null, 2)}\n`, { mode: 0o600 });
   written.push(file);
 }
 
