@@ -1193,12 +1193,14 @@ function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
     const evidenceContext = String(options.evidenceContext || '');
     const evidenceQuote = String(options.evidenceQuote || '').trim();
     const quoteOffset = evidenceQuote ? evidenceContext.indexOf(evidenceQuote) : -1;
-    const anaphoricEn = /^(?:who|which|that|he|she|it|they|his|her|their|its)\\b/u.test(enNormalized);
+    const anaphoricEn = ['who ', 'which ', 'that ', 'he ', 'she ', 'it ', 'they ', 'his ', 'her ', 'their ', 'its ']
+      .some(prefix => enNormalized.startsWith(prefix));
     const prefix = quoteOffset >= 0 ? evidenceContext.slice(0, quoteOffset) : '';
     const sameSentencePrefix = prefix.split(/[.!?](?:\\s+|$)/u).at(-1) || '';
+    const normalizedPrefix = ' ' + normalizujClaim(sameSentencePrefix) + ' ';
     const missingEntitiesBound = quoteOffset >= 0
       && anaphoricEn
-      && missing.every(name => czyNazwaWlasnaWystepuje(name, normalizujClaim(sameSentencePrefix)));
+      && missing.every(name => normalizedPrefix.includes(' ' + normalizujClaim(name) + ' '));
     if (!missingEntitiesBound) {
       return { ok: false, reason: 'tłumaczenie claimu gubi nazwy własne: ' + missing.slice(0, 3).join(', ') };
     }
