@@ -268,8 +268,20 @@ function normalizujIdZrodla(value) {
 }
 
 function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '', options = {}) {
+  if (!Array.isArray(sourceIds) || !sourceIds.length || typeof evidenceQuote !== 'string') {
+    return { ok: false, reason: 'brak poprawnego source_id lub evidence_quote' };
+  }
+  const quote = evidenceQuote.trim();
   const blocks = parseEvidenceBlocks(dane);
   const nameOracle = options.nameOracle instanceof Set ? options.nameOracle : zbudujWyroczniaNazw(blocks);
+  // Only exact quotes from one of the claim's own sources can contribute local
+  // context to translation checks. This supports a relative clause like
+  // "who appears..." only when the preceding subject is adjacent in that source.
+  const translationSourceContext = sourceIds
+    .map(id => blocks.find(block => normalizujIdZrodla(block.sourceId) === normalizujIdZrodla(id)))
+    .filter(block => block && quoteExists(block.content, quote))
+    .map(block => buildBoundedSourceContext(block.content, quote, 1))
+    .find(Boolean) || '';
   const ignoredSentenceInitialNames = new Set();
   const collectIgnoredNames = result => {
     for (const token of result?.ignoredSentenceInitialNames || []) ignoredSentenceInitialNames.add(token);
@@ -285,16 +297,13 @@ function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '', opt
       return { ok: false, reason: 'brak angielskiego tłumaczenia claimu dla angielskiego dowodu' };
     }
     const translation = claimEn || String(claim || '').trim();
-    const consistency = spojnoscTlumaczeniaClaimu(claim, translation, { nameOracle, evidenceQuote });
+    const consistency = spojnoscTlumaczeniaClaimu(claim, translation, { nameOracle, evidenceQuote, evidenceContext: translationSourceContext });
     if (!consistency.ok) {
       return { ok: false, reason: consistency.reason || 'angielskie tłumaczenie claimu nie zgadza się z oryginałem' };
     }
     claim = translation;
   }
-  if (!Array.isArray(sourceIds) || !sourceIds.length || typeof evidenceQuote !== 'string') {
-    return { ok: false, reason: 'brak poprawnego source_id lub evidence_quote' };
-  }
-  const quote = evidenceQuote.trim();
+
   // Dolny próg: 8 znaków, a cytat 8–11-znakowy musi mieć co najmniej dwa wyrazy. Dzięki temu
   // krótkie, ale dosłowne wpisy z infoboksów („Class Rogue”, „Gender Male”) są dowodem,
   // a pojedyncze słowo nadal nim nie jest.
