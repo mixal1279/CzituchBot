@@ -57,6 +57,23 @@ test('epistemic reason-why translation remains equivalent across Polish and Engl
   assert.equal(result.ok, true, JSON.stringify(result));
 });
 
+
+test('Polish intelligence-dampening descriptor matches its English equivalent', () => {
+  const result = spojnoscTlumaczeniaClaimu(
+    'Wheatley jest inteligencyjną sferą tłumiącą.',
+    'Wheatley is an intelligence dampening sphere.',
+  );
+  assert.equal(result.ok, true, JSON.stringify(result));
+});
+
+test('appearance in a campaign remains equivalent across Polish and English', () => {
+  const result = spojnoscTlumaczeniaClaimu(
+    'Wheatley pojawia się w kampanii jednoosobowej gry Portal 2.',
+    'Wheatley appears in the single-player campaign of Portal 2.',
+  );
+  assert.equal(result.ok, true, JSON.stringify(result));
+});
+
 test('translation still rejects a changed causal relation', () => {
   const result = spojnoscTlumaczeniaClaimu(
     'Wheatley przejął kontrolę nad Aperture, ponieważ GLaDOS zniknęła.',
