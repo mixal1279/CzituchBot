@@ -354,7 +354,7 @@ function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '', opt
       // The live benchmark exposed a common, actionable failure: generated
       // citations included "[...]" to join non-adjacent fragments. These are
       // not verbatim evidence and must never be relaxed into fuzzy matching.
-      const usesSyntheticEllipsis = /(?:\[\s*(?:…|\\.\\.\\.)\s*\]|…|\\.\\.\\.)/u.test(quote);
+      const usesSyntheticEllipsis = /(?:\[\s*(?:…|\.\.\.)\s*\]|…|\.\.\.)/u.test(quote);
       reasons.push(usesSyntheticEllipsis
         ? 'evidence_quote zawiera wielokropek lub sklejone fragmenty; wymagany jest dosłowny, ciągły cytat: ' + id
         : 'evidence_quote nie występuje w wskazanym źródle: ' + id);
