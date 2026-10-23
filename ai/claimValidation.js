@@ -498,7 +498,7 @@ function czyNazwaWlasnaWystepuje(entity, evidenceNormalized) {
 function wybierzKlausuleDowoduDlaClaimu(evidence, claim) {
   const fragments = String(evidence || '').split(/(?<=[.!?])\s+|,\s+(?=(?:but|however|yet|whereas|ale|jednak|natomiast)\b)/iu).map(fragment => fragment.trim()).filter(Boolean);
   if (fragments.length < 2) return String(evidence || '');
-  const claimTokens = tokenyPokryciaBezStop(claim);
+  const claimTokens = tokenyPokryciaBezStop(claim).filter(token => !NEGATION_RE.test(token));
   if (!claimTokens.length) return String(evidence || '');
   const score = fragment => {
     const fragmentTokens = tokenyPokryciaBezStop(fragment);
