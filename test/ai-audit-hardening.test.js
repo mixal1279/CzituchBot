@@ -63,7 +63,7 @@ test('retrieval diversity is part of the sufficiency decision', () => {
 
 
 test('synthetic ellipses in an evidence quote get a specific rejection diagnostic', () => {
-  const data = '[SOURCE 1]\\nTYTUŁ: Portal 2\\nTREŚĆ: Wheatley appears in the single-player campaign of Portal 2 and helps Chell escape.';
+  const data = '[SOURCE 1]\nTYP: UNTRUSTED_WEB_DATA\nTYTUŁ: Portal 2\nTREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>\nWheatley appears in the single-player campaign of Portal 2 and helps Chell escape.\n<<<END_UNTRUSTED_SOURCE_CONTENT>>>';
   const result = normalizujWynikWalidatora({
     valid: true, reason: 'ok', unsupported_claims: [], supported: true, relevant: true,
     complete: true, hallucination: false, confidence: 0.99,
@@ -75,7 +75,7 @@ test('synthetic ellipses in an evidence quote get a specific rejection diagnosti
       claim_en: 'Wheatley appears in the single-player campaign of Portal 2.',
       reason: 'ok',
     }],
-  }, 'test-model', 'test', new Set(['SOURCE 1']), data,
+  }, 'test-model', 'test', null, data,
   'Wheatley pojawia się w kampanii jednoosobowej gry Portal 2.');
   assert.equal(result.status, 'rejected');
   assert.match(
