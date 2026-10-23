@@ -54,3 +54,15 @@ test('cross-language translation recognizes release and travel concepts without 
   );
   assert.equal(travel.ok, true, travel.reason);
 });
+
+test('common Polish sentence-initial words in game answers are not treated as proper names', () => {
+  for (const claim of [
+    'Rodzinne zadanie prowadzi do odnalezienia Anny.',
+    'Polowanie na czarownice jest jednym z powiązanych zadań.',
+    'Wędrwanie w ciemności jest kolejnym zadaniem.',
+    'Struktura generuje się w biomie Netheru.',
+    'Wiedźmin jest mutowanym łowcą potworów.',
+  ]) {
+    assert.deepEqual(wyodrebnijNazwyWlasne(claim), [], claim);
+  }
+});
