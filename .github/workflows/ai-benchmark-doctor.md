@@ -3,6 +3,7 @@ description: |
   Investigates failed AI Live Benchmark GitHub Actions runs, identifies likely
   root causes from logs and repository context, and reports evidence-backed
   recommendations without modifying code.
+engine: copilot
 on:
   workflow_run:
     workflows: ["AI live benchmark"]
@@ -14,6 +15,7 @@ permissions:
   contents: read
   issues: read
   pull-requests: read
+  copilot-requests: write
 safe-outputs:
   create-issue:
     title-prefix: "[AI benchmark diagnosis] "
