@@ -2,12 +2,20 @@ name: Compile GitHub Agentic Workflows
 
 on:
   workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/ai-benchmark-doctor.md"
+      - ".github/workflows/ai-benchmark-doctor.lock.yml"
+      - ".github/workflows/compile-gh-aw.yml"
   push:
     branches:
       - main
       - fix/validator-false-rejection-regressions
     paths:
       - ".github/workflows/ai-benchmark-doctor.md"
+      - ".github/workflows/ai-benchmark-doctor.lock.yml"
       - ".github/workflows/compile-gh-aw.yml"
 
 permissions:
@@ -22,10 +30,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Check out branch
+      - name: Check out the tested commit
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.ref_name }}
 
       - name: Set up GitHub CLI and gh-aw
         run: |
