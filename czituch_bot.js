@@ -2405,7 +2405,17 @@ async function walidujOdpowiedzAIBezCache(persona, pytanie, odpowiedz, dane, his
     const validatorElapsedMs = Date.now() - validatorStartedAt;
     const remainingAfter = requestState?.remainingMs?.() ?? null;
     requestState?.recordTiming?.('validator_provider_end', { provider: 'gemini', model: models[i], status: result.status, validatorElapsedMs, remainingBefore, remainingAfter, reason: String(result.reason || '').slice(0, 180) });
-    if (requestState) requestState.validatorResults.push({ model: models[i], provider: 'gemini', status: result.status, elapsedMs: validatorElapsedMs, remainingMsBefore: remainingBefore, remainingMsAfter: remainingAfter, complete: result.complete === true, confidence: Number.isFinite(result.confidence) ? result.confidence : null, claimCoverage: Array.isArray(result.claims) && result.claims.length ? result.claims.filter(c => c.supported === true).length / result.claims.length : null, validationDiagnostics: result.diagnostics || null });
+    if (requestState) requestState.validatorResults.push({
+      model: models[i], provider: 'gemini', status: result.status,
+      elapsedMs: validatorElapsedMs, remainingMsBefore: remainingBefore, remainingMsAfter: remainingAfter,
+      complete: result.complete === true, confidence: Number.isFinite(result.confidence) ? result.confidence : null,
+      claimCoverage: Array.isArray(result.claims) && result.claims.length ? result.claims.filter(c => c.supported === true).length / result.claims.length : null,
+      reason: typeof result.reason === 'string' ? result.reason.slice(0, 300) : null,
+      technicalError: result.technicalError === true, timeoutAbort: result.timeoutAbort === true,
+      quota: result.quota === true, skipped: result.skipped === true,
+      statusCode: Number.isFinite(Number(result.statusCode)) && result.statusCode != null ? Number(result.statusCode) : null,
+      validationDiagnostics: result.diagnostics || null,
+    });
     console.log(`[AI][${requestId}] validator #${i + 1} ${models[i]} → ${result.status}${result.diagnostics ? ` localReject=${JSON.stringify(result.diagnostics.localRejectReasons)} claimCoverage=${result.diagnostics.claimCoverage}` : ''}`);
     if (result.status === 'accepted' || result.status === 'soft_accepted') return result;
     if (result.status === 'rejected') {
@@ -2464,6 +2474,10 @@ async function walidujOdpowiedzAIBezCache(persona, pytanie, odpowiedz, dane, his
           claimCoverage: Array.isArray(groqResult.claims) && groqResult.claims.length
             ? groqResult.claims.filter(c => c.supported === true).length / groqResult.claims.length
             : null,
+          reason: typeof groqResult.reason === 'string' ? groqResult.reason.slice(0, 300) : null,
+          technicalError: groqResult.technicalError === true, timeoutAbort: groqResult.timeoutAbort === true,
+          quota: groqResult.quota === true, skipped: groqResult.skipped === true,
+          statusCode: Number.isFinite(Number(groqResult.statusCode)) && groqResult.statusCode != null ? Number(groqResult.statusCode) : null,
           validationDiagnostics: groqResult.diagnostics || null,
         });
         if (groqResult.status === 'accepted' || groqResult.status === 'soft_accepted') return groqResult;
@@ -2522,6 +2536,10 @@ async function walidujOdpowiedzAIBezCache(persona, pytanie, odpowiedz, dane, his
         claimCoverage: Array.isArray(xkiroResult.claims) && xkiroResult.claims.length
           ? xkiroResult.claims.filter(c => c.supported === true).length / xkiroResult.claims.length
           : null,
+        reason: typeof xkiroResult.reason === 'string' ? xkiroResult.reason.slice(0, 300) : null,
+        technicalError: xkiroResult.technicalError === true, timeoutAbort: xkiroResult.timeoutAbort === true,
+        quota: xkiroResult.quota === true, skipped: xkiroResult.skipped === true,
+        statusCode: Number.isFinite(Number(xkiroResult.statusCode)) && xkiroResult.statusCode != null ? Number(xkiroResult.statusCode) : null,
         validationDiagnostics: xkiroResult.diagnostics || null,
       });
       if (xkiroResult.status === 'accepted' || xkiroResult.status === 'soft_accepted') return xkiroResult;
@@ -2567,7 +2585,7 @@ async function walidujOdpowiedzAIBezCache(persona, pytanie, odpowiedz, dane, his
   if (requestState?.validatorResults?.length) {
     const lastResult = requestState.validatorResults[requestState.validatorResults.length - 1];
     if (lastResult?.provider === 'openrouter' || lastResult?.status === 'fallback') {
-      Object.assign(lastResult, { elapsedMs: validatorElapsedMs, remainingMsBefore: remainingBefore, remainingMsAfter: remainingAfter, status: fallback.status });
+      Object.assign(lastResult, { elapsedMs: validatorElapsedMs, remainingMsBefore: remainingBefore, remainingMsAfter: remainingAfter, status: fallback.status, reason: typeof fallback.reason === 'string' ? fallback.reason.slice(0, 300) : null, technicalError: fallback.technicalError === true, timeoutAbort: fallback.timeoutAbort === true, quota: fallback.quota === true, skipped: fallback.skipped === true, statusCode: Number.isFinite(Number(fallback.statusCode)) && fallback.statusCode != null ? Number(fallback.statusCode) : null });
     }
   }
   if (fallback.status === 'accepted' || fallback.status === 'soft_accepted') return fallback;
