@@ -1183,7 +1183,26 @@ function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
       && /\brelic\b/u.test(enNormalized)) return false;
     return !czyNazwaWlasnaWystepuje(name, enNormalized);
   });
-  if (missing.length) return { ok: false, reason: 'tłumaczenie claimu gubi nazwy własne: ' + missing.slice(0, 3).join(', ')};
+  if (missing.length) {
+    // A source may quote a relative/anaphoric continuation ("who appears…")
+    // that is not a standalone translation of the Polish claim. Accept the
+    // omitted subject only when the exact quote is embedded in the supplied,
+    // bounded source context and the claimed entity is in the SAME sentence
+    // immediately before that quote. The downstream evidence check still
+    // validates the action, quote, and source binding.
+    const evidenceContext = String(options.evidenceContext || '');
+    const evidenceQuote = String(options.evidenceQuote || '').trim();
+    const quoteOffset = evidenceQuote ? evidenceContext.indexOf(evidenceQuote) : -1;
+    const anaphoricEn = /^(?:who|which|that|he|she|it|they|his|her|their|its)\\b/u.test(enNormalized);
+    const prefix = quoteOffset >= 0 ? evidenceContext.slice(0, quoteOffset) : '';
+    const sameSentencePrefix = prefix.split(/[.!?](?:\\s+|$)/u).at(-1) || '';
+    const missingEntitiesBound = quoteOffset >= 0
+      && anaphoricEn
+      && missing.every(name => czyNazwaWlasnaWystepuje(name, normalizujClaim(sameSentencePrefix)));
+    if (!missingEntitiesBound) {
+      return { ok: false, reason: 'tłumaczenie claimu gubi nazwy własne: ' + missing.slice(0, 3).join(', ') };
+    }
+  }
   return { ok: true };
 }
 
