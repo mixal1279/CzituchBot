@@ -1,0 +1,51 @@
+name: Compile GitHub Agentic Workflows
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - fix/validator-false-rejection-regressions
+    paths:
+      - ".github/workflows/ai-benchmark-doctor.md"
+      - ".github/workflows/compile-gh-aw.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: compile-gh-aw-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up GitHub CLI
+        run: |
+          gh --version
+          gh extension install github/gh-aw
+
+      - name: Compile and validate agentic workflow
+        run: gh aw compile .github/workflows/ai-benchmark-doctor.md
+
+      - name: Commit generated lock file
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/workflows/ai-benchmark-doctor.lock.yml
+          if git diff --cached --quiet; then
+            echo "Generated lock file is already up to date."
+            exit 0
+          fi
+          git commit -m "ci: compile AI benchmark doctor workflow"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
