@@ -1956,12 +1956,13 @@ async function walidujOdpowiedzOpenRouter(persona, pytanie, odpowiedz, dane, req
   if (requestState && validatorTimeoutMs === null) {
     return { status: 'unavailable', ok: false, technicalError: true, transient: true, skipped: true, provider: 'openrouter', model: KONFIGURACJA.openrouterValidatorModel, unsupported_claims: [], reason: 'OpenRouter validator pominięty: zbyt mały pozostały budżet czasu' };
   }
-  const timer = setTimeout(() => controller.abort(), validatorTimeoutMs);
+  // Timeout is enforced around the complete fetch + response-body read.
   try {
-    const response = await fetch(`${KONFIGURACJA.openrouterBaseUrl}/chat/completions`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${KONFIGURACJA.openrouterKey}`, 'HTTP-Referer': 'https://czituchbot.pl', 'X-Title': 'CzituchBot validator' },
-      body: JSON.stringify({
+     const { response, data } = await awaitWithAbortTimeout((async () => {
+      const response = await fetch(`${KONFIGURACJA.openrouterBaseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${KONFIGURACJA.openrouterKey}`, 'HTTP-Referer': 'https://czituchbot.pl', 'X-Title': 'CzituchBot validator' },
+        body: JSON.stringify({
         model: KONFIGURACJA.openrouterValidatorModel,
         messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
         temperature: 0,
@@ -1972,9 +1973,10 @@ async function walidujOdpowiedzOpenRouter(persona, pytanie, odpowiedz, dane, req
         provider: { require_parameters: true },
         response_format: buildOpenRouterValidatorResponseFormat(),
       }), signal: controller.signal,
-    });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) {
+      });
+      const data = await response.json().catch(() => ({}));
+      return { response, data };
+    })(), validatorTimeoutMs, controller, 'OpenRouter validator');    if (!response.ok) {
       const status = Number(response.status || 0);
       const retryAfter = retryAfterHint(response);
       const metadata = data?.error?.metadata || {};
@@ -2066,7 +2068,7 @@ async function walidujOdpowiedzOpenRouter(persona, pytanie, odpowiedz, dane, req
     const diagnostic = formatProviderError('openrouter', KONFIGURACJA.openrouterValidatorModel, err, { timeoutMs: validatorTimeoutMs, timeoutAbort });
     console.error(`[AI][${requestId}] OpenRouter validator TRANSPORT_ERROR: ${diagnostic}`);
     return { status: 'unavailable', ok: false, technicalError: true, transient: timeoutAbort, timeoutAbort, provider: 'openrouter', model: KONFIGURACJA.openrouterValidatorModel, unsupported_claims: [], reason: timeoutAbort ? 'OpenRouter validator timeout/abort' : 'fallback validator niedostępny', error: diagnostic, diagnostic };
-  } finally { clearTimeout(timer); }
+  }
 }
 
 
@@ -2220,7 +2222,7 @@ async function walidujOdpowiedzXKiro(persona, pytanie, odpowiedz, dane, requestI
   // timeoutem w benchmarku; 4,5 s daje modelowi realną szansę, a limit pozostałego
   // czasu i rezerwa nadal chronią ostatni fallback OpenRouter. Poniżej 14,5 s pomijamy xKiro.
   const timeoutMs = requestState
-    ? (remainingMs < 14500 ? null : computeValidatorTimeout(remainingMs, {
+    ? (computeValidatorTimeout(remainingMs, {
         maxTimeoutMs: Number(process.env.AI_XKIRO_VALIDATOR_TIMEOUT_MS) || 4500,
         reserveMs: computeValidatorReserveMs(remainingMs, requestState.validatory + 1, requestState.maxValidatorow, requestState.validationPass === 1 ? INITIAL_VALIDATOR_REPAIR_RESERVE_MS : 0),
         minTimeoutMs: 1200,
@@ -2505,7 +2507,7 @@ async function walidujOdpowiedzAIBezCache(persona, pytanie, odpowiedz, dane, his
     const xkiroRemainingMs = requestState
       ? (typeof requestState.remainingMs === 'function' ? requestState.remainingMs() : requestState.maxCzasMs - (Date.now() - requestState.startedAt))
       : 6000;
-    const xkiroTimeoutMs = xkiroRemainingMs < 14500 ? null : computeValidatorTimeout(xkiroRemainingMs, {
+    const xkiroTimeoutMs = computeValidatorTimeout(xkiroRemainingMs, {
       maxTimeoutMs: Number(process.env.AI_XKIRO_VALIDATOR_TIMEOUT_MS) || 4500,
       reserveMs: computeValidatorReserveMs(xkiroRemainingMs, requestState?.validatory + 1, requestState?.maxValidatorow, requestState?.validationPass === 1 ? INITIAL_VALIDATOR_REPAIR_RESERVE_MS : 0),
       minTimeoutMs: 1200,
