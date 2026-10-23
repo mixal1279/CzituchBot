@@ -61,6 +61,29 @@ test('retrieval diversity is part of the sufficiency decision', () => {
   assert.equal(shouldRunAdditionalRetrieval({ text: 'x'.repeat(1200), sourceCount: 2, queryCount: 1, results, requireDiversity: true }), false);
 });
 
+
+test('synthetic ellipses in an evidence quote get a specific rejection diagnostic', () => {
+  const data = '[SOURCE 1]\\nTYTUŁ: Portal 2\\nTREŚĆ: Wheatley appears in the single-player campaign of Portal 2 and helps Chell escape.';
+  const result = normalizujWynikWalidatora({
+    valid: true, reason: 'ok', unsupported_claims: [], supported: true, relevant: true,
+    complete: true, hallucination: false, confidence: 0.99,
+    claims: [{
+      claim: 'Wheatley pojawia się w kampanii jednoosobowej gry Portal 2.',
+      supported: true,
+      source_ids: ['SOURCE 1'],
+      evidence_quote: 'Wheatley appears [...] in the single-player campaign of Portal 2.',
+      claim_en: 'Wheatley appears in the single-player campaign of Portal 2.',
+      reason: 'ok',
+    }],
+  }, 'test-model', 'test', new Set(['SOURCE 1']), data,
+  'Wheatley pojawia się w kampanii jednoosobowej gry Portal 2.');
+  assert.equal(result.status, 'rejected');
+  assert.match(
+    result.diagnostics.unsupportedEvidenceClaims[0].reasons[0],
+    /dosłowny, ciągły cytat/,
+  );
+});
+
 test('validator accepts a genuine paraphrased claim without weakening source binding', () => {
   const data = '[SOURCE 1]\nTYTUŁ: Portal 2\nTREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>\nWheatley zostaje przeniesiony do ciała GLaDOS.\n<<<END_UNTRUSTED_SOURCE_CONTENT>>>';
   const result = normalizujWynikWalidatora({
