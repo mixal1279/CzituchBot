@@ -56,13 +56,14 @@ test('cross-language translation recognizes release and travel concepts without 
 });
 
 test('common Polish sentence-initial words in game answers are not treated as proper names', () => {
-  for (const claim of [
-    'Rodzinne zadanie prowadzi do odnalezienia Anny.',
-    'Polowanie na czarownice jest jednym z powiązanych zadań.',
-    'Wędrwanie w ciemności jest kolejnym zadaniem.',
-    'Struktura generuje się w biomie Netheru.',
-    'Wiedźmin jest mutowanym łowcą potworów.',
-  ]) {
-    assert.deepEqual(wyodrebnijNazwyWlasne(claim), [], claim);
+  const cases = [
+    ['Rodzinne zadanie prowadzi do odnalezienia Anny.', 'rodzinne'],
+    ['Polowanie na czarownice jest jednym z powiązanych zadań.', 'polowanie'],
+    ['Wędrowanie w ciemności jest kolejnym zadaniem.', 'wedrowanie'],
+    ['Struktura generuje się w biomie Netheru.', 'struktura'],
+    ['Wiedźmin jest mutowanym łowcą potworów.', 'wiedzmin'],
+  ];
+  for (const [claim, falseEntity] of cases) {
+    assert.equal(wyodrebnijNazwyWlasne(claim).includes(falseEntity), false, claim);
   }
 });
