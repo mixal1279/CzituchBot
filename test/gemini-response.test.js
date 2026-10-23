@@ -122,3 +122,12 @@ test('Gemini generateContent URL follows the configured model ID', () => {
   assert.throws(() => buildGeminiGenerateContentUrl(''), /Invalid Gemini model ID/);
   assert.throws(() => buildGeminiGenerateContentUrl('models/gemini-3.8-flash'), /Invalid Gemini model ID/);
 });
+
+test('hard numeric tokens normalize thousands separators without changing decimals', () => {
+  const { normalizujTokenLiczbowy } = require('../ai/response');
+  assert.equal(normalizujTokenLiczbowy('50,000 lat'), '50000 lat');
+  assert.equal(normalizujTokenLiczbowy('50.000 lat'), '50000 lat');
+  assert.equal(normalizujTokenLiczbowy('50 000 lat'), '50000 lat');
+  assert.equal(normalizujTokenLiczbowy('2,5'), '2.5');
+  assert.equal(normalizujTokenLiczbowy('2.50'), '2.5');
+});

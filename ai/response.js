@@ -5,10 +5,15 @@ const { parseEvidenceBlocks, removeLeadingSourceMetadataNoise } = require('./evi
 function normalizujTokenLiczbowy(token) {
   const text = String(token || '')
     .toLocaleLowerCase('pl-PL')
-    .replace(/\s+/g, ' ')
-    .replace(/,/g, '.')
+    .replace(/[\u00a0\u2009\u202f]/g, ' ')
     .trim();
-  const match = text.match(/^(\d+(?:\.\d+)?)(\s*)(.*)$/u);
+  // Normalizuj separatory tysięcy przed zamianą separatora dziesiętnego:
+  // 50,000 / 50.000 / 50 000 => 50000; 2,5 / 2.50 => 2.5.
+  const normalized = text
+    .replace(/(?<=\d)\s(?=\d{3}(?:\D|$))/gu, '')
+    .replace(/(\d)[,.](\d{3})(?=\D|$)/gu, '$1$2')
+    .replace(/,/g, '.');
+  const match = normalized.match(/^(\d+(?:\.\d+)?)(\s*)(.*)$/u);
   if (!match) return text;
   const number = Number(match[1]);
   return `${Number.isFinite(number) ? String(number) : match[1]}${match[2]}${match[3]}`.trim();
