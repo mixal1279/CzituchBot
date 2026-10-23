@@ -331,7 +331,7 @@ function wyodrebnijNazwyWlasne(value, options = {}) {
       const knownOracleCandidate = options.nameOracle instanceof Set
         && [...new Set([normalizujTokenWyroczni(token), ...wariantyNazwyDoDopasowania(token).map(normalizujTokenWyroczni)])]
           .some(variant => options.nameOracle.has(variant));
-      if (!atSentenceStart && GENERIC_CAPITALIZED_WORDS.has(normalizedCandidate)
+      if (GENERIC_CAPITALIZED_WORDS.has(normalizedCandidate)
         && !knownAliasCandidate && !knownOracleCandidate) continue;
       if (atSentenceStart && options.nameOracle instanceof Set) {
         const normalizedToken = normalizujTokenWyroczni(token);
