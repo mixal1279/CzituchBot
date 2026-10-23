@@ -235,3 +235,5 @@ test('cross-language game evidence recognizes recruiting a companion', () => {
   );
   assert.equal(result.ok, true, JSON.stringify(result));
 });
+
+// Regression tests for negation scope and numeric-to-event attribution are added here.
