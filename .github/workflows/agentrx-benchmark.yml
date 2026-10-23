@@ -1,0 +1,90 @@
+name: AgentRx benchmark diagnosis
+
+on:
+  workflow_run:
+    workflows: ["AI live benchmark"]
+    types: [completed]
+    branches: ["main", "fix/validator-false-rejection-regressions"]
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: agentrx-benchmark-${{ github.event.workflow_run.id }}
+  cancel-in-progress: true
+
+jobs:
+  diagnose:
+    if: github.event.workflow_run.conclusion == 'failure'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      AGENT_VERIFY_ENDPOINT: ${{ secrets.AGENT_VERIFY_ENDPOINT }}
+      AGENT_VERIFY_DEPLOYMENT: ${{ secrets.AGENT_VERIFY_DEPLOYMENT }}
+      AGENT_VERIFY_MODEL_NAME: ${{ secrets.AGENT_VERIFY_MODEL_NAME }}
+      AZURE_TOKEN_CREDENTIALS: dev
+
+    steps:
+      - name: Check AgentRx configuration
+        id: config
+        shell: bash
+        run: |
+          if [[ -z "$AGENT_VERIFY_ENDPOINT" || -z "$AGENT_VERIFY_DEPLOYMENT" || -z "$AGENT_VERIFY_MODEL_NAME" ]]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::AgentRx skipped. Configure repository secrets AGENT_VERIFY_ENDPOINT, AGENT_VERIFY_DEPLOYMENT and AGENT_VERIFY_MODEL_NAME."
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout benchmark commit
+        if: steps.config.outputs.configured == 'true'
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          persist-credentials: false
+
+      - name: Download benchmark artifact
+        if: steps.config.outputs.configured == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: ai-live-benchmark-${{ github.event.workflow_run.head_sha }}
+          path: benchmark-artifact
+          repository: ${{ github.repository }}
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build AgentRx trajectory input
+        if: steps.config.outputs.configured == 'true'
+        env:
+          GITHUB_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: node scripts/agentrx-adapter.js benchmark-artifact/ai-live-benchmark.json agentrx-trajectory.json
+
+      - name: Set up Python
+        if: steps.config.outputs.configured == 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install AgentRx
+        if: steps.config.outputs.configured == 'true'
+        shell: bash
+        run: |
+          git clone --depth 1 https://github.com/microsoft/AgentRx.git /tmp/AgentRx
+          python -m pip install --upgrade pip
+          python -m pip install -e /tmp/AgentRx
+
+      - name: Run AgentRx diagnosis
+        if: steps.config.outputs.configured == 'true'
+        run: python /tmp/AgentRx/run.py agentrx-trajectory.json
+
+      - name: Upload AgentRx report
+        if: always() && steps.config.outputs.configured == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: agentrx-diagnosis-${{ github.event.workflow_run.head_sha }}
+          path: |
+            agentrx-trajectory.json
+            /tmp/AgentRx/runs/
+          if-no-files-found: warn
+          retention-days: 14
