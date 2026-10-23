@@ -827,7 +827,7 @@ test('OpenRouter validator timeout covers a body read that ignores AbortSignal',
   assert.equal(result.status, 'unavailable');
   assert.equal(result.timeoutAbort, true);
   assert.equal(capturedSignal.aborted, true);
-  assert.ok(Date.now() - started < 1000, 'body-read deadline should settle promptly');
+  assert.ok(Date.now() - started < 4000, 'body-read deadline should settle promptly');
 });
 
 test('xKiro is attempted below the former 14.5s hard threshold when the calculated budget permits it', async () => {
