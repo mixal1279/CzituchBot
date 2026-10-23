@@ -64,7 +64,7 @@ test('retrieval diversity is part of the sufficiency decision', () => {
 
 
 test('source-bound relative-clause evidence passes only with its adjacent named subject', () => {
-  const data = '[SOURCE 1]\\nTYP: UNTRUSTED_WEB_DATA\\nTYTUŁ: Portal 2\\nTREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>\\nThe Intelligence Dampening Sphere, more commonly known as Wheatley, is a personality core of masculine programming and English West Country accent who appears in the single-player campaign of Portal 2.\\n<<<END_UNTRUSTED_SOURCE_CONTENT>>>';
+  const data = '[SOURCE 1]\nTYP: UNTRUSTED_WEB_DATA\nTYTUŁ: Portal 2\nTREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>\nThe Intelligence Dampening Sphere, more commonly known as Wheatley, is a personality core of masculine programming and English West Country accent who appears in the single-player campaign of Portal 2.\n<<<END_UNTRUSTED_SOURCE_CONTENT>>>';
   const answer = 'Wheatley pojawia się w kampanii jednoosobowej gry Portal 2.';
   const result = normalizujWynikWalidatora({
     valid: true, reason: 'source-backed', unsupported_claims: [], supported: true, relevant: true,
