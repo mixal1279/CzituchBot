@@ -495,6 +495,48 @@ function czyNazwaWlasnaWystepuje(entity, evidenceNormalized) {
   });
 }
 
+function wybierzKlausuleDowoduDlaClaimu(evidence, claim) {
+  const fragments = String(evidence || '').split(/(?<=[.!?])\s+|,\s+(?=(?:but|however|yet|whereas|ale|jednak|natomiast)\b)/iu).map(fragment => fragment.trim()).filter(Boolean);
+  if (fragments.length < 2) return String(evidence || '');
+  const claimTokens = tokenyPokryciaBezStop(claim);
+  if (!claimTokens.length) return String(evidence || '');
+  const score = fragment => {
+    const fragmentTokens = tokenyPokryciaBezStop(fragment);
+    const shared = claimTokens.filter(token => fragmentTokens.some(other => tokenyPokrywajaSie(token, other)));
+    return shared.length / claimTokens.length;
+  };
+  let best = fragments[0];
+  let bestScore = score(best);
+  for (const fragment of fragments.slice(1)) {
+    const fragmentScore = score(fragment);
+    if (fragmentScore > bestScore) { best = fragment; bestScore = fragmentScore; }
+  }
+  return bestScore >= 0.2 ? best : String(evidence || '');
+}
+
+function sprawdzPowiazanieLiczbZeZdarzeniem(evidence, claim, options = {}) {
+  if (options.allowDistributedEvidence || wyglądaNaAngielski(evidence) !== wyglądaNaAngielski(claim)) return { ok: true };
+  const claimNumbers = wyodrebnijLiczbyIDaty(claim);
+  if (!claimNumbers.length) return { ok: true };
+  const sentences = String(evidence || '').split(/(?<=[.!?])\s+/u).map(sentence => sentence.trim()).filter(Boolean);
+  if (sentences.length < 2) return { ok: true };
+  const claimTokens = tokenyPokryciaBezStop(claim);
+  if (!claimTokens.length) return { ok: true };
+  const score = sentence => {
+    const sentenceTokens = tokenyPokryciaBezStop(sentence);
+    const shared = claimTokens.filter(token => sentenceTokens.some(other => tokenyPokrywajaSie(token, other)));
+    return shared.length / claimTokens.length;
+  };
+  const bestOverallScore = Math.max(...sentences.map(score));
+  const numericSentences = sentences.filter(sentence => {
+    const numbers = wyodrebnijLiczbyIDaty(sentence);
+    return claimNumbers.every(number => numbers.includes(number));
+  });
+  if (!numericSentences.length) return { ok: true };
+  const bestNumericScore = Math.max(...numericSentences.map(score));
+  if (bestOverallScore >= 0.35 && bestOverallScore - bestNumericScore >= 0.25) return { ok: false, reason: 'wartość liczbowa występuje przy innym zdarzeniu niż w claimie' };
+  return { ok: true };
+}
 function sprawdzTwardeKonflikty(evidence, claim, options = {}) {
   const e = String(evidence || '');
   const c = String(claim || '');
@@ -502,7 +544,7 @@ function sprawdzTwardeKonflikty(evidence, claim, options = {}) {
   // negates the explanation, not event X. A document-level negation scan used
   // to reject a positive claim about X because an unrelated subordinate clause
   // contained “never”. Keep the hard gate for negation of the actual event.
-  const evidenceForNegation = e.replace(
+  const evidenceForNegation = wybierzKlausuleDowoduDlaClaimu(e, c).replace(
     /\b(?:although|though|while)\s+(?:it|this|that)\s+(?:was|is|has been)\s+never\s+explained\b[,;:]?\s*/giu,
     ' ',
   );
@@ -525,6 +567,8 @@ function sprawdzTwardeKonflikty(evidence, claim, options = {}) {
   const evidenceQuantities = wyodrebnijJednostkoweWartosci(e);
   const claimQuantities = wyodrebnijJednostkoweWartosci(c);
   if (claimQuantities.some(q => !evidenceQuantities.includes(q))) return { ok: false, reason: 'claim zawiera wartość liczbową z niezgodnymi lub niepotwierdzonymi jednostkami' };
+  const numericAssociation = sprawdzPowiazanieLiczbZeZdarzeniem(e, c, options);
+  if (!numericAssociation.ok) return numericAssociation;
 
   const claimTemporal = wyodrebnijMarkery(c, TEMPORAL_RE);
   const evidenceTemporal = wyodrebnijMarkery(e, TEMPORAL_RE);

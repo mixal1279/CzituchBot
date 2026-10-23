@@ -235,3 +235,23 @@ test('cross-language game evidence recognizes recruiting a companion', () => {
   );
   assert.equal(result.ok, true, JSON.stringify(result));
 });
+
+test('negation in a separate clause does not invalidate a positive event claim', () => {
+  const result = zgodnoscStrukturalna('Wheatley did not explain the plan, but he took control of Aperture.', 'Wheatley took control of Aperture.');
+  assert.equal(result.ok, true, JSON.stringify(result));
+});
+
+test('negation attached to the claimed event remains a hard conflict', () => {
+  const result = zgodnoscStrukturalna('Wheatley did not explain the plan, but he took control of Aperture.', 'Wheatley did not take control of Aperture.');
+  assert.equal(result.ok, false, JSON.stringify(result));
+});
+
+test('a number attached to a different event does not support the claim', () => {
+  const result = zgodnoscStrukturalna('The loading screen lasts 10 minutes. Completing the game takes 40 hours.', 'Completing the game takes 10 minutes.');
+  assert.equal(result.ok, false, JSON.stringify(result));
+});
+
+test('a number attached to the same event remains supported', () => {
+  const result = zgodnoscStrukturalna('Completing the game takes 40 hours.', 'Completing the game takes 40 hours.');
+  assert.equal(result.ok, true, JSON.stringify(result));
+});
