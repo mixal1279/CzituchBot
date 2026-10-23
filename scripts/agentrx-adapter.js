@@ -1,121 +1,133 @@
 'use strict';
 
-// Converts the existing benchmark report into a compact AgentRx trajectory.
-// The benchmark stores provider attempts, timing events, and validator results
-// separately; this adapter preserves each source's order but does NOT claim
-// to reconstruct exact cross-array wall-clock ordering.
+// Convert each failed benchmark case into AgentRx's generic dialogue-style
+// trajectory input. The benchmark keeps arrays of provider attempts, timing
+// events, and validator results separately; the adapter therefore preserves
+// their individual order but cannot reconstruct exact cross-array chronology.
 const fs = require('node:fs');
 const path = require('node:path');
 
 const input = process.argv[2] || 'benchmark-artifact/ai-live-benchmark.json';
-const output = process.argv[3] || 'agentrx-trajectory.json';
+const outputDir = process.argv[3] || 'agentrx-inputs';
 const report = JSON.parse(fs.readFileSync(input, 'utf8'));
 
 if (!report || typeof report !== 'object' || !Array.isArray(report.failures)) {
   throw new Error('Invalid benchmark report: expected a JSON object with failures[]');
 }
+if (report.failures.length === 0) {
+  throw new Error('No failed cases in benchmark report; AgentRx diagnosis is unnecessary.');
+}
 
-const allResults = Array.isArray(report.results) ? report.results : report.failures;
-const selected = allResults.filter(item =>
-  item && (item.judgeStatus !== 'accepted' || item.factualPassed === false || item.falseReject === true)
-);
+fs.mkdirSync(outputDir, { recursive: true });
+const written = [];
 
-const trajectories = selected.map(item => {
-  const steps = [];
-  steps.push({
-    step_id: 'benchmark_case',
-    type: 'observation',
-    description: 'Benchmark case outcome and scoring',
-    data: {
-      case_id: item.id ?? null,
-      category: item.category ?? null,
-      judge_status: item.judgeStatus ?? null,
-      final_status: item.finalStatus ?? null,
-      factual_passed: item.factualPassed ?? null,
-      false_reject: item.falseReject ?? false,
-      rejection_reason: item.rejectionReason ?? null,
-      missing: item.missing ?? [],
-      factual_missing: item.factualMissing ?? [],
-      factual_forbidden: item.factualForbidden ?? []
-    }
+for (const item of report.failures) {
+  if (!item || typeof item !== 'object') continue;
+  const turns = [];
+  let seq = 1;
+  const addTurn = (who, channel, payload) => {
+    turns.push({ seq: seq++, who, channel, payload });
+  };
+
+  addTurn('customer', 'chat', {
+    msg: 'Diagnose this failed CzituchBot AI Live Benchmark case. Separate likely code defects from provider outages, quotas, timeouts, and missing telemetry.',
+    case_id: item.id ?? null,
+    category: item.category ?? null,
+    benchmark_seed: report.seed ?? null
   });
 
   for (const [index, attempt] of (item.generationAttempts || []).entries()) {
-    steps.push({
-      step_id: `generation_attempt_${index + 1}`,
-      type: 'tool_call',
-      description: 'Recorded model-provider generation attempt; order is provider-array order, not guaranteed global chronology',
-      data: attempt
+    addTurn('agent', 'internal', {
+      tool_call: {
+        fn: 'benchmark.generation_attempt',
+        kwargs: { index, attempt },
+        request_id: `generation-${index + 1}`
+      }
+    });
+    addTurn('system', 'internal', {
+      tool_result: {
+        request_id: `generation-${index + 1}`,
+        status: attempt.status || 'unknown',
+        data: attempt
+      }
     });
   }
 
   for (const [index, event] of (item.timingTrace || []).entries()) {
-    steps.push({
-      step_id: `timing_event_${index + 1}`,
-      type: 'observation',
-      description: 'Recorded pipeline timing event',
-      data: event
+    addTurn('system', 'internal', {
+      observation: {
+        type: 'timing_event',
+        index,
+        event,
+        note: 'Event order is preserved within timingTrace only.'
+      }
     });
   }
 
   for (const [index, validator] of (item.validatorResults || []).entries()) {
-    steps.push({
-      step_id: `validator_result_${index + 1}`,
-      type: 'tool_result',
-      description: 'Recorded validator result; order is validator-array order, not guaranteed global chronology',
-      data: validator
+    addTurn('agent', 'internal', {
+      tool_call: {
+        fn: 'benchmark.validator_result',
+        kwargs: { index, validator },
+        request_id: `validator-${index + 1}`
+      }
+    });
+    addTurn('system', 'internal', {
+      tool_result: {
+        request_id: `validator-${index + 1}`,
+        status: validator.status || 'unknown',
+        data: validator
+      }
     });
   }
 
-  steps.push({
-    step_id: 'final_evaluation',
-    type: 'observation',
-    description: 'Final benchmark evaluation',
-    data: {
-      answered: item.answered ?? null,
+  addTurn('system', 'internal', {
+    observation: {
+      type: 'final_benchmark_evaluation',
       judge_status: item.judgeStatus ?? null,
       final_status: item.finalStatus ?? null,
-      factual_score: item.factualScore ?? null,
+      rejection_reason: item.rejectionReason ?? null,
       factual_passed: item.factualPassed ?? null,
       false_reject: item.falseReject ?? false,
+      missing: item.missing ?? [],
+      factual_missing: item.factualMissing ?? [],
+      factual_forbidden: item.factualForbidden ?? [],
+      fallback_reasons: item.fallbackReasons ?? [],
       model_calls: item.modelCalls ?? null,
       generation_budget: item.generationBudget ?? null,
-      fallback_reasons: item.fallbackReasons ?? []
+      answer: item.answer ?? null,
+      discarded_answer: item.discardedAnswer ?? null
     }
   });
 
-  return {
-    trajectory_id: String(item.id ?? 'unknown-case'),
-    task: 'Diagnose this failed CzituchBot AI Live Benchmark case. Distinguish code defects from provider outages, quotas, and incomplete telemetry.',
-    metadata: {
-      benchmark: report.benchmark ?? null,
-      seed: report.seed ?? null,
-      total_cases: report.total ?? null,
-      source_commit: process.env.GITHUB_SHA ?? null,
-      synthesized_from_benchmark_record: true,
-      chronology_warning: 'Arrays are individually ordered, but the report does not guarantee exact cross-array event chronology.'
-    },
-    steps
-  };
-});
+  addTurn('agent', 'chat', {
+    msg: 'End of recorded benchmark evidence. Diagnose only what the evidence supports; identify missing telemetry when root cause is uncertain.'
+  });
 
-if (!trajectories.length) {
-  throw new Error('No failed cases found for AgentRx analysis; report may be incomplete or all cases passed.');
+  const id = String(item.id ?? `case-${written.length + 1}`).replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 80);
+  const trajectory = {
+    meta: {
+      session_id: `czituchbot-${id}`,
+      platform: 'CzituchBot AI Live Benchmark',
+      source_commit: process.env.GITHUB_SHA || null,
+      benchmark_seed: report.seed ?? null,
+      synthesized_from_benchmark_record: true,
+      chronology_warning: 'Generation attempts, timingTrace and validatorResults are ordered within their own arrays only; the source report does not guarantee exact cross-array chronology.'
+    },
+    goal_description: `Diagnose failed benchmark case ${id}. Classify the failure, identify evidence-supported root cause and recommend a focused regression test.`,
+    dialogue: {
+      turns,
+      resolution: {
+        outcome: 'failed_benchmark_case',
+        categories: [item.judgeStatus || 'unknown', item.finalStatus || 'unknown']
+      }
+    }
+  };
+
+  const file = path.join(outputDir, `${id}.json`);
+  fs.writeFileSync(file, `${JSON.stringify(trajectory, null, 2)}\\n`, { mode: 0o600 });
+  written.push(file);
 }
 
-const payload = {
-  source: 'CzituchBot AI Live Benchmark',
-  benchmark: report.benchmark ?? null,
-  seed: report.seed ?? null,
-  valid: report.valid ?? null,
-  total: report.total ?? null,
-  summary: {
-    failed_cases: trajectories.length,
-    false_rejects: report.falseRejects ?? null,
-    diagnostics: report.diagnostics ?? {}
-  },
-  trajectories
-};
-
-fs.writeFileSync(path.resolve(output), `${JSON.stringify(payload, null, 2)}\\n`, { mode: 0o600 });
-console.log(`Prepared ${trajectories.length} benchmark case trajectory/trajectories at ${output}`);
+if (!written.length) throw new Error('No valid failed benchmark cases could be converted.');
+console.log(`Prepared ${written.length} AgentRx input file(s): ${outputDir}/`);
