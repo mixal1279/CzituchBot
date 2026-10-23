@@ -246,6 +246,27 @@ test('negation attached to the claimed event remains a hard conflict', () => {
   assert.equal(result.ok, false, JSON.stringify(result));
 });
 
+
+test('negation stays scoped to the clause that describes the claimed event', () => {
+  const unrelatedFirst = zgodnoscStrukturalna(
+    'Wheatley did not explain the plan, but he took control of Aperture.',
+    'Wheatley did not take control of Aperture.',
+  );
+  assert.equal(unrelatedFirst.ok, false, JSON.stringify(unrelatedFirst));
+
+  const relevantFirst = zgodnoscStrukturalna(
+    'Wheatley took control of Aperture, but he did not explain the plan.',
+    'Wheatley did not take control of Aperture.',
+  );
+  assert.equal(relevantFirst.ok, false, JSON.stringify(relevantFirst));
+
+  const negatedEvent = zgodnoscStrukturalna(
+    'Wheatley did not take control of Aperture, but he explained the plan.',
+    'Wheatley took control of Aperture.',
+  );
+  assert.equal(negatedEvent.ok, false, JSON.stringify(negatedEvent));
+});
+
 test('a number attached to a different event does not support the claim', () => {
   const result = zgodnoscStrukturalna('The loading screen lasts 10 minutes. Completing the game takes 40 hours.', 'Completing the game takes 10 minutes.');
   assert.equal(result.ok, false, JSON.stringify(result));
