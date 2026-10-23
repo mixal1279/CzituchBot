@@ -1,0 +1,55 @@
+name: Compile GitHub Agentic Workflows
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/ai-benchmark-doctor.md"
+      - ".github/workflows/ai-benchmark-doctor.lock.yml"
+      - ".github/workflows/compile-gh-aw.yml"
+  push:
+    branches:
+      - main
+      - fix/validator-false-rejection-regressions
+    paths:
+      - ".github/workflows/ai-benchmark-doctor.md"
+      - ".github/workflows/ai-benchmark-doctor.lock.yml"
+      - ".github/workflows/compile-gh-aw.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: compile-gh-aw-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out the tested commit
+        uses: actions/checkout@v4
+
+      - name: Set up GitHub CLI and gh-aw
+        run: |
+          gh --version
+          gh extension install github/gh-aw@v0.93.2
+
+      - name: Compile and validate agentic workflow
+        run: |
+          gh aw version
+          gh aw compile .github/workflows/ai-benchmark-doctor.md
+
+      - name: Verify committed lock file is up to date
+        run: git diff --exit-code -- .github/workflows/ai-benchmark-doctor.lock.yml
+
+      - name: Upload generated lock file
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-benchmark-doctor-lock
+          path: .github/workflows/ai-benchmark-doctor.lock.yml
+          if-no-files-found: error
+          retention-days: 7
