@@ -85,9 +85,8 @@ test('localized Witcher 3 quest titles share verified Polish and English aliases
     ['Damy lasu', 'Ladies of the Wood'],
   ];
   for (const [pl, en] of cases) {
-    const alias = KNOWN_ENTITY_ALIAS_PATTERNS.find(entry => entry.canonical ===
-      pl.toLocaleLowerCase('pl-PL').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').replace(/ł/g, 'l'));
-    assert.ok(alias, `missing canonical alias for ${pl}`);
+    const alias = KNOWN_ENTITY_ALIAS_PATTERNS.find(entry => entry.pattern.test(pl));
+    assert.ok(alias, `missing alias pattern for ${pl}`);
     assert.equal(alias.pattern.test(en), true, `${pl} should match ${en}`);
   }
 });
