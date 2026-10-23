@@ -67,3 +67,27 @@ test('cross-language translation recognizes release and travel concepts without 
   );
   assert.equal(travel.ok, true, travel.reason);
 });
+test('numeric normalization preserves thousands and decimal values across locale formats', () => {
+  const { wyodrebnijLiczbyIDaty } = require('../ai/claimValidation');
+  assert.deepEqual(wyodrebnijLiczbyIDaty('Około 50,000 lat'), ['50000']);
+  assert.deepEqual(wyodrebnijLiczbyIDaty('Około 50.000 lat'), ['50000']);
+  assert.deepEqual(wyodrebnijLiczbyIDaty('Około 50 000 lat'), ['50000']);
+  assert.deepEqual(wyodrebnijLiczbyIDaty('Wartość wynosi 2,5'), ['2.5']);
+  assert.deepEqual(wyodrebnijLiczbyIDaty('Wartość wynosi 2.50'), ['2.5']);
+});
+
+test('localized Witcher 3 quest titles share verified Polish and English aliases', () => {
+  const { KNOWN_ENTITY_ALIAS_PATTERNS } = require('../ai/claimValidation');
+  const cases = [
+    ['Sprawy rodzinne', 'Family Matters'],
+    ['Polowanie na czarownicę', 'Hunting a Witch'],
+    ['Wędrowanie w ciemności', 'Wandering in the Dark'],
+    ['Damy lasu', 'Ladies of the Wood'],
+  ];
+  for (const [pl, en] of cases) {
+    const alias = KNOWN_ENTITY_ALIAS_PATTERNS.find(entry => entry.canonical ===
+      pl.toLocaleLowerCase('pl-PL').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').replace(/ł/g, 'l'));
+    assert.ok(alias, `missing canonical alias for ${pl}`);
+    assert.equal(alias.pattern.test(en), true, `${pl} should match ${en}`);
+  }
+});

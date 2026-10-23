@@ -170,7 +170,13 @@ function wyodrebnijLiczbyIDaty(value) {
   // Keep decimal separators until numeric extraction; normalizujClaim intentionally
   // removes punctuation and would turn 2.50 into two unrelated integers (2 and 50).
   const raw = String(value || '');
-  const text = raw.toLocaleLowerCase('pl-PL').replace(/,/g, '.');
+  // Rozróżnia separator tysięcy od dziesiętnego:
+  // 50,000 / 50.000 / 50 000 => 50000, ale 2,5 / 2.50 => 2.5.
+  // Nie zmieniamy tekstu źródłowego poza normalizacją samych tokenów liczbowych.
+  const text = raw.toLocaleLowerCase('pl-PL')
+    .replace(/(?<=\d)[\s\u00a0\u202f](?=\d{3}(?:\D|$))/gu, '')
+    .replace(/(\d)[,.](\d{3})(?=\D|$)/gu, '$1$2')
+    .replace(/,/g, '.');
   const matches = text.match(/\b(?:19|20)\d{2}\b|\b\d+(?:\.\d+)?%?\b/g) || [];
   const canonical = matches.map(value => {
     const percent = value.endsWith('%');

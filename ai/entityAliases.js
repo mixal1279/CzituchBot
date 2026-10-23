@@ -10,6 +10,11 @@ const ENTITY_ALIAS_GROUPS = Object.freeze([
   // encje, dla których mapowanie PL/EN jest jednoznaczne; nie dopisujemy
   // nazw opisowych ani tłumaczeń zgadywanych na podstawie samego kontekstu.
   { canonical: 'wild hunt', names: ['Wild Hunt', 'Dziki Gon'] },
+  // Zweryfikowane tytuły zadań Wiedźmina 3 w lokalizacji PL/EN.
+  { canonical: 'family matters', names: ['Family Matters', 'Sprawy rodzinne'] },
+  { canonical: 'hunting a witch', names: ['Hunting a Witch', 'Polowanie na czarownicę', 'Polowanie na czarownice'] },
+  { canonical: 'wandering in the dark', names: ['Wandering in the Dark', 'Wędrowanie w ciemności'] },
+  { canonical: 'ladies of the wood', names: ['Ladies of the Wood', 'Damy lasu'] },
   { canonical: 'bloody baron', names: ['Bloody Baron', 'Krwawy Baron', 'Baron Krwawy'] },
   // Keep the Skyrim item separate from Dragonrend; only the English item name is unambiguous.
   { canonical: 'dragonbane', names: ['Dragonbane'] },
