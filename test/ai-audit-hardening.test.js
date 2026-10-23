@@ -62,6 +62,30 @@ test('retrieval diversity is part of the sufficiency decision', () => {
 });
 
 
+
+test('source-bound relative-clause evidence passes only with its adjacent named subject', () => {
+  const data = '[SOURCE 1]\\nTYP: UNTRUSTED_WEB_DATA\\nTYTUŁ: Portal 2\\nTREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>\\nThe Intelligence Dampening Sphere, more commonly known as Wheatley, is a personality core of masculine programming and English West Country accent who appears in the single-player campaign of Portal 2.\\n<<<END_UNTRUSTED_SOURCE_CONTENT>>>';
+  const answer = 'Wheatley pojawia się w kampanii jednoosobowej gry Portal 2.';
+  const result = normalizujWynikWalidatora({
+    valid: true, reason: 'source-backed', unsupported_claims: [], supported: true, relevant: true,
+    complete: true, hallucination: false, confidence: 0.99,
+    claims: [{
+      claim: answer.slice(0, -1),
+      supported: true,
+      source_ids: ['SOURCE 1'],
+      evidence_quote: 'who appears in the single-player campaign of Portal 2.',
+      claim_en: 'who appears in the single-player campaign of Portal 2.',
+      reason: 'source-backed',
+    }],
+  }, 'test-model', 'test', null, data, answer);
+  assert.equal(result.status, 'accepted', JSON.stringify({
+    status: result.status,
+    reason: result.reason,
+    diagnostics: result.diagnostics?.localRejectReasons,
+    unsupported: result.unsupported_claims,
+  }));
+});
+
 test('synthetic ellipses in an evidence quote get a specific rejection diagnostic', () => {
   const data = '[SOURCE 1]\nTYP: UNTRUSTED_WEB_DATA\nTYTUŁ: Portal 2\nTREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>\nWheatley appears in the single-player campaign of Portal 2 and helps Chell escape.\n<<<END_UNTRUSTED_SOURCE_CONTENT>>>';
   const result = normalizujWynikWalidatora({
