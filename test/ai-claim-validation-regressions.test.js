@@ -21,6 +21,19 @@ test('English resistance and Polish odporność share a protection marker', () =
   assert.equal(result.ok, true, result.reason);
 });
 
+test('common sentence-initial Polish nouns from benchmark are not treated as proper names', () => {
+  const cases = [
+    ['Rodzinne zadanie prowadzi do odnalezienia Anny.', 'rodzinne'],
+    ['Polowanie na czarownice jest jednym z powiązanych zadań.', 'polowanie'],
+    ['Wędrowanie w ciemności jest kolejnym zadaniem.', 'wedrowanie'],
+    ['Struktura generuje się w biomie Netheru.', 'struktura'],
+    ['Wiedźmin jest mutowanym łowcą potworów.', 'wiedzmin'],
+  ];
+  for (const [claim, falseEntity] of cases) {
+    assert.equal(wyodrebnijNazwyWlasne(claim).includes(falseEntity), false, claim);
+  }
+});
+
 test('sentence-initial Polish modifiers are not treated as proper names', () => {
   assert.deepEqual(wyodrebnijNazwyWlasne(
     'Alternatywnymi metodami walki są unieruchamianie smoka lub przyzwanie minionów.',

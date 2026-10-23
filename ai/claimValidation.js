@@ -286,7 +286,10 @@ function wyodrebnijNazwyWlasne(value, options = {}) {
     // Rzeczownik pospolity na początku claimu nie może zostać uznany za encję.
     // W live benchmark „Przejęcie kontroli przez Wheatleya…” było błędnie
     // odrzucane, bo „Przejęcie” nie występowało w angielskim claim_en jako nazwa.
-    'przejecie', 'przejecia', 'przejeciu', 'przejeciem', 'przejec'
+    'przejecie', 'przejecia', 'przejeciu', 'przejeciem', 'przejec',
+    // Common sentence-initial nouns seen in the live benchmark are descriptions,
+    // not proper names. Keep strict evidence, number, and date checks unchanged.
+    'rodzinne', 'rodzinna', 'rodzinny', 'rodzinnego', 'rodzinnej', 'rodzinnym', 'polowanie', 'polowania', 'polowaniem', 'polowaniu', 'wedrowanie', 'wedrowania', 'wedrowaniem', 'wedrowaniu', 'damy', 'dama', 'struktura', 'struktury', 'strukture', 'strukturze', 'wiedzmin', 'wiedzmina', 'wiedzminem', 'wiedzminie', 'forteca', 'fortecy', 'fortece', 'twierdza', 'twierdzy', 'twierdze'
   ].map(normalizujClaim));
   const candidates = [];
   const aliasSpans = [];
