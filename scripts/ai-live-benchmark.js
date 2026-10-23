@@ -312,6 +312,15 @@ function buildBenchmarkDiagnostics(results, allCases = benchmark.cases, selected
   const tavilyHttpEvents = results.flatMap(result =>
     (result.timingTrace || []).filter(event => event.stage === 'tavily_http_end')
   );
+  const tavilyHttpFailuresByStatus = {};
+  for (const event of tavilyHttpEvents.filter(item => item.ok !== true)) {
+    const rawStatus = Number(event.httpStatus);
+    const status = Number.isInteger(rawStatus) && rawStatus > 0 ? String(rawStatus) : 'unknown';
+    tavilyHttpFailuresByStatus[status] = (tavilyHttpFailuresByStatus[status] || 0) + 1;
+  }
+  const tavilyHttpFailureRate = tavilyHttpEvents.length
+    ? tavilyHttpEvents.filter(event => event.ok !== true).length / tavilyHttpEvents.length
+    : 0;
   const generationCycleStarts = results.flatMap(result =>
     (result.timingTrace || []).filter(event => event.stage === 'generation_cycle_start')
   );
@@ -359,6 +368,7 @@ function buildBenchmarkDiagnostics(results, allCases = benchmark.cases, selected
   if (validatorUnavailableRate > 0.25) qualityDegradationReasons.push('validator_unavailable_rate_above_25_percent');
   if (degradedProviders.length > 0) qualityDegradationReasons.push('fallback_provider_degradation');
   if (generationProviderFailures.length > 0) qualityDegradationReasons.push('generation_provider_errors');
+  if (tavilyHttpFailureRate > 0.25) qualityDegradationReasons.push('tavily_http_failures_above_25_percent');
   const qualityComparable = qualityDegradationReasons.length === 0;
   const categories = [...new Set(allCases.map(item => item.category || 'uncategorized'))].sort();
   const goldCoverageByCategory = Object.fromEntries(categories.map(category => [
@@ -390,7 +400,12 @@ function buildBenchmarkDiagnostics(results, allCases = benchmark.cases, selected
     validatorStatusCounts,
     validatorTransportFailures: validatorRows
       .filter(row => row.skipped !== true && (row.status === 'unavailable' || row.status === 'error' || row.technicalError === true))
-      .map(row => ({ provider: row.provider || 'unknown', model: row.model || null, status: row.status || 'unknown', reason: row.reason || null })),
+      .map(row => ({
+        provider: row.provider || 'unknown', model: row.model || null, status: row.status || 'unknown',
+        reason: row.reason || null, technicalError: row.technicalError === true,
+        timeoutAbort: row.timeoutAbort === true, quota: row.quota === true,
+        statusCode: Number.isInteger(Number(row.statusCode)) && row.statusCode != null ? Number(row.statusCode) : null,
+      })),
     providerOutage: failedOutageProviders.length > 0,
     outageProviders: failedOutageProviders,
     degradedProviders,
@@ -398,6 +413,8 @@ function buildBenchmarkDiagnostics(results, allCases = benchmark.cases, selected
       sum + (result.timingTrace || []).filter(event => event.stage === 'validator_second_opinion').length, 0),
     tavilyHttpCalls: tavilyHttpEvents.length,
     tavilyHttpFailures: tavilyHttpEvents.filter(event => event.ok !== true).length,
+    tavilyHttpFailureRate: Number(tavilyHttpFailureRate.toFixed(3)),
+    tavilyHttpFailuresByStatus,
     avgTavilyHttpMs: tavilyHttpEvents.length
       ? Math.round(tavilyHttpEvents.reduce((sum, event) => sum + Math.max(0, Number(event.durationMs) || 0), 0) / tavilyHttpEvents.length)
       : null,
