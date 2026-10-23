@@ -1976,7 +1976,8 @@ async function walidujOdpowiedzOpenRouter(persona, pytanie, odpowiedz, dane, req
       });
       const data = await response.json().catch(() => ({}));
       return { response, data };
-    })(), validatorTimeoutMs, controller, 'OpenRouter validator');    if (!response.ok) {
+    })(), validatorTimeoutMs, controller, 'OpenRouter validator');
+    if (!response.ok) {
       const status = Number(response.status || 0);
       const retryAfter = retryAfterHint(response);
       const metadata = data?.error?.metadata || {};
@@ -2218,15 +2219,14 @@ async function walidujOdpowiedzXKiro(persona, pytanie, odpowiedz, dane, requestI
   // OpenRouter remains the next fallback after xKiro, so xKiro must always
   // leave enough time for that final validator. The validator counter alone
   // does not mean xKiro is the last provider in the fallback chain.
-  // xKiro ma wysoką latencję. Poprzedni limit 3 s regularnie kończył się dokładnie
-  // timeoutem w benchmarku; 4,5 s daje modelowi realną szansę, a limit pozostałego
-  // czasu i rezerwa nadal chronią ostatni fallback OpenRouter. Poniżej 14,5 s pomijamy xKiro.
+  // xKiro ma wysoką latencję; timeout 4,5 s jest ograniczany przez pozostały budżet.
+  // Nie pomijamy go na podstawie sztywnego progu, jeśli krótsza próba mieści się w rezerwie.
   const timeoutMs = requestState
-    ? (computeValidatorTimeout(remainingMs, {
+    ? computeValidatorTimeout(remainingMs, {
         maxTimeoutMs: Number(process.env.AI_XKIRO_VALIDATOR_TIMEOUT_MS) || 4500,
         reserveMs: computeValidatorReserveMs(remainingMs, requestState.validatory + 1, requestState.maxValidatorow, requestState.validationPass === 1 ? INITIAL_VALIDATOR_REPAIR_RESERVE_MS : 0),
         minTimeoutMs: 1200,
-      }))
+      })
     : (Number(process.env.AI_XKIRO_VALIDATOR_TIMEOUT_MS) || 4500);
   if (requestState && timeoutMs === null) {
     return { status: 'unavailable', ok: false, technicalError: true, transient: true, skipped: true, provider: 'xkiro', model, unsupported_claims: [], reason: 'xKiro validator pominięty: zbyt mały pozostały budżet czasu' };
