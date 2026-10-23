@@ -15,6 +15,23 @@ test('sentence-initial quantifiers are not extracted as proper names', () => {
   assert.equal(names.includes('artur'), true);
 });
 
+
+test('sentence-internal generic words are not mistaken for proper names', () => {
+  const rdr2 = wyodrebnijNazwyWlasne('Arthur Morgan trafia do Saint Denis w Rozdziale 4.');
+  assert.equal(rdr2.includes('rozdziale'), false);
+  assert.equal(rdr2.includes('arthur'), true);
+  assert.equal(rdr2.includes('morgan'), true);
+  assert.equal(rdr2.includes('saint'), true);
+  assert.equal(rdr2.includes('denis'), true);
+
+  const portal = wyodrebnijNazwyWlasne('Pojawia się w kampanii jednoosobowej gry. Pomaga Chell w ucieczce z Centrum Rozbudowy Aperture Science.');
+  assert.equal(portal.includes('pojawia'), false);
+  assert.equal(portal.includes('pomaga'), false);
+  assert.equal(portal.includes('centrum'), false);
+  assert.equal(portal.includes('rozbudowy'), false);
+  assert.equal(portal.includes('aperture science'), true);
+});
+
 test('curly apostrophes in inflected names remain intact during normalization', () => {
   const names = wyodrebnijNazwyWlasne('Johnny’ego Silverhanda spotyka Geralt.');
   assert.equal(names.includes('johnny’ego'), true);
