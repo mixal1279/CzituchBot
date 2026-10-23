@@ -78,7 +78,7 @@ const GENERIC_CAPITALIZED_WORDS = new Set([
   // Zwykłe rzeczowniki, czasowniki i określenia błędnie wyciągane jako nazwy,
   // gdy autor odpowiedzi zapisze je wielką literą w środku zdania.
   'rozdzial', 'rozdzialu', 'rozdziale', 'rozdzialem', 'chapter', 'chapters',
-  'oboz', 'obozu', 'obozie', 'obozem', 'camp', 'inside', 'within',
+  'oboz', 'obozu', 'obozie', 'obozem', 'obozow', 'obozami', 'obozach', 'camp', 'inside', 'within', 'wewnatrz', 'wewnatrzu', 'wewnetrz',
   'droga', 'drogi', 'droge', 'road', 'route', 'path',
   'pojawia', 'pojawilo', 'pojawil', 'pojawila', 'pojawiaja', 'appears', 'appeared', 'appear',
   'pomaga', 'pomagal', 'pomogla', 'pomogli', 'pomagaja', 'helps', 'helped', 'help',
