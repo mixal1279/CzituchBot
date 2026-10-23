@@ -30,10 +30,15 @@ jobs:
       - name: Set up GitHub CLI and gh-aw
         run: |
           gh --version
-          gh extension install github/gh-aw
+          gh extension install github/gh-aw@v0.93.2
 
       - name: Compile and validate agentic workflow
-        run: gh aw compile .github/workflows/ai-benchmark-doctor.md
+        run: |
+          gh aw version
+          gh aw compile .github/workflows/ai-benchmark-doctor.md
+
+      - name: Verify committed lock file is up to date
+        run: git diff --exit-code -- .github/workflows/ai-benchmark-doctor.lock.yml
 
       - name: Upload generated lock file
         uses: actions/upload-artifact@v4
