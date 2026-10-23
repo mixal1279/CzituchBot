@@ -30,6 +30,11 @@ test('sentence-internal generic words are not mistaken for proper names', () => 
   assert.equal(portal.includes('centrum'), false);
   assert.equal(portal.includes('rozbudowy'), false);
   assert.equal(portal.includes('aperture science'), true);
+
+  const bg3 = wyodrebnijNazwyWlasne('Wewnątrz obozu goblinów prowadzi droga do głównej części obozu.');
+  assert.equal(bg3.includes('wewnatrz'), false);
+  assert.equal(bg3.includes('obozu'), false);
+  assert.equal(bg3.includes('droga'), false);
 });
 
 test('curly apostrophes in inflected names remain intact during normalization', () => {
