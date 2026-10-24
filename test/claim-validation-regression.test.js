@@ -40,6 +40,18 @@ test('sentence-initial generic words are not treated as proper names', () => {
   }
 });
 
+test('Minecraft End inflections share one verified entity in claim_en', () => {
+  const result = spojnoscTlumaczeniaClaimu(
+    'Elytrę można znaleźć na statkach końcowych na zewnętrznych wyspach Endu.',
+    'Elytra can be found on End ships on the outer islands of the End.',
+  );
+  assert.equal(result.ok, true, JSON.stringify(result));
+});
+
+test('sentence-initial availability wording is not treated as an entity', () => {
+  assert.deepEqual(wyodrebnijNazwyWlasne('Dostępne materiały opisują świat Tarkir.'), ['tarkir']);
+});
+
 test('English cart cannot be mistranslated as a Polish basket', () => {
   assert.equal(sprawdzSprzecznosciSemantyczne(
     'The Greatsword is in an abandoned treasure cart.',

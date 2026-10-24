@@ -100,6 +100,8 @@ const KNOWN_ENTITY_ALIAS_PATTERNS = [
   { canonical: 'dragonbane', pattern: /\bdr(?:a)?gon\s*bane\b/iu },
   { canonical: "alduin's wall", pattern: /\b(?:alduin['’]?s|alduins)\s+wall\b/iu },
   { canonical: 'dragonrend', pattern: /\bdragonrend\b/iu },
+  // Minecraft: „End”, „Endu” i „Endzie” oznaczają tę samą krainę.
+  { canonical: 'the end', pattern: /\b(?:the\s+end|end(?:u|em|zie|a)?)\b/iu },
   { canonical: 'spellbreaker', pattern: /\b(?:spellbreaker|zaklinacz\s+spellbreaker|łamacz(?:a|owi|em|u)?\s+zakl(?:ę|e)ć)\b/iu },
   { canonical: 'extended relaxation center', pattern: /\b(?:extended\s+relaxation\s+center|centrum\s+(?:przedluzonego|rozszerzonego)\s+relaksu)\b/iu },
   { canonical: 'aperture laboratories', pattern: /\b(?:aperture\s+laboratories|laboratori(?:a|ach|ami|ow|ów)\s+aperture)\b/iu },
@@ -299,7 +301,7 @@ function wyodrebnijNazwyWlasne(value, options = {}) {
     // not proper names. Keep strict evidence, number, and date checks unchanged.
     'rodzinne', 'rodzinna', 'rodzinny', 'rodzinnego', 'rodzinnej', 'rodzinnym', 'polowanie', 'polowania', 'polowaniem', 'polowaniu', 'wedrowanie', 'wedrowania', 'wedrowaniem', 'wedrowaniu', 'damy', 'dama', 'struktura', 'struktury', 'strukture', 'strukturze', 'wiedzmin', 'wiedzmina', 'wiedzminem', 'wiedzminie', 'forteca', 'fortecy', 'fortece', 'twierdza', 'twierdzy', 'twierdze',
     // Zwykłe słowa otwierające zdanie z przypadków false-rejection.
-    'materialy', 'jedynym', 'jedyna', 'jedynie', 'ponadto', 'dodatkowo', 'aby', 'jesli'
+    'materialy', 'dostepne', 'dostepnych', 'danych', 'jedynym', 'jedyna', 'jedynie', 'ponadto', 'dodatkowo', 'aby', 'jesli'
   ].map(normalizujClaim));
   const candidates = [];
   const aliasSpans = [];
