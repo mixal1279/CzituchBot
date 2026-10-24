@@ -2,7 +2,7 @@
 
 const assert = require('node:assert/strict');
 const { classifyAIRequest } = require('../ai/router');
-const { planAIRequest } = require('../ai/planner');
+const { planAIRequest, buildRetrievalQueries } = require('../ai/planner');
 const { okreslKategorieAI } = require('../ai/policy');
 const { dodajGameFAQsDomenę } = require('../ai/gameplay');
 
@@ -16,6 +16,16 @@ const policy = (q, recipe) => {
   if (/jak|gdzie|kto|kim|co|dlaczego|kiedy|ile|czy/i.test(q)) return 'web_fact';
   return 'conversation';
 };
+
+const astarionQueries = buildRetrievalQueries('Dlaczego Astarion dołączył do drużyny?', {
+  needs_web: true,
+  is_lore: true,
+  is_gameplay: false,
+  entity: 'Astarion',
+  game: 'Baldur’s Gate 3',
+  resolved_entity: { name: 'Astarion', game: 'Baldur’s Gate 3' },
+}, { maxQueries: 4 });
+assert.ok(astarionQueries.some(query => /motivation|backstory|antagonist|escape/i.test(query)));
 
 const cases = [
   ['Kim jest Wheatley w Portal 2?', 'lore', 'Portal 2', 'character'],

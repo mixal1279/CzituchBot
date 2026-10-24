@@ -16,6 +16,7 @@ const {
   classifyFailure,
 } = require('../ai/fallback');
 const { createTavilySearch, filtrujPoScore, normalizujProgScore, normalizujZakresTavily, normalizujDomenyTavily, hostnamePasujeDoDomenyTavily, sanityzujTrescZrodlaTavily, czyWymagaSecondaryRetrieval, snapshotCacheTavily, ograniczCacheTavily } = require('../ai/tavily');
+const { assessEvidence, sourceMatchesRequestContext } = require('../ai/core');
 
 test('retrieval source contract is normalized', () => {
   const source = normalizeSource({
@@ -29,6 +30,21 @@ test('retrieval source contract is normalized', () => {
   assert.equal(source.url, 'https://example.com/a');
   assert.equal(source.score, 0.8);
   assert.match(formatSources([source]), /\[SOURCE 1\]/);
+});
+
+test('lore evidence is isolated to the requested game and character', () => {
+  const routing = {
+    is_lore: true,
+    is_gameplay: false,
+    entity: 'Dragonborn',
+    game: 'Skyrim',
+    resolved_entity: { type: 'character', name: 'Dragonborn', game: 'Skyrim' },
+  };
+  const foreign = { title: 'Tarkir lore', url: 'https://example.com/tarkir', content: 'Tarkir is a world dominated by dragons and five clans.' };
+  const matching = { title: 'Dragonborn - Skyrim', url: 'https://example.com/skyrim', content: 'The Dragonborn, also called Dovahkiin, is a hero of Skyrim.' };
+  assert.equal(sourceMatchesRequestContext(foreign, routing), false);
+  assert.equal(sourceMatchesRequestContext(matching, routing), true);
+  assert.equal(assessEvidence([foreign, matching], 'Kim jest Dragonborn?', routing).sources.length, 1);
 });
 
 test('Tavily time ranges normalize legacy prefixes and reject unsupported values', () => {

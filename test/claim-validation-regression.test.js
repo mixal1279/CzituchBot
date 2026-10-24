@@ -11,6 +11,7 @@ const {
   sprawdzTwardeKonflikty,
   spojnoscTlumaczeniaClaimu,
   pojeciaCrossLanguage,
+  wyodrebnijLiczbyIDaty,
 } = require('../ai/claimValidation');
 
 test('dragon landing concept does not match generic land or lands wording', () => {
@@ -50,6 +51,13 @@ test('Minecraft End inflections share one verified entity in claim_en', () => {
 
 test('sentence-initial availability wording is not treated as an entity', () => {
   assert.deepEqual(wyodrebnijNazwyWlasne('Dostępne materiały opisują świat Tarkir.'), ['tarkir']);
+});
+
+test('equivalent decade forms normalize across Polish and English', () => {
+  assert.deepEqual(wyodrebnijLiczbyIDaty('pod koniec lat 80. lub na początku lat 90.'), ['decade:1980', 'decade:1990']);
+  assert.deepEqual(wyodrebnijLiczbyIDaty("in the late 1980s or early '90s"), ['decade:1980', 'decade:1990']);
+  assert.deepEqual(wyodrebnijLiczbyIDaty('ponad 20 lat wcześniej'), ['20']);
+  assert.equal(spojnoscTlumaczeniaClaimu('Michael poznał Trevora pod koniec lat 80.', 'Michael met Trevor in the late 1980s.').ok, true);
 });
 
 test('English cart cannot be mistranslated as a Polish basket', () => {

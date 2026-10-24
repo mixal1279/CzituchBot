@@ -177,10 +177,26 @@ function wyodrebnijLiczbyIDaty(value) {
   // Rozróżnia separator tysięcy od dziesiętnego:
   // 50,000 / 50.000 / 50 000 => 50000, ale 2,5 / 2.50 => 2.5.
   // Nie zmieniamy tekstu źródłowego poza normalizacją samych tokenów liczbowych.
-  const text = raw.toLocaleLowerCase('pl-PL')
+  let text = raw.toLocaleLowerCase('pl-PL')
     .replace(/(?<=\d)[\s\u00a0\u202f](?=\d{3}(?:\D|$))/gu, '')
     .replace(/(\d)[,.](\d{3})(?=\D|$)/gu, '$1$2')
     .replace(/,/g, '.');
+  const decadeFacts = [];
+  const addDecade = (century, decade) => decadeFacts.push(`decade:${century}${decade}`);
+  // „late 1980s”, „early '90s” and Polish „pod koniec lat 80.” are
+  // equivalent temporal facts. Remove the decade phrase before numeric
+  // extraction so 80/90 cannot be compared as unrelated integers.
+  text = text.replace(/\b(?:19|20)\d{2}\s*s\b/gu, (match) => {
+    const year = Number(match.match(/(?:19|20)\d{2}/)?.[0]);
+    if (Number.isFinite(year)) addDecade(Math.floor(year / 100), year % 100 - (year % 10));
+    return ' ';
+  });
+  text = text.replace(/\b(?:lat(?:ach)?\s+['’]?|['’])(\d{2})\s*(?:s|tych)?\b|\b(\d{2})s\b/gu, (match, first, second) => {
+    const shortYear = first || second;
+    const n = Number(shortYear);
+    if (n >= 10 && n <= 99) decadeFacts.push(`decade:${(n >= 50 ? 1900 : 2000) + n - (n % 10)}`);
+    return ' ';
+  });
   const matches = text.match(/\b(?:19|20)\d{2}\b|\b\d+(?:\.\d+)?%?\b/g) || [];
   const canonical = matches.map(value => {
     const percent = value.endsWith('%');
@@ -212,7 +228,7 @@ function wyodrebnijLiczbyIDaty(value) {
   // liczba. Porównanie słów pomijałoby wtedy poprawny claim. Liczby słowne
   // porównujemy tam, gdzie obie strony są w tym samym języku
   // (patrz liczbyDoPorownania).
-  return [...new Set(canonical)];
+  return [...new Set([...canonical, ...decadeFacts])];
 }
 const UNIT_ALIASES = new Map([
   ['h','hour'], ['hr','hour'], ['hrs','hour'], ['hour','hour'], ['hours','hour'], ['godzina','hour'], ['godziny','hour'], ['godzin','hour'], ['godz','hour'],
@@ -233,7 +249,11 @@ const UNIT_ALIASES = new Map([
   ['°c','celsius'], ['°f','fahrenheit'], ['zł','pln'], ['pln','pln'], ['usd','usd'], ['eur','eur'], ['%','percent'],
 ]);
 function wyodrebnijJednostkoweWartosci(value) {
-  const text = String(value || '').toLocaleLowerCase('pl-PL').replace(/,/g, '.');
+  const text = String(value || '').toLocaleLowerCase('pl-PL').replace(/,/g, '.')
+    // Dekada nie jest ilością lat: porównuje ją wyodrębnianie dat powyżej.
+    .replace(/\b(?:19|20)\d{2}\s*s\b/gu, ' ')
+    .replace(/\blat(?:ach)?\s+['’]?\d{2}\b/gu, ' ')
+    .replace(/\b['’]\d{2}\s*s\b/gu, ' ');
   const unitPattern = '(?:' + [...UNIT_ALIASES.keys()].filter(k => k !== 'm' && k !== 's').sort((a, b) => b.length - a.length).map(k => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|') + ')';
   const out = [];
   const re = new RegExp(`(?:\\b(\\d+(?:\\.\\d+)?)\\s*(${unitPattern})(?=$|[^\\p{L}\\p{N}])|(${unitPattern})(?=$|[^\\p{L}\\p{N}])\\s*(\\d+(?:\\.\\d+)?))`, 'giu');

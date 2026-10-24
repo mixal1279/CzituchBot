@@ -11,6 +11,8 @@
  * testowalne i nie zależą od providerów.
  */
 
+const { GAME_ALIASES, CHARACTER_ALIASES, containsAlias } = require('./entities');
+
 const STOPWORDS = new Set([
   'czy','jak','jaki','jaka','jakie','co','czym','kto','kim','kiedy','gdzie',
   'ile','dlaczego','czemu','jest','są','to','ten','ta','te','do','na','w','we',
@@ -190,6 +192,23 @@ function scoreSource(source, query, options = {}) {
   return { ...s, coreScore: Number(score.toFixed(4)), relevance, titleRelevance, authorityScore: authority };
 }
 
+function sourceMatchesRequestContext(source = {}, routing = {}) {
+  if (!routing?.is_lore && !routing?.is_gameplay) return true;
+  const resolved = routing.resolved_entity || {};
+  const candidates = [];
+  const addAliases = (entries, name) => {
+    const entry = entries.find(item => item.name === name);
+    if (entry) candidates.push(entry.name, ...entry.aliases);
+  };
+  if (resolved.type === 'character' || routing.entity) {
+    addAliases(CHARACTER_ALIASES, resolved.name || routing.entity);
+  }
+  addAliases(GAME_ALIASES, resolved.game || routing.game);
+  if (!candidates.length) return true;
+  const haystack = [source.title, source.content, source.url].filter(Boolean).join(' ');
+  return candidates.some(alias => containsAlias(haystack, alias));
+}
+
 function similarity(a, b) {
   const aa = new Set(tokens([a.title, a.content].join(' ')));
   const bb = new Set(tokens([b.title, b.content].join(' ')));
@@ -274,6 +293,7 @@ function czyStreszczenieModelu(source) {
 function assessEvidence(results = [], question, routing = {}) {
   const normalized = (Array.isArray(results) ? results : [])
     .filter(Boolean)
+    .filter(source => sourceMatchesRequestContext(source, routing))
     .map((s, index) => scoreSource(s, question, {
       index,
       // Score against both the resolved character/item and its parent game.
@@ -369,5 +389,6 @@ module.exports = {
   diversifySources,
   buildRetrievalPlan,
   assessEvidence,
+  sourceMatchesRequestContext,
   decideEvidencePolicy,
 };

@@ -81,8 +81,11 @@ function buildRetrievalQueries(question, routing = {}, options = {}) {
     const portalCoreTransferContext = /\b(?:portal\s*2|wheatley|glados|core\s+transfer|transfer\s+rdzenia|rdzen\w*)\b/iu.test([original, entity, game].join(' '));
     const causalHints = portalCoreTransferContext
       ? 'cause reason motivation event core transfer lore'
-      : 'cause reason motivation story conflict lore';
+      : 'cause reason motivation story conflict lore backstory relationship antagonist escape joins party';
     dodajUnikalneQuery(queries, [entity, game, causalHints].filter(Boolean).join(' '));
+    if (routing?.is_lore && /(?:astarion|wheatley|glados|chell|arthur|geralt|ciri|johnny|shadowheart|karlach|gale|dragonborn)/iu.test([original, entity].join(' '))) {
+      dodajUnikalneQuery(queries, [entity, game, 'motivation backstory antagonist freedom why joins party'].filter(Boolean).join(' '));
+    }
   } else if (routing?.is_lore) {
     dodajUnikalneQuery(queries, [entity || original, game, 'character history story lore'].filter(Boolean).join(' '));
   } else if (routing?.is_gameplay) {
@@ -157,7 +160,8 @@ function responseContract(profile) {
     'Nie dodawaj metakomentarzy typu „źródło potwierdza”, nie cytuj ponownie źródeł w treści odpowiedzi i nie dopisuj końcowego podsumowania, które powtarza poprzednie zdanie. Odpowiadaj bezpośrednio na pytanie, wyłącznie potrzebnymi faktami.',
     'Dla pytań gameplay podawaj kolejność działań, jeśli jest potrzebna do wykonania zadania.',
     'Dla pytań lore nie dopowiadaj spoilerów, których nie wymaga pytanie; gdy występuje interpretacja lub niepewność, oznacz ją wprost.',
-    'Oddzielaj fakty potwierdzone przez źródła od interpretacji i nie przedstawiaj interpretacji jako kanonu.'
+    'Oddzielaj fakty potwierdzone przez źródła od interpretacji i nie przedstawiaj interpretacji jako kanonu.',
+    ...(profile === 'timeline' ? ['Dla odpowiedzi czasowych zachowaj dokładnie dekady, zakresy i kwalifikatory („początek”, „koniec”, „około”, „ponad”); nie dodawaj pobocznych liczb z cytatu.'] : [])
   ].join('\n');
 }
 
