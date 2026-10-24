@@ -72,7 +72,9 @@ for (const [question, expectedIntent, expectedEntity, expectedType] of cases) {
 }
 
 const selectedDomains = dodajGameFAQsDomenę(['youtube.com', 'example.com']);
-assert.deepEqual(selectedDomains, ['gamefaqs.gamespot.com', 'youtube.com', 'example.com']);
+assert.equal(selectedDomains.includes('gamefaqs.gamespot.com'), false);
+assert.ok(selectedDomains.includes('ign.com'));
+assert.ok(selectedDomains.includes('gry-online.pl'));
 
 for (const question of [
   'Ile trwa fight w Elden Ring?',

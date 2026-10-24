@@ -297,7 +297,9 @@ function wyodrebnijNazwyWlasne(value, options = {}) {
     'przejecie', 'przejecia', 'przejeciu', 'przejeciem', 'przejec',
     // Common sentence-initial nouns seen in the live benchmark are descriptions,
     // not proper names. Keep strict evidence, number, and date checks unchanged.
-    'rodzinne', 'rodzinna', 'rodzinny', 'rodzinnego', 'rodzinnej', 'rodzinnym', 'polowanie', 'polowania', 'polowaniem', 'polowaniu', 'wedrowanie', 'wedrowania', 'wedrowaniem', 'wedrowaniu', 'damy', 'dama', 'struktura', 'struktury', 'strukture', 'strukturze', 'wiedzmin', 'wiedzmina', 'wiedzminem', 'wiedzminie', 'forteca', 'fortecy', 'fortece', 'twierdza', 'twierdzy', 'twierdze'
+    'rodzinne', 'rodzinna', 'rodzinny', 'rodzinnego', 'rodzinnej', 'rodzinnym', 'polowanie', 'polowania', 'polowaniem', 'polowaniu', 'wedrowanie', 'wedrowania', 'wedrowaniem', 'wedrowaniu', 'damy', 'dama', 'struktura', 'struktury', 'strukture', 'strukturze', 'wiedzmin', 'wiedzmina', 'wiedzminem', 'wiedzminie', 'forteca', 'fortecy', 'fortece', 'twierdza', 'twierdzy', 'twierdze',
+    // Zwykłe słowa otwierające zdanie z przypadków false-rejection.
+    'materialy', 'jedynym', 'jedyna', 'jedynie', 'ponadto', 'dodatkowo', 'aby', 'jesli'
   ].map(normalizujClaim));
   const candidates = [];
   const aliasSpans = [];
@@ -1145,7 +1147,12 @@ function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
     // punkty muszą wystarczać samodzielnie.
     // Bez tego warunku claim_en nigdy nie byłoby użyteczne dla nazw tłumaczonych.
   }
-  if (!zbiorRowny(wyodrebnijLiczbyIDaty(pl), wyodrebnijLiczbyIDaty(en))) {
+  // Liczby/daty obecne w polskim claimie muszą pozostać w tłumaczeniu.
+  // Data dodana przez evidence/claim_en może jednak zostać bezpiecznie
+  // pominięta przy uogólnieniu polskiego zdania.
+  const polishNumbers = wyodrebnijLiczbyIDaty(pl);
+  const englishNumbers = wyodrebnijLiczbyIDaty(en);
+  if (polishNumbers.some(number => !englishNumbers.includes(number))) {
     return { ok: false, reason: 'tłumaczenie claimu zmienia liczby lub daty' };
   }
   if (!zbiorRowny(wyodrebnijJednostkoweWartosci(pl), wyodrebnijJednostkoweWartosci(en))) {
@@ -1178,6 +1185,21 @@ function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
     // noun cannot be silently omitted from the English claim translation.
     ...wyodrebnijNazwyWlasne(pl),
   ])];
+  if (copiedQuote && /^(?:who|which|that|he|she|it|they|his|her|their|its)\s/u.test(enNormalized)) {
+    const evidenceContext = String(options.evidenceContext || '');
+    const evidenceQuote = String(options.evidenceQuote || '').trim();
+    const quoteOffset = evidenceQuote ? evidenceContext.indexOf(evidenceQuote) : -1;
+    if (quoteOffset < 0) {
+      return { ok: false, reason: 'tłumaczenie claimu gubi nazwy własne: ' + claimNames.slice(0, 3).join(', ') };
+    }
+    if (quoteOffset >= 0) {
+      const sameSentencePrefix = (evidenceContext.slice(0, quoteOffset).split(/[.!?](?:\s+|$)/u).at(-1) || '');
+      const normalizedPrefix = ' ' + normalizujClaim(sameSentencePrefix) + ' ';
+      if (!claimNames.some(name => normalizedPrefix.includes(' ' + normalizujClaim(name) + ' '))) {
+        return { ok: false, reason: 'tłumaczenie claimu gubi nazwy własne: ' + claimNames.slice(0, 3).join(', ') };
+      }
+    }
+  }
   // Twarda kontrola: polska nazwa własna musi wystąpić w angielskim tłumaczeniu.
   // Dla nazwy przetłumaczonej rozstrzyga tabela aliasów — czyNazwaWlasnaWystepuje
   // sprawdza w niej wzorzec (PL i EN w jednym wyrażeniu), a podmiana encji
@@ -1195,6 +1217,23 @@ function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
     return !czyNazwaWlasnaWystepuje(name, enNormalized);
   });
   if (missing.length) {
+    // Pełna nazwa może pochodzić z pytania, podczas gdy evidence_quote używa
+    // skrótu (np. „Johnny” zamiast „Johnny Silverhand”). Jeśli brakująca
+    // część nie występuje nawet w cytacie, nie jest to błąd tłumaczenia.
+    const quoteText = normalizujClaim(options.evidenceQuote || '');
+    const retainedNames = claimNames.filter(name => !missing.includes(name) && czyNazwaWlasnaWystepuje(name, enNormalized));
+    const missingNameIsAdjacentPart = retainedNames.some(retained => missing.some(name =>
+      new RegExp(`\\b${normalizujClaim(retained)}\\s+${normalizujClaim(name)}\\b`, 'u').test(normalizujClaim(pl))
+    ));
+    const hasRetainedEntity = retainedNames.length > 0 && missingNameIsAdjacentPart;
+    const missingInQuoteToo = hasRetainedEntity
+      ? missing.filter(name => !czyNazwaWlasnaWystepuje(name, quoteText))
+      : [];
+    if (quoteText && hasRetainedEntity && claimNames.length > missing.length && missingInQuoteToo.length === missing.length) return { ok: true };
+    const missingFromTranslation = quoteText && hasRetainedEntity
+      ? missing.filter(name => !missingInQuoteToo.includes(name))
+      : missing;
+    if (!missingFromTranslation.length) return { ok: true };
     // A source may quote a relative/anaphoric continuation ("who appears…")
     // that is not a standalone translation of the Polish claim. Accept the
     // omitted subject only when the exact quote is embedded in the supplied,
@@ -1214,9 +1253,9 @@ function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
     const normalizedPrefix = ' ' + normalizujClaim(sameSentencePrefix) + ' ';
     const missingEntitiesBound = quoteOffset >= 0
       && anaphoricEn
-      && missing.every(name => normalizedPrefix.includes(' ' + normalizujClaim(name) + ' '));
+      && missingFromTranslation.every(name => normalizedPrefix.includes(' ' + normalizujClaim(name) + ' '));
     if (!missingEntitiesBound) {
-      return { ok: false, reason: 'tłumaczenie claimu gubi nazwy własne: ' + missing.slice(0, 3).join(', ') };
+      return { ok: false, reason: 'tłumaczenie claimu gubi nazwy własne: ' + missingFromTranslation.slice(0, 3).join(', ') };
     }
   }
   return { ok: true };

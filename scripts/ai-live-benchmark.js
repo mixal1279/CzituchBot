@@ -17,7 +17,7 @@ const benchmark = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'test', 
 const defaultLimit = Math.min(10, benchmark.cases.length);
 const requestedLimit = Number(process.env.AI_BENCHMARK_LIMIT);
 const limit = Math.max(1, Math.min(benchmark.cases.length, Number.isFinite(requestedLimit) && requestedLimit > 0 ? requestedLimit : defaultLimit));
-const delayMs = Math.max(0, Number(process.env.AI_BENCHMARK_DELAY_MS) || 0);
+const delayMs = Math.max(0, Number(process.env.AI_BENCHMARK_DELAY_MS) || 8000);
 function stratifiedCases(all, requested, seed = 0) {
   if (requested >= all.length) return [...all];
   const groups = new Map();
@@ -550,7 +550,7 @@ async function run() {
       const complete = completeCount / results.length;
       console.error(`[LIVE BENCHMARK] ${i + 1}/${cases.length} answered=${answeredCount}/${results.length} (${(answered * 100).toFixed(1)}%) complete=${completeCount}/${results.length} (${(complete * 100).toFixed(1)}%)`);
     }
-    await sleep(delayMs);
+    if (i + 1 < cases.length) await sleep(delayMs);
   }
 
   const answered = results.filter(x => x.answered).length;

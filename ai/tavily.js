@@ -13,8 +13,8 @@ const { createGroqCompletion, awaitWithAbortTimeout } = require('./provider-runt
 // Jedna lista autorytetu domen (wcześniej dwie kopie w tym pliku rozjechały się:
 // np. eurogamer tylko w jednej, docs.npmjs.com tylko w drugiej).
 const DOMENY_OFICJALNE = ['minecraft.net', 'rockstargames.com', 'thewitcher.com', 'playstation.com', 'naughtydog.com', 'bandainamcoent.com', 'larian.com', 'baldursgate3.game', 'nvidia.com', 'openai.com', 'anthropic.com', 'microsoft.com', 'apple.com', 'discord.com', 'twitch.tv', 'kick.com'];
-const DOMENY_WYSPECJALIZOWANE = ['minecraft.wiki', 'gamelore.fandom.com', 'steamdb.info', 'gamefaqs.gamespot.com', 'developer.mozilla.org', 'docs.npmjs.com'];
-const DOMENY_PRZEWODNIKI = ['ign.com', 'gamespot.com', 'pcgamer.com', 'fandom.com', 'eurogamer.net', 'eurogamer.pl'];
+const DOMENY_WYSPECJALIZOWANE = ['minecraft.wiki', 'fandom.com', 'steamdb.info', 'developer.mozilla.org', 'docs.npmjs.com'];
+const DOMENY_PRZEWODNIKI = ['ign.com', 'gamespot.com', 'pcgamer.com', 'gamerant.com', 'polygon.com', 'fandom.com', 'eurogamer.net', 'eurogamer.pl', 'gry-online.pl'];
 
 const TAVILY_CACHE_TTL_MS = 10 * 60 * 1000; // domyślne / pytania o świeże wiadomości
 const TAVILY_REWRITE_TTL_MS = 6 * 60 * 60 * 1000;
@@ -514,7 +514,14 @@ function czyWymagaSecondaryRetrieval(results, sourceQuestion = '', timeRange = n
 }
 
 function czyZablokowanyHostTavily(url) {
-  try { return TAVILY_BLOKOWANE_HOSTY.has(new URL(url).hostname.toLowerCase().replace(/^www\./, '')); }
+  try {
+    const parsed = new URL(url);
+    const host = parsed.hostname.toLowerCase().replace(/^www\./, '');
+    // GameFAQs jest przydatne dla poradników, ale jego Boards/Q&A to głównie
+    // zgłoszenia „can't unlock / doesn't work”, a nie instrukcje przejścia.
+    const forumPath = /(?:^|[\/_-])(?:boards?|qa|q-and-a|questions?|forums?)(?:[\/_-]|$)/i.test(parsed.pathname);
+    return TAVILY_BLOKOWANE_HOSTY.has(host) || (host === 'gamefaqs.gamespot.com' && forumPath);
+  }
   catch (_) { return true; }
 }
 

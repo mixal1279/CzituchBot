@@ -31,14 +31,14 @@ function extractHostname(value) {
 
 function dodajGameFAQsDomenę(domeny) {
   const lista = Array.isArray(domeny) ? [...domeny] : [];
-  const hasGameFAQs = lista.some((d) => extractHostname(d) === GAMEFAQS_DOMAIN);
-  if (!hasGameFAQs) lista.unshift(GAMEFAQS_DOMAIN);
-  // Keep the specialist domain as a preference, not as a global include_domains
-  // union. Adding Fandom, IGN, PC Gamer and YouTube here broadens every gameplay
-  // search equally and does not implement an ordered fallback. Other domains
-  // already selected by the caller are preserved; weak-result fallback must be
-  // decided after retrieval, when result quality is available.
-  return lista;
+  const preferredGuides = ['ign.com', 'gamespot.com', 'polygon.com', 'rockpapershotgun.com', 'gry-online.pl'];
+  const withoutForumSource = lista.filter(domain => extractHostname(domain) !== GAMEFAQS_DOMAIN);
+  for (const domain of preferredGuides) {
+    if (!withoutForumSource.some(item => extractHostname(item) === domain)) withoutForumSource.unshift(domain);
+  }
+  // GameFAQs Boards/Q&A są pełne zgłoszeń „can't unlock / doesn't work”;
+  // preferujemy strony poradnikowe zamiast wymuszać ten host dla każdego pytania.
+  return withoutForumSource;
 }
 
 function wytnijAtrybucjeGameFAQs(tekst) {

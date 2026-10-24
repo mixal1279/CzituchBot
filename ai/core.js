@@ -87,11 +87,11 @@ function classifyAuthority(source = {}) {
     'ubisoft.com','bethesda.net','starwars.com','openai.com','discord.com'
   ];
   const specialized = [
-    'gamelore.fandom.com','minecraft.wiki','gamefaqs.gamespot.com',
+    'minecraft.wiki','fandom.com',
     'steamdb.info','howlongtobeat.com','pcgamingwiki.com'
   ];
   const reference = ['wikipedia.org','imdb.com','mobygames.com'];
-  const guide = ['ign.com','gamespot.com','pcgamer.com','eurogamer.net','fandom.com'];
+  const guide = ['ign.com','gamespot.com','pcgamer.com','gamerant.com','polygon.com','gry-online.pl','eurogamer.net','eurogamer.pl','fandom.com'];
 
   const inList = list => list.some(d => host === d || host.endsWith('.' + d));
   if (inList(official)) return 'official';

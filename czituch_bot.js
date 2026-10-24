@@ -2503,7 +2503,10 @@ async function walidujOdpowiedzAIBezCache(persona, pytanie, odpowiedz, dane, his
   if (KONFIGURACJA.xkiroKey && validatorBreakerIsOpen('xkiro')) {
     console.warn(`[AI][${requestId}] xKiro validator pominięty przed rezerwacją slotu: circuit breaker aktywny`);
   }
-  if (KONFIGURACJA.xkiroKey && !validatorBreakerIsOpen('xkiro')) {
+  // xKiro (qwen 397B free) ma zbyt wysoki TTFT dla głównego budżetu requestu.
+  // Pozostaje dostępne przez bezpośredni hook/preflight, ale nie zużywa czasu
+  // produkcyjnego validatora bez jawnego opt-in.
+  if (process.env.AI_ENABLE_XKIRO_VALIDATOR === '1' && KONFIGURACJA.xkiroKey && !validatorBreakerIsOpen('xkiro')) {
     const xkiroRemainingMs = requestState
       ? (typeof requestState.remainingMs === 'function' ? requestState.remainingMs() : requestState.maxCzasMs - (Date.now() - requestState.startedAt))
       : 6000;
