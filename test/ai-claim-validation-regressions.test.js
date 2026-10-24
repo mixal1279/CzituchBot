@@ -21,6 +21,19 @@ test('English resistance and Polish odporność share a protection marker', () =
   assert.equal(result.ok, true, result.reason);
 });
 
+test('common sentence-initial Polish nouns from benchmark are not treated as proper names', () => {
+  const cases = [
+    ['Rodzinne zadanie prowadzi do odnalezienia Anny.', 'rodzinne'],
+    ['Polowanie na czarownice jest jednym z powiązanych zadań.', 'polowanie'],
+    ['Wędrowanie w ciemności jest kolejnym zadaniem.', 'wedrowanie'],
+    ['Struktura generuje się w biomie Netheru.', 'struktura'],
+    ['Wiedźmin jest mutowanym łowcą potworów.', 'wiedzmin'],
+  ];
+  for (const [claim, falseEntity] of cases) {
+    assert.equal(wyodrebnijNazwyWlasne(claim).includes(falseEntity), false, claim);
+  }
+});
+
 test('sentence-initial Polish modifiers are not treated as proper names', () => {
   assert.deepEqual(wyodrebnijNazwyWlasne(
     'Alternatywnymi metodami walki są unieruchamianie smoka lub przyzwanie minionów.',
@@ -53,4 +66,27 @@ test('cross-language translation recognizes release and travel concepts without 
     { evidenceQuote: 'Geralt travels to Novigrad.' },
   );
   assert.equal(travel.ok, true, travel.reason);
+});
+test('numeric normalization preserves thousands and decimal values across locale formats', () => {
+  const { wyodrebnijLiczbyIDaty } = require('../ai/claimValidation');
+  assert.deepEqual(wyodrebnijLiczbyIDaty('Około 50,000 lat'), ['50000']);
+  assert.deepEqual(wyodrebnijLiczbyIDaty('Około 50.000 lat'), ['50000']);
+  assert.deepEqual(wyodrebnijLiczbyIDaty('Około 50 000 lat'), ['50000']);
+  assert.deepEqual(wyodrebnijLiczbyIDaty('Wartość wynosi 2,5'), ['2.5']);
+  assert.deepEqual(wyodrebnijLiczbyIDaty('Wartość wynosi 2.50'), ['2.5']);
+});
+
+test('localized Witcher 3 quest titles share verified Polish and English aliases', () => {
+  const { KNOWN_ENTITY_ALIAS_PATTERNS } = require('../ai/claimValidation');
+  const cases = [
+    ['Sprawy rodzinne', 'Family Matters'],
+    ['Polowanie na czarownicę', 'Hunting a Witch'],
+    ['Wędrowanie w ciemności', 'Wandering in the Dark'],
+    ['Damy lasu', 'Ladies of the Wood'],
+  ];
+  for (const [pl, en] of cases) {
+    const alias = KNOWN_ENTITY_ALIAS_PATTERNS.find(entry => entry.pattern.test(pl));
+    assert.ok(alias, `missing alias pattern for ${pl}`);
+    assert.equal(alias.pattern.test(en), true, `${pl} should match ${en}`);
+  }
 });

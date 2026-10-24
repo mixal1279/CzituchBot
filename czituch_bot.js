@@ -94,7 +94,7 @@ const { buildAnswerPlan } = require('./ai/answer-plan');
 const { judgeAnswer, partialAnswerPreservesCoreIntent } = require('./ai/answer-judge');
 const { parseEvidenceBlocks, buildQuestionEvidenceContext, escapeUntrustedEvidenceContent } = require('./ai/evidence');
 const { buildBoundedEvidencePrompt } = require('./ai/prompt-context');
-const { buildRequestMessages, buildOpenRouterMessages: formatOpenRouterMessages } = require('./ai/request-messages');
+const { buildRequestMessages, buildOpenRouterMessages: formatOpenRouterMessages, isMissingQuestionPlaceholder } = require('./ai/request-messages');
 const { parseGeminiGenerationResponse, buildGeminiGenerateContentUrl } = require('./ai/gemini-response');
 
 // Exact source spans help the validator quote evidence accurately. These are
@@ -1956,12 +1956,13 @@ async function walidujOdpowiedzOpenRouter(persona, pytanie, odpowiedz, dane, req
   if (requestState && validatorTimeoutMs === null) {
     return { status: 'unavailable', ok: false, technicalError: true, transient: true, skipped: true, provider: 'openrouter', model: KONFIGURACJA.openrouterValidatorModel, unsupported_claims: [], reason: 'OpenRouter validator pominięty: zbyt mały pozostały budżet czasu' };
   }
-  const timer = setTimeout(() => controller.abort(), validatorTimeoutMs);
+  // Timeout is enforced around the complete fetch + response-body read.
   try {
-    const response = await fetch(`${KONFIGURACJA.openrouterBaseUrl}/chat/completions`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${KONFIGURACJA.openrouterKey}`, 'HTTP-Referer': 'https://czituchbot.pl', 'X-Title': 'CzituchBot validator' },
-      body: JSON.stringify({
+     const { response, data } = await awaitWithAbortTimeout((async () => {
+      const response = await fetch(`${KONFIGURACJA.openrouterBaseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${KONFIGURACJA.openrouterKey}`, 'HTTP-Referer': 'https://czituchbot.pl', 'X-Title': 'CzituchBot validator' },
+        body: JSON.stringify({
         model: KONFIGURACJA.openrouterValidatorModel,
         messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
         temperature: 0,
@@ -1972,8 +1973,10 @@ async function walidujOdpowiedzOpenRouter(persona, pytanie, odpowiedz, dane, req
         provider: { require_parameters: true },
         response_format: buildOpenRouterValidatorResponseFormat(),
       }), signal: controller.signal,
-    });
-    const data = await response.json().catch(() => ({}));
+      });
+      const data = await response.json().catch(() => ({}));
+      return { response, data };
+    })(), validatorTimeoutMs, controller, 'OpenRouter validator');
     if (!response.ok) {
       const status = Number(response.status || 0);
       const retryAfter = retryAfterHint(response);
@@ -2066,7 +2069,7 @@ async function walidujOdpowiedzOpenRouter(persona, pytanie, odpowiedz, dane, req
     const diagnostic = formatProviderError('openrouter', KONFIGURACJA.openrouterValidatorModel, err, { timeoutMs: validatorTimeoutMs, timeoutAbort });
     console.error(`[AI][${requestId}] OpenRouter validator TRANSPORT_ERROR: ${diagnostic}`);
     return { status: 'unavailable', ok: false, technicalError: true, transient: timeoutAbort, timeoutAbort, provider: 'openrouter', model: KONFIGURACJA.openrouterValidatorModel, unsupported_claims: [], reason: timeoutAbort ? 'OpenRouter validator timeout/abort' : 'fallback validator niedostępny', error: diagnostic, diagnostic };
-  } finally { clearTimeout(timer); }
+  }
 }
 
 
@@ -2216,15 +2219,14 @@ async function walidujOdpowiedzXKiro(persona, pytanie, odpowiedz, dane, requestI
   // OpenRouter remains the next fallback after xKiro, so xKiro must always
   // leave enough time for that final validator. The validator counter alone
   // does not mean xKiro is the last provider in the fallback chain.
-  // xKiro ma wysoką latencję. Poprzedni limit 3 s regularnie kończył się dokładnie
-  // timeoutem w benchmarku; 4,5 s daje modelowi realną szansę, a limit pozostałego
-  // czasu i rezerwa nadal chronią ostatni fallback OpenRouter. Poniżej 14,5 s pomijamy xKiro.
+  // xKiro ma wysoką latencję; timeout 4,5 s jest ograniczany przez pozostały budżet.
+  // Nie pomijamy go na podstawie sztywnego progu, jeśli krótsza próba mieści się w rezerwie.
   const timeoutMs = requestState
-    ? (remainingMs < 14500 ? null : computeValidatorTimeout(remainingMs, {
+    ? computeValidatorTimeout(remainingMs, {
         maxTimeoutMs: Number(process.env.AI_XKIRO_VALIDATOR_TIMEOUT_MS) || 4500,
         reserveMs: computeValidatorReserveMs(remainingMs, requestState.validatory + 1, requestState.maxValidatorow, requestState.validationPass === 1 ? INITIAL_VALIDATOR_REPAIR_RESERVE_MS : 0),
         minTimeoutMs: 1200,
-      }))
+      })
     : (Number(process.env.AI_XKIRO_VALIDATOR_TIMEOUT_MS) || 4500);
   if (requestState && timeoutMs === null) {
     return { status: 'unavailable', ok: false, technicalError: true, transient: true, skipped: true, provider: 'xkiro', model, unsupported_claims: [], reason: 'xKiro validator pominięty: zbyt mały pozostały budżet czasu' };
@@ -2405,7 +2407,17 @@ async function walidujOdpowiedzAIBezCache(persona, pytanie, odpowiedz, dane, his
     const validatorElapsedMs = Date.now() - validatorStartedAt;
     const remainingAfter = requestState?.remainingMs?.() ?? null;
     requestState?.recordTiming?.('validator_provider_end', { provider: 'gemini', model: models[i], status: result.status, validatorElapsedMs, remainingBefore, remainingAfter, reason: String(result.reason || '').slice(0, 180) });
-    if (requestState) requestState.validatorResults.push({ model: models[i], provider: 'gemini', status: result.status, elapsedMs: validatorElapsedMs, remainingMsBefore: remainingBefore, remainingMsAfter: remainingAfter, complete: result.complete === true, confidence: Number.isFinite(result.confidence) ? result.confidence : null, claimCoverage: Array.isArray(result.claims) && result.claims.length ? result.claims.filter(c => c.supported === true).length / result.claims.length : null, validationDiagnostics: result.diagnostics || null });
+    if (requestState) requestState.validatorResults.push({
+      model: models[i], provider: 'gemini', status: result.status,
+      elapsedMs: validatorElapsedMs, remainingMsBefore: remainingBefore, remainingMsAfter: remainingAfter,
+      complete: result.complete === true, confidence: Number.isFinite(result.confidence) ? result.confidence : null,
+      claimCoverage: Array.isArray(result.claims) && result.claims.length ? result.claims.filter(c => c.supported === true).length / result.claims.length : null,
+      reason: typeof result.reason === 'string' ? result.reason.slice(0, 300) : null,
+      technicalError: result.technicalError === true, timeoutAbort: result.timeoutAbort === true,
+      quota: result.quota === true, skipped: result.skipped === true,
+      statusCode: Number.isFinite(Number(result.statusCode)) && result.statusCode != null ? Number(result.statusCode) : null,
+      validationDiagnostics: result.diagnostics || null,
+    });
     console.log(`[AI][${requestId}] validator #${i + 1} ${models[i]} → ${result.status}${result.diagnostics ? ` localReject=${JSON.stringify(result.diagnostics.localRejectReasons)} claimCoverage=${result.diagnostics.claimCoverage}` : ''}`);
     if (result.status === 'accepted' || result.status === 'soft_accepted') return result;
     if (result.status === 'rejected') {
@@ -2464,6 +2476,10 @@ async function walidujOdpowiedzAIBezCache(persona, pytanie, odpowiedz, dane, his
           claimCoverage: Array.isArray(groqResult.claims) && groqResult.claims.length
             ? groqResult.claims.filter(c => c.supported === true).length / groqResult.claims.length
             : null,
+          reason: typeof groqResult.reason === 'string' ? groqResult.reason.slice(0, 300) : null,
+          technicalError: groqResult.technicalError === true, timeoutAbort: groqResult.timeoutAbort === true,
+          quota: groqResult.quota === true, skipped: groqResult.skipped === true,
+          statusCode: Number.isFinite(Number(groqResult.statusCode)) && groqResult.statusCode != null ? Number(groqResult.statusCode) : null,
           validationDiagnostics: groqResult.diagnostics || null,
         });
         if (groqResult.status === 'accepted' || groqResult.status === 'soft_accepted') return groqResult;
@@ -2491,7 +2507,7 @@ async function walidujOdpowiedzAIBezCache(persona, pytanie, odpowiedz, dane, his
     const xkiroRemainingMs = requestState
       ? (typeof requestState.remainingMs === 'function' ? requestState.remainingMs() : requestState.maxCzasMs - (Date.now() - requestState.startedAt))
       : 6000;
-    const xkiroTimeoutMs = xkiroRemainingMs < 14500 ? null : computeValidatorTimeout(xkiroRemainingMs, {
+    const xkiroTimeoutMs = computeValidatorTimeout(xkiroRemainingMs, {
       maxTimeoutMs: Number(process.env.AI_XKIRO_VALIDATOR_TIMEOUT_MS) || 4500,
       reserveMs: computeValidatorReserveMs(xkiroRemainingMs, requestState?.validatory + 1, requestState?.maxValidatorow, requestState?.validationPass === 1 ? INITIAL_VALIDATOR_REPAIR_RESERVE_MS : 0),
       minTimeoutMs: 1200,
@@ -2522,6 +2538,10 @@ async function walidujOdpowiedzAIBezCache(persona, pytanie, odpowiedz, dane, his
         claimCoverage: Array.isArray(xkiroResult.claims) && xkiroResult.claims.length
           ? xkiroResult.claims.filter(c => c.supported === true).length / xkiroResult.claims.length
           : null,
+        reason: typeof xkiroResult.reason === 'string' ? xkiroResult.reason.slice(0, 300) : null,
+        technicalError: xkiroResult.technicalError === true, timeoutAbort: xkiroResult.timeoutAbort === true,
+        quota: xkiroResult.quota === true, skipped: xkiroResult.skipped === true,
+        statusCode: Number.isFinite(Number(xkiroResult.statusCode)) && xkiroResult.statusCode != null ? Number(xkiroResult.statusCode) : null,
         validationDiagnostics: xkiroResult.diagnostics || null,
       });
       if (xkiroResult.status === 'accepted' || xkiroResult.status === 'soft_accepted') return xkiroResult;
@@ -2567,7 +2587,7 @@ async function walidujOdpowiedzAIBezCache(persona, pytanie, odpowiedz, dane, his
   if (requestState?.validatorResults?.length) {
     const lastResult = requestState.validatorResults[requestState.validatorResults.length - 1];
     if (lastResult?.provider === 'openrouter' || lastResult?.status === 'fallback') {
-      Object.assign(lastResult, { elapsedMs: validatorElapsedMs, remainingMsBefore: remainingBefore, remainingMsAfter: remainingAfter, status: fallback.status });
+      Object.assign(lastResult, { elapsedMs: validatorElapsedMs, remainingMsBefore: remainingBefore, remainingMsAfter: remainingAfter, status: fallback.status, reason: typeof fallback.reason === 'string' ? fallback.reason.slice(0, 300) : null, technicalError: fallback.technicalError === true, timeoutAbort: fallback.timeoutAbort === true, quota: fallback.quota === true, skipped: fallback.skipped === true, statusCode: Number.isFinite(Number(fallback.statusCode)) && fallback.statusCode != null ? Number(fallback.statusCode) : null });
     }
   }
   if (fallback.status === 'accepted' || fallback.status === 'soft_accepted') return fallback;
@@ -3681,6 +3701,10 @@ Pytanie użytkownika: ${pytanie}`;
     let result = shouldAttemptPrimary
       ? await zapytajGlowny(effectiveMaxTok, prompt, primaryModel)
       : wynikPusty('groq', primaryModel, allowPrimary ? 'provider cooldown active' : 'primary model skipped for this generation cycle');
+    if (isMissingQuestionPlaceholder(result.tekst)) {
+      result = { ...result, tekst: '', error: 'empty_response: generator returned a missing-question placeholder' };
+      console.warn(`[AI][${requestId}] ${primaryStep} zwrócił placeholder „brak pytania”; traktuję jako pustą odpowiedź i uruchamiam fallback.`);
+    }
     let lastResult = result;
     let failureType = allowPrimary ? classifyFailure(result.error || '') : 'validator_rejection';
 
@@ -3787,7 +3811,11 @@ Pytanie użytkownika: ${pytanie}`;
       attempted.push(step);
       const attemptStartedAt = Date.now();
       aiState.recordTiming('generation_fallback_start', { phase, provider: step.split(':')[0], model: step.split(':').slice(1).join(':') || 'default', step });
-      const candidate = await fn();
+      let candidate = await fn();
+      if (isMissingQuestionPlaceholder(candidate.tekst)) {
+        candidate = { ...candidate, tekst: '', error: 'empty_response: fallback generator returned a missing-question placeholder' };
+        console.warn(`[AI][${requestId}] ${step} zwrócił placeholder „brak pytania”; pomijam wynik i próbuję kolejnego fallbacku.`);
+      }
       lastResult = candidate;
       if (candidate.tekst && !candidate.ucieta) {
         lastSuccessfulGenerationStep = step;

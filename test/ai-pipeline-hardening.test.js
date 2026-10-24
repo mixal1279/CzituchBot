@@ -60,6 +60,21 @@ test('answer coverage rejects a second factual sentence that has no supporting c
   assert.equal(coverage.ok, false, JSON.stringify(coverage));
 });
 
+
+test('answer coverage splits coordinated factual clauses introduced by a następnie', () => {
+  const answer = 'Wheatley przejął kontrolę nad GLaDOS, a następnie zniszczył laboratorium.';
+  const firstOnly = sprawdzPokrycieClaimamiOdpowiedzi(answer, [
+    { claim: 'Wheatley przejął kontrolę nad GLaDOS' },
+  ]);
+  assert.equal(firstOnly.ok, false, JSON.stringify(firstOnly));
+
+  const bothClaims = sprawdzPokrycieClaimamiOdpowiedzi(answer, [
+    { claim: 'Wheatley przejął kontrolę nad GLaDOS' },
+    { claim: 'Wheatley następnie zniszczył laboratorium' },
+  ]);
+  assert.equal(bothClaims.ok, true, JSON.stringify(bothClaims));
+});
+
 test('answer coverage accepts an answer when each factual sentence has a matching claim', () => {
   const answer = 'Wheatley przejął kontrolę nad GLaDOS. Wheatley zniszczył laboratorium.';
   const coverage = sprawdzPokrycieClaimamiOdpowiedzi(answer, [
