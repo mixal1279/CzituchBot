@@ -367,7 +367,7 @@ function wyodrebnijNazwyWlasne(value, options = {}) {
     // not proper names. Keep strict evidence, number, and date checks unchanged.
     'rodzinne', 'rodzinna', 'rodzinny', 'rodzinnego', 'rodzinnej', 'rodzinnym', 'polowanie', 'polowania', 'polowaniem', 'polowaniu', 'wedrowanie', 'wedrowania', 'wedrowaniem', 'wedrowaniu', 'damy', 'dama', 'struktura', 'struktury', 'strukture', 'strukturze', 'wiedzmin', 'wiedzmina', 'wiedzminem', 'wiedzminie', 'forteca', 'fortecy', 'fortece', 'twierdza', 'twierdzy', 'twierdze',
     // Zwykłe słowa otwierające zdanie z przypadków false-rejection.
-    'materialy', 'dostepne', 'dostepnych', 'danych', 'jedynym', 'jedyna', 'jedynie', 'ponadto', 'dodatkowo', 'aby', 'jesli'
+    'materialy', 'dostepne', 'dostepnych', 'danych', 'jedynym', 'jedyna', 'jedynie', 'ponadto', 'dodatkowo', 'aby', 'jesli', 'relacja', 'relacji', 'relacje', 'poznanie', 'poznania'
   ].map(normalizujClaim));
   const candidates = [];
   const aliasSpans = [];
@@ -909,7 +909,9 @@ function tokenyPokrywajaSie(a, b) {
 function czyOgraniczenieDowodowe(sentence) {
   const text = normalizujClaim(sentence);
   const limitation = /\b(?:nie\s+(?:potwierdz\w*|podaj\w*|precyz\w*|okresl\w*|wskaz\w*|zawier\w*|znalazl\w*|znaleziono)|brak\s+(?:dokladn\w*\s+)?(?:dat\w*|moment\w*|czas\w*|potwierdzon\w*\s+(?:przyczyn\w*|powod\w*)))\b/u.test(text);
-  const scopedTopic = /\b(?:dat\w*|moment\w*|czas\w*|rok\w*|przyczyn\w*|powod\w*)\b/u.test(text);
+  // „metod\w*” i „sposob\w*”: zastrzeżenie o braku dodatkowych metod w źródłach („Źródła nie podają
+  // dodatkowych metod zdobycia…”) jest tak samo zakresem źródła jak brak daty, a nie faktem o świecie.
+  const scopedTopic = /\b(?:dat\w*|moment\w*|czas\w*|rok\w*|przyczyn\w*|powod\w*|metod\w*|sposob\w*)\b/u.test(text);
   const sourceMention = /\b(?:zrodla?\w*|materialy|dane|sources?|evidence)\b/u.test(text);
   const inheritedSourceScope = /^\s*(?:ale|jednak)?\s*nie\b/u.test(text);
   return limitation && scopedTopic && (sourceMention || inheritedSourceScope);
@@ -1155,6 +1157,24 @@ function liczbyDoPorownania(tekst) {
   return [...new Set([...wyodrebnijLiczbyIDaty(tekst), ...slowaLiczbowe(tekst)])];
 }
 
+// Angielskie liczby słowne zamieniane na cyfry wyłącznie w kontrolę parytetu PL↔EN claimu:
+// „około 20 lat” ↔ „over twenty years”. Wersja z cyframi jest DODATKOWĄ ścieżką akceptacji obok
+// surowego tłumaczenia, więc nie tworzy nowych odrzuceń (np. „dwadzieścia lat” ↔ „twenty years”).
+const EN_LICZBY_SLOWNE = {
+  one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10,
+  eleven: 11, twelve: 12, thirteen: 13, fourteen: 14, fifteen: 15, sixteen: 16, seventeen: 17,
+  eighteen: 18, nineteen: 19, twenty: 20, thirty: 30, forty: 40, fifty: 50, sixty: 60,
+  seventy: 70, eighty: 80, ninety: 90,
+};
+function angielskieLiczbySlowneNaCyfry(value) {
+  return String(value || '').replace(
+    /(?<![\p{L}\p{N}])(?:(twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)[-\s](one|two|three|four|five|six|seven|eight|nine)|(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety))(?![\p{L}\p{N}])/giu,
+    (match, tens, unit, single) => String(tens
+      ? EN_LICZBY_SLOWNE[tens.toLowerCase()] + EN_LICZBY_SLOWNE[unit.toLowerCase()]
+      : EN_LICZBY_SLOWNE[single.toLowerCase()]),
+  );
+}
+
 // Czy w cytacie po zachowanym imieniu stoi inny wyraz pisany wielką literą („Johnny Cash”)?
 // Wtedy cytat mówi o innej osobie niż „Johnny Silverhand” i skrót imienia nie może być uznany
 // za tę samą encję. Interpunkcja kończąca token przerywa nazwę; „’s” jest odcinane.
@@ -1250,11 +1270,14 @@ function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
   // Data dodana przez evidence/claim_en może jednak zostać bezpiecznie
   // pominięta przy uogólnieniu polskiego zdania.
   const polishNumbers = wyodrebnijLiczbyIDaty(pl);
-  const englishNumbers = wyodrebnijLiczbyIDaty(en);
+  const enLiczbowo = angielskieLiczbySlowneNaCyfry(en);
+  const englishNumbers = [...new Set([...wyodrebnijLiczbyIDaty(en), ...wyodrebnijLiczbyIDaty(enLiczbowo)])];
   if (polishNumbers.some(number => !englishNumbers.includes(number))) {
     return { ok: false, reason: 'tłumaczenie claimu zmienia liczby lub daty' };
   }
-  if (!zbiorRowny(wyodrebnijJednostkoweWartosci(pl), wyodrebnijJednostkoweWartosci(en))) {
+  const polishUnits = wyodrebnijJednostkoweWartosci(pl);
+  if (!zbiorRowny(polishUnits, wyodrebnijJednostkoweWartosci(en))
+    && !zbiorRowny(polishUnits, wyodrebnijJednostkoweWartosci(enLiczbowo))) {
     return { ok: false, reason: 'tłumaczenie claimu zmienia jednostki lub wartości' };
   }
   if (wyodrebnijMarkery(pl, NEGATION_RE) !== wyodrebnijMarkery(en, NEGATION_RE)) {
