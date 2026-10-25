@@ -9,7 +9,9 @@ const NEGATION_STRICT_RE = /(?<![\p{L}])(?:nie|nigdy|brak|bez|zaden|zadna|zadne|
 // Claim o redukcji/ograniczeniu jest zgodny z dowodem „no damage / take no damage” (zero implikuje zmniejszenie).
 // „s?tlumi\w*” obejmuje odmiany „tłumić” (tłumiąca, tłumienie, stłumić), ale nie „tłumaczy”/„tłum”.
 const REDUCTION_RE = /(?<![\p{L}])(?:zmniejsz\w*|ogranicz\w*|redukuj\w*|zredukow\w*|oslab\w*|chron\w*|neutralizuj\w*|reduc\w*|inhibit\w*|dampen\w*|s?tlumi\w*|mitigat\w*|lower\w*|decreas\w*|protect\w*|prevent\w*|avoid\w*|block\w*|ward\w*|immun\w*|resist\w*|zapobieg\w*|unik\w*|blok\w*|odporn\w*)(?![\p{L}])/iu;
-const CAUSAL_RE = /(?<![\p{L}])(?:bo|poniewaz|gdyz|dlatego|because|therefore|caused|causes|trigger\w*|consequently|hence|as\s+a\s+result|led\s+to|leading\s+to|resulted\s+in|resulting\s+in|because\s+of|due\s+to|thereby|thus|w\s+ten\s+sposob|przez\s+co|co\s+(?:umozliw\w*|spowod\w*)|motyw\w*|zmusz\w*|powoduj\w*|przyczyn\w*|wskutek|w\s+efekcie|allow(?:s|ed|ing)?|enabl(?:e|es|ed|ing)|which\s+(?:let|lets|allowed|allows|enabled|enables)|putting\s+(?:him|her|them|it)\s+in\s+control|giving\s+(?:him|her|them|it)\s+control|dajac\s+(?:mu|jej|im)\s+(?:wladz\w*|kontrol\w*|panowan\w*)|force(?:s|d|ing)?\s+(?:the\s+)?[\p{L}\p{N}'’_-]+(?:\s+[\p{L}\p{N}'’_-]+){0,1}\s+to\s+[\p{L}\p{N}'’_-]+|so\s+(?:he|she|they|it|we|the)|in\s+exchange(?:\s+for)?|in\s+return(?:\s+for)?|in\s+turn|thanks\s+to|owing\s+to|w\s+zamian(?:\s+za)?|w\s+rewan[zż]u|w\s+wyniku|z\s+powodu|dzieki|spowod\w*|doprowadz\w*|umozliw\w*)(?![\p{L}])/iu;
+// „skutkuj\w*” i „w rezultacie” to polskie odpowiedniki „resulting in”/„as a result”: bez nich
+// polski claim z relacją przyczynową przechodził kontrolę parytetu PL↔EN, gdy claim_en ją gubił.
+const CAUSAL_RE = /(?<![\p{L}])(?:bo|poniewaz|gdyz|dlatego|because|therefore|caused|causes|trigger\w*|consequently|hence|as\s+a\s+result|led\s+to|leading\s+to|resulted\s+in|resulting\s+in|because\s+of|due\s+to|thereby|thus|w\s+ten\s+sposob|przez\s+co|co\s+(?:umozliw\w*|spowod\w*)|motyw\w*|zmusz\w*|powoduj\w*|przyczyn\w*|wskutek|w\s+efekcie|skutkuj\w*|w\s+rezultacie|allow(?:s|ed|ing)?|enabl(?:e|es|ed|ing)|which\s+(?:let|lets|allowed|allows|enabled|enables)|putting\s+(?:him|her|them|it)\s+in\s+control|giving\s+(?:him|her|them|it)\s+control|dajac\s+(?:mu|jej|im)\s+(?:wladz\w*|kontrol\w*|panowan\w*)|force(?:s|d|ing)?\s+(?:the\s+)?[\p{L}\p{N}'’_-]+(?:\s+[\p{L}\p{N}'’_-]+){0,1}\s+to\s+[\p{L}\p{N}'’_-]+|so\s+(?:he|she|they|it|we|the)|in\s+exchange(?:\s+for)?|in\s+return(?:\s+for)?|in\s+turn|thanks\s+to|owing\s+to|w\s+zamian(?:\s+za)?|w\s+rewan[zż]u|w\s+wyniku|z\s+powodu|dzieki|spowod\w*|doprowadz\w*|umozliw\w*)(?![\p{L}])/iu;
 // Nie traktujemy samego „force” jako przyczynowości: „forced a core transfer”
 // może opisywać akcję. Rozpoznajemy jednak konstrukcję „force X to Y” oraz
 // bezpośrednie „giving him control”, które wyrażają relację między zdarzeniami.
@@ -1092,6 +1094,20 @@ function liczbyDoPorownania(tekst) {
   return [...new Set([...wyodrebnijLiczbyIDaty(tekst), ...slowaLiczbowe(tekst)])];
 }
 
+// Czy w cytacie po zachowanym imieniu stoi inny wyraz pisany wielką literą („Johnny Cash”)?
+// Wtedy cytat mówi o innej osobie niż „Johnny Silverhand” i skrót imienia nie może być uznany
+// za tę samą encję. Interpunkcja kończąca token przerywa nazwę; „’s” jest odcinane.
+// Odpowiednik followedByForeignSurname z ai/entities.js, ale działający na cytacie.
+function cytatRozszerzaNazwePoImieniu(quote, nameVariants) {
+  const tokens = String(quote || '').split(/\s+/u).filter(Boolean);
+  for (let i = 0; i < tokens.length - 1; i++) {
+    if (/[.!?,;:)]$/u.test(tokens[i])) continue;
+    if (!nameVariants.has(normalizujClaim(tokens[i].replace(/['’]s$/iu, '')))) continue;
+    if (/^[A-ZĄĆĘŁŃÓŚŹŻ]/u.test(tokens[i + 1])) return true;
+  }
+  return false;
+}
+
 function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
   const pl = String(claimPl || '').trim();
   const en = String(claimEn || '').trim();
@@ -1240,14 +1256,22 @@ function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
   });
   if (missing.length) {
     // Pełna nazwa może pochodzić z pytania, podczas gdy evidence_quote używa
-    // skrótu (np. „Johnny” zamiast „Johnny Silverhand”). Jeśli brakująca
-    // część nie występuje nawet w cytacie, nie jest to błąd tłumaczenia.
+    // skrótu (np. „Johnny” zamiast „Johnny Silverhand”). Skrót jest dopuszczalny
+    // tylko wtedy, gdy cytat naprawdę mówi o tej samej encji: zachowane imię musi
+    // w nim wystąpić i nie może po nim stać inny człon nazwy („Johnny Cash”
+    // to nie „Johnny Silverhand”), a brakująca część nie może występować w cytacie.
     const quoteText = normalizujClaim(options.evidenceQuote || '');
     const retainedNames = claimNames.filter(name => !missing.includes(name) && czyNazwaWlasnaWystepuje(name, enNormalized));
-    const missingNameIsAdjacentPart = retainedNames.some(retained => missing.some(name =>
+    // Zachowana część musi sąsiadować z brakującą w polskim claimie.
+    const adjacentRetainedNames = retainedNames.filter(retained => missing.some(name =>
       new RegExp(`\\b${normalizujClaim(retained)}\\s+${normalizujClaim(name)}\\b`, 'u').test(normalizujClaim(pl))
     ));
-    const hasRetainedEntity = retainedNames.length > 0 && missingNameIsAdjacentPart;
+    const hasRetainedEntity = adjacentRetainedNames.length > 0 && adjacentRetainedNames.every(retained =>
+      czyNazwaWlasnaWystepuje(retained, quoteText)
+      && !cytatRozszerzaNazwePoImieniu(options.evidenceQuote, new Set([
+        normalizujClaim(retained),
+        ...wariantyNazwyDoDopasowania(retained).map(normalizujClaim),
+      ])));
     const missingInQuoteToo = hasRetainedEntity
       ? missing.filter(name => !czyNazwaWlasnaWystepuje(name, quoteText))
       : [];
