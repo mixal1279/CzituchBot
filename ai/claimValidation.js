@@ -2,6 +2,7 @@
 
 const { ENTITY_ALIAS_GROUPS, buildEntityAliasPatterns } = require('./entityAliases');
 const { slowaLiczbowe } = require('./polishNumbers');
+const { GAME_ALIASES } = require('./entities');
 
 const NEGATION_RE = /(?<![\p{L}])(?:nie|nigdy|brak|bez|zaden|zadna|zadne|never|no|not|cannot|without|lack\s+of|absence\s+of|unable|neither|nor|fails?\s+to|\p{L}+n['’]t)(?![\p{L}])/iu;
 // Ta sama lista bez gołego „no”: „no damage” to kwantyfikator zerowy, a nie zaprzeczenie czasownika.
@@ -153,6 +154,49 @@ function normalizujClaim(value) {
 }
 function tokenyClaim(value) {
   return [...new Set(normalizujClaim(value).split(' ').filter(t => t.length >= 4))];
+}
+// Tytuły gier z tabeli ai/entities.js. Claim często powtarza tytuł z pytania („W grze Baldur's Gate 3…”),
+// choć cytat źródłowy mówi tylko o postaci. Taki tytuł opisuje kontekst pytania, a nie fakt do
+// potwierdzenia w cytacie, więc (1) numerał z tytułu nie jest liczbą do potwierdzenia w dowodzie
+// i (2) słowa tytułu nie są nazwami własnymi wymaganymi w dowodzie. Zgodność tytułu ze źródłem pilnuje
+// filtr źródeł (sourceMatchesRequestContext); pozostałe nazwy własne nadal muszą wystąpić w dowodzie.
+// Skróty krótsze niż 5 znaków (mc, bg3, tlou) są zbyt dwuznaczne i nie są zwalniane.
+const TYTULY_GIER = (() => {
+  const sep = '[^\\p{L}\\p{N}]+';
+  const esc = token => token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const seen = new Set();
+  const out = [];
+  for (const entry of GAME_ALIASES) {
+    for (const alias of [entry.name, ...entry.aliases]) {
+      const tokens = String(alias || '').split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+      const key = tokens.join(' ').toLocaleLowerCase('pl-PL');
+      if (!tokens.length || key.replace(/ /g, '').length < 5 || seen.has(key)) continue;
+      seen.add(key);
+      const last = tokens[tokens.length - 1];
+      const hasEdition = tokens.length > 1 && /^\d{1,4}$/u.test(last);
+      out.push({
+        re: new RegExp(`(?<![\\p{L}\\p{N}])${tokens.map(esc).join(sep)}(?![\\p{L}\\p{N}])`, 'giu'),
+        hasDigit: /\d/u.test(key),
+        edition: hasEdition ? last : null,
+        // Ta sama seria z innym numerem w dowodzie („Fallout 3” przy claimie o „Fallout 4”)
+        // oznacza, że numerał jest realnym rozróżnikiem i nie wolno go zwalniać.
+        sibling: hasEdition
+          ? new RegExp(`(?<![\\p{L}\\p{N}])${tokens.slice(0, -1).map(esc).join(sep)}${sep}(\\d{1,4})(?![\\p{L}\\p{N}])`, 'giu')
+          : null,
+      });
+    }
+  }
+  return out.sort((a, b) => b.re.source.length - a.re.source.length);
+})();
+function usunTytulyGierZLiczb(claimText, evidenceText = '') {
+  let out = String(claimText || '');
+  const evidence = String(evidenceText || '');
+  for (const title of TYTULY_GIER) {
+    if (!title.hasDigit) continue;
+    if (title.sibling && [...evidence.matchAll(title.sibling)].some(match => match[1] !== title.edition)) continue;
+    out = out.replace(title.re, ' ');
+  }
+  return out;
 }
 function rzymskieNaArabskie(s) {
   // Konwertuje poprawną liczbę rzymską na arabską. Zwraca null gdy nie jest
@@ -335,6 +379,18 @@ function wyodrebnijNazwyWlasne(value, options = {}) {
       candidates.push({ token: alias.canonical, offset: start });
     }
   }
+  // Tytuł gry powtórzony w claimie to kontekst pytania, nie fakt do potwierdzenia w cytacie
+  // (patrz TYTULY_GIER). Zwalniamy go z wymogu obecności w dowodzie tylko na żądanie wywołującego;
+  // pozostałe nazwy własne claimu nadal muszą wystąpić w dowodzie.
+  const titleSpans = [];
+  if (options.skipGameTitles) {
+    for (const title of TYTULY_GIER) {
+      for (const match of raw.matchAll(title.re)) {
+        const start = Number(match.index || 0);
+        titleSpans.push({ start, end: start + match[0].length });
+      }
+    }
+  }
   const sentenceRe = /(^|[.!?]\s*)([^.!?]*)(?=[.!?]|$)/gu;
   const capitalizedRe = /(?<![\p{L}\p{N}_])[A-ZĄĆĘŁŃÓŚŹŻ][\p{L}\d'’.-]*/gu;
   const sentenceMatches = [...raw.matchAll(sentenceRe)];
@@ -359,6 +415,8 @@ function wyodrebnijNazwyWlasne(value, options = {}) {
       const token = match[0];
       const tokenOffset = Number(match.index || 0);
       if (aliasSpans.some(span => tokenOffset >= span.start && tokenOffset < span.end)) continue;
+      const absoluteTokenOffset = sentenceOffset + tokenOffset;
+      if (titleSpans.some(span => absoluteTokenOffset >= span.start && absoluteTokenOffset < span.end)) continue;
       const before = sentence.slice(0, tokenOffset);
       const atSentenceStart = firstCandidate && !before.trim();
       firstCandidate = false;
@@ -587,7 +645,7 @@ function wybierzKlausuleDowoduDlaClaimu(evidence, claim) {
 
 function sprawdzPowiazanieLiczbZeZdarzeniem(evidence, claim, options = {}) {
   if (options.allowDistributedEvidence || wyglądaNaAngielski(evidence) !== wyglądaNaAngielski(claim)) return { ok: true };
-  const claimNumbers = wyodrebnijLiczbyIDaty(claim);
+  const claimNumbers = wyodrebnijLiczbyIDaty(usunTytulyGierZLiczb(claim, evidence));
   if (!claimNumbers.length) return { ok: true };
   const sentences = String(evidence || '').split(/(?<=[.!?])\s+/u).map(sentence => sentence.trim()).filter(Boolean);
   if (sentences.length < 2) return { ok: true };
@@ -632,7 +690,10 @@ function sprawdzTwardeKonflikty(evidence, claim, options = {}) {
   if (options.checkNegationOnly) return { ok: true };
 
   const evidenceNumbers = wyodrebnijLiczbyIDaty(e);
-  const claimNumbers = wyodrebnijLiczbyIDaty(c);
+  // Numerał w tytule gry („Baldur's Gate 3”, „Cyberpunk 2077”) nie jest faktem do potwierdzenia w cytacie
+  // (patrz TYTULY_GIER); zwalniamy go, chyba że dowód wspomina inną część tej samej serii.
+  const cBezTytulow = usunTytulyGierZLiczb(c, e);
+  const claimNumbers = wyodrebnijLiczbyIDaty(cBezTytulow);
   if (claimNumbers.some(n => !evidenceNumbers.includes(n))) return { ok: false, reason: 'claim zawiera liczbę/datę nieobecną w dowodzie' };
 
   const evidenceQuantities = wyodrebnijJednostkoweWartosci(e);
@@ -641,7 +702,7 @@ function sprawdzTwardeKonflikty(evidence, claim, options = {}) {
   const numericAssociation = sprawdzPowiazanieLiczbZeZdarzeniem(e, c, options);
   if (!numericAssociation.ok) return numericAssociation;
 
-  const claimTemporal = wyodrebnijMarkery(c, TEMPORAL_RE);
+  const claimTemporal = wyodrebnijMarkery(cBezTytulow, TEMPORAL_RE);
   const evidenceTemporal = wyodrebnijMarkery(e, TEMPORAL_RE);
   if (claimTemporal && !evidenceTemporal && claimNumbers.length === 0) return { ok: false, reason: 'claim zawiera sygnał czasowy nieobecny w dowodzie' };
   return { ok: true };
@@ -703,7 +764,7 @@ function dopasowanieSemantyczne(evidence, claim, options = {}) {
   const et = new Set(tokenyClaim(evidence));
   const overlap = ct.length ? ct.filter(t => [...et].some(other => tokenyPokrywajaSie(t, other))).length / ct.length : 0;
   const ignoredSentenceInitialNames = [];
-  const nameOptions = { ...options, _ignoredSentenceInitialNames: ignoredSentenceInitialNames };
+  const nameOptions = { ...options, _ignoredSentenceInitialNames: ignoredSentenceInitialNames, skipGameTitles: true };
   const entities = wyodrebnijNazwyWlasne(claim, nameOptions);
   const normalizedEvidence = normalizujClaim(evidence);
   const missingEntities = entities.filter(entity => !czyNazwaWlasnaWystepuje(entity, normalizedEvidence));
@@ -728,7 +789,7 @@ function dopasowanieSemantyczne(evidence, claim, options = {}) {
 function czyRelacjaPrzyczynowaPokrywaClaim(evidence, claim, options = {}) {
   const claimText = String(claim || '');
   const evidenceText = String(evidence || '');
-  const claimEntities = wyodrebnijNazwyWlasne(claimText, options);
+  const claimEntities = wyodrebnijNazwyWlasne(claimText, { ...options, skipGameTitles: true });
   const claimTokens = tokenyPokryciaBezStop(claimText);
   const sentences = evidenceText
     .replace(/\s+/g, ' ')
@@ -767,7 +828,7 @@ function zgodnoscStrukturalna(evidence, claim, options = {}) {
   if (!semanticConflict.ok) return semanticConflict;
 
   const evidenceNumbers = wyodrebnijLiczbyIDaty(e);
-  const claimNumbers = wyodrebnijLiczbyIDaty(c);
+  const claimNumbers = wyodrebnijLiczbyIDaty(usunTytulyGierZLiczb(c, e));
   if (claimNumbers.length && claimNumbers.some(n => !evidenceNumbers.includes(n))) {
     return { ok: false, reason: 'claim zawiera liczbę/datę nieobecną w dowodzie' };
   }
@@ -793,7 +854,7 @@ function zgodnoscStrukturalna(evidence, claim, options = {}) {
   const evidenceConcepts = pojeciaCrossLanguage(e);
   const claimConcepts = pojeciaCrossLanguage(c);
   const sharedConcepts = [...claimConcepts].filter(x => evidenceConcepts.has(x));
-  const claimEntities = wyodrebnijNazwyWlasne(c, options);
+  const claimEntities = wyodrebnijNazwyWlasne(c, { ...options, skipGameTitles: true });
   const normalizedEvidence = normalizujClaim(e);
   const entityCoverage = claimEntities.length
     ? claimEntities.filter(entity => czyNazwaWlasnaWystepuje(entity, normalizedEvidence)).length / claimEntities.length
