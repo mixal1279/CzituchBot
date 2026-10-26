@@ -309,7 +309,9 @@ function wyodrebnijJednostkoweWartosci(value) {
     const unit = UNIT_ALIASES.get(rawUnit);
     if (Number.isFinite(amount) && unit) out.push(`${amount}:${unit}`);
   }
-  const shortUnitRe = /(?:\b(\d+(?:\.\d+)?)\s+(m|s)\b|\b(m|s)\s+(\d+(?:\.\d+)?))/giu;
+  // Granice jednostki „m”/„s” muszą rozumieć polskie litery: \b traktuje „ą/ę/ó…” jako nie-litery,
+  // więc „3 są” dawało „3 s” (sekundy), a „5 mężczyzn” dawało „5 m” (metry).
+  const shortUnitRe = /(?:(?<![\p{L}\p{N}])(\d+(?:\.\d+)?)\s+(m|s)(?![\p{L}\p{N}])|(?<![\p{L}\p{N}])(m|s)\s+(\d+(?:\.\d+)?)(?![\p{L}\p{N}]))/giu;
   for (const m of text.matchAll(shortUnitRe)) {
     const amount = Number(m[1] || m[4]);
     const unit = UNIT_ALIASES.get(String(m[2] || m[3] || '').toLocaleLowerCase('pl-PL'));
