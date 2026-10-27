@@ -231,19 +231,22 @@ function wyodrebnijLiczbyIDaty(value) {
     .replace(/(\d)[,.](\d{3})(?=\D|$)/gu, '$1$2')
     .replace(/,/g, '.');
   const decadeFacts = [];
-  const addDecade = (century, decade) => decadeFacts.push(`decade:${century}${decade}`);
+  // Dekada liczona numerycznie z roku (1980, 2000, 2010). Sklejanie cyfry wieku z cyfrą dekady
+  // dawało „200” dla lat 2000. i „190” dla lat 1900., więc „2000s” nigdy nie zgadzało się z „'00s”.
+  const addDecade = year => decadeFacts.push(`decade:${Math.floor(year / 10) * 10}`);
   // „late 1980s”, „early '90s” and Polish „pod koniec lat 80.” are
   // equivalent temporal facts. Remove the decade phrase before numeric
   // extraction so 80/90 cannot be compared as unrelated integers.
   text = text.replace(/\b(?:19|20)\d{2}\s*s\b/gu, (match) => {
     const year = Number(match.match(/(?:19|20)\d{2}/)?.[0]);
-    if (Number.isFinite(year)) addDecade(Math.floor(year / 100), year % 100 - (year % 10));
+    if (Number.isFinite(year)) addDecade(year);
     return ' ';
   });
   text = text.replace(/\b(?:lat(?:ach)?\s+['’]?|['’])(\d{2})\s*(?:s|tych)?\b|\b(\d{2})s\b/gu, (match, first, second) => {
     const shortYear = first || second;
     const n = Number(shortYear);
-    if (n >= 10 && n <= 99) decadeFacts.push(`decade:${(n >= 50 ? 1900 : 2000) + n - (n % 10)}`);
+    // „'00s” / „lat 00.” to lata 2000.; dekady 01–09 nie istnieją, więc tylko 00 i 10–99.
+    if ((n >= 10 && n <= 99) || n === 0) decadeFacts.push(`decade:${(n >= 50 ? 1900 : 2000) + n - (n % 10)}`);
     return ' ';
   });
   const matches = text.match(/\b(?:19|20)\d{2}\b|\b\d+(?:\.\d+)?%?\b/g) || [];
