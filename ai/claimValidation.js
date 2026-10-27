@@ -242,6 +242,13 @@ function wyodrebnijLiczbyIDaty(value) {
     if (Number.isFinite(year)) addDecade(year);
     return ' ';
   });
+  // Polska forma długa: „lata 2000.”, „w latach 2010”, „lat 1990.” to dekada, tak jak „2000s”.
+  // Zakres („w latach 2010–2013”), lista („w latach 2000 i 2010”) i pojedynczy rok („w latach 2012”)
+  // nie są dekadą i zostają zwykłymi liczbami.
+  text = text.replace(/\blat(?:a|ach)?\s+((?:19|20)\d0)(?!\d)(?!\s*(?:[-–—]\s*\d|(?:do|oraz|i)\s+\d{4}|,\s*(?:19|20)\d{2}))\.?/gu, (match, year) => {
+    addDecade(Number(year));
+    return ' ';
+  });
   text = text.replace(/\b(?:lat(?:ach)?\s+['’]?|['’])(\d{2})\s*(?:s|tych)?\b|\b(\d{2})s\b/gu, (match, first, second) => {
     const shortYear = first || second;
     const n = Number(shortYear);
@@ -304,6 +311,8 @@ function wyodrebnijJednostkoweWartosci(value) {
   const text = String(value || '').toLocaleLowerCase('pl-PL').replace(/,/g, '.')
     // Dekada nie jest ilością lat: porównuje ją wyodrębnianie dat powyżej.
     .replace(/\b(?:19|20)\d{2}\s*s\b/gu, ' ')
+    // „lata 2000.” / „w latach 2012” to data, nie „2000 lat”: alias „lata” dawał fałszywą jednostkę 2000:year.
+    .replace(/\blat(?:a|ach)?\s+(?:19|20)\d{2}\b/gu, ' ')
     .replace(/\blat(?:ach)?\s+['’]?\d{2}\b/gu, ' ')
     .replace(/\b['’]\d{2}\s*s\b/gu, ' ');
   const unitPattern = '(?:' + [...UNIT_ALIASES.keys()].filter(k => k !== 'm' && k !== 's').sort((a, b) => b.length - a.length).map(k => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|') + ')';
