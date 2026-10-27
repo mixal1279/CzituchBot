@@ -105,6 +105,9 @@ const KNOWN_ENTITY_ALIAS_PATTERNS = [
   { canonical: 'dragonrend', pattern: /\bdragonrend\b/iu },
   // Minecraft: „End”, „Endu” i „Endzie” oznaczają tę samą krainę.
   { canonical: 'the end', pattern: /\b(?:the\s+end|end(?:u|em|zie|a)?)\b/iu },
+  // Minecraft: polska nazwa Ender Pearl to „perła Kresu” (Kres = End); bez aliasu „Kresu” było
+  // wymaganą nazwą własną, której nie ma w angielskim tłumaczeniu.
+  { canonical: 'ender pearl', pattern: /\b(?:ender\s+pearls?|per[łl](?:a|y|ę|ą|e|ie|o)?\s+kresu)\b/iu },
   { canonical: 'spellbreaker', pattern: /\b(?:spellbreaker|zaklinacz\s+spellbreaker|łamacz(?:a|owi|em|u)?\s+zakl(?:ę|e)ć)\b/iu },
   { canonical: 'extended relaxation center', pattern: /\b(?:extended\s+relaxation\s+center|centrum\s+(?:przedluzonego|rozszerzonego)\s+relaksu)\b/iu },
   { canonical: 'aperture laboratories', pattern: /\b(?:aperture\s+laboratories|laboratori(?:a|ach|ami|ow|ów)\s+aperture)\b/iu },
@@ -369,7 +372,9 @@ function wyodrebnijNazwyWlasne(value, options = {}) {
     // not proper names. Keep strict evidence, number, and date checks unchanged.
     'rodzinne', 'rodzinna', 'rodzinny', 'rodzinnego', 'rodzinnej', 'rodzinnym', 'polowanie', 'polowania', 'polowaniem', 'polowaniu', 'wedrowanie', 'wedrowania', 'wedrowaniem', 'wedrowaniu', 'damy', 'dama', 'struktura', 'struktury', 'strukture', 'strukturze', 'wiedzmin', 'wiedzmina', 'wiedzminem', 'wiedzminie', 'forteca', 'fortecy', 'fortece', 'twierdza', 'twierdzy', 'twierdze',
     // Zwykłe słowa otwierające zdanie z przypadków false-rejection.
-    'materialy', 'dostepne', 'dostepnych', 'danych', 'jedynym', 'jedyna', 'jedynie', 'ponadto', 'dodatkowo', 'aby', 'jesli', 'relacja', 'relacji', 'relacje', 'poznanie', 'poznania'
+    // „Statki End…”: obok stoi nazwa pisana wielką literą, więc sygnał „nazwa wielowyrazowa” nie
+    // odróżni rzeczownika pospolitego od imienia i słowo musi być na liście.
+    'materialy', 'dostepne', 'dostepnych', 'danych', 'jedynym', 'jedyna', 'jedynie', 'ponadto', 'dodatkowo', 'aby', 'jesli', 'relacja', 'relacji', 'relacje', 'poznanie', 'poznania', 'statki', 'statek', 'statku', 'statkiem'
   ].map(normalizujClaim));
   const candidates = [];
   const aliasSpans = [];
@@ -1303,11 +1308,16 @@ function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
     return { ok: false, reason: 'tłumaczenie claimu zmienia kierunek redukcji lub ochrony' };
   }
   const enNormalized = normalizujClaim(en);
+  // Z wyrocznią nazw (wywołanie z źródłami) obowiązuje ta sama zasada co przy dowodzie: słowo na
+  // początku zdania jest nazwą tylko wtedy, gdy ma sygnał (znany alias, nazwa wielowyrazowa, wielka
+  // litera w środku zdania, obecność w wyroczni). Wcześniej drugi przebieg bez wyroczni liczył
+  // KAŻDE takie słowo, więc polskie rzeczowniki pospolite („Wspólny”, „Przedmiotu”, „Relacja”)
+  // odpadały jako „gubi nazwy własne”. Bez wyroczni nie ma czym rozstrzygnąć, więc liczy się każde.
+  // Konsekwencja: nieznana nazwa postaci na początku zdania, której nie ma w tabelach ani w
+  // źródłach, nie jest już pilnowana przy tłumaczeniu (nadal pilnuje jej kontrola dowodu).
   const claimNames = [...new Set([
     ...wyodrebnijNazwyWlasne(pl, options),
-    // Re-run without the source oracle so an unknown sentence-initial proper
-    // noun cannot be silently omitted from the English claim translation.
-    ...wyodrebnijNazwyWlasne(pl),
+    ...(options.nameOracle instanceof Set ? [] : wyodrebnijNazwyWlasne(pl)),
   ])];
   if (copiedQuote && /^(?:who|which|that|he|she|it|they|his|her|their|its)\s/u.test(enNormalized)) {
     const evidenceContext = String(options.evidenceContext || '');
