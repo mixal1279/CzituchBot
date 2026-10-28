@@ -244,8 +244,9 @@ function wyodrebnijLiczbyIDaty(value) {
   });
   // Polska forma długa: „lata 2000.”, „w latach 2010”, „lat 1990.” to dekada, tak jak „2000s”.
   // Zakres („w latach 2010–2013”), lista („w latach 2000 i 2010”) i pojedynczy rok („w latach 2012”)
-  // nie są dekadą i zostają zwykłymi liczbami.
-  text = text.replace(/\blat(?:a|ach)?\s+((?:19|20)\d0)(?!\d)(?!\s*(?:[-–—]\s*\d|(?:do|oraz|i)\s+\d{4}|,\s*(?:19|20)\d{2}))\.?/gu, (match, year) => {
+  // nie są dekadą i zostają zwykłymi liczbami. Przecinek jest tu już zamieniony na kropkę
+  // (patrz wyżej), więc listę „2000, 2005” rozpoznaje [,.] po roku.
+  text = text.replace(/\blat(?:a|ach)?\s+((?:19|20)\d0)(?!\d)(?!\s*(?:[-–—]\s*\d|(?:do|oraz|i)\s+\d{4}|[,.]\s*(?:19|20)\d{2}))\.?/gu, (match, year) => {
     addDecade(Number(year));
     return ' ';
   });
