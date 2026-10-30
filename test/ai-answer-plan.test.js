@@ -312,3 +312,19 @@ test('variable-duration exception is not enabled for ordinary quantity questions
   const plan = buildAnswerPlan('Ile kosztuje Elden Ring?', { intent: 'web_fact', entity: 'Elden Ring', game: 'Elden Ring' });
   assert.equal(plan.quantityMayBeVariable, false);
 });
+
+
+test('answer signals recognize companion/romance relationships, broad outcomes, and English actions', () => {
+  assert.equal(extractAnswerSignals('Geralt i Yennefer są towarzyszami, łączy ich romans.').relationship, true);
+  assert.equal(extractAnswerSignals('Vesemir zostaje zabity przez Imleritha podczas bitwy.').outcome, true);
+  assert.equal(extractAnswerSignals('Equip the weapon and use the sign.').steps, true);
+});
+
+test('a year after a Polish preposition is not mistaken for a location', () => {
+  assert.equal(extractAnswerSignals('W 2024 roku rozpoczęto nowy etap projektu.').where, false);
+});
+
+test('inflected Polish relationship questions create the relationship requirement', () => {
+  const plan = buildAnswerPlan('Jaką relację łączy Geralta i Yennefer?', { intent: 'web_fact', is_lore: true });
+  assert.ok(plan.requirements.some(item => item.id === 'relationship'));
+});
