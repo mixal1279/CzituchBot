@@ -164,7 +164,7 @@ function extractAnswerSignals(answer) {
     outcome: /\b(wynik\w*|skutek|skutk\w*|konsekwenc\w*|ostatecznie|pozniej|potem|nastepnie|umar\w*|zgin\w*|gin\w*|zabij\w*|smier\w*|zostal\w*|zostaj\w*)\b/.test(text)
       && text.split(/\s+/).length >= 4,
     relationship: Boolean(relationshipMarker)
-      && /\b(?:wspolprac|wspolpracy|konflikt|przyjazn|zauf|zdrad|sojusz|wrog|partner|towarzysz|romans|lacz|dziel|relationship|friends?|friendship|enemies?|alliances?)\p{L}*/u.test(text),
+      && /(?<![\p{L}])(?:wspolprac\p{L}*|konflikt\p{L}*|przyjazn\p{L}*|zauf\p{L}*|zdrad\p{L}*|sojusz\p{L}*|wrog\p{L}*|partner\p{L}*|towarzysz\p{L}*|romans\p{L}*|lacz\p{L}*|dziel\p{L}*|relationship\p{L}*|friends?|friendship|enemies?|alliances?)(?![\p{L}])/u.test(text),
     entity_context: text.length > 0,
     // Dla slotu „dlaczego” jawnie podany motyw jest wyjaśnieniem, ale pozostaje oznaczony osobno.
     causal_explanation: causalExplanation,
