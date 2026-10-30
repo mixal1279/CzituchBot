@@ -1,5 +1,35 @@
 'use strict';
 
+function replaceUntrustedBlockTags(text) {
+  const marker = 'UNTRUSTED_';
+  let output = '';
+  let cursor = 0;
+  let i = 0;
+
+  while (i < text.length) {
+    if (text[i] !== '<') { i++; continue; }
+    let nameStart = i + 1;
+    while (nameStart < text.length && /\s/.test(text[nameStart])) nameStart++;
+    if (text[nameStart] === '/') nameStart++;
+    while (nameStart < text.length && /\s/.test(text[nameStart])) nameStart++;
+    if (text.slice(nameStart, nameStart + marker.length).toUpperCase() !== marker) { i++; continue; }
+
+    const tagStart = nameStart + marker.length;
+    const close = text.indexOf('>', tagStart);
+    const lineBreakMatch = text.slice(tagStart).match(/[\r\n]/);
+    const lineBreak = lineBreakMatch ? tagStart + lineBreakMatch.index : -1;
+    if (close === -1 || (lineBreak !== -1 && lineBreak < close)) {
+      i = tagStart;
+      continue;
+    }
+
+    output += text.slice(cursor, i) + '[USUNIĘTY_ZNACZNIK_BLOKU]';
+    cursor = close + 1;
+    i = cursor;
+  }
+  return output + text.slice(cursor);
+}
+
 function sanitizeUntrustedText(material) {
   let text = String(material || '');
   text = text
@@ -7,7 +37,6 @@ function sanitizeUntrustedText(material) {
     // Treść strony nie może udawać nagłówka źródła ani zamykać/otwierać bloków niezaufanych danych.
     .replace(/\[\s*(?:SOURCE|REFERENCE)\b[^\]\r\n]*\]/gi, '[USUNIĘTE_ODWOŁANIE_DO_ŹRÓDŁA]')
     .replace(/<<<\s*(?:END_)?UNTRUSTED[^>\r\n]*>>>/gi, '[USUNIĘTY_ZNACZNIK_BLOKU]')
-    .replace(/<\s*\/?\s*UNTRUSTED_[A-Z_]*[^>\r\n]*>/gi, '[USUNIĘTY_ZNACZNIK_BLOKU]')
     .replace(/<!--[\s\S]*?-->/g, '[USUNIĘTY_KOMENTARZ_HTML]')
     .replace(/<script\b[^>]*>[\s\S]*?<\/script\b[^>]*>/gi, '[USUNIĘTY_SKRYPT_HTML]')
     .replace(/<\/?(?:system|developer|assistant|user|tool|instructions?|prompt|context)\b[^>]*>/gi, '[USUNIĘTY_MARKER_ZRODŁA]')
@@ -17,6 +46,7 @@ function sanitizeUntrustedText(material) {
     .replace(/\b(?:zignoruj|ignoruj|pomiń|pomijaj)\s+(?:wszystkie\s+|te\s+)?(?:poprzednie|wcześniejsze|wczesniejsze|powyższe|powyzsze)\s+(?:instrukcje|zasady|wiadomości|wiadomosci|polecenia)\b/gi, '[USUNIĘTA_INSTRUKCJA_ŹRÓDŁA]')
     .replace(/\b(?:wiadomość|wiadomosc|prompt|instrukcja)\s+(?:systemowa|deweloperska|developera)\s*:/gi, '[USUNIĘTY_MARKER_ŹRÓDŁA:]')
     .replace(/\b(?:you are|act as|jesteś|działaj jako)\s+(?:an?\s+)?(?:assistant|system|developer|model|ai|bot|asystent|systemem|modelem|botem)\b/gi, '[USUNIĘTA_INSTRUKCJA_ROLI]');
+  text = replaceUntrustedBlockTags(text);
   return text.replace(/\s{2,}/g, ' ').trim();
 }
 
