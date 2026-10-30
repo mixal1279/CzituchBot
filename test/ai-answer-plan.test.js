@@ -344,3 +344,9 @@ test('relationship detection does not treat friendly as a relationship term', ()
   assert.equal(extractAnswerSignals('The character is friendly to strangers.').relationship, false);
   assert.equal(extractAnswerSignals('Geralt is a friend of Yennefer.').relationship, true);
 });
+
+
+test('relationship signals recognize enemy and Polish wrogowie forms', () => {
+  assert.equal(extractAnswerSignals('Geralt considers the Wild Hunt an enemy.').relationship, true);
+  assert.equal(extractAnswerSignals('Wrogowie Geralta atakują go w lesie.').relationship, true);
+});
