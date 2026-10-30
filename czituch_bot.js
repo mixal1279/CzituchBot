@@ -6527,14 +6527,26 @@ async function wczytajTokenYT() {
   } catch (err) {
     console.error('[YT Auth] Błąd wczytywania tokenu i kopii zapasowych:', err.message);
   }
+  // A failed Firestore read does not prove that no token exists. Never start a
+  // fresh OAuth flow when the canonical token store could not be inspected.
+  if (firestoreReadFailed && !credentials) {
+    throw new Error('[YT Auth] Nie można ustalić stanu tokenu w Firestore i nie znaleziono dostępnej kopii. Przywróć dostęp lub kopię tokenu przed ponowną autoryzacją.');
+  }
   return false;
 }
 
 async function zalogujYouTube() {
+  // Bind the callback to this authorization attempt and use PKCE so an
+  // intercepted authorization code cannot be redeemed without the verifier.
+  const oauthState = crypto.randomBytes(32).toString('hex');
+  const { codeVerifier, codeChallenge } = await oauth2Client.generateCodeVerifierAsync();
   const authUrl = oauth2Client.generateAuthUrl({
     access_type: 'offline',
     scope: ['https://www.googleapis.com/auth/youtube', 'https://www.googleapis.com/auth/youtube.force-ssl'],
     prompt: 'consent',
+    state: oauthState,
+    code_challenge: codeChallenge,
+    code_challenge_method: 'S256',
   });
   console.log('\n========================================');
   console.log('🔐 LOGOWANIE DO YOUTUBE');
@@ -6548,26 +6560,44 @@ async function zalogujYouTube() {
     const http = require('http');
     const server = http.createServer((req, res) => {
       const url = new URL(req.url, 'http://localhost:3000');
+      const callbackState = url.searchParams.get('state');
+      const oauthError = url.searchParams.get('error');
       const code = url.searchParams.get('code');
-      if (code) {
-        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-        res.end('<h2>✅ Zalogowano! Możesz zamknąć tę kartę i wrócić do terminala.</h2>');
+
+      if (!callbackState || callbackState !== oauthState) {
+        res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' });
+        res.end('Nieprawidłowy parametr state. Autoryzacja została odrzucona.');
         server.close();
-        resolve(code);
-      } else {
-        res.writeHead(400);
+        reject(new Error('Nieprawidłowy parametr state w callbacku OAuth'));
+        return;
+      }
+      if (oauthError) {
+        res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' });
+        res.end('Autoryzacja Google została anulowana lub odrzucona.');
+        server.close();
+        reject(new Error('Google OAuth zwrócił błąd; szczegóły odpowiedzi pominięto.'));
+        return;
+      }
+      if (!code) {
+        res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' });
         res.end('Brak kodu autoryzacji.');
         server.close();
         reject(new Error('Brak kodu w callbacku'));
+        return;
       }
+
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.end('<h2>✅ Zalogowano! Możesz zamknąć tę kartę i wrócić do terminala.</h2>');
+      server.close();
+      resolve(code);
     });
+    server.on('error', reject);
     server.listen(3000, () => {
       console.log('[YT Auth] ⏳ Czekam na autoryzację na porcie 3000...');
     });
-    server.on('error', reject);
   });
 
-  const { tokens } = await oauth2Client.getToken(code);
+  const { tokens } = await oauth2Client.getToken({ code, codeVerifier });
   oauth2Client.setCredentials(tokens);
   try {
     await zapiszTokenYT(tokens);
@@ -8776,39 +8806,47 @@ const startBot = async () => {
   await wczytajTokenKick();
 
   // ---- YouTube – autoryzacja ----
-  const maszTokenYT = await wczytajTokenYT();
-  if (!maszTokenYT) {
-    await zalogujYouTube();
-  } else {
-    await wyswietlKontoYoutube();
-    oauth2Client.on('tokens', (newTokens) => {
-      // EventEmitter does not await async listeners. Catch every persistence failure
-      // here so a transient Firestore outage cannot become an unhandled rejection.
-      void (async () => {
-        try {
-          let current = oauth2Client.credentials || {};
+  // YouTube is optional for process availability: a token-store/OAuth failure
+  // must not prevent Twitch, Billy and the rest of the bot from starting.
+  let youtubeReady = false;
+  try {
+    const maszTokenYT = await wczytajTokenYT();
+    if (!maszTokenYT) {
+      await zalogujYouTube();
+    } else {
+      await wyswietlKontoYoutube();
+      oauth2Client.on('tokens', (newTokens) => {
+        // EventEmitter does not await async listeners. Catch every persistence failure
+        // here so a transient Firestore outage cannot become an unhandled rejection.
+        void (async () => {
           try {
-            current = await FIRESTORE_STATE.readToken('youtube') || current;
-          } catch (readError) {
-            console.warn('[YT Auth] Nie udało się odczytać poprzedniego tokenu z Firestore; używam danych klienta OAuth:', readError.message);
+            let current = oauth2Client.credentials || {};
+            try {
+              current = await FIRESTORE_STATE.readToken('youtube') || current;
+            } catch (readError) {
+              console.warn('[YT Auth] Nie udało się odczytać poprzedniego tokenu z Firestore; używam danych klienta OAuth:', readError.message);
+            }
+            await zapiszTokenYT({ ...current, ...newTokens });
+            console.log('[YT Auth] 🔄 Token automatycznie odświeżony i zapisany');
+          } catch (saveError) {
+            console.error('[YT Auth] Nie udało się trwale zapisać odświeżonego tokenu; token pozostaje w pamięci:', saveError.message);
           }
-          await zapiszTokenYT({ ...current, ...newTokens });
-          console.log('[YT Auth] 🔄 Token automatycznie odświeżony i zapisany');
-        } catch (saveError) {
-          console.error('[YT Auth] Nie udało się trwale zapisać odświeżonego tokenu; token pozostaje w pamięci:', saveError.message);
-        }
-      })();
-    });
-    // Wymuś jedno, pojedyncze odświeżenie tokenu PRZED odpaleniem 4 równoległych
-    // youtubeWatcherów. Bez tego, jeśli token access wygasł, kilka zapytań
-    // odpalonych naraz próbuje odświeżyć go równocześnie — Google losowo odrzuca
-    // jedno z nich błędem "cannot act on behalf of the specified Google account".
-    try {
-      await oauth2Client.getAccessToken();
-      console.log('[YT Auth] ✅ Token dostępu świeży, startuję kanały');
-    } catch (err) {
-      console.error('[YT Auth] ❌ Nie udało się odświeżyć tokenu przed startem:', err.message);
+        })();
+      });
+      // Wymuś jedno, pojedyncze odświeżenie tokenu PRZED odpaleniem 4 równoległych
+      // youtubeWatcherów. Bez tego, jeśli token access wygasł, kilka zapytań
+      // odpalonych naraz próbuje odświeżyć go równocześnie — Google losowo odrzuca
+      // jedno z nich błędem "cannot act on behalf of the specified Google account".
+      try {
+        await oauth2Client.getAccessToken();
+        console.log('[YT Auth] ✅ Token dostępu świeży, startuję kanały');
+      } catch (err) {
+        console.error('[YT Auth] ❌ Nie udało się odświeżyć tokenu przed startem:', err.message);
+      }
     }
+    youtubeReady = true;
+  } catch (youtubeError) {
+    console.error('[YouTube] ❌ Nie udało się przygotować YouTube; pomijam watchery, ale uruchamiam pozostałe platformy. Szczegóły błędu OAuth/API pominięto ze względów bezpieczeństwa.');
   }
 
   // ---- Billy broadcaster token – autoryzacja / auto-refresh ----
@@ -8847,11 +8885,15 @@ const startBot = async () => {
   uruchomEventSubBilly();
   // Rozsunięte o 1s każdy — dodatkowe zabezpieczenie przed równoczesnymi
   // zapytaniami OAuth tuż po starcie (patrz komentarz przy getAccessToken wyżej).
-  youtubeWatcher(KONFIGURACJA.youtubeTargetKanal,  wyslijYoutube);
-  setTimeout(() => youtubeWatcher(KONFIGURACJA.youtubeTargetKanal2, wyslijYoutube), 1000);
-  setTimeout(() => youtubeWatcher(KONFIGURACJA.youtubeTargetKanal4, wyslijYoutube), 2000);
-  setTimeout(() => youtubeWatcher(KONFIGURACJA.youtubeTargetKanal5, wyslijYoutube), 3000);
-  setTimeout(() => youtubeWatcher(KONFIGURACJA.youtubeTargetKanal6, wyslijYoutube), 4000);
+  if (youtubeReady) {
+    youtubeWatcher(KONFIGURACJA.youtubeTargetKanal, wyslijYoutube);
+    setTimeout(() => youtubeWatcher(KONFIGURACJA.youtubeTargetKanal2, wyslijYoutube), 1000);
+    setTimeout(() => youtubeWatcher(KONFIGURACJA.youtubeTargetKanal4, wyslijYoutube), 2000);
+    setTimeout(() => youtubeWatcher(KONFIGURACJA.youtubeTargetKanal5, wyslijYoutube), 3000);
+    setTimeout(() => youtubeWatcher(KONFIGURACJA.youtubeTargetKanal6, wyslijYoutube), 4000);
+  } else {
+    console.warn('[YouTube] Watchery nie zostały uruchomione z powodu niedostępnej autoryzacji.');
+  }
   // Harmonogram ekonomii nie wysyła już wiadomości na Kick.
 
   console.log('\n🎉 Wszystkie platformy uruchomione!\n');
