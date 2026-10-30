@@ -41,7 +41,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh --version
-          gh extension install github/gh-aw@v0.93.2
+          gh extension install github/gh-aw --pin v0.93.2
 
       - name: Compile and validate agentic workflow
         env:
