@@ -36,7 +36,7 @@ require('dotenv').config();
 
 const { youtube: youtubeFactory } = require('@googleapis/youtube');
 const { discoverLiveVideoId } = require('./youtube-live-discovery');
-const { agregujMetrykiWalidatorow, zbudujKontekstMetrykiWalidatora } = require('./ai/validator-telemetry');
+const { agregujMetrykiWalidatorow, zbudujKontekstMetrykiWalidatora, wybierzTimeoutWalidatora } = require('./ai/validator-telemetry');
 const { OAuth2Client } = require('google-auth-library');
 const Groq       = require('groq-sdk');
 const tmi        = require('tmi.js');
@@ -1659,7 +1659,7 @@ function zarezerwujSlotWalidatora(requestState, purpose) {
 }
 
 
-async function walidujOdpowiedzGeminiModel(model, persona, pytanie, odpowiedz, dane, historiaRozmowy = [], requestId = '-', requestState = null, requestMeta = null) {
+async function walidujOdpowiedzGeminiModel(model, persona, pytanie, odpowiedz, dane, historiaRozmowy = [], requestId = '-', requestState = null, requestMeta = null, timeoutOverrideMs = null) {
   if (!dane) return { status: 'unavailable', ok: false, technicalError: true, provider: 'gemini', model, unsupported_claims: [], reason: 'brak danych referencyjnych' };
   try {
     const { system, user } = zbudujPromptWalidatora(pytanie, odpowiedz, dane, requestMeta);
@@ -1672,13 +1672,14 @@ async function walidujOdpowiedzGeminiModel(model, persona, pytanie, odpowiedz, d
     // when less than 4s + that reserve remains.
     // Gemini flash-lite/flash bywa wolniejszy pod obciążeniem (8-11 s w live benchmarku),
     // więc podnosimy max do 12 s. ReserveMs chroni budżet kolejnych validatorów.
-    const validatorTimeoutMs = requestState
+    const computedValidatorTimeoutMs = requestState
       ? computeValidatorTimeout(validatorRemainingMs, {
           maxTimeoutMs: 12000,
           reserveMs: computeValidatorReserveMs(validatorRemainingMs, requestState?.validatory + 1, requestState?.maxValidatorow, requestState?.validationPass === 1 ? INITIAL_VALIDATOR_REPAIR_RESERVE_MS : 0),
           minTimeoutMs: 4000,
         })
       : 3500;
+    const validatorTimeoutMs = wybierzTimeoutWalidatora(timeoutOverrideMs, computedValidatorTimeoutMs);
     if (requestState && validatorTimeoutMs === null) {
       return { status: 'unavailable', ok: false, technicalError: true, transient: true, skipped: true, provider: 'gemini', model, unsupported_claims: [], reason: 'Gemini validator pominięty: zbyt mały pozostały budżet czasu' };
     }
@@ -1925,7 +1926,7 @@ function wyczyscGeminiGenerationCooldown(model) {
   delete geminiGenerationCooldowns[String(model || '')];
 }
 
-async function walidujOdpowiedzOpenRouter(persona, pytanie, odpowiedz, dane, requestId = '-', requestState = null, requestMeta = null) {
+async function walidujOdpowiedzOpenRouter(persona, pytanie, odpowiedz, dane, requestId = '-', requestState = null, requestMeta = null, timeoutOverrideMs = null) {
   if (!KONFIGURACJA.openrouterKey || !dane) {
     return { status: 'unavailable', ok: false, technicalError: true, provider: 'openrouter', model: KONFIGURACJA.openrouterValidatorModel, unsupported_claims: [], reason: 'brak fallbacku OpenRouter' };
   }
@@ -1939,13 +1940,14 @@ async function walidujOdpowiedzOpenRouter(persona, pytanie, odpowiedz, dane, req
   const remainingMs = requestState
     ? (typeof requestState.remainingMs === 'function' ? requestState.remainingMs() : requestState.maxCzasMs - (Date.now() - requestState.startedAt))
     : 12000;
-  const validatorTimeoutMs = requestState
+  const computedValidatorTimeoutMs = requestState
     ? computeValidatorTimeout(remainingMs, {
         maxTimeoutMs: 9000,
         reserveMs: computeValidatorReserveMs(remainingMs, requestState?.validatory + 1, requestState?.maxValidatorow, requestState?.validationPass === 1 ? INITIAL_VALIDATOR_REPAIR_RESERVE_MS : 0),
         minTimeoutMs: 4000,
       })
     : 3000;
+  const validatorTimeoutMs = wybierzTimeoutWalidatora(timeoutOverrideMs, computedValidatorTimeoutMs);
   if (requestState && validatorTimeoutMs === null) {
     return { status: 'unavailable', ok: false, technicalError: true, transient: true, skipped: true, provider: 'openrouter', model: KONFIGURACJA.openrouterValidatorModel, unsupported_claims: [], reason: 'OpenRouter validator pominięty: zbyt mały pozostały budżet czasu' };
   }
@@ -2067,7 +2069,7 @@ async function walidujOdpowiedzOpenRouter(persona, pytanie, odpowiedz, dane, req
 }
 
 
-async function walidujOdpowiedzGroq(persona, pytanie, odpowiedz, dane, requestId = '-', requestState = null, requestMeta = null) {
+async function walidujOdpowiedzGroq(persona, pytanie, odpowiedz, dane, requestId = '-', requestState = null, requestMeta = null, timeoutOverrideMs = null) {
   const model = AI_MODELS.validator;
   const providerKey = `groq:${model}`;
   const groqClient = groqValidatorClientOverride || groq;
@@ -2081,13 +2083,14 @@ async function walidujOdpowiedzGroq(persona, pytanie, odpowiedz, dane, requestId
   const remainingMs = requestState
     ? (typeof requestState.remainingMs === 'function' ? requestState.remainingMs() : requestState.maxCzasMs - (Date.now() - requestState.startedAt))
     : 3000;
-  const timeoutMs = requestState
+  const computedTimeoutMs = requestState
     ? computeValidatorTimeout(remainingMs, {
         maxTimeoutMs: 3000,
         reserveMs: computeValidatorReserveMs(remainingMs, requestState?.validatory + 1, requestState?.maxValidatorow, requestState?.validationPass === 1 ? INITIAL_VALIDATOR_REPAIR_RESERVE_MS : 0),
         minTimeoutMs: 2000,
       })
     : 3000;
+  const timeoutMs = wybierzTimeoutWalidatora(timeoutOverrideMs, computedTimeoutMs);
   if (requestState && timeoutMs === null) {
     return { status: 'unavailable', ok: false, technicalError: true, transient: true, skipped: true, provider: 'groq', model, unsupported_claims: [], reason: 'Groq validator pominięty: zbyt mały pozostały budżet czasu' };
   }
@@ -2197,7 +2200,7 @@ async function walidujOdpowiedzGroq(persona, pytanie, odpowiedz, dane, requestId
   }
 }
 
-async function walidujOdpowiedzXKiro(persona, pytanie, odpowiedz, dane, requestId = '-', requestState = null, requestMeta = null) {
+async function walidujOdpowiedzXKiro(persona, pytanie, odpowiedz, dane, requestId = '-', requestState = null, requestMeta = null, timeoutOverrideMs = null) {
   const model = KONFIGURACJA.xkiroModel;
   if (!KONFIGURACJA.xkiroKey || !dane) {
     return { status: 'unavailable', ok: false, technicalError: true, provider: 'xkiro', model, unsupported_claims: [], reason: 'brak XKIRO_API_KEY lub danych referencyjnych' };
@@ -2224,13 +2227,14 @@ async function walidujOdpowiedzXKiro(persona, pytanie, odpowiedz, dane, requestI
     6000,
     Number.isFinite(configuredTimeoutMs) && configuredTimeoutMs > 0 ? configuredTimeoutMs : 6000,
   );
-  const timeoutMs = requestState
+  const computedTimeoutMs = requestState
     ? computeValidatorTimeout(remainingMs, {
         maxTimeoutMs: xkiroMaxTimeoutMs,
         reserveMs: computeValidatorReserveMs(remainingMs, requestState.validatory + 1, requestState.maxValidatorow, requestState.validationPass === 1 ? INITIAL_VALIDATOR_REPAIR_RESERVE_MS : 0),
         minTimeoutMs: 6000,
       })
     : xkiroMaxTimeoutMs;
+  const timeoutMs = wybierzTimeoutWalidatora(timeoutOverrideMs, computedTimeoutMs);
   if (requestState && timeoutMs === null) {
     return { status: 'unavailable', ok: false, technicalError: true, transient: true, skipped: true, provider: 'xkiro', model, unsupported_claims: [], reason: 'xKiro validator pominięty: zbyt mały pozostały budżet czasu' };
   }
@@ -2470,7 +2474,7 @@ async function walidujOdpowiedzAIBezCache(persona, pytanie, odpowiedz, dane, his
     const validatorStartedAt = Date.now();
     const remainingBefore = requestState?.remainingMs?.() ?? null;
     requestState?.recordTiming?.('validator_provider_start', { provider: 'gemini', model: models[i], remainingBefore });
-    const result = await walidujOdpowiedzGeminiModel(models[i], persona, pytanie, odpowiedz, dane, historiaRozmowy, requestId, requestState, requestMeta);
+    const result = await walidujOdpowiedzGeminiModel(models[i], persona, pytanie, odpowiedz, dane, historiaRozmowy, requestId, requestState, requestMeta, requestState ? timeoutMs : null);
     // Wynik Gemini musi trafić do circuit breakera tak jak wyniki Groq/xKiro/
     // OpenRouter. Bez tego breaker nigdy nie otwierał się dla Gemini, więc przy
     // awarii providera każdy kolejny request płacił pełne 12 s za werdykt,
@@ -2540,7 +2544,7 @@ async function walidujOdpowiedzAIBezCache(persona, pytanie, odpowiedz, dane, his
         const validatorStartedAt = Date.now();
         const remainingBefore = requestState?.remainingMs?.() ?? null;
         requestState?.recordTiming?.('validator_provider_start', { provider: 'groq', model: AI_MODELS.validator, remainingBefore });
-        const groqResult = await walidujOdpowiedzGroq(persona, pytanie, odpowiedz, dane, requestId, requestState, requestMeta);
+        const groqResult = await walidujOdpowiedzGroq(persona, pytanie, odpowiedz, dane, requestId, requestState, requestMeta, requestState ? groqTimeoutMs : null);
         recordValidatorTransportResult('groq', groqResult, requestId);
         recordValidatorMetric('groq', groqResult.model || AI_MODELS.validator, remainingBefore, groqTimeoutMs, validatorStartedAt, groqResult);
         const validatorElapsedMs = Date.now() - validatorStartedAt;
@@ -2611,7 +2615,7 @@ async function walidujOdpowiedzAIBezCache(persona, pytanie, odpowiedz, dane, his
       const validatorStartedAt = Date.now();
       const remainingBefore = requestState?.remainingMs?.() ?? null;
       requestState?.recordTiming?.('validator_provider_start', { provider: 'xkiro', model: KONFIGURACJA.xkiroModel, remainingBefore });
-      const xkiroResult = await walidujOdpowiedzXKiro(persona, pytanie, odpowiedz, dane, requestId, requestState, requestMeta);
+      const xkiroResult = await walidujOdpowiedzXKiro(persona, pytanie, odpowiedz, dane, requestId, requestState, requestMeta, requestState ? xkiroTimeoutMs : null);
       recordValidatorTransportResult('xkiro', xkiroResult, requestId);
       recordValidatorMetric('xkiro', xkiroResult.model || KONFIGURACJA.xkiroModel, remainingBefore, xkiroTimeoutMs, validatorStartedAt, xkiroResult);
       const validatorElapsedMs = Date.now() - validatorStartedAt;
@@ -2677,7 +2681,7 @@ async function walidujOdpowiedzAIBezCache(persona, pytanie, odpowiedz, dane, his
   const validatorStartedAt = Date.now();
   const remainingBefore = requestState?.remainingMs?.() ?? null;
   requestState?.recordTiming?.('validator_provider_start', { provider: 'openrouter', model: KONFIGURACJA.openrouterValidatorModel, remainingBefore });
-  const fallback = await walidujOdpowiedzOpenRouter(persona, pytanie, odpowiedz, dane, requestId, requestState, requestMeta);
+  const fallback = await walidujOdpowiedzOpenRouter(persona, pytanie, odpowiedz, dane, requestId, requestState, requestMeta, requestState ? openRouterTimeoutMs : null);
   recordValidatorTransportResult('openrouter', fallback, requestId);
   recordValidatorMetric('openrouter', fallback.model || KONFIGURACJA.openrouterValidatorModel, remainingBefore, openRouterTimeoutMs, validatorStartedAt, fallback);
   const validatorElapsedMs = Date.now() - validatorStartedAt;
