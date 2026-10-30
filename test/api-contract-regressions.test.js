@@ -37,8 +37,9 @@ test('Gemini validator and generation fallbacks use documented GenerateContent f
   assert.doesNotMatch(source, /generationConfig:\s*\{\s*temperature:/, 'Gemini 3.x GenerateContent requests must omit deprecated sampling parameters');
   const webRetrieval = read('ai/webRetrieval.js');
   assert.doesNotMatch(webRetrieval, /generationConfig:\s*\{\s*temperature:/, 'Gemini web retrieval must omit deprecated sampling parameters');
-  assert.match(source, /model === 'gemini-3\.8-flash'[\s\S]{0,100}\{ thinkingLevel: 'low' \}/);
-  assert.match(source, /model === 'gemini-3\.5-flash-lite'[\s\S]{0,120}\{ thinkingLevel: 'minimal' \}/);
+  const geminiConfig = read('ai/gemini-response.js');
+  assert.match(geminiConfig, /model === 'gemini-3\\.8-flash'[\\s\\S]{0,100}\\{ thinkingLevel: 'low' \\}/);
+  assert.match(geminiConfig, /model === 'gemini-3\\.5-flash-lite'[\\s\\S]{0,120}\\{ thinkingLevel: 'minimal' \\}/);
 });
 
 test('repair budget matches the provider timeout and logs never expose generated text', () => {
