@@ -311,7 +311,7 @@ test('xKiro validator preserves daily free-token exhaustion details when setting
   }
 });
 
-test('xKiro validator wall-clock timeout settles even if fetch ignores AbortSignal', async () => {
+test('xKiro validator wall-clock timeout settles at the enforced six-second floor even if fetch ignores AbortSignal', async () => {
   hooks.KONFIGURACJA.xkiroKey = 'test-xkiro-key';
   hooks.KONFIGURACJA.xkiroModel = 'qwen/qwen3.5-397b-a17b:free';
   const previousTimeout = process.env.AI_XKIRO_VALIDATOR_TIMEOUT_MS;
@@ -328,7 +328,7 @@ test('xKiro validator wall-clock timeout settles even if fetch ignores AbortSign
     assert.equal(result.status, 'unavailable');
     assert.equal(result.timeoutAbort, true);
     assert.equal(capturedSignal.aborted, true);
-    assert.ok(Date.now() - started < 500, 'wall-clock timeout should not wait for a never-settling fetch');
+    assert.ok(Date.now() - started < 6500, 'wall-clock timeout should settle at the enforced six-second floor rather than wait for a never-settling fetch');
   } finally {
     if (previousTimeout === undefined) delete process.env.AI_XKIRO_VALIDATOR_TIMEOUT_MS;
     else process.env.AI_XKIRO_VALIDATOR_TIMEOUT_MS = previousTimeout;

@@ -90,7 +90,7 @@ test('answer coverage accepts an answer when each factual sentence has a matchin
 test('xKiro transport timeout cannot fall below the six-second useful-attempt floor', () => {
   const source = fs.readFileSync(path.join(__dirname, '..', 'czituch_bot.js'), 'utf8');
   const start = source.indexOf('async function walidujOdpowiedzXKiro(');
-  const end = source.indexOf('\\n}\\n\\n// Model walidatora Gemini', start);
+  const end = source.indexOf('\n}\n\n// Model walidatora Gemini', start);
   assert.notEqual(start, -1, 'xKiro validator function must exist');
   assert.notEqual(end, -1, 'xKiro validator function boundary must exist');
   const implementation = source.slice(start, end);
