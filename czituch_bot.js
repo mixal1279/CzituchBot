@@ -6527,6 +6527,11 @@ async function wczytajTokenYT() {
   } catch (err) {
     console.error('[YT Auth] Błąd wczytywania tokenu i kopii zapasowych:', err.message);
   }
+  // A failed Firestore read does not prove that no token exists. Never start a
+  // fresh OAuth flow when the canonical token store could not be inspected.
+  if (firestoreReadFailed && !credentials) {
+    throw new Error('[YT Auth] Nie można ustalić stanu tokenu w Firestore i nie znaleziono dostępnej kopii. Przywróć dostęp lub kopię tokenu przed ponowną autoryzacją.');
+  }
   return false;
 }
 
@@ -8776,12 +8781,16 @@ const startBot = async () => {
   await wczytajTokenKick();
 
   // ---- YouTube – autoryzacja ----
-  const maszTokenYT = await wczytajTokenYT();
-  if (!maszTokenYT) {
-    await zalogujYouTube();
-  } else {
-    await wyswietlKontoYoutube();
-    oauth2Client.on('tokens', (newTokens) => {
+  // YouTube is optional for process availability: a token-store/OAuth failure
+  // must not prevent Twitch, Billy and the rest of the bot from starting.
+  let youtubeReady = false;
+  try {
+    const maszTokenYT = await wczytajTokenYT();
+    if (!maszTokenYT) {
+      await zalogujYouTube();
+    } else {
+      await wyswietlKontoYoutube();
+      oauth2Client.on('tokens', (newTokens) => {
       // EventEmitter does not await async listeners. Catch every persistence failure
       // here so a transient Firestore outage cannot become an unhandled rejection.
       void (async () => {
@@ -8808,7 +8817,11 @@ const startBot = async () => {
       console.log('[YT Auth] ✅ Token dostępu świeży, startuję kanały');
     } catch (err) {
       console.error('[YT Auth] ❌ Nie udało się odświeżyć tokenu przed startem:', err.message);
+      }
     }
+    youtubeReady = true;
+  } catch (youtubeError) {
+    console.error('[YouTube] ❌ Nie udało się przygotować YouTube; pomijam watchery, ale uruchamiam pozostałe platformy:', youtubeError?.message || youtubeError);
   }
 
   // ---- Billy broadcaster token – autoryzacja / auto-refresh ----
@@ -8847,11 +8860,15 @@ const startBot = async () => {
   uruchomEventSubBilly();
   // Rozsunięte o 1s każdy — dodatkowe zabezpieczenie przed równoczesnymi
   // zapytaniami OAuth tuż po starcie (patrz komentarz przy getAccessToken wyżej).
-  youtubeWatcher(KONFIGURACJA.youtubeTargetKanal,  wyslijYoutube);
-  setTimeout(() => youtubeWatcher(KONFIGURACJA.youtubeTargetKanal2, wyslijYoutube), 1000);
-  setTimeout(() => youtubeWatcher(KONFIGURACJA.youtubeTargetKanal4, wyslijYoutube), 2000);
-  setTimeout(() => youtubeWatcher(KONFIGURACJA.youtubeTargetKanal5, wyslijYoutube), 3000);
-  setTimeout(() => youtubeWatcher(KONFIGURACJA.youtubeTargetKanal6, wyslijYoutube), 4000);
+  if (youtubeReady) {
+    youtubeWatcher(KONFIGURACJA.youtubeTargetKanal, wyslijYoutube);
+    setTimeout(() => youtubeWatcher(KONFIGURACJA.youtubeTargetKanal2, wyslijYoutube), 1000);
+    setTimeout(() => youtubeWatcher(KONFIGURACJA.youtubeTargetKanal4, wyslijYoutube), 2000);
+    setTimeout(() => youtubeWatcher(KONFIGURACJA.youtubeTargetKanal5, wyslijYoutube), 3000);
+    setTimeout(() => youtubeWatcher(KONFIGURACJA.youtubeTargetKanal6, wyslijYoutube), 4000);
+  } else {
+    console.warn('[YouTube] Watchery nie zostały uruchomione z powodu niedostępnej autoryzacji.');
+  }
   // Harmonogram ekonomii nie wysyła już wiadomości na Kick.
 
   console.log('\n🎉 Wszystkie platformy uruchomione!\n');
