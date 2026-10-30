@@ -28,7 +28,7 @@ const CROSS_LANGUAGE_CONCEPTS = [
   ['transfer_rdzenia', /core transfer|transfer of (?:the )?core|transfer(?:u|em|ze)? rdzenia|transfer rdzenia/i],
   ['obrazenia', /injur\w*|wound\w*|hurt\w*|damage\w*|harm\w*|rann\w*|obraz\w*/i],
   ['zabojstwo', /kill\w*|murder\w*|death|dead|zabij\w*|zabil\w*|zabila\w*|zabici\w*|zabity\w*|zabicie\w*|zgin\w*|smier\w*/i],
-  ['konflikt', /conflict\w*|feud\w*|fight\w*|war\w*|hatred|hate\w*|konflikt\w*|walcz\w*|wojn\w*/i],
+  ['konflikt', /conflict\w*|feud\w*|fight\w*|\bwar\w*|hatred|hate\w*|konflikt\w*|walcz\w*|wojn\w*/i],
   ['zwiazek', /relationship\w*|girlfriend\w*|boyfriend\w*|partner\w*|romanc\w*|romantic\w*|involved|zwi[aą]zk\w*|zwiaz\w*|relacj\w*|dziewczyn\w*|chlopak\w*/i],
   ['pomoc', /help\w*|assist\w*|save\w*|rescu\w*|pomog\w*|pomaga\w*|urat\w*|ocal\w*/i],
   // Granica słowa przed „appear”: „disappears” oznacza przeciwną akcję i nie może być uznane za „appears”.
@@ -58,6 +58,7 @@ const CROSS_LANGUAGE_CONCEPTS = [
   ['wampir', /vampire\w*|wampir\w*/i],
   ['klasa_rogue', /\brogue\b|thief\w*|lotr\w*|zlodziej\w*/i],
   ['towarzysz', /\bcompanions?\b|recruit\w*|party member\w*|join(?:s|ed|ing)? (?:the|your) party|minion\w*|summon\w*|towarzysz\w*|zrekrut\w*|wezw\w*|przywol\w*/i],
+  ['rekrutacja_towarzysza', /zrekrut\w*|join(?:s|ed|ing)? (?:the|your) party|recruit\w*/i],
   ['ataki_dystansowe', /\branged\b|\bbow\b|luk\w*|dystansow\w*/i],
   ['modyfikacja_zachowania', /\bbehav\w*|make her behave|intelligence dampening|tlumi\w*|zmusz\w*|zachow\w*|rdzen osobowosci|force(?:s|d|ing)?\s+(?:the\s+)?[\w'-]+(?:\s+[\w'-]+){0,1}\s+to\s+[\w'-]+/i],
   ['walka_konna', /horseback|mounted combat|on horseback|konskiego grzbietu|na koniu|z konia|walczac z konia/i],
