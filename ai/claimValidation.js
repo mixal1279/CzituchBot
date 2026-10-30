@@ -57,7 +57,7 @@ const CROSS_LANGUAGE_CONCEPTS = [
   ['elf', /\bhigh\s+elf\b|\belves?\b|elf\w*/i],
   ['wampir', /vampire\w*|wampir\w*/i],
   ['klasa_rogue', /\brogue\b|thief\w*|lotr\w*|zlodziej\w*/i],
-  ['towarzysz', /\bcompanions?\b|recruit\w*|party member\w*|minion\w*|summon\w*|towarzysz\w*|zrekrut\w*|wezw\w*|przywol\w*/i],
+  ['towarzysz', /\bcompanions?\b|recruit\w*|party member\w*|join(?:s|ed|ing)? (?:the|your) party|minion\w*|summon\w*|towarzysz\w*|zrekrut\w*|wezw\w*|przywol\w*/i],
   ['ataki_dystansowe', /\branged\b|\bbow\b|luk\w*|dystansow\w*/i],
   ['modyfikacja_zachowania', /\bbehav\w*|make her behave|intelligence dampening|tlumi\w*|zmusz\w*|zachow\w*|rdzen osobowosci|force(?:s|d|ing)?\s+(?:the\s+)?[\w'-]+(?:\s+[\w'-]+){0,1}\s+to\s+[\w'-]+/i],
   ['walka_konna', /horseback|mounted combat|on horseback|konskiego grzbietu|na koniu|z konia|walczac z konia/i],
@@ -105,7 +105,7 @@ const KNOWN_ENTITY_ALIAS_PATTERNS = [
   { canonical: "alduin's wall", pattern: /\b(?:alduin['’]?s|alduins)\s+wall\b/iu },
   { canonical: 'dragonrend', pattern: /\bdragonrend\b/iu },
   // Minecraft: „End”, „Endu” i „Endzie” oznaczają tę samą krainę.
-  { canonical: 'the end', pattern: /\b(?:the\s+end|end(?:u|em|zie|a))\b/iu },
+  { canonical: 'the end', pattern: /\b(?:the\s+end|end(?:u|em|zie|a)|krawedz(?:i|ia|ie|iach|iom|mi)?)\b/iu },
   // Minecraft: polska nazwa Ender Pearl to „perła Kresu” (Kres = End); bez aliasu „Kresu” było
   // wymaganą nazwą własną, której nie ma w angielskim tłumaczeniu.
   { canonical: 'ender pearl', pattern: /\b(?:ender\s+pearls?|per[łl](?:a|y|ę|ą|e|ie|o)?\s+kresu)\b/iu },
