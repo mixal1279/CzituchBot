@@ -311,7 +311,7 @@ test('xKiro validator preserves daily free-token exhaustion details when setting
   }
 });
 
-test('xKiro validator wall-clock timeout settles even if fetch ignores AbortSignal', async () => {
+test('xKiro validator wall-clock timeout settles at the enforced six-second floor even if fetch ignores AbortSignal', async () => {
   hooks.KONFIGURACJA.xkiroKey = 'test-xkiro-key';
   hooks.KONFIGURACJA.xkiroModel = 'qwen/qwen3.5-397b-a17b:free';
   const previousTimeout = process.env.AI_XKIRO_VALIDATOR_TIMEOUT_MS;
@@ -328,7 +328,7 @@ test('xKiro validator wall-clock timeout settles even if fetch ignores AbortSign
     assert.equal(result.status, 'unavailable');
     assert.equal(result.timeoutAbort, true);
     assert.equal(capturedSignal.aborted, true);
-    assert.ok(Date.now() - started < 500, 'wall-clock timeout should not wait for a never-settling fetch');
+    assert.ok(Date.now() - started < 6500, 'wall-clock timeout should settle at the enforced six-second floor rather than wait for a never-settling fetch');
   } finally {
     if (previousTimeout === undefined) delete process.env.AI_XKIRO_VALIDATOR_TIMEOUT_MS;
     else process.env.AI_XKIRO_VALIDATOR_TIMEOUT_MS = previousTimeout;
@@ -806,3 +806,51 @@ test('normalizeGroqBaseUrl collapses duplicate OpenAI API suffixes without chang
   );
   assert.equal(normalizeGroqBaseUrl('https://proxy.example/v1'), 'https://proxy.example/v1');
 });
+
+test('OpenRouter validator timeout covers a body read that ignores AbortSignal', async () => {
+  hooks.KONFIGURACJA.openrouterKey = 'test-openrouter-key';
+  hooks.KONFIGURACJA.openrouterValidatorModel = 'openai/gpt-oss-20b';
+  let capturedSignal;
+  mockFetch(async (_url, options) => {
+    capturedSignal = options.signal;
+    return {
+      ok: true,
+      status: 200,
+      json: () => new Promise(() => {}),
+    };
+  });
+
+  const started = Date.now();
+  const result = await hooks.walidujOdpowiedzOpenRouter(
+    'generic', QUESTION, ANSWER, EVIDENCE, 'test-openrouter-body-timeout',
+  );
+  assert.equal(result.status, 'unavailable');
+  assert.equal(result.timeoutAbort, true);
+  assert.equal(capturedSignal.aborted, true);
+  assert.ok(Date.now() - started < 4000, 'body-read deadline should settle promptly');
+});
+
+test('xKiro is attempted below the former 14.5s hard threshold when the calculated budget permits it', async () => {
+  hooks.KONFIGURACJA.xkiroKey = 'test-xkiro-key';
+  hooks.KONFIGURACJA.xkiroModel = 'qwen/qwen3.5-397b-a17b:free';
+  let calls = 0;
+  mockFetch(async () => {
+    calls++;
+    return jsonResponse({
+      model: 'qwen/qwen3.5-397b-a17b:free',
+      choices: [{ finish_reason: 'stop', message: { content: JSON.stringify(VALID_VERDICT) } }],
+    });
+  });
+  const requestState = createAIRequestContext({ maxCzasMs: 40000, maxValidators: 4, maxModelCalls: 12 });
+  requestState.remainingMs = () => 14000;
+  requestState.validationPass = 2;
+  requestState.validatory = 0;
+  requestState.maxValidatorow = 4;
+
+  const result = await hooks.walidujOdpowiedzXKiro(
+    'generic', QUESTION, ANSWER, EVIDENCE, 'test-xkiro-budget-cliff', requestState,
+  );
+  assert.equal(calls, 1, 'xKiro should not be skipped solely due to the former 14.5s threshold');
+  assert.equal(result.status, 'accepted');
+});
+

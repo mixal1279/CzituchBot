@@ -86,6 +86,8 @@ jobs:
               "- claim-source werdykty: " + Object.entries((r.claimSupport || {}).claimSourceVerdictCounts || {}).map(([k, v]) => k + "=" + v).join(", "),
               "- błędy generatora: " + ((d.generationProviderFailures || []).join(", ") || "brak"),
               "- dostawcy zdegradowani: " + ((d.degradedProviders || []).join(", ") || "brak"),
+              "- transport walidatora: " + ((d.validatorTransportFailures || []).map(x => [x.provider, x.model, x.status, x.statusCode ? "HTTP " + x.statusCode : "", x.reason || ""].filter(Boolean).join("/")).join("; ") || "brak"),
+              "- Tavily HTTP: " + (d.tavilyHttpCalls || 0) + " wywołań, błędy=" + (d.tavilyHttpFailures || 0) + " (" + (d.tavilyHttpFailureRate ?? 0) + "), statusy=" + (Object.entries(d.tavilyHttpFailuresByStatus || {}).map(([k, v]) => k + "=" + v).join(", ") || "brak"),
               "- porównywalność jakości: " + (d.qualityComparable ? "tak" : "nie — metryki ograniczone przez dostawców"),
               "- ograniczenia jakości: " + ((d.qualityDegradationReasons || []).join(", ") || "brak"),
               "- odrzucone przez walidator: " + d.validatorRejected + ", niejednoznaczne: " + d.validatorInconclusive,

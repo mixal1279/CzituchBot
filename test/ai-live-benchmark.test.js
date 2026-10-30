@@ -8,6 +8,13 @@ const path = require('node:path');
 const { normalizeFactText, scoreGoldenFacts } = require('../ai/benchmark-scorer');
 const { buildQuestionForBot, evaluateBenchmarkAnswer, classifyBenchmarkOutcome, buildBenchmarkDiagnostics, formatBenchmarkFailureDiagnostics, stratifiedCases, isFailureText, writeBenchmarkReport, writeStdoutAndWait, wybierzOdrzuconaOdpowiedz, isFalseReject } = require('../scripts/ai-live-benchmark');
 
+test('live benchmark delay can be explicitly disabled with zero', () => {
+  const { resolveDelayMs } = require('../scripts/ai-live-benchmark');
+  assert.equal(resolveDelayMs('0'), 0);
+  assert.equal(resolveDelayMs('', 8000), 8000);
+  assert.equal(resolveDelayMs('not-a-number', 8000), 8000);
+});
+
 test('benchmark factual normalization preserves words with Polish diacritics and collapses whitespace', () => {
   assert.equal(normalizeFactText('Święty Łukasz  —  przejął kontrolę.'), 'swiety lukasz przejal kontrole');
 });
@@ -152,6 +159,7 @@ test('live diagnostics distinguish validator failures from generation failures a
   assert.equal(diagnostics.validatorStatusCounts.rejected, 1);
   assert.equal(diagnostics.validatorStatusCounts.unavailable, 1);
   assert.equal(diagnostics.validatorTransportFailures.length, 1);
+  assert.equal(diagnostics.validatorTransportFailures[0].reason, 'timeout');
   assert.deepEqual(diagnostics.generationProviderFailures, ['gemini:gemini-3.8-flash:timeout']);
   assert.equal(diagnostics.validatorSecondOpinions, 1);
   assert.equal(diagnostics.tavilyHttpCalls, 1);
@@ -418,6 +426,22 @@ test('odrzucona odpowiedź pochodzi z ostatniego werdyktu walidatora, nie z pier
   assert.equal(wybierzOdrzuconaOdpowiedz(zPustym, false), 'wczesniejsza odpowiedź');
 });
 
+
+
+test('Tavily HTTP failures expose status and mark benchmark quality non-comparable', () => {
+  const benchmark = JSON.parse(fs.readFileSync(path.join(__dirname, 'ai-benchmark.json'), 'utf8'));
+  const selected = stratifiedCases(benchmark.cases, 5, 113);
+  const diagnostics = buildBenchmarkDiagnostics([{
+    finalStatus: 'accepted',
+    generationAttempts: [{ provider: 'groq', model: 'openai/gpt-oss-120b', status: 'success' }],
+    validatorResults: [{ provider: 'gemini', model: 'gemini-3.5-flash-lite', status: 'accepted' }],
+    timingTrace: [{ stage: 'tavily_http_end', durationMs: 70, ok: false, httpStatus: 432 }],
+  }], benchmark.cases, selected);
+  assert.equal(diagnostics.tavilyHttpFailureRate, 1);
+  assert.deepEqual(diagnostics.tavilyHttpFailuresByStatus, { '432': 1 });
+  assert.equal(diagnostics.qualityComparable, false);
+  assert.ok(diagnostics.qualityDegradationReasons.includes('tavily_http_failures_above_25_percent'));
+});
 
 test('benchmark failure diagnostics include rejected claims and deterministic evidence gates', () => {
   const lines = formatBenchmarkFailureDiagnostics([{

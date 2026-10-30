@@ -2,9 +2,9 @@
 
 const assert = require('node:assert/strict');
 const { classifyAIRequest } = require('../ai/router');
-const { planAIRequest } = require('../ai/planner');
+const { planAIRequest, buildRetrievalQueries } = require('../ai/planner');
 const { okreslKategorieAI } = require('../ai/policy');
-const { dodajGameFAQsDomenę } = require('../ai/gameplay');
+const { dodajGameFAQsDomenę, czyPytanieOGameplay } = require('../ai/gameplay');
 
 const policy = (q, recipe) => {
   if (/czy warto|co myślisz|co sadzisz|opinia/i.test(q)) return 'conversation';
@@ -16,6 +16,16 @@ const policy = (q, recipe) => {
   if (/jak|gdzie|kto|kim|co|dlaczego|kiedy|ile|czy/i.test(q)) return 'web_fact';
   return 'conversation';
 };
+
+const astarionQueries = buildRetrievalQueries('Dlaczego Astarion dołączył do drużyny?', {
+  needs_web: true,
+  is_lore: true,
+  is_gameplay: false,
+  entity: 'Astarion',
+  game: 'Baldur’s Gate 3',
+  resolved_entity: { name: 'Astarion', game: 'Baldur’s Gate 3' },
+}, { maxQueries: 4 });
+assert.ok(astarionQueries.some(query => /motivation|backstory|antagonist|escape/i.test(query)));
 
 const cases = [
   ['Kim jest Wheatley w Portal 2?', 'lore', 'Portal 2', 'character'],
@@ -72,7 +82,10 @@ for (const [question, expectedIntent, expectedEntity, expectedType] of cases) {
 }
 
 const selectedDomains = dodajGameFAQsDomenę(['youtube.com', 'example.com']);
-assert.deepEqual(selectedDomains, ['gamefaqs.gamespot.com', 'youtube.com', 'example.com']);
+assert.deepEqual(selectedDomains, ['youtube.com', 'example.com']);
+assert.deepEqual(dodajGameFAQsDomenę(['gamefaqs.gamespot.com']), ['gamefaqs.gamespot.com']);
+assert.equal(czyPytanieOGameplay('Jak odblokować ten sekret?', ['unrelated.fandom.com']), false);
+assert.equal(czyPytanieOGameplay('Jak odblokować ten sekret?', ['gamelore.fandom.com']), true);
 
 for (const question of [
   'Ile trwa fight w Elden Ring?',

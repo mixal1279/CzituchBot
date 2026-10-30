@@ -1,0 +1,35 @@
+name: APIsec AI Surface
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: apisec-ai-surface-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ai-surface:
+    name: AI attack-surface analysis
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Scan with APIsec AI-Surface
+        uses: apisec-inc/AI-Surface@726fcd4aa91e2627802db09a1b6dcf7e3cc48326 # v1.1.1
+        with:
+          path: '.'
+          comment-on-pr: 'true'
+          fail-on: 'high'
+          fail-on-risk: 'false'
+          write-inventory: 'false'

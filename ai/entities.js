@@ -20,7 +20,7 @@ const GAME_ALIASES = [
   { name: 'Dying Light', type: 'franchise', aliases: ['dying light'] },
   { name: 'Fallout 4', type: 'game', aliases: ['fallout 4'] },
   { name: 'Fallout', type: 'franchise', aliases: ['fallout'] },
-  { name: 'Skyrim', type: 'game', aliases: ['skyrim'] },
+  { name: 'Skyrim', type: 'game', aliases: ['skyrim', 'the elder scrolls v skyrim', 'elder scrolls v skyrim'] },
   { name: 'Starfield', type: 'game', aliases: ['starfield'] },
   { name: 'Fortnite', type: 'game', aliases: ['fortnite'] },
 ];
@@ -49,6 +49,7 @@ const CHARACTER_ALIASES = [
   { name: 'Radahn', game: 'Elden Ring', aliases: ['radahn'] },
   { name: 'Steve', game: 'Minecraft', aliases: ['steve'] },
   { name: 'Alex', game: 'Minecraft', aliases: ['alex'] },
+  { name: 'Dragonborn', game: 'Skyrim', aliases: ['dragonborn', 'dovahkiin'] },
   { name: 'Lord Farquaad', game: 'Shrek', aliases: ['lord farquaad', 'lord farquad', 'farquaad', 'farquad'] },
 ];
 

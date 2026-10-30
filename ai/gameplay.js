@@ -11,7 +11,7 @@ function czyPytanieOGameplay(pytanie, domeny = null) {
   const p = String(pytanie || '').trim();
   if (!p || !GAMEPLAY_INTENT_RE.test(p)) return false;
   const resolved = resolveGameEntity(p);
-  const gamingDomain = Array.isArray(domeny) && domeny.some(d => /(?:gamefaqs\.gamespot\.com|gamelore\.fandom\.com|minecraft\.wiki|fandom\.com|ign\.com|gamespot\.com|pcgamer\.com|eurogamer|thewitcher\.com|rockstargames\.com|bandainamco|playstation\.com|naughtydog\.com|baldursgate3\.game|larian\.com|fortnite\.gg)/i.test(String(d)));
+  const gamingDomain = Array.isArray(domeny) && domeny.some(d => /(?:gamefaqs\.gamespot\.com|gamelore\.fandom\.com|minecraft\.wiki|ign\.com|gamespot\.com|pcgamer\.com|eurogamer|thewitcher\.com|rockstargames\.com|bandainamco|playstation\.com|naughtydog\.com|baldursgate3\.game|larian\.com|fortnite\.gg)/i.test(String(d)));
   return GAME_CONTEXT_RE.test(p) || gamingDomain || Boolean(resolved);
 }
 
@@ -30,15 +30,10 @@ function extractHostname(value) {
 }
 
 function dodajGameFAQsDomenę(domeny) {
-  const lista = Array.isArray(domeny) ? [...domeny] : [];
-  const hasGameFAQs = lista.some((d) => extractHostname(d) === GAMEFAQS_DOMAIN);
-  if (!hasGameFAQs) lista.unshift(GAMEFAQS_DOMAIN);
-  // Keep the specialist domain as a preference, not as a global include_domains
-  // union. Adding Fandom, IGN, PC Gamer and YouTube here broadens every gameplay
-  // search equally and does not implement an ordered fallback. Other domains
-  // already selected by the caller are preserved; weak-result fallback must be
-  // decided after retrieval, when result quality is available.
-  return lista;
+  // Preserve the caller's explicit domain preferences. Do not inject a global
+  // union of guide sites into every gameplay query; retrieval ranking handles
+  // fallback sources after the first search.
+  return Array.isArray(domeny) ? [...domeny] : [];
 }
 
 function wytnijAtrybucjeGameFAQs(tekst) {

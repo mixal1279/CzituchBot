@@ -2,13 +2,18 @@
 
 const { ENTITY_ALIAS_GROUPS, buildEntityAliasPatterns } = require('./entityAliases');
 const { slowaLiczbowe } = require('./polishNumbers');
+const { GAME_ALIASES } = require('./entities');
+const { findQuotePrefix } = require('./evidence');
 
 const NEGATION_RE = /(?<![\p{L}])(?:nie|nigdy|brak|bez|zaden|zadna|zadne|never|no|not|cannot|without|lack\s+of|absence\s+of|unable|neither|nor|fails?\s+to|\p{L}+n['’]t)(?![\p{L}])/iu;
 // Ta sama lista bez gołego „no”: „no damage” to kwantyfikator zerowy, a nie zaprzeczenie czasownika.
 const NEGATION_STRICT_RE = /(?<![\p{L}])(?:nie|nigdy|brak|bez|zaden|zadna|zadne|never|not|cannot|without|lack\s+of|absence\s+of|unable|neither|nor|fails?\s+to|\p{L}+n['’]t)(?![\p{L}])/iu;
 // Claim o redukcji/ograniczeniu jest zgodny z dowodem „no damage / take no damage” (zero implikuje zmniejszenie).
-const REDUCTION_RE = /(?<![\p{L}])(?:zmniejsz\w*|ogranicz\w*|redukuj\w*|zredukow\w*|oslab\w*|chron\w*|neutralizuj\w*|reduc\w*|inhibit\w*|dampen\w*|mitigat\w*|lower\w*|decreas\w*|protect\w*|prevent\w*|avoid\w*|block\w*|ward\w*|immun\w*|resist\w*|zapobieg\w*|unik\w*|blok\w*|odporn\w*)(?![\p{L}])/iu;
-const CAUSAL_RE = /(?<![\p{L}])(?:bo|poniewaz|gdyz|dlatego|because|therefore|caused|causes|trigger\w*|consequently|hence|as\s+a\s+result|led\s+to|leading\s+to|resulted\s+in|resulting\s+in|because\s+of|due\s+to|thereby|thus|w\s+ten\s+sposob|przez\s+co|co\s+(?:umozliw\w*|spowod\w*)|motyw\w*|zmusz\w*|powoduj\w*|przyczyn\w*|wskutek|w\s+efekcie|allow(?:s|ed|ing)?|enabl(?:e|es|ed|ing)|which\s+(?:let|lets|allowed|allows|enabled|enables)|putting\s+(?:him|her|them|it)\s+in\s+control|giving\s+(?:him|her|them|it)\s+control|dajac\s+(?:mu|jej|im)\s+(?:wladz\w*|kontrol\w*|panowan\w*)|force(?:s|d|ing)?\s+(?:the\s+)?[\p{L}\p{N}'’_-]+(?:\s+[\p{L}\p{N}'’_-]+){0,1}\s+to\s+[\p{L}\p{N}'’_-]+|so\s+(?:he|she|they|it|we|the)|in\s+exchange(?:\s+for)?|in\s+return(?:\s+for)?|in\s+turn|thanks\s+to|owing\s+to|w\s+zamian(?:\s+za)?|w\s+rewan[zż]u|w\s+wyniku|z\s+powodu|dzieki|spowod\w*|doprowadz\w*|umozliw\w*)(?![\p{L}])/iu;
+// „s?tlumi\w*” obejmuje odmiany „tłumić” (tłumiąca, tłumienie, stłumić), ale nie „tłumaczy”/„tłum”.
+const REDUCTION_RE = /(?<![\p{L}])(?:zmniejsz\w*|ogranicz\w*|redukuj\w*|zredukow\w*|oslab\w*|chron\w*|neutralizuj\w*|reduc\w*|inhibit\w*|dampen\w*|s?tlumi\w*|mitigat\w*|lower\w*|decreas\w*|protect\w*|prevent\w*|avoid\w*|block\w*|ward\w*|immun\w*|resist\w*|zapobieg\w*|unik\w*|blok\w*|odporn\w*)(?![\p{L}])/iu;
+// „skutkuj\w*” i „w rezultacie” to polskie odpowiedniki „resulting in”/„as a result”: bez nich
+// polski claim z relacją przyczynową przechodził kontrolę parytetu PL↔EN, gdy claim_en ją gubił.
+const CAUSAL_RE = /(?<![\p{L}])(?:bo|poniewaz|gdyz|dlatego|because|therefore|caused|causes|trigger\w*|consequently|hence|as\s+a\s+result|led\s+to|leading\s+to|resulted\s+in|resulting\s+in|because\s+of|due\s+to|thereby|thus|w\s+ten\s+sposob|przez\s+co|co\s+(?:umozliw\w*|spowod\w*)|motyw\w*|zmusz\w*|powoduj\w*|przyczyn\w*|wskutek|w\s+efekcie|skutkuj\w*|w\s+rezultacie|allow(?:s|ed|ing)?|enabl(?:e|es|ed|ing)|which\s+(?:let|lets|allowed|allows|enabled|enables)|putting\s+(?:him|her|them|it)\s+in\s+control|giving\s+(?:him|her|them|it)\s+control|dajac\s+(?:mu|jej|im)\s+(?:wladz\w*|kontrol\w*|panowan\w*)|force(?:s|d|ing)?\s+(?:the\s+)?[\p{L}\p{N}'’_-]+(?:\s+[\p{L}\p{N}'’_-]+){0,1}\s+to\s+[\p{L}\p{N}'’_-]+|so\s+(?:he|she|they|it|we|the)|in\s+exchange(?:\s+for)?|in\s+return(?:\s+for)?|in\s+turn|thanks\s+to|owing\s+to|w\s+zamian(?:\s+za)?|w\s+rewan[zż]u|w\s+wyniku|z\s+powodu|dzieki|spowod\w*|doprowadz\w*|umozliw\w*)(?![\p{L}])/iu;
 // Nie traktujemy samego „force” jako przyczynowości: „forced a core transfer”
 // może opisywać akcję. Rozpoznajemy jednak konstrukcję „force X to Y” oraz
 // bezpośrednie „giving him control”, które wyrażają relację między zdarzeniami.
@@ -26,6 +31,8 @@ const CROSS_LANGUAGE_CONCEPTS = [
   ['konflikt', /conflict\w*|feud\w*|fight\w*|war\w*|hatred|hate\w*|konflikt\w*|walcz\w*|wojn\w*/i],
   ['zwiazek', /relationship\w*|girlfriend\w*|boyfriend\w*|partner\w*|romanc\w*|romantic\w*|involved|zwi[aą]zk\w*|zwiaz\w*|relacj\w*|dziewczyn\w*|chlopak\w*/i],
   ['pomoc', /help\w*|assist\w*|save\w*|rescu\w*|pomog\w*|pomaga\w*|urat\w*|ocal\w*/i],
+  // Granica słowa przed „appear”: „disappears” oznacza przeciwną akcję i nie może być uznane za „appears”.
+  ['wystepowanie', /\b(?:appear\w*|pojaw\w*|wystep\w*)/i],
   ['kontrola', /control\w*|take[s]?\s+over|command\w*|manipulat\w*|kontrol\w*|przej[a]l\w*|manipul\w*|removed?\s+from\s+power|los[et]\s+control/i],
   // „bossem”, „bossa”, „bosses”: odmiana nie może zerwać zgodności pojęcia PL↔EN.
   ['szef', /\bboss\w*|szef\w*|leader\w*|przywodc\w*/i],
@@ -52,7 +59,7 @@ const CROSS_LANGUAGE_CONCEPTS = [
   ['klasa_rogue', /\brogue\b|thief\w*|lotr\w*|zlodziej\w*/i],
   ['towarzysz', /\bcompanions?\b|recruit\w*|party member\w*|minion\w*|summon\w*|towarzysz\w*|zrekrut\w*|wezw\w*|przywol\w*/i],
   ['ataki_dystansowe', /\branged\b|\bbow\b|luk\w*|dystansow\w*/i],
-  ['modyfikacja_zachowania', /\bbehav\w*|make her behave|intelligence dampening|zmusz\w*|zachow\w*|rdzen osobowosci|force(?:s|d|ing)?\s+(?:the\s+)?[\w'-]+(?:\s+[\w'-]+){0,1}\s+to\s+[\w'-]+/i],
+  ['modyfikacja_zachowania', /\bbehav\w*|make her behave|intelligence dampening|tlumi\w*|zmusz\w*|zachow\w*|rdzen osobowosci|force(?:s|d|ing)?\s+(?:the\s+)?[\w'-]+(?:\s+[\w'-]+){0,1}\s+to\s+[\w'-]+/i],
   ['walka_konna', /horseback|mounted combat|on horseback|konskiego grzbietu|na koniu|z konia|walczac z konia/i],
   ['pozycja_zdystansu', /far back|high up|at range|dystans\w*|z daleka|na dystans/i],
   ['gigantyczne_zwierzeta', /giant (?:zombie[- ]?)?dogs?|gigantyczn\w*\s+(?:zombie\s+)?ps\w*|wielkie (?:zombie\s+)?psy/i],
@@ -73,12 +80,35 @@ function pojeciaCrossLanguage(value) {
 }
 
 const COVERAGE_STOPWORDS = new Set(['jest','byla','bylo','byli','zostal','zostala','zostalo','oraz','ktory','ktora','ktore','przez','jako','jego','jej','this','that','with','from','were','was','have','has']);
+const GENERIC_CAPITALIZED_WORDS = new Set([
+  // Zwykłe rzeczowniki, czasowniki i określenia błędnie wyciągane jako nazwy,
+  // gdy autor odpowiedzi zapisze je wielką literą w środku zdania.
+  'rozdzial', 'rozdzialu', 'rozdziale', 'rozdzialem', 'chapter', 'chapters',
+  'oboz', 'obozu', 'obozie', 'obozem', 'obozow', 'obozami', 'obozach', 'camp', 'inside', 'within', 'wewnatrz', 'wewnatrzu', 'wewnetrz',
+  'droga', 'drogi', 'droge', 'road', 'route', 'path',
+  'pojawia', 'pojawilo', 'pojawil', 'pojawila', 'pojawiaja', 'appears', 'appeared', 'appear',
+  'pomaga', 'pomagal', 'pomogla', 'pomogli', 'pomagaja', 'helps', 'helped', 'help',
+  'centrum', 'rozbudowy', 'center', 'centre', 'expansion', 'facility',
+  'kampanii', 'kampania', 'campaign', 'gra', 'gry', 'game', 'games',
+  'wioska', 'wioski', 'village', 'villages', 'kierunku', 'direction',
+  'czesc', 'czesci', 'part', 'first', 'main', 'glowna', 'glownej',
+  'zachodnim', 'zachodnia', 'west', 'north', 'south', 'east',
+  'bezposrednio', 'directly', 'initially', 'initial', 'poczatkowo',
+  'deuteragonisty', 'role', 'rola', 'character', 'postac', 'postaci',
+  'trafia', 'przybywa', 'przybyl', 'wystepuje', 'arrives', 'arrived',
+  'znajduje', 'located', 'lezy', 'prowadzi',
+].map(normalizujClaim));
 const KNOWN_ENTITY_ALIAS_PATTERNS = [
   { canonical: 'greatsword', pattern: /\b(?:greatsword|wielk(?:i|iego|iemu|im|imi)\s+miec(?:z|za|zem|zowi|zu))\b/iu },
   // Accept the benchmark source's one-letter misspelling `drgon bane` only for the known item.
   { canonical: 'dragonbane', pattern: /\bdr(?:a)?gon\s*bane\b/iu },
   { canonical: "alduin's wall", pattern: /\b(?:alduin['’]?s|alduins)\s+wall\b/iu },
   { canonical: 'dragonrend', pattern: /\bdragonrend\b/iu },
+  // Minecraft: „End”, „Endu” i „Endzie” oznaczają tę samą krainę.
+  { canonical: 'the end', pattern: /\b(?:the\s+end|end(?:u|em|zie|a))\b/iu },
+  // Minecraft: polska nazwa Ender Pearl to „perła Kresu” (Kres = End); bez aliasu „Kresu” było
+  // wymaganą nazwą własną, której nie ma w angielskim tłumaczeniu.
+  { canonical: 'ender pearl', pattern: /\b(?:ender\s+pearls?|per[łl](?:a|y|ę|ą|e|ie|o)?\s+kresu)\b/iu },
   { canonical: 'spellbreaker', pattern: /\b(?:spellbreaker|zaklinacz\s+spellbreaker|łamacz(?:a|owi|em|u)?\s+zakl(?:ę|e)ć)\b/iu },
   { canonical: 'extended relaxation center', pattern: /\b(?:extended\s+relaxation\s+center|centrum\s+(?:przedluzonego|rozszerzonego)\s+relaksu)\b/iu },
   { canonical: 'aperture laboratories', pattern: /\b(?:aperture\s+laboratories|laboratori(?:a|ach|ami|ow|ów)\s+aperture)\b/iu },
@@ -129,6 +159,49 @@ function normalizujClaim(value) {
 function tokenyClaim(value) {
   return [...new Set(normalizujClaim(value).split(' ').filter(t => t.length >= 4))];
 }
+// Tytuły gier z tabeli ai/entities.js. Claim często powtarza tytuł z pytania („W grze Baldur's Gate 3…”),
+// choć cytat źródłowy mówi tylko o postaci. Taki tytuł opisuje kontekst pytania, a nie fakt do
+// potwierdzenia w cytacie, więc (1) numerał z tytułu nie jest liczbą do potwierdzenia w dowodzie
+// i (2) słowa tytułu nie są nazwami własnymi wymaganymi w dowodzie. Zgodność tytułu ze źródłem pilnuje
+// filtr źródeł (sourceMatchesRequestContext); pozostałe nazwy własne nadal muszą wystąpić w dowodzie.
+// Skróty krótsze niż 5 znaków (mc, bg3, tlou) są zbyt dwuznaczne i nie są zwalniane.
+const TYTULY_GIER = (() => {
+  const sep = '[^\\p{L}\\p{N}]+';
+  const esc = token => token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const seen = new Set();
+  const out = [];
+  for (const entry of GAME_ALIASES) {
+    for (const alias of [entry.name, ...entry.aliases]) {
+      const tokens = String(alias || '').split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+      const key = tokens.join(' ').toLocaleLowerCase('pl-PL');
+      if (!tokens.length || key.replace(/ /g, '').length < 5 || seen.has(key)) continue;
+      seen.add(key);
+      const last = tokens[tokens.length - 1];
+      const hasEdition = tokens.length > 1 && /^\d{1,4}$/u.test(last);
+      out.push({
+        re: new RegExp(`(?<![\\p{L}\\p{N}])${tokens.map(esc).join(sep)}(?![\\p{L}\\p{N}])`, 'giu'),
+        hasDigit: /\d/u.test(key),
+        edition: hasEdition ? last : null,
+        // Ta sama seria z innym numerem w dowodzie („Fallout 3” przy claimie o „Fallout 4”)
+        // oznacza, że numerał jest realnym rozróżnikiem i nie wolno go zwalniać.
+        sibling: hasEdition
+          ? new RegExp(`(?<![\\p{L}\\p{N}])${tokens.slice(0, -1).map(esc).join(sep)}${sep}(\\d{1,4})(?![\\p{L}\\p{N}])`, 'giu')
+          : null,
+      });
+    }
+  }
+  return out.sort((a, b) => b.re.source.length - a.re.source.length);
+})();
+function usunTytulyGierZLiczb(claimText, evidenceText = '') {
+  let out = String(claimText || '');
+  const evidence = String(evidenceText || '');
+  for (const title of TYTULY_GIER) {
+    if (!title.hasDigit) continue;
+    if (title.sibling && [...evidence.matchAll(title.sibling)].some(match => match[1] !== title.edition)) continue;
+    out = out.replace(title.re, ' ');
+  }
+  return out;
+}
 function rzymskieNaArabskie(s) {
   // Konwertuje poprawną liczbę rzymską na arabską. Zwraca null gdy nie jest
   // to poprawna liczba rzymska (używane do odfiltrowania zwykłych słów jak „Ciri”,
@@ -151,7 +224,40 @@ function wyodrebnijLiczbyIDaty(value) {
   // Keep decimal separators until numeric extraction; normalizujClaim intentionally
   // removes punctuation and would turn 2.50 into two unrelated integers (2 and 50).
   const raw = String(value || '');
-  const text = raw.toLocaleLowerCase('pl-PL').replace(/,/g, '.');
+  // Rozróżnia separator tysięcy od dziesiętnego:
+  // 50,000 / 50.000 / 50 000 => 50000, ale 2,5 / 2.50 => 2.5.
+  // Nie zmieniamy tekstu źródłowego poza normalizacją samych tokenów liczbowych.
+  let text = raw.toLocaleLowerCase('pl-PL')
+    .replace(/(?<=\d)[\s\u00a0\u202f](?=\d{3}(?:\D|$))/gu, '')
+    .replace(/(\d)[,.](\d{3})(?=\D|$)/gu, '$1$2')
+    .replace(/,/g, '.');
+  const decadeFacts = [];
+  // Dekada liczona numerycznie z roku (1980, 2000, 2010). Sklejanie cyfry wieku z cyfrą dekady
+  // dawało „200” dla lat 2000. i „190” dla lat 1900., więc „2000s” nigdy nie zgadzało się z „'00s”.
+  const addDecade = year => decadeFacts.push(`decade:${Math.floor(year / 10) * 10}`);
+  // „late 1980s”, „early '90s” and Polish „pod koniec lat 80.” are
+  // equivalent temporal facts. Remove the decade phrase before numeric
+  // extraction so 80/90 cannot be compared as unrelated integers.
+  text = text.replace(/\b(?:19|20)\d{2}\s*s\b/gu, (match) => {
+    const year = Number(match.match(/(?:19|20)\d{2}/)?.[0]);
+    if (Number.isFinite(year)) addDecade(year);
+    return ' ';
+  });
+  // Polska forma długa: „lata 2000.”, „w latach 2010”, „lat 1990.” to dekada, tak jak „2000s”.
+  // Zakres („w latach 2010–2013”), lista („w latach 2000 i 2010”) i pojedynczy rok („w latach 2012”)
+  // nie są dekadą i zostają zwykłymi liczbami. Przecinek jest tu już zamieniony na kropkę
+  // (patrz wyżej), więc listę „2000, 2005” rozpoznaje [,.] po roku.
+  text = text.replace(/\blat(?:a|ach)?\s+((?:19|20)\d0)(?!\d)(?!\s*(?:[-–—]\s*\d|(?:do|oraz|i)\s+\d{4}|[,.]\s*(?:19|20)\d{2}))\.?/gu, (match, year) => {
+    addDecade(Number(year));
+    return ' ';
+  });
+  text = text.replace(/\b(?:lat(?:ach)?\s+['’]?|['’])(\d{2})\s*(?:s|tych)?\b|\b(\d{2})s\b/gu, (match, first, second) => {
+    const shortYear = first || second;
+    const n = Number(shortYear);
+    // „'00s” / „lat 00.” to lata 2000.; dekady 01–09 nie istnieją, więc tylko 00 i 10–99.
+    if ((n >= 10 && n <= 99) || n === 0) decadeFacts.push(`decade:${(n >= 50 ? 1900 : 2000) + n - (n % 10)}`);
+    return ' ';
+  });
   const matches = text.match(/\b(?:19|20)\d{2}\b|\b\d+(?:\.\d+)?%?\b/g) || [];
   const canonical = matches.map(value => {
     const percent = value.endsWith('%');
@@ -183,7 +289,7 @@ function wyodrebnijLiczbyIDaty(value) {
   // liczba. Porównanie słów pomijałoby wtedy poprawny claim. Liczby słowne
   // porównujemy tam, gdzie obie strony są w tym samym języku
   // (patrz liczbyDoPorownania).
-  return [...new Set(canonical)];
+  return [...new Set([...canonical, ...decadeFacts])];
 }
 const UNIT_ALIASES = new Map([
   ['h','hour'], ['hr','hour'], ['hrs','hour'], ['hour','hour'], ['hours','hour'], ['godzina','hour'], ['godziny','hour'], ['godzin','hour'], ['godz','hour'],
@@ -204,7 +310,13 @@ const UNIT_ALIASES = new Map([
   ['°c','celsius'], ['°f','fahrenheit'], ['zł','pln'], ['pln','pln'], ['usd','usd'], ['eur','eur'], ['%','percent'],
 ]);
 function wyodrebnijJednostkoweWartosci(value) {
-  const text = String(value || '').toLocaleLowerCase('pl-PL').replace(/,/g, '.');
+  const text = String(value || '').toLocaleLowerCase('pl-PL').replace(/,/g, '.')
+    // Dekada nie jest ilością lat: porównuje ją wyodrębnianie dat powyżej.
+    .replace(/\b(?:19|20)\d{2}\s*s\b/gu, ' ')
+    // „lata 2000.” / „w latach 2012” to data, nie „2000 lat”: alias „lata” dawał fałszywą jednostkę 2000:year.
+    .replace(/\blat(?:a|ach)?\s+(?:19|20)\d{2}\b/gu, ' ')
+    .replace(/\blat(?:ach)?\s+['’]?\d{2}\b/gu, ' ')
+    .replace(/\b['’]\d{2}\s*s\b/gu, ' ');
   const unitPattern = '(?:' + [...UNIT_ALIASES.keys()].filter(k => k !== 'm' && k !== 's').sort((a, b) => b.length - a.length).map(k => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|') + ')';
   const out = [];
   const re = new RegExp(`(?:\\b(\\d+(?:\\.\\d+)?)\\s*(${unitPattern})(?=$|[^\\p{L}\\p{N}])|(${unitPattern})(?=$|[^\\p{L}\\p{N}])\\s*(\\d+(?:\\.\\d+)?))`, 'giu');
@@ -214,7 +326,9 @@ function wyodrebnijJednostkoweWartosci(value) {
     const unit = UNIT_ALIASES.get(rawUnit);
     if (Number.isFinite(amount) && unit) out.push(`${amount}:${unit}`);
   }
-  const shortUnitRe = /(?:\b(\d+(?:\.\d+)?)\s+(m|s)\b|\b(m|s)\s+(\d+(?:\.\d+)?))/giu;
+  // Granice jednostki „m”/„s” muszą rozumieć polskie litery: \b traktuje „ą/ę/ó…” jako nie-litery,
+  // więc „3 są” dawało „3 s” (sekundy), a „5 mężczyzn” dawało „5 m” (metry).
+  const shortUnitRe = /(?:(?<![\p{L}\p{N}])(\d+(?:\.\d+)?)\s+(m|s)(?![\p{L}\p{N}])|(?<![\p{L}\p{N}])(m|s)\s+(\d+(?:\.\d+)?)(?![\p{L}\p{N}]))/giu;
   for (const m of text.matchAll(shortUnitRe)) {
     const amount = Number(m[1] || m[4]);
     const unit = UNIT_ALIASES.get(String(m[2] || m[3] || '').toLocaleLowerCase('pl-PL'));
@@ -267,7 +381,14 @@ function wyodrebnijNazwyWlasne(value, options = {}) {
     // Rzeczownik pospolity na początku claimu nie może zostać uznany za encję.
     // W live benchmark „Przejęcie kontroli przez Wheatleya…” było błędnie
     // odrzucane, bo „Przejęcie” nie występowało w angielskim claim_en jako nazwa.
-    'przejecie', 'przejecia', 'przejeciu', 'przejeciem', 'przejec'
+    'przejecie', 'przejecia', 'przejeciu', 'przejeciem', 'przejec',
+    // Common sentence-initial nouns seen in the live benchmark are descriptions,
+    // not proper names. Keep strict evidence, number, and date checks unchanged.
+    'rodzinne', 'rodzinna', 'rodzinny', 'rodzinnego', 'rodzinnej', 'rodzinnym', 'polowanie', 'polowania', 'polowaniem', 'polowaniu', 'wedrowanie', 'wedrowania', 'wedrowaniem', 'wedrowaniu', 'damy', 'dama', 'struktura', 'struktury', 'strukture', 'strukturze', 'wiedzmin', 'wiedzmina', 'wiedzminem', 'wiedzminie', 'forteca', 'fortecy', 'fortece', 'twierdza', 'twierdzy', 'twierdze',
+    // Zwykłe słowa otwierające zdanie z przypadków false-rejection.
+    // „Statki End…”: obok stoi nazwa pisana wielką literą, więc sygnał „nazwa wielowyrazowa” nie
+    // odróżni rzeczownika pospolitego od imienia i słowo musi być na liście.
+    'materialy', 'dostepne', 'dostepnych', 'danych', 'jedynym', 'jedyna', 'jedynie', 'ponadto', 'dodatkowo', 'aby', 'jesli', 'relacja', 'relacji', 'relacje', 'poznanie', 'poznania', 'statki', 'statek', 'statku', 'statkiem'
   ].map(normalizujClaim));
   const candidates = [];
   const aliasSpans = [];
@@ -277,6 +398,18 @@ function wyodrebnijNazwyWlasne(value, options = {}) {
       const start = Number(match.index || 0);
       aliasSpans.push({ start, end: start + match[0].length });
       candidates.push({ token: alias.canonical, offset: start });
+    }
+  }
+  // Tytuł gry powtórzony w claimie to kontekst pytania, nie fakt do potwierdzenia w cytacie
+  // (patrz TYTULY_GIER). Zwalniamy go z wymogu obecności w dowodzie tylko na żądanie wywołującego;
+  // pozostałe nazwy własne claimu nadal muszą wystąpić w dowodzie.
+  const titleSpans = [];
+  if (options.skipGameTitles) {
+    for (const title of TYTULY_GIER) {
+      for (const match of raw.matchAll(title.re)) {
+        const start = Number(match.index || 0);
+        titleSpans.push({ start, end: start + match[0].length });
+      }
     }
   }
   const sentenceRe = /(^|[.!?]\s*)([^.!?]*)(?=[.!?]|$)/gu;
@@ -303,11 +436,20 @@ function wyodrebnijNazwyWlasne(value, options = {}) {
       const token = match[0];
       const tokenOffset = Number(match.index || 0);
       if (aliasSpans.some(span => tokenOffset >= span.start && tokenOffset < span.end)) continue;
+      const absoluteTokenOffset = sentenceOffset + tokenOffset;
+      if (titleSpans.some(span => absoluteTokenOffset >= span.start && absoluteTokenOffset < span.end)) continue;
       const before = sentence.slice(0, tokenOffset);
       const atSentenceStart = firstCandidate && !before.trim();
       firstCandidate = false;
 
       if (atSentenceStart && genericFirstWords.has(normalizujClaim(token))) continue;
+      const normalizedCandidate = normalizujClaim(token);
+      const knownAliasCandidate = KNOWN_ENTITY_ALIAS_PATTERNS.some(alias => alias.pattern.test(token));
+      const knownOracleCandidate = options.nameOracle instanceof Set
+        && [...new Set([normalizujTokenWyroczni(token), ...wariantyNazwyDoDopasowania(token).map(normalizujTokenWyroczni)])]
+          .some(variant => options.nameOracle.has(variant));
+      if (GENERIC_CAPITALIZED_WORDS.has(normalizedCandidate)
+        && !knownAliasCandidate && !knownOracleCandidate) continue;
       if (atSentenceStart && options.nameOracle instanceof Set) {
         const normalizedToken = normalizujTokenWyroczni(token);
         const isKnownAlias = KNOWN_ENTITY_ALIAS_PATTERNS.some(alias => alias.pattern.test(token));
@@ -495,6 +637,71 @@ function czyNazwaWlasnaWystepuje(entity, evidenceNormalized) {
   });
 }
 
+function wybierzKlausuleDowoduDlaClaimu(evidence, claim) {
+  const fragments = String(evidence || '').split(/(?<=[.!?])\s+|,\s+(?=(?:but|however|yet|whereas|ale|jednak|natomiast)\b)/iu).map(fragment => fragment.trim()).filter(Boolean);
+  if (fragments.length < 2) return String(evidence || '');
+  // Auxiliary verbs and polarity markers should not make an unrelated
+  // negative clause win a tie against the clause describing the claimed event.
+  const scopeStopwords = new Set([
+    'did', 'does', 'do', 'was', 'were', 'is', 'are', 'be', 'been', 'being',
+    'has', 'have', 'had', 'can', 'could', 'will', 'would', 'should', 'may',
+    'might', 'must', 'not', 'never', 'nie', 'nigdy', 'brak', 'bez',
+  ]);
+  const claimTokens = tokenyPokryciaBezStop(claim)
+    .filter(token => !NEGATION_RE.test(token) && !scopeStopwords.has(token));
+  if (!claimTokens.length) return String(evidence || '');
+  const entityTokens = new Set(
+    wyodrebnijNazwyWlasne(claim).flatMap(name => tokenyPokryciaBezStop(name)),
+  );
+  const score = fragment => {
+    const fragmentTokens = tokenyPokryciaBezStop(fragment);
+    const shared = claimTokens.filter(token => fragmentTokens.some(other => tokenyPokrywajaSie(token, other)));
+    // If two clauses have the same lexical coverage, prefer the one matching
+    // more of the claim's non-entity/event tokens. A repeated character name
+    // must not let an unrelated negated clause win a polarity check.
+    const eventMatches = shared.filter(token => !entityTokens.has(token)).length;
+    return { total: shared.length, eventMatches };
+  };
+  let best = fragments[0];
+  let bestScore = score(best);
+  for (const fragment of fragments.slice(1)) {
+    const fragmentScore = score(fragment);
+    if (
+      fragmentScore.total > bestScore.total
+      || (fragmentScore.total === bestScore.total && fragmentScore.eventMatches > bestScore.eventMatches)
+    ) {
+      best = fragment;
+      bestScore = fragmentScore;
+    }
+  }
+  return bestScore.total / claimTokens.length >= 0.2 ? best : String(evidence || '');
+}
+
+function sprawdzPowiazanieLiczbZeZdarzeniem(evidence, claim, options = {}) {
+  if (options.allowDistributedEvidence || wyglądaNaAngielski(evidence) !== wyglądaNaAngielski(claim)) return { ok: true };
+  const claimNumbers = wyodrebnijLiczbyIDaty(usunTytulyGierZLiczb(claim, evidence));
+  if (!claimNumbers.length) return { ok: true };
+  const sentences = String(evidence || '').split(/(?<=[.!?])\s+/u).map(sentence => sentence.trim()).filter(Boolean);
+  if (sentences.length < 2) return { ok: true };
+  const claimTokens = tokenyPokryciaBezStop(claim);
+  if (!claimTokens.length) return { ok: true };
+  const score = sentence => {
+    const sentenceTokens = tokenyPokryciaBezStop(sentence);
+    const shared = claimTokens.filter(token => sentenceTokens.some(other => tokenyPokrywajaSie(token, other)));
+    return shared.length / claimTokens.length;
+  };
+  const bestOverallScore = sentences.reduce((best, sentence) => Math.max(best, score(sentence)), 0);
+  const numericSentences = sentences.filter(sentence => {
+    const numbers = wyodrebnijLiczbyIDaty(sentence);
+    return claimNumbers.every(number => numbers.includes(number));
+  });
+  if (!numericSentences.length) {
+    return { ok: false, reason: 'wartości liczbowe claimu nie występują razem w jednym zdaniu dowodowym' };
+  }
+  const bestNumericScore = numericSentences.reduce((best, sentence) => Math.max(best, score(sentence)), 0);
+  if (bestOverallScore >= 0.35 && bestOverallScore - bestNumericScore >= 0.25) return { ok: false, reason: 'wartość liczbowa występuje przy innym zdarzeniu niż w claimie' };
+  return { ok: true };
+}
 function sprawdzTwardeKonflikty(evidence, claim, options = {}) {
   const e = String(evidence || '');
   const c = String(claim || '');
@@ -502,7 +709,7 @@ function sprawdzTwardeKonflikty(evidence, claim, options = {}) {
   // negates the explanation, not event X. A document-level negation scan used
   // to reject a positive claim about X because an unrelated subordinate clause
   // contained “never”. Keep the hard gate for negation of the actual event.
-  const evidenceForNegation = e.replace(
+  const evidenceForNegation = wybierzKlausuleDowoduDlaClaimu(e, c).replace(
     /\b(?:although|though|while)\s+(?:it|this|that)\s+(?:was|is|has been)\s+never\s+explained\b[,;:]?\s*/giu,
     ' ',
   );
@@ -519,14 +726,19 @@ function sprawdzTwardeKonflikty(evidence, claim, options = {}) {
   if (options.checkNegationOnly) return { ok: true };
 
   const evidenceNumbers = wyodrebnijLiczbyIDaty(e);
-  const claimNumbers = wyodrebnijLiczbyIDaty(c);
+  // Numerał w tytule gry („Baldur's Gate 3”, „Cyberpunk 2077”) nie jest faktem do potwierdzenia w cytacie
+  // (patrz TYTULY_GIER); zwalniamy go, chyba że dowód wspomina inną część tej samej serii.
+  const cBezTytulow = usunTytulyGierZLiczb(c, e);
+  const claimNumbers = wyodrebnijLiczbyIDaty(cBezTytulow);
   if (claimNumbers.some(n => !evidenceNumbers.includes(n))) return { ok: false, reason: 'claim zawiera liczbę/datę nieobecną w dowodzie' };
 
   const evidenceQuantities = wyodrebnijJednostkoweWartosci(e);
   const claimQuantities = wyodrebnijJednostkoweWartosci(c);
   if (claimQuantities.some(q => !evidenceQuantities.includes(q))) return { ok: false, reason: 'claim zawiera wartość liczbową z niezgodnymi lub niepotwierdzonymi jednostkami' };
+  const numericAssociation = sprawdzPowiazanieLiczbZeZdarzeniem(e, c, options);
+  if (!numericAssociation.ok) return numericAssociation;
 
-  const claimTemporal = wyodrebnijMarkery(c, TEMPORAL_RE);
+  const claimTemporal = wyodrebnijMarkery(cBezTytulow, TEMPORAL_RE);
   const evidenceTemporal = wyodrebnijMarkery(e, TEMPORAL_RE);
   if (claimTemporal && !evidenceTemporal && claimNumbers.length === 0) return { ok: false, reason: 'claim zawiera sygnał czasowy nieobecny w dowodzie' };
   return { ok: true };
@@ -588,7 +800,7 @@ function dopasowanieSemantyczne(evidence, claim, options = {}) {
   const et = new Set(tokenyClaim(evidence));
   const overlap = ct.length ? ct.filter(t => [...et].some(other => tokenyPokrywajaSie(t, other))).length / ct.length : 0;
   const ignoredSentenceInitialNames = [];
-  const nameOptions = { ...options, _ignoredSentenceInitialNames: ignoredSentenceInitialNames };
+  const nameOptions = { ...options, _ignoredSentenceInitialNames: ignoredSentenceInitialNames, skipGameTitles: true };
   const entities = wyodrebnijNazwyWlasne(claim, nameOptions);
   const normalizedEvidence = normalizujClaim(evidence);
   const missingEntities = entities.filter(entity => !czyNazwaWlasnaWystepuje(entity, normalizedEvidence));
@@ -613,7 +825,7 @@ function dopasowanieSemantyczne(evidence, claim, options = {}) {
 function czyRelacjaPrzyczynowaPokrywaClaim(evidence, claim, options = {}) {
   const claimText = String(claim || '');
   const evidenceText = String(evidence || '');
-  const claimEntities = wyodrebnijNazwyWlasne(claimText, options);
+  const claimEntities = wyodrebnijNazwyWlasne(claimText, { ...options, skipGameTitles: true });
   const claimTokens = tokenyPokryciaBezStop(claimText);
   const sentences = evidenceText
     .replace(/\s+/g, ' ')
@@ -652,7 +864,7 @@ function zgodnoscStrukturalna(evidence, claim, options = {}) {
   if (!semanticConflict.ok) return semanticConflict;
 
   const evidenceNumbers = wyodrebnijLiczbyIDaty(e);
-  const claimNumbers = wyodrebnijLiczbyIDaty(c);
+  const claimNumbers = wyodrebnijLiczbyIDaty(usunTytulyGierZLiczb(c, e));
   if (claimNumbers.length && claimNumbers.some(n => !evidenceNumbers.includes(n))) {
     return { ok: false, reason: 'claim zawiera liczbę/datę nieobecną w dowodzie' };
   }
@@ -678,7 +890,7 @@ function zgodnoscStrukturalna(evidence, claim, options = {}) {
   const evidenceConcepts = pojeciaCrossLanguage(e);
   const claimConcepts = pojeciaCrossLanguage(c);
   const sharedConcepts = [...claimConcepts].filter(x => evidenceConcepts.has(x));
-  const claimEntities = wyodrebnijNazwyWlasne(c, options);
+  const claimEntities = wyodrebnijNazwyWlasne(c, { ...options, skipGameTitles: true });
   const normalizedEvidence = normalizujClaim(e);
   const entityCoverage = claimEntities.length
     ? claimEntities.filter(entity => czyNazwaWlasnaWystepuje(entity, normalizedEvidence)).length / claimEntities.length
@@ -733,7 +945,9 @@ function tokenyPokrywajaSie(a, b) {
 function czyOgraniczenieDowodowe(sentence) {
   const text = normalizujClaim(sentence);
   const limitation = /\b(?:nie\s+(?:potwierdz\w*|podaj\w*|precyz\w*|okresl\w*|wskaz\w*|zawier\w*|znalazl\w*|znaleziono)|brak\s+(?:dokladn\w*\s+)?(?:dat\w*|moment\w*|czas\w*|potwierdzon\w*\s+(?:przyczyn\w*|powod\w*)))\b/u.test(text);
-  const scopedTopic = /\b(?:dat\w*|moment\w*|czas\w*|rok\w*|przyczyn\w*|powod\w*)\b/u.test(text);
+  // „metod\w*” i „sposob\w*”: zastrzeżenie o braku dodatkowych metod w źródłach („Źródła nie podają
+  // dodatkowych metod zdobycia…”) jest tak samo zakresem źródła jak brak daty, a nie faktem o świecie.
+  const scopedTopic = /\b(?:dat\w*|moment\w*|czas\w*|rok\w*|przyczyn\w*|powod\w*|metod\w*|sposob\w*)\b/u.test(text);
   const sourceMention = /\b(?:zrodla?\w*|materialy|dane|sources?|evidence)\b/u.test(text);
   const inheritedSourceScope = /^\s*(?:ale|jednak)?\s*nie\b/u.test(text);
   return limitation && scopedTopic && (sourceMention || inheritedSourceScope);
@@ -769,7 +983,7 @@ function sprawdzPokrycieClaimamiOdpowiedzi(answer, claims) {
     // Nie rozbijamy zwykłych list rzeczowników (np. „ogień, mróz i magia”):
     // separator musi być przecinkiem przed spójnikiem albo średnikiem.
     const clauses = base
-      .split(/;\s*|,\s*(?=(?:and\s+then|and|but|then|while|or|a\s+potem|ale|jednak|następnie|nastepnie|oraz)\b)/iu)
+      .split(/;\s*|,\s*(?=(?:and\s+then|and|but|then|while|or|a\s+(?:potem|następnie|nastepnie)|ale|jednak|następnie|nastepnie|oraz)\b)/iu)
       .map(part => part.trim())
       .filter(Boolean);
     if (clauses.length > 1) return clauses.map(text => ({ text, sourceSentenceIndex }));
@@ -979,6 +1193,38 @@ function liczbyDoPorownania(tekst) {
   return [...new Set([...wyodrebnijLiczbyIDaty(tekst), ...slowaLiczbowe(tekst)])];
 }
 
+// Angielskie liczby słowne zamieniane na cyfry wyłącznie w kontrolę parytetu PL↔EN claimu:
+// „około 20 lat” ↔ „over twenty years”. Wersja z cyframi jest DODATKOWĄ ścieżką akceptacji obok
+// surowego tłumaczenia, więc nie tworzy nowych odrzuceń (np. „dwadzieścia lat” ↔ „twenty years”).
+const EN_LICZBY_SLOWNE = {
+  one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10,
+  eleven: 11, twelve: 12, thirteen: 13, fourteen: 14, fifteen: 15, sixteen: 16, seventeen: 17,
+  eighteen: 18, nineteen: 19, twenty: 20, thirty: 30, forty: 40, fifty: 50, sixty: 60,
+  seventy: 70, eighty: 80, ninety: 90,
+};
+function angielskieLiczbySlowneNaCyfry(value) {
+  return String(value || '').replace(
+    /(?<![\p{L}\p{N}])(?:(twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)[-\s](one|two|three|four|five|six|seven|eight|nine)|(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety))(?![\p{L}\p{N}])/giu,
+    (match, tens, unit, single) => String(tens
+      ? EN_LICZBY_SLOWNE[tens.toLowerCase()] + EN_LICZBY_SLOWNE[unit.toLowerCase()]
+      : EN_LICZBY_SLOWNE[single.toLowerCase()]),
+  );
+}
+
+// Czy w cytacie po zachowanym imieniu stoi inny wyraz pisany wielką literą („Johnny Cash”)?
+// Wtedy cytat mówi o innej osobie niż „Johnny Silverhand” i skrót imienia nie może być uznany
+// za tę samą encję. Interpunkcja kończąca token przerywa nazwę; „’s” jest odcinane.
+// Odpowiednik followedByForeignSurname z ai/entities.js, ale działający na cytacie.
+function cytatRozszerzaNazwePoImieniu(quote, nameVariants) {
+  const tokens = String(quote || '').split(/\s+/u).filter(Boolean);
+  for (let i = 0; i < tokens.length - 1; i++) {
+    if (/[.!?,;:)]$/u.test(tokens[i])) continue;
+    if (!nameVariants.has(normalizujClaim(tokens[i].replace(/['’]s$/iu, '')))) continue;
+    if (/^[A-ZĄĆĘŁŃÓŚŹŻ]/u.test(tokens[i + 1])) return true;
+  }
+  return false;
+}
+
 function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
   const pl = String(claimPl || '').trim();
   const en = String(claimEn || '').trim();
@@ -1056,10 +1302,18 @@ function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
     // punkty muszą wystarczać samodzielnie.
     // Bez tego warunku claim_en nigdy nie byłoby użyteczne dla nazw tłumaczonych.
   }
-  if (!zbiorRowny(wyodrebnijLiczbyIDaty(pl), wyodrebnijLiczbyIDaty(en))) {
+  // Liczby/daty obecne w polskim claimie muszą pozostać w tłumaczeniu.
+  // Data dodana przez evidence/claim_en może jednak zostać bezpiecznie
+  // pominięta przy uogólnieniu polskiego zdania.
+  const polishNumbers = wyodrebnijLiczbyIDaty(pl);
+  const enLiczbowo = angielskieLiczbySlowneNaCyfry(en);
+  const englishNumbers = [...new Set([...wyodrebnijLiczbyIDaty(en), ...wyodrebnijLiczbyIDaty(enLiczbowo)])];
+  if (polishNumbers.some(number => !englishNumbers.includes(number))) {
     return { ok: false, reason: 'tłumaczenie claimu zmienia liczby lub daty' };
   }
-  if (!zbiorRowny(wyodrebnijJednostkoweWartosci(pl), wyodrebnijJednostkoweWartosci(en))) {
+  const polishUnits = wyodrebnijJednostkoweWartosci(pl);
+  if (!zbiorRowny(polishUnits, wyodrebnijJednostkoweWartosci(en))
+    && !zbiorRowny(polishUnits, wyodrebnijJednostkoweWartosci(enLiczbowo))) {
     return { ok: false, reason: 'tłumaczenie claimu zmienia jednostki lub wartości' };
   }
   if (wyodrebnijMarkery(pl, NEGATION_RE) !== wyodrebnijMarkery(en, NEGATION_RE)) {
@@ -1083,12 +1337,35 @@ function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
     return { ok: false, reason: 'tłumaczenie claimu zmienia kierunek redukcji lub ochrony' };
   }
   const enNormalized = normalizujClaim(en);
+  // Z wyrocznią nazw (wywołanie z źródłami) obowiązuje ta sama zasada co przy dowodzie: słowo na
+  // początku zdania jest nazwą tylko wtedy, gdy ma sygnał (znany alias, nazwa wielowyrazowa, wielka
+  // litera w środku zdania, obecność w wyroczni). Wcześniej drugi przebieg bez wyroczni liczył
+  // KAŻDE takie słowo, więc polskie rzeczowniki pospolite („Wspólny”, „Przedmiotu”, „Relacja”)
+  // odpadały jako „gubi nazwy własne”. Bez wyroczni nie ma czym rozstrzygnąć, więc liczy się każde.
+  // Konsekwencja: nieznana nazwa postaci na początku zdania, której nie ma w tabelach ani w
+  // źródłach, nie jest już pilnowana przy tłumaczeniu (nadal pilnuje jej kontrola dowodu).
   const claimNames = [...new Set([
     ...wyodrebnijNazwyWlasne(pl, options),
-    // Re-run without the source oracle so an unknown sentence-initial proper
-    // noun cannot be silently omitted from the English claim translation.
-    ...wyodrebnijNazwyWlasne(pl),
+    ...(options.nameOracle instanceof Set ? [] : wyodrebnijNazwyWlasne(pl)),
   ])];
+  if (copiedQuote && /^(?:who|which|that|he|she|it|they|his|her|their|its)\s/u.test(enNormalized)) {
+    const evidenceContext = String(options.evidenceContext || '');
+    const evidenceQuote = String(options.evidenceQuote || '').trim();
+    const missingClaimNames = claimNames.filter(name => !czyNazwaWlasnaWystepuje(name, enNormalized));
+    // The quote verifier normalizes whitespace, punctuation, and accents.
+    // Locate the quote with that same normalization instead of raw indexOf().
+    const quotePrefix = evidenceQuote ? findQuotePrefix(evidenceContext, evidenceQuote) : null;
+    if (missingClaimNames.length) {
+      if (quotePrefix === null) {
+        return { ok: false, reason: 'tłumaczenie claimu gubi nazwy własne: ' + missingClaimNames.slice(0, 3).join(', ') };
+      }
+      const sameSentencePrefix = quotePrefix.split(/\bsentenceboundarytoken\b/u).at(-1) || '';
+      const normalizedPrefix = ' ' + sameSentencePrefix + ' ';
+      if (!missingClaimNames.every(name => normalizedPrefix.includes(' ' + normalizujClaim(name) + ' '))) {
+        return { ok: false, reason: 'tłumaczenie claimu gubi nazwy własne: ' + missingClaimNames.slice(0, 3).join(', ') };
+      }
+    }
+  }
   // Twarda kontrola: polska nazwa własna musi wystąpić w angielskim tłumaczeniu.
   // Dla nazwy przetłumaczonej rozstrzyga tabela aliasów — czyNazwaWlasnaWystepuje
   // sprawdza w niej wzorzec (PL i EN w jednym wyrażeniu), a podmiana encji
@@ -1105,7 +1382,57 @@ function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
       && /\brelic\b/u.test(enNormalized)) return false;
     return !czyNazwaWlasnaWystepuje(name, enNormalized);
   });
-  if (missing.length) return { ok: false, reason: 'tłumaczenie claimu gubi nazwy własne: ' + missing.slice(0, 3).join(', ')};
+  if (missing.length) {
+    // Pełna nazwa może pochodzić z pytania, podczas gdy evidence_quote używa
+    // skrótu (np. „Johnny” zamiast „Johnny Silverhand”). Skrót jest dopuszczalny
+    // tylko wtedy, gdy cytat naprawdę mówi o tej samej encji: zachowane imię musi
+    // w nim wystąpić i nie może po nim stać inny człon nazwy („Johnny Cash”
+    // to nie „Johnny Silverhand”), a brakująca część nie może występować w cytacie.
+    const quoteText = normalizujClaim(options.evidenceQuote || '');
+    const retainedNames = claimNames.filter(name => !missing.includes(name) && czyNazwaWlasnaWystepuje(name, enNormalized));
+    // Zachowana część musi sąsiadować z brakującą w polskim claimie.
+    const adjacentRetainedNames = retainedNames.filter(retained => missing.some(name =>
+      new RegExp(`\\b${normalizujClaim(retained)}\\s+${normalizujClaim(name)}\\b`, 'u').test(normalizujClaim(pl))
+    ));
+    const hasRetainedEntity = adjacentRetainedNames.length > 0 && adjacentRetainedNames.every(retained =>
+      czyNazwaWlasnaWystepuje(retained, quoteText)
+      && !cytatRozszerzaNazwePoImieniu(options.evidenceQuote, new Set([
+        normalizujClaim(retained),
+        ...wariantyNazwyDoDopasowania(retained).map(normalizujClaim),
+      ])));
+    const missingInQuoteToo = hasRetainedEntity
+      ? missing.filter(name => !czyNazwaWlasnaWystepuje(name, quoteText))
+      : [];
+    if (quoteText && hasRetainedEntity && claimNames.length > missing.length && missingInQuoteToo.length === missing.length) return { ok: true };
+    const missingFromTranslation = quoteText && hasRetainedEntity
+      ? missing.filter(name => !missingInQuoteToo.includes(name))
+      : missing;
+    if (!missingFromTranslation.length) return { ok: true };
+    // A source may quote a relative/anaphoric continuation ("who appears…")
+    // that is not a standalone translation of the Polish claim. Accept the
+    // omitted subject only when the exact quote is embedded in the supplied,
+    // bounded source context and the claimed entity is in the SAME sentence
+    // immediately before that quote. The downstream evidence check still
+    // validates the action, quote, and source binding.
+    const evidenceContext = String(options.evidenceContext || '');
+    const evidenceQuote = String(options.evidenceQuote || '').trim();
+    // Reuse quoteExists' punctuation/whitespace normalization; raw indexOf()
+    // rejected valid quotes when extraction normalized spacing or punctuation.
+    const quotePrefix = evidenceQuote ? findQuotePrefix(evidenceContext, evidenceQuote) : null;
+    const anaphoricEn = ['who ', 'which ', 'that ', 'he ', 'she ', 'it ', 'they ', 'his ', 'her ', 'their ', 'its ']
+      .some(prefix => enNormalized.startsWith(prefix));
+    // Only the sentence containing the quote may supply the omitted subject.
+    const sameSentencePrefix = quotePrefix !== null
+      ? (quotePrefix.split(/\bsentenceboundarytoken\b/u).at(-1) || '')
+      : '';
+    const normalizedPrefix = ' ' + sameSentencePrefix + ' ';
+    const missingEntitiesBound = quotePrefix !== null
+      && anaphoricEn
+      && missingFromTranslation.every(name => normalizedPrefix.includes(' ' + normalizujClaim(name) + ' '));
+    if (!missingEntitiesBound) {
+      return { ok: false, reason: 'tłumaczenie claimu gubi nazwy własne: ' + missingFromTranslation.slice(0, 3).join(', ') };
+    }
+  }
   return { ok: true };
 }
 

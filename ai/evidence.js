@@ -142,6 +142,14 @@ function normalizeQuoteVerificationText(value) {
   return normalizeEvidenceText(withSentenceBoundaries);
 }
 
+function findQuotePrefix(sourceContent, quote) {
+  const source = normalizeQuoteVerificationText(sourceContent);
+  const wantedQuote = normalizeQuoteVerificationText(quote);
+  if (!source || !wantedQuote) return null;
+  const offset = source.indexOf(wantedQuote);
+  return offset >= 0 ? source.slice(0, offset) : null;
+}
+
 function quoteExists(sourceContent, quote) {
   const sourceSegments = String(sourceContent || '')
     // Split before punctuation normalization: otherwise source-side ellipses
@@ -460,4 +468,4 @@ function buildQuestionEvidenceContext(question, blocks, allowedSourceIds = null,
   }).join('\n\n');
 }
 
-module.exports = { escapeUntrustedEvidenceContent, normalizeEvidenceText, parseEvidenceBlocks, quoteExists, splitEvidenceSentences, classifyClaimType, evidenceRelationSignals, rankEvidenceForClaim, ensureEvidenceSourceId, buildEvidenceCandidatesFromSources, buildEvidenceRepairContext, buildQuestionEvidenceContext, removeLeadingImageFilenameNoise, removeLeadingSourceMetadataNoise };
+module.exports = { escapeUntrustedEvidenceContent, normalizeEvidenceText, normalizeQuoteVerificationText, findQuotePrefix, parseEvidenceBlocks, quoteExists, splitEvidenceSentences, classifyClaimType, evidenceRelationSignals, rankEvidenceForClaim, ensureEvidenceSourceId, buildEvidenceCandidatesFromSources, buildEvidenceRepairContext, buildQuestionEvidenceContext, removeLeadingImageFilenameNoise, removeLeadingSourceMetadataNoise };

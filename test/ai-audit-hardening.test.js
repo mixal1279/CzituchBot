@@ -61,6 +61,53 @@ test('retrieval diversity is part of the sufficiency decision', () => {
   assert.equal(shouldRunAdditionalRetrieval({ text: 'x'.repeat(1200), sourceCount: 2, queryCount: 1, results, requireDiversity: true }), false);
 });
 
+
+
+test('source-bound relative-clause evidence passes only with its adjacent named subject', () => {
+  const data = '[SOURCE 1]\nTYP: UNTRUSTED_WEB_DATA\nTYTUŁ: Portal 2\nTREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>\nThe Intelligence Dampening Sphere, more commonly known as Wheatley, is a personality core of masculine programming and English West Country accent who appears in the single-player campaign of Portal 2.\n<<<END_UNTRUSTED_SOURCE_CONTENT>>>';
+  const answer = 'Wheatley pojawia się w kampanii jednoosobowej gry Portal 2.';
+  const result = normalizujWynikWalidatora({
+    valid: true, reason: 'source-backed', unsupported_claims: [], supported: true, relevant: true,
+    complete: true, hallucination: false, confidence: 0.99,
+    claims: [{
+      claim: answer.slice(0, -1),
+      supported: true,
+      source_ids: ['SOURCE 1'],
+      evidence_quote: 'who appears in the single-player campaign of Portal 2.',
+      claim_en: 'who appears in the single-player campaign of Portal 2.',
+      reason: 'source-backed',
+    }],
+  }, 'test-model', 'test', null, data, answer);
+  assert.equal(result.status, 'accepted', JSON.stringify({
+    status: result.status,
+    reason: result.reason,
+    diagnostics: result.diagnostics?.localRejectReasons,
+    unsupported: result.unsupported_claims,
+  }));
+});
+
+test('synthetic ellipses in an evidence quote get a specific rejection diagnostic', () => {
+  const data = '[SOURCE 1]\nTYP: UNTRUSTED_WEB_DATA\nTYTUŁ: Portal 2\nTREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>\nWheatley appears in the single-player campaign of Portal 2 and helps Chell escape.\n<<<END_UNTRUSTED_SOURCE_CONTENT>>>';
+  const result = normalizujWynikWalidatora({
+    valid: true, reason: 'ok', unsupported_claims: [], supported: true, relevant: true,
+    complete: true, hallucination: false, confidence: 0.99,
+    claims: [{
+      claim: 'Wheatley pojawia się w kampanii jednoosobowej gry Portal 2.',
+      supported: true,
+      source_ids: ['SOURCE 1'],
+      evidence_quote: 'Wheatley appears [...] in the single-player campaign of Portal 2.',
+      claim_en: 'Wheatley appears in the single-player campaign of Portal 2.',
+      reason: 'ok',
+    }],
+  }, 'test-model', 'test', null, data,
+  'Wheatley pojawia się w kampanii jednoosobowej gry Portal 2.');
+  assert.equal(result.status, 'rejected');
+  assert.match(
+    result.diagnostics.unsupportedEvidenceClaims[0].reasons[0],
+    /dosłowny, ciągły cytat/,
+  );
+});
+
 test('validator accepts a genuine paraphrased claim without weakening source binding', () => {
   const data = '[SOURCE 1]\nTYTUŁ: Portal 2\nTREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>\nWheatley zostaje przeniesiony do ciała GLaDOS.\n<<<END_UNTRUSTED_SOURCE_CONTENT>>>';
   const result = normalizujWynikWalidatora({
@@ -234,4 +281,56 @@ test('cross-language game evidence recognizes recruiting a companion', () => {
     { allowCrossLanguageExactEvidence: true },
   );
   assert.equal(result.ok, true, JSON.stringify(result));
+});
+
+test('negation in a separate clause does not invalidate a positive event claim', () => {
+  const result = zgodnoscStrukturalna('Wheatley did not explain the plan, but he took control of Aperture.', 'Wheatley took control of Aperture.');
+  assert.equal(result.ok, true, JSON.stringify(result));
+});
+
+test('negation attached to the claimed event remains a hard conflict', () => {
+  const result = zgodnoscStrukturalna('Wheatley did not explain the plan, but he took control of Aperture.', 'Wheatley did not take control of Aperture.');
+  assert.equal(result.ok, false, JSON.stringify(result));
+});
+
+
+test('negation stays scoped to the clause that describes the claimed event', () => {
+  const unrelatedFirst = zgodnoscStrukturalna(
+    'Wheatley did not explain the plan, but he took control of Aperture.',
+    'Wheatley did not take control of Aperture.',
+  );
+  assert.equal(unrelatedFirst.ok, false, JSON.stringify(unrelatedFirst));
+
+  const relevantFirst = zgodnoscStrukturalna(
+    'Wheatley took control of Aperture, but he did not explain the plan.',
+    'Wheatley did not take control of Aperture.',
+  );
+  assert.equal(relevantFirst.ok, false, JSON.stringify(relevantFirst));
+
+  const negatedEvent = zgodnoscStrukturalna(
+    'Wheatley did not take control of Aperture, but he explained the plan.',
+    'Wheatley took control of Aperture.',
+  );
+  assert.equal(negatedEvent.ok, false, JSON.stringify(negatedEvent));
+});
+
+test('a number attached to a different event does not support the claim', () => {
+  const result = zgodnoscStrukturalna('The loading screen lasts 10 minutes. Completing the game takes 40 hours.', 'Completing the game takes 10 minutes.');
+  assert.equal(result.ok, false, JSON.stringify(result));
+});
+
+test('a number attached to the same event remains supported with unrelated numeric evidence nearby', () => {
+  const result = zgodnoscStrukturalna(
+    'The loading screen lasts 10 minutes. Completing the game takes 40 hours. The credits list 4 chapters.',
+    'Completing the game takes 40 hours.',
+  );
+  assert.equal(result.ok, true, JSON.stringify(result));
+});
+
+test('numbers split across different events do not jointly support one compound claim', () => {
+  const result = zgodnoscStrukturalna(
+    'The game was released in 2011. It takes 40 hours to complete.',
+    'The game was released in 2011 and takes 40 hours to complete.',
+  );
+  assert.equal(result.ok, false, JSON.stringify(result));
 });
