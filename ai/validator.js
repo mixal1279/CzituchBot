@@ -6,6 +6,7 @@ const { assessEvidence } = require('./core');
 const { sprawdzTwardeFaktyOdpowiedzi } = require('./response');
 const { czyDowodSemantyczniePokrywaClaim, czyRelacjaPrzyczynowaPokrywaClaim, zgodnoscStrukturalna, sprawdzTwardeKonflikty, sprawdzSprzecznosciSemantyczne, sprawdzPokrycieClaimamiOdpowiedzi, spojnoscTlumaczeniaClaimu, zbudujWyroczniaNazw, wyodrebnijNazwyWlasne, czyNazwaWlasnaWystepuje, wyglądaNaAngielski, normalizujClaim, CAUSAL_RE, CAUSAL_EVIDENCE_RE, czyOgraniczenieDowodowe } = require('./claimValidation');
 const { parseEvidenceBlocks, quoteExists, rankEvidenceForClaim, buildEvidenceRepairContext } = require('./evidence');
+const { naprawKsztaltWynikuWalidatora } = require('./validator-shape');
 const { buildClaimSupportAudit, HARD_OVERCLAIM_TYPES } = require('./claim-support');
 
 // Kontrakt walidatora jest celowo mały: generator potrzebuje tylko jasnego
@@ -531,6 +532,8 @@ function isAtomicPartialClaimText(value) {
 }
 
 function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSourceIds = null, dane = '', answer = '', options = {}) {
+  const shape = naprawKsztaltWynikuWalidatora(wynik);
+  wynik = shape.wynik;
   if (!wynik || typeof wynik !== 'object' || Array.isArray(wynik)) return null;
 
   // Validator produkcyjny ma ścisły kontrakt. Nie akceptujemy już starych,
@@ -980,7 +983,7 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
     evidenceSourceCount: evidenceAssessment.sourceCount,
     evidenceIndependentHosts: evidenceAssessment.independentHosts,
     localRejectReasons,
-    evidenceRepairContext: [...new Set([...unsupportedEvidenceClaimIndexes, ...hardOverclaimClaimIndexes])].length
+    ...(shape.poprawki.length ? { shapeRepairs: shape.poprawki } : {}),    evidenceRepairContext: [...new Set([...unsupportedEvidenceClaimIndexes, ...hardOverclaimClaimIndexes])].length
       ? buildEvidenceRepairContext([...new Set([...unsupportedEvidenceClaimIndexes, ...hardOverclaimClaimIndexes])].map(index => claims[index]), allowedBlocks, allowed, 4)
       : '',
   };

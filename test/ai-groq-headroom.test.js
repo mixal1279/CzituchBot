@@ -2,7 +2,7 @@
 
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { createGroqCompletion, normalizeGroqSdkBaseUrl } = require('../ai/provider-runtime');
+const { createGroqCompletion, normalizeGroqSdkBaseUrl, normalizujGroqBaseUrl, groqTpmRetryAfterMs, resetGroqTpmWindow } = require('../ai/provider-runtime');
 
 function fakeClient(sink) {
   return { chat: { completions: { create(payload) { sink.payload = payload; return Promise.resolve({}); } } } };
@@ -66,4 +66,28 @@ test('Groq SDK base URL strips the endpoint prefix already included by the SDK',
   assert.equal(normalizeGroqSdkBaseUrl('https://api.groq.com/openai/v1/'), 'https://api.groq.com');
   assert.equal(normalizeGroqSdkBaseUrl('https://api.groq.com'), 'https://api.groq.com');
   assert.equal(normalizeGroqSdkBaseUrl('https://gateway.example/openai/v1'), 'https://gateway.example');
+});
+
+
+test('Groq base URL normalizer strips the SDK-owned REST prefix', () => {
+  assert.equal(normalizujGroqBaseUrl(undefined), 'https://api.groq.com');
+  assert.equal(normalizujGroqBaseUrl('https://api.groq.com/openai/v1/'), 'https://api.groq.com');
+  assert.equal(normalizujGroqBaseUrl('https://gateway.example/'), 'https://gateway.example');
+});
+
+test('Groq TPM guard reserves estimated tokens for pending requests', async () => {
+  resetGroqTpmWindow();
+  const previous = process.env.AI_GROQ_TPM_GUARD;
+  delete process.env.AI_GROQ_TPM_GUARD;
+  const payload = {
+    model: 'openai/gpt-oss-20b',
+    max_completion_tokens: 3000,
+    messages: [{ role: 'user', content: 'x'.repeat(3000) }],
+  };
+  const pending = new Promise(() => {});
+  createGroqCompletion({ chat: { completions: { create: () => pending } } }, payload);
+  assert.ok(groqTpmRetryAfterMs('openai/gpt-oss-20b', 4000) > 0);
+  resetGroqTpmWindow();
+  if (previous === undefined) delete process.env.AI_GROQ_TPM_GUARD;
+  else process.env.AI_GROQ_TPM_GUARD = previous;
 });

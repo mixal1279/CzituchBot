@@ -86,6 +86,21 @@ function parseGeminiGenerationResponse(data, label = 'Gemini') {
   };
 }
 
+function normalizeGeminiRestSchema(schema) {
+  if (Array.isArray(schema)) return schema.map(normalizeGeminiRestSchema);
+  if (!schema || typeof schema !== 'object') return schema;
+
+  const normalized = {};
+  for (const [key, value] of Object.entries(schema)) {
+    if (key === 'type' && typeof value === 'string') {
+      normalized[key] = value.toUpperCase();
+    } else {
+      normalized[key] = normalizeGeminiRestSchema(value);
+    }
+  }
+  return normalized;
+}
+
 function buildGeminiGenerateContentUrl(model) {
   const modelId = String(model || '').trim();
   if (!/^[a-zA-Z0-9._-]+$/.test(modelId)) {
@@ -94,4 +109,23 @@ function buildGeminiGenerateContentUrl(model) {
   return `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent`;
 }
 
-module.exports = { parseGeminiGenerationResponse, buildGeminiGenerateContentUrl };
+/** Build the documented GenerateContent generationConfig for the JSON validator. */
+function buildGeminiValidatorGenerationConfig(model, schema) {
+  return {
+    maxOutputTokens: 1400,
+    responseMimeType: 'application/json',
+    responseSchema: normalizeGeminiRestSchema(schema),
+    ...(model === 'gemini-3.8-flash'
+      ? { thinkingConfig: { thinkingLevel: 'low' } }
+      : model === 'gemini-3.5-flash-lite'
+        ? { thinkingConfig: { thinkingLevel: 'minimal' } }
+        : {}),
+  };
+}
+
+module.exports = {
+  parseGeminiGenerationResponse,
+  buildGeminiGenerateContentUrl,
+  buildGeminiValidatorGenerationConfig,
+  normalizeGeminiRestSchema,
+};

@@ -96,7 +96,7 @@ const { judgeAnswer, partialAnswerPreservesCoreIntent } = require('./ai/answer-j
 const { parseEvidenceBlocks, buildQuestionEvidenceContext, escapeUntrustedEvidenceContent } = require('./ai/evidence');
 const { buildBoundedEvidencePrompt } = require('./ai/prompt-context');
 const { buildRequestMessages, buildOpenRouterMessages: formatOpenRouterMessages, isMissingQuestionPlaceholder } = require('./ai/request-messages');
-const { parseGeminiGenerationResponse, buildGeminiGenerateContentUrl } = require('./ai/gemini-response');
+const { parseGeminiGenerationResponse, buildGeminiGenerateContentUrl, buildGeminiValidatorGenerationConfig } = require('./ai/gemini-response');
 
 // Exact source spans help the validator quote evidence accurately. These are
 // hints only: local code still verifies the quote and semantic support.
@@ -1687,19 +1687,7 @@ async function walidujOdpowiedzGeminiModel(model, persona, pytanie, odpowiedz, d
         body: JSON.stringify({
           systemInstruction: { parts: [{ text: system }] },
           contents: [{ role: 'user', parts: [{ text: user }] }],
-          generationConfig: {
-            maxOutputTokens: 1400,
-            // Gemini v1beta TextResponseFormat.MimeType jest polem enum; wymaga
-            // wartości w formacie UPPER_SNAKE_CASE: "APPLICATION_JSON" zamiast
-            // "application/json". Mała litera powoduje HTTP 400:
-            // Invalid value at 'generation_config.response_format.text.mime_type'
-            responseFormat: { text: { mimeType: 'APPLICATION_JSON', schema: GEMINI_VALIDATOR_JSON_SCHEMA } },
-            ...(model === 'gemini-3.8-flash'
-              ? { thinkingConfig: { thinkingLevel: 'low' } }
-              : model === 'gemini-3.5-flash-lite'
-                ? { thinkingConfig: { thinkingLevel: 'minimal' } }
-                : {}),
-          },
+          generationConfig: buildGeminiValidatorGenerationConfig(model, GEMINI_VALIDATOR_JSON_SCHEMA),
         }), signal: controller.signal,
       });
       const data = await response.json().catch(() => ({}));

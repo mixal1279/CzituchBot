@@ -30,16 +30,18 @@ test('Gemini validator and generation fallbacks use documented GenerateContent f
   assert.match(source, /systemInstruction:\s*\{\s*parts:/s);
   assert.equal((source.match(/systemInstruction:\s*\{\s*parts:\s*\[\{\s*text:\s*overrideSystemPrompt\s*\}\]\s*\}/g) || []).length, 2, 'both Gemini generation fallbacks must send the system instruction');
   assert.doesNotMatch(source, /system_instruction:/);
-  // Gemini v1beta TextResponseFormat.MimeType jest polem enum (UPPER_SNAKE_CASE)
-  assert.match(source, /responseFormat:\s*\{\s*text:\s*\{\s*mimeType:\s*'APPLICATION_JSON',\s*schema:\s*GEMINI_VALIDATOR_JSON_SCHEMA/s);
-  assert.doesNotMatch(source, /responseMimeType:\s*'application\/json'/);
-  assert.doesNotMatch(source, /responseSchema:\s*GEMINI_VALIDATOR_JSON_SCHEMA/);
-  assert.doesNotMatch(source, /mimeType:\s*'application\/json'/);  // enum wymaga wielkich liter
+  assert.match(source, /generationConfig:\s*buildGeminiValidatorGenerationConfig\(model, GEMINI_VALIDATOR_JSON_SCHEMA\)/);
+  assert.doesNotMatch(source, /responseFormat:\s*\{\s*text:/);
+  assert.match(read('ai/gemini-response.js'), /responseMimeType:\s*'application\/json'/);
+  assert.match(read('ai/gemini-response.js'), /responseSchema:\s*normalizeGeminiRestSchema\(schema\)/);
   assert.doesNotMatch(source, /generationConfig:\s*\{\s*temperature:/, 'Gemini 3.x GenerateContent requests must omit deprecated sampling parameters');
   const webRetrieval = read('ai/webRetrieval.js');
   assert.doesNotMatch(webRetrieval, /generationConfig:\s*\{\s*temperature:/, 'Gemini web retrieval must omit deprecated sampling parameters');
-  assert.match(source, /model === 'gemini-3\.8-flash'[\s\S]{0,100}\{ thinkingLevel: 'low' \}/);
-  assert.match(source, /model === 'gemini-3\.5-flash-lite'[\s\S]{0,120}\{ thinkingLevel: 'minimal' \}/);
+  const geminiConfig = read('ai/gemini-response.js');
+  const flash38 = geminiConfig.indexOf("model === 'gemini-3.8-flash'");
+  const flash35 = geminiConfig.indexOf("model === 'gemini-3.5-flash-lite'");
+  assert.ok(flash38 >= 0 && geminiConfig.indexOf("thinkingLevel: 'low'", flash38) > flash38);
+  assert.ok(flash35 >= 0 && geminiConfig.indexOf("thinkingLevel: 'minimal'", flash35) > flash35);
 });
 
 test('repair budget matches the provider timeout and logs never expose generated text', () => {

@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { parseGeminiGenerationResponse, buildGeminiGenerateContentUrl } = require('../ai/gemini-response');
+const { parseGeminiGenerationResponse, buildGeminiGenerateContentUrl, buildGeminiValidatorGenerationConfig, normalizeGeminiRestSchema } = require('../ai/gemini-response');
 
 test('Gemini generation: brak kandydatów zachowuje promptFeedback i safetyRatings', () => {
   const result = parseGeminiGenerationResponse({
@@ -130,4 +130,17 @@ test('hard numeric tokens normalize thousands separators without changing decima
   assert.equal(normalizujTokenLiczbowy('50 000 lat'), '50000 lat');
   assert.equal(normalizujTokenLiczbowy('2,5'), '2.5');
   assert.equal(normalizujTokenLiczbowy('2.50'), '2.5');
+});
+
+
+test('Gemini validator config uses REST responseMimeType and recursively uppercases schema types', () => {
+  const schema = { type: 'object', properties: { claims: { type: 'array', items: { type: 'object' } } } };
+  const config = buildGeminiValidatorGenerationConfig('gemini-3.8-flash', schema);
+  assert.equal(config.responseMimeType, 'application/json');
+  assert.equal(config.responseSchema.type, 'OBJECT');
+  assert.equal(config.responseSchema.properties.claims.type, 'ARRAY');
+  assert.equal(config.responseSchema.properties.claims.items.type, 'OBJECT');
+  assert.equal(config.thinkingConfig.thinkingLevel, 'low');
+  assert.equal(schema.type, 'object', 'normalization must not mutate caller schema');
+  assert.deepEqual(normalizeGeminiRestSchema(['string', { type: 'string' }]), ['string', { type: 'STRING' }]);
 });
