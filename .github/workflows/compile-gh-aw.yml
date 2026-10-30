@@ -1,0 +1,66 @@
+name: Compile GitHub Agentic Workflows
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/ai-benchmark-doctor.md"
+      - ".github/workflows/ai-benchmark-doctor.lock.yml"
+      - ".github/workflows/compile-gh-aw.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/ai-benchmark-doctor.md"
+      - ".github/workflows/ai-benchmark-doctor.lock.yml"
+      - ".github/workflows/compile-gh-aw.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: compile-gh-aw-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  compile:
+    name: Compile and verify gh-aw workflow
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out the tested commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up GitHub CLI and gh-aw
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh --version
+          gh extension install github/gh-aw --pin v0.93.2
+
+      - name: Compile and validate agentic workflow
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh aw version
+          gh aw compile .github/workflows/ai-benchmark-doctor.md
+
+      - name: Upload generated lock file
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ai-benchmark-doctor-lock
+          path: .github/workflows/ai-benchmark-doctor.lock.yml
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Verify committed lock file is up to date
+        run: |
+          git ls-files --error-unmatch .github/workflows/ai-benchmark-doctor.lock.yml
+          git diff --exit-code HEAD -- .github/workflows/ai-benchmark-doctor.lock.yml
