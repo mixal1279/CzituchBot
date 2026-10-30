@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const { classifyAIRequest } = require('../ai/router');
 const { planAIRequest, buildRetrievalQueries } = require('../ai/planner');
 const { okreslKategorieAI } = require('../ai/policy');
-const { dodajGameFAQsDomenę } = require('../ai/gameplay');
+const { dodajGameFAQsDomenę, czyPytanieOGameplay } = require('../ai/gameplay');
 
 const policy = (q, recipe) => {
   if (/czy warto|co myślisz|co sadzisz|opinia/i.test(q)) return 'conversation';
@@ -82,10 +82,10 @@ for (const [question, expectedIntent, expectedEntity, expectedType] of cases) {
 }
 
 const selectedDomains = dodajGameFAQsDomenę(['youtube.com', 'example.com']);
-// Compare normalized host entries exactly; these are not URL substring checks.
-assert.equal(selectedDomains.some(domain => domain === 'gamefaqs.gamespot.com'), false);
-assert.equal(selectedDomains.some(domain => domain === 'ign.com'), true);
-assert.ok(selectedDomains.includes('gry-online.pl'));
+assert.deepEqual(selectedDomains, ['youtube.com', 'example.com']);
+assert.deepEqual(dodajGameFAQsDomenę(['gamefaqs.gamespot.com']), ['gamefaqs.gamespot.com']);
+assert.equal(czyPytanieOGameplay('Jak odblokować ten sekret?', ['unrelated.fandom.com']), false);
+assert.equal(czyPytanieOGameplay('Jak odblokować ten sekret?', ['gamelore.fandom.com']), true);
 
 for (const question of [
   'Ile trwa fight w Elden Ring?',

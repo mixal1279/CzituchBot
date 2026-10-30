@@ -47,6 +47,23 @@ test('lore evidence is isolated to the requested game and character', () => {
   assert.equal(assessEvidence([foreign, matching], 'Kim jest Dragonborn?', routing).sources.length, 1);
 });
 
+test('a character-scoped lore request rejects sources that mention only the game', () => {
+  const routing = {
+    is_lore: true,
+    is_gameplay: false,
+    entity: 'Dragonborn',
+    entity_type: 'character',
+    game: 'Skyrim',
+    resolved_entity: { type: 'character', name: 'Dragonborn', game: 'Skyrim' },
+  };
+  const gameOnly = {
+    title: 'Skyrim overview',
+    url: 'https://example.com/skyrim',
+    content: 'Skyrim is a province in Tamriel with mountains, holds, and many quests.',
+  };
+  assert.equal(sourceMatchesRequestContext(gameOnly, routing), false);
+});
+
 test('Tavily time ranges normalize legacy prefixes and reject unsupported values', () => {
   assert.equal(normalizujZakresTavily('past_day'), 'day');
   assert.equal(normalizujZakresTavily('past_week'), 'week');

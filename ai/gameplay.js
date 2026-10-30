@@ -11,7 +11,7 @@ function czyPytanieOGameplay(pytanie, domeny = null) {
   const p = String(pytanie || '').trim();
   if (!p || !GAMEPLAY_INTENT_RE.test(p)) return false;
   const resolved = resolveGameEntity(p);
-  const gamingDomain = Array.isArray(domeny) && domeny.some(d => /(?:gamefaqs\.gamespot\.com|gamelore\.fandom\.com|minecraft\.wiki|fandom\.com|ign\.com|gamespot\.com|pcgamer\.com|eurogamer|thewitcher\.com|rockstargames\.com|bandainamco|playstation\.com|naughtydog\.com|baldursgate3\.game|larian\.com|fortnite\.gg)/i.test(String(d)));
+  const gamingDomain = Array.isArray(domeny) && domeny.some(d => /(?:gamefaqs\.gamespot\.com|gamelore\.fandom\.com|minecraft\.wiki|ign\.com|gamespot\.com|pcgamer\.com|eurogamer|thewitcher\.com|rockstargames\.com|bandainamco|playstation\.com|naughtydog\.com|baldursgate3\.game|larian\.com|fortnite\.gg)/i.test(String(d)));
   return GAME_CONTEXT_RE.test(p) || gamingDomain || Boolean(resolved);
 }
 
@@ -30,15 +30,10 @@ function extractHostname(value) {
 }
 
 function dodajGameFAQsDomenę(domeny) {
-  const lista = Array.isArray(domeny) ? [...domeny] : [];
-  const preferredGuides = ['ign.com', 'gamespot.com', 'polygon.com', 'rockpapershotgun.com', 'gry-online.pl'];
-  const withoutForumSource = lista.filter(domain => extractHostname(domain) !== GAMEFAQS_DOMAIN);
-  for (const domain of preferredGuides) {
-    if (!withoutForumSource.some(item => extractHostname(item) === domain)) withoutForumSource.unshift(domain);
-  }
-  // GameFAQs Boards/Q&A są pełne zgłoszeń „can't unlock / doesn't work”;
-  // preferujemy strony poradnikowe zamiast wymuszać ten host dla każdego pytania.
-  return withoutForumSource;
+  // Preserve the caller's explicit domain preferences. Do not inject a global
+  // union of guide sites into every gameplay query; retrieval ranking handles
+  // fallback sources after the first search.
+  return Array.isArray(domeny) ? [...domeny] : [];
 }
 
 function wytnijAtrybucjeGameFAQs(tekst) {

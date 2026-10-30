@@ -17,7 +17,12 @@ const benchmark = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'test', 
 const defaultLimit = Math.min(10, benchmark.cases.length);
 const requestedLimit = Number(process.env.AI_BENCHMARK_LIMIT);
 const limit = Math.max(1, Math.min(benchmark.cases.length, Number.isFinite(requestedLimit) && requestedLimit > 0 ? requestedLimit : defaultLimit));
-const delayMs = Math.max(0, Number(process.env.AI_BENCHMARK_DELAY_MS) || 8000);
+function resolveDelayMs(value, defaultMs = 8000) {
+  if (value == null || String(value).trim() === '') return defaultMs;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? Math.max(0, parsed) : defaultMs;
+}
+const delayMs = resolveDelayMs(process.env.AI_BENCHMARK_DELAY_MS);
 function stratifiedCases(all, requested, seed = 0) {
   if (requested >= all.length) return [...all];
   const groups = new Map();
@@ -624,7 +629,7 @@ async function run() {
   }
 }
 
-module.exports = {
+module.exports = { resolveDelayMs,
   wybierzOdrzuconaOdpowiedz, normalizeFactText, scoreGoldenFacts, stratifiedCases, buildQuestionForBot, isFailureText, evaluateBenchmarkAnswer, isFalseReject, extractClaimSupportAudit, classifyBenchmarkOutcome, buildBenchmarkDiagnostics, formatBenchmarkFailureDiagnostics, writeBenchmarkReport, writeStdoutAndWait, run };
 
 if (require.main === module) {

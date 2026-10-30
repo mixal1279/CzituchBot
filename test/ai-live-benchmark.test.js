@@ -8,6 +8,13 @@ const path = require('node:path');
 const { normalizeFactText, scoreGoldenFacts } = require('../ai/benchmark-scorer');
 const { buildQuestionForBot, evaluateBenchmarkAnswer, classifyBenchmarkOutcome, buildBenchmarkDiagnostics, formatBenchmarkFailureDiagnostics, stratifiedCases, isFailureText, writeBenchmarkReport, writeStdoutAndWait, wybierzOdrzuconaOdpowiedz, isFalseReject } = require('../scripts/ai-live-benchmark');
 
+test('live benchmark delay can be explicitly disabled with zero', () => {
+  const { resolveDelayMs } = require('../scripts/ai-live-benchmark');
+  assert.equal(resolveDelayMs('0'), 0);
+  assert.equal(resolveDelayMs('', 8000), 8000);
+  assert.equal(resolveDelayMs('not-a-number', 8000), 8000);
+});
+
 test('benchmark factual normalization preserves words with Polish diacritics and collapses whitespace', () => {
   assert.equal(normalizeFactText('Święty Łukasz  —  przejął kontrolę.'), 'swiety lukasz przejal kontrole');
 });

@@ -89,11 +89,11 @@ function classifyAuthority(source = {}) {
     'ubisoft.com','bethesda.net','starwars.com','openai.com','discord.com'
   ];
   const specialized = [
-    'minecraft.wiki','fandom.com',
+    'minecraft.wiki','gamelore.fandom.com',
     'steamdb.info','howlongtobeat.com','pcgamingwiki.com'
   ];
   const reference = ['wikipedia.org','imdb.com','mobygames.com'];
-  const guide = ['ign.com','gamespot.com','pcgamer.com','gamerant.com','polygon.com','gry-online.pl','eurogamer.net','eurogamer.pl','fandom.com'];
+  const guide = ['ign.com','gamespot.com','pcgamer.com','gamerant.com','polygon.com','gry-online.pl','eurogamer.net','eurogamer.pl'];
 
   const inList = list => list.some(d => host === d || host.endsWith('.' + d));
   if (inList(official)) return 'official';
@@ -195,18 +195,31 @@ function scoreSource(source, query, options = {}) {
 function sourceMatchesRequestContext(source = {}, routing = {}) {
   if (!routing?.is_lore && !routing?.is_gameplay) return true;
   const resolved = routing.resolved_entity || {};
-  const candidates = [];
-  const addAliases = (entries, name) => {
-    const entry = entries.find(item => item.name === name);
-    if (entry) candidates.push(entry.name, ...entry.aliases);
-  };
-  if (resolved.type === 'character' || routing.entity) {
-    addAliases(CHARACTER_ALIASES, resolved.name || routing.entity);
-  }
-  addAliases(GAME_ALIASES, resolved.game || routing.game);
-  if (!candidates.length) return true;
   const haystack = [source.title, source.content, source.url].filter(Boolean).join(' ');
-  return candidates.some(alias => containsAlias(haystack, alias));
+  const aliasesFor = (entries, name) => {
+    const wanted = normalize(name);
+    if (!wanted) return [];
+    const entry = entries.find(item =>
+      normalize(item.name) === wanted || item.aliases.some(alias => normalize(alias) === wanted)
+    );
+    return entry ? [entry.name, ...entry.aliases] : [String(name).trim()];
+  };
+
+  // A source about the right game is not sufficient for a request about a
+  // specific character. Require the character (or one of its aliases) itself.
+  const characterScoped = resolved.type === 'character' || routing.entity_type === 'character';
+  const characterName = resolved.name || (characterScoped ? routing.entity : '');
+  if (characterScoped && characterName) {
+    const characterAliases = aliasesFor(CHARACTER_ALIASES, characterName);
+    return characterAliases.some(alias => containsAlias(haystack, alias));
+  }
+
+  const gameName = resolved.game || routing.game;
+  if (gameName) {
+    const gameAliases = aliasesFor(GAME_ALIASES, gameName);
+    return gameAliases.some(alias => containsAlias(haystack, alias));
+  }
+  return true;
 }
 
 function similarity(a, b) {
