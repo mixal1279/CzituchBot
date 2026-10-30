@@ -295,3 +295,21 @@ test('retrieval selection prioritizes intent-specific evidence over generic prof
   assert.ok(!selected.includes(genericLoreQuery));
 });
 
+
+
+test('variable encounter duration satisfies a quantity requirement without inventing a number', () => {
+  const plan = buildAnswerPlan('Ile trwa walka z Malenią?', {
+    intent: 'web_fact', is_lore: true, entity: 'Malenia', game: 'Elden Ring',
+  });
+  assert.equal(plan.quantityMayBeVariable, true);
+  const answer = 'Walka z Malenią w Elden Ring nie ma stałego czasu; zależy od umiejętności gracza, buildu i strategii.';
+  const completeness = assessAnswerCompleteness(answer, plan);
+  assert.equal(completeness.ok, true, JSON.stringify(completeness));
+  assert.equal(judgeAnswer(answer, plan).status, 'accepted');
+});
+
+test('variable-duration exception is not enabled for ordinary quantity questions', () => {
+  const plan = buildAnswerPlan('Ile kosztuje gra?', { intent: 'web_fact', entity: 'Gra' });
+  assert.equal(plan.quantityMayBeVariable, false);
+  assert.equal(assessAnswerCompleteness('Cena gry zależy od sklepu.', plan).ok, false);
+});
