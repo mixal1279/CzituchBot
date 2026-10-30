@@ -11,7 +11,7 @@ const SLOT_PATTERNS = Object.freeze({
   comparison: /\b(czym\s+(?:się\s+)?różni|czym\s+różni\s+się|różnica|porównaj|lepszy|gorszy|vs\.?|versus|difference|compare)\b/i,
   steps: /\b(jak zrobić|jak wykonać|jak zdobyć|jak przejść|jak ukończyć|jak ukonczyc|jak pokonać|jak znaleźć|jak znalezc|jak odblokować|jak odblokowac|jak aktywować|jak aktywowac|jak naprawić|jak naprawic|jak użyć|jak uzyc|instrukcja|krok po kroku|how to|walkthrough)\b/i,
   outcome: /\b(co\s+(?:się\s+)?stało(?:\s+się)?|co dalej|jaki był skutek|konsekw\p{L}*|what happened|what happened next)\b/iu,
-  relationship: /(?<![\p{L}\p{N}_])(?:relacj\p{L}*|związk\p{L}*|przyjaź\p{L}*|wróg\p{L}*|sojusz\p{L}*|relationship\p{L}*|friend(?:s|ship)?|enemies?|alliance\p{L}*)(?![\p{L}\p{N}_])/iu,
+  relationship: /(?<![\p{L}\p{N}_])(?:relacj\p{L}*|związk\p{L}*|przyjaź\p{L}*|wróg\p{L}*|wrog\p{L}*|sojusz\p{L}*|relationship\p{L}*|friend(?:s|ship)?|enem(?:y|ies)|alliance\p{L}*)(?![\p{L}\p{N}_])/iu,
 });
 const INTENT_REQUIREMENTS = Object.freeze({
   lore: ['entity_context'],
@@ -137,7 +137,7 @@ function extractAnswerSignals(answer) {
   const whyExplanation = causalExplanation || motiveExplanation;
   const procedural = /\b(nalezy|trzeba|mozna|sposob|krok|najpierw|potem|nastepnie|first|then|step|wystarczy|uzyj|uzywaj|wykorzystaj|skorzystaj|wybierz|zdobadz|znajdz|idz|wejdz|pokonaj|unikaj|zabij|atakuj|zbuduj|stworz|wez|kup|otworz|podejdz|poczekaj|wyposaz|rzuc|cast|use|attack|avoid|equip)\b/.exec(text)?.[0] || '';
   const mechanism = /\b(dziala|funkcjonuje|polega|mechanizm|umozliw\w*|pozwala)\b/.exec(text)?.[0] || '';
-  const relationshipMarker = /(?<![\p{L}])(?:relacj\p{L}*|zwiazk\p{L}*|przyjac\p{L}*|przyjazn\p{L}*|towarzysz\p{L}*|romans\p{L}*|wrog\p{L}*|sojusz\p{L}*|zdrad\p{L}*|partner\p{L}*|relationship\p{L}*|friends?|friendship|enemies?|alliances?)(?![\p{L}])/u.exec(text)?.[0] || '';
+  const relationshipMarker = /(?<![\p{L}])(?:relacj\p{L}*|zwiazk\p{L}*|przyjac\p{L}*|przyjazn\p{L}*|towarzysz\p{L}*|romans\p{L}*|wrog\p{L}*|sojusz\p{L}*|zdrad\p{L}*|partner\p{L}*|relationship\p{L}*|friends?|friendship|enem(?:y|ies)|alliances?)(?![\p{L}])/u.exec(text)?.[0] || '';
 
   const whenUnconfirmed = /\b(?:zrodla?\w*|materialy|dane|sources?|evidence)\b.{0,120}\bnie\s+(?:podaj\w*|precyzuj\w*|okresl\w*|wskazuj\w*|potwierdz\w*|zawier\w*)\b.{0,80}\b(?:dat\w*|moment\w*|czas\w*|rok\w*)\b/.test(text);
 
@@ -164,7 +164,7 @@ function extractAnswerSignals(answer) {
     outcome: /\b(wynik\w*|skutek|skutk\w*|konsekwenc\w*|ostatecznie|pozniej|potem|nastepnie|umar\w*|zgin\w*|gin\w*|zabij\w*|smier\w*|zostal\w*|zostaj\w*)\b/.test(text)
       && text.split(/\s+/).length >= 4,
     relationship: Boolean(relationshipMarker)
-      && /(?<![\p{L}])(?:wspolprac\p{L}*|konflikt\p{L}*|przyjazn\p{L}*|zauf\p{L}*|zdrad\p{L}*|sojusz\p{L}*|wrog\p{L}*|partner\p{L}*|towarzysz\p{L}*|romans\p{L}*|lacz\p{L}*|dziel\p{L}*|relationship\p{L}*|friends?|friendship|enemies?|alliances?)(?![\p{L}])/u.test(text),
+      && /(?<![\p{L}])(?:wspolprac\p{L}*|konflikt\p{L}*|przyjazn\p{L}*|zauf\p{L}*|zdrad\p{L}*|sojusz\p{L}*|wrog\p{L}*|partner\p{L}*|towarzysz\p{L}*|romans\p{L}*|lacz\p{L}*|dziel\p{L}*|relationship\p{L}*|friends?|friendship|enem(?:y|ies)|alliances?)(?![\p{L}])/u.test(text),
     entity_context: text.length > 0,
     // Dla slotu „dlaczego” jawnie podany motyw jest wyjaśnieniem, ale pozostaje oznaczony osobno.
     causal_explanation: causalExplanation,

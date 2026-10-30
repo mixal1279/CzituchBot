@@ -344,3 +344,12 @@ test('relationship detection does not treat friendly as a relationship term', ()
   assert.equal(extractAnswerSignals('The character is friendly to strangers.').relationship, false);
   assert.equal(extractAnswerSignals('Geralt is a friend of Yennefer.').relationship, true);
 });
+
+
+test('relationship slots recognize Polish wrogowie and English enemy forms', () => {
+  const polish = buildAnswerPlan('Jak Geralt radzi sobie z wrogami?', { intent: 'web_fact', is_lore: true });
+  assert.ok(polish.requirements.some(item => item.id === 'relationship'));
+  assert.equal(extractAnswerSignals('Geralt considers the Wild Hunt an enemy.').relationship, true);
+  assert.equal(extractAnswerSignals('Wrogowie Geralta atakują go w lesie.').relationship, true);
+  assert.equal(extractAnswerSignals('The friendly NPC offers a helpful service.').relationship, false);
+});
