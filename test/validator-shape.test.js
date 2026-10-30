@@ -14,7 +14,7 @@ test('validator shape repair unwraps a single-key claim wrapper without inventin
   assert.equal(result.wynik.supported, true);
   assert.equal(result.wynik.claims[0].claim, 'Portal 2 was released in 2011.');
   assert.equal(result.wynik.confidence, 0.9);
-  assert.deepEqual(result.poprawki, ['supported_array_as_claims', 'confidence_text_to_number']);
+  assert.deepEqual(result.poprawki, ['supported_array_as_claims', 'claim_wrapper_unwrapped', 'confidence_text_to_number']);
   assert.equal(input.supported.length, 1, 'the original response must not be mutated');
   assert.equal(input.claims, undefined, 'no claim is added to the original response');
 });
