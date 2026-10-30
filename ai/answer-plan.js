@@ -11,7 +11,7 @@ const SLOT_PATTERNS = Object.freeze({
   comparison: /\b(czym\s+(?:się\s+)?różni|czym\s+różni\s+się|różnica|porównaj|lepszy|gorszy|vs\.?|versus|difference|compare)\b/i,
   steps: /\b(jak zrobić|jak wykonać|jak zdobyć|jak przejść|jak ukończyć|jak ukonczyc|jak pokonać|jak znaleźć|jak znalezc|jak odblokować|jak odblokowac|jak aktywować|jak aktywowac|jak naprawić|jak naprawic|jak użyć|jak uzyc|instrukcja|krok po kroku|how to|walkthrough)\b/i,
   outcome: /\b(co\s+(?:się\s+)?stało(?:\s+się)?|co dalej|jaki był skutek|konsekw\p{L}*|what happened|what happened next)\b/iu,
-  relationship: /(?:relacj|związk|przyjaź|wróg|sojusz|relationship|friend|enemy|alliance)/iu,
+  relationship: /(?:^|[^\\p{L}\\p{N}])(?:relacj\\p{L}*|związk\\p{L}*|przyjaź\\p{L}*|wróg|wrogowie|sojusz\\p{L}*|relationship\\p{L}*|friends?|friendship|enemy|enemies|alliance\\p{L}*)(?=$|[^\\p{L}\\p{N}])/iu,
 });
 const INTENT_REQUIREMENTS = Object.freeze({
   lore: ['entity_context'],
