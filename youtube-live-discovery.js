@@ -1,14 +1,11 @@
 'use strict';
 
-const LIVE_BADGE_STYLES = new Set([
-  'BADGE_STYLE_TYPE_LIVE_NOW',
-]);
+const LIVE_BADGE_STYLES = new Set(['BADGE_STYLE_TYPE_LIVE_NOW']);
 
 function parseAssignedJson(html, variableName) {
   const source = String(html || '');
-  const marker = new RegExp(String.raw\`(?:var\\s+|let\\s+|const\\s+|window\\s*\\[\\s*["']\${variableName}["']\\s*\\]\\s*=\\s*)\${variableName}\\s*=\\s*\`, 'g');
-  const directMarker = new RegExp(String.raw\`\${variableName}\\s*=\\s*\`, 'g');
-  let match = marker.exec(source) || directMarker.exec(source);
+  const marker = new RegExp(variableName + '\\s*=\\s*');
+  const match = marker.exec(source);
   if (!match) return null;
 
   const start = source.indexOf('{', match.index + match[0].length);
@@ -44,7 +41,7 @@ function hasLiveBadge(renderer) {
 
   const badges = Array.isArray(renderer.badges) ? renderer.badges : [];
   for (const badge of badges) {
-    const metadata = badge?.metadataBadgeRenderer;
+    const metadata = badge && badge.metadataBadgeRenderer;
     if (metadata && (
       LIVE_BADGE_STYLES.has(metadata.style) ||
       ['LIVE', 'LIVE NOW'].includes(String(metadata.label || '').toUpperCase())
@@ -53,7 +50,8 @@ function hasLiveBadge(renderer) {
 
   const overlays = Array.isArray(renderer.thumbnailOverlays) ? renderer.thumbnailOverlays : [];
   return overlays.some(item =>
-    item?.thumbnailOverlayTimeStatusRenderer?.style === 'LIVE'
+    item && item.thumbnailOverlayTimeStatusRenderer &&
+    item.thumbnailOverlayTimeStatusRenderer.style === 'LIVE'
   );
 }
 
@@ -67,11 +65,9 @@ function findLiveVideoId(data) {
     if (!current || typeof current !== 'object') continue;
     visited += 1;
 
-    if (typeof current.videoId === 'string' && /^[a-zA-Z0-9_-]{11}$/.test(current.videoId) && hasLiveBadge(current)) {
-      return current.videoId;
-    }
-
-    if (typeof current.videoId === 'string' && /^[a-zA-Z0-9_-]{11}$/.test(current.videoId) && current.isLiveNow === true) {
+    if (typeof current.videoId === 'string' &&
+        /^[a-zA-Z0-9_-]{11}$/.test(current.videoId) &&
+        hasLiveBadge(current)) {
       return current.videoId;
     }
 
@@ -85,7 +81,7 @@ function findLiveVideoId(data) {
 function videoIdFromUrl(value) {
   try {
     const url = new URL(value);
-    if (!/(^|\\.)youtube\\.com$/i.test(url.hostname)) return null;
+    if (!/(^|\.)youtube\.com$/i.test(url.hostname)) return null;
     if (url.pathname === '/watch') {
       const id = url.searchParams.get('v');
       return id && /^[a-zA-Z0-9_-]{11}$/.test(id) ? id : null;
@@ -94,13 +90,17 @@ function videoIdFromUrl(value) {
   return null;
 }
 
-function extractLiveVideoId(html, finalUrl = '') {
+function extractLiveVideoId(html, finalUrl) {
   const redirectedVideoId = videoIdFromUrl(finalUrl);
   if (redirectedVideoId) return redirectedVideoId;
 
   const playerResponse = parseAssignedJson(html, 'ytInitialPlayerResponse');
-  const playerLive = playerResponse?.microformat?.playerMicroformatRenderer?.liveBroadcastDetails?.isLiveNow === true;
-  const playerVideoId = playerResponse?.videoDetails?.videoId;
+  const playerLive = playerResponse &&
+    playerResponse.microformat &&
+    playerResponse.microformat.playerMicroformatRenderer &&
+    playerResponse.microformat.playerMicroformatRenderer.liveBroadcastDetails &&
+    playerResponse.microformat.playerMicroformatRenderer.liveBroadcastDetails.isLiveNow === true;
+  const playerVideoId = playerResponse && playerResponse.videoDetails && playerResponse.videoDetails.videoId;
   if (playerLive && typeof playerVideoId === 'string' && /^[a-zA-Z0-9_-]{11}$/.test(playerVideoId)) {
     return playerVideoId;
   }
@@ -109,17 +109,18 @@ function extractLiveVideoId(html, finalUrl = '') {
   return findLiveVideoId(initialData);
 }
 
-async function discoverLiveVideoId(channelId, options = {}) {
+async function discoverLiveVideoId(channelId, options) {
+  const opts = options || {};
   if (typeof channelId !== 'string' || !/^UC[a-zA-Z0-9_-]{20,}$/.test(channelId)) {
     throw new TypeError('Nieprawidłowy YouTube Channel ID.');
   }
-  const fetchImpl = options.fetchImpl || globalThis.fetch;
+  const fetchImpl = opts.fetchImpl || globalThis.fetch;
   if (typeof fetchImpl !== 'function') throw new Error('Środowisko Node.js nie udostępnia fetch().');
 
-  const timeoutMs = Number.isFinite(options.timeoutMs) ? Math.max(1000, options.timeoutMs) : 12000;
+  const timeoutMs = Number.isFinite(opts.timeoutMs) ? Math.max(1000, opts.timeoutMs) : 12000;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
-  const url = \`https://www.youtube.com/channel/\${encodeURIComponent(channelId)}/live?hl=en\`;
+  const url = 'https://www.youtube.com/channel/' + encodeURIComponent(channelId) + '/live?hl=en';
 
   try {
     const response = await fetchImpl(url, {
@@ -132,11 +133,13 @@ async function discoverLiveVideoId(channelId, options = {}) {
         'Accept-Language': 'en-US,en;q=0.9,pl;q=0.8',
       },
     });
-    if (!response.ok) throw new Error(\`Strona YouTube /live zwróciła HTTP \${response.status}.\`);
+    if (!response.ok) throw new Error('Strona YouTube /live zwróciła HTTP ' + response.status + '.');
     const html = await response.text();
     return extractLiveVideoId(html, response.url || url);
   } catch (error) {
-    if (error?.name === 'AbortError') throw new Error(\`Timeout \${timeoutMs} ms podczas pobierania strony YouTube /live.\`);
+    if (error && error.name === 'AbortError') {
+      throw new Error('Timeout ' + timeoutMs + ' ms podczas pobierania strony YouTube /live.');
+    }
     throw error;
   } finally {
     clearTimeout(timeout);
