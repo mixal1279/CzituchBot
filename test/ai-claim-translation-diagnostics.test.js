@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 
-const { dopasowanieSemantyczne, czyOgraniczenieDowodowe, spojnoscTlumaczeniaClaimu, czyNazwaWlasnaWystepuje, wyodrebnijNazwyWlasne } = require('../ai/claimValidation');
+const { dopasowanieSemantyczne, czyOgraniczenieDowodowe, spojnoscTlumaczeniaClaimu, zgodnoscStrukturalna, czyNazwaWlasnaWystepuje, wyodrebnijNazwyWlasne } = require('../ai/claimValidation');
 
 test('brak tłumaczenia claimu jest wskazywany wprost, a nie jako brak nazw własnych', () => {
   const withoutTranslation = dopasowanieSemantyczne(
@@ -91,4 +91,19 @@ test('Polish recruitment outcome matches a verbatim English source quote', () =>
     { evidenceQuote: quote },
   );
   assert.equal(result.ok, true, JSON.stringify(result));
+});
+
+test('explicit offer-to-join outcome satisfies the causal evidence gate', () => {
+  const quote = 'Taking him up on this offer will see him officially join your party.';
+  const result = zgodnoscStrukturalna(quote, 'Dzięki temu zostaje zrekrutowany jako towarzysz.');
+  assert.equal(result.ok, true, JSON.stringify(result));
+});
+
+test('a source saying a shulker guards elytra does not prove it must be killed', () => {
+  const result = spojnoscTlumaczeniaClaimu(
+    'Elytrę strzeże shulker, którego trzeba pokonać, aby móc ją zabrać.',
+    'A shulker guards the elytra and loot chests.',
+    { evidenceQuote: 'A shulker guards the elytra and loot chests.' },
+  );
+  assert.equal(result.ok, false, JSON.stringify(result));
 });
