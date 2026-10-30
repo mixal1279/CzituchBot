@@ -2536,7 +2536,8 @@ async function walidujOdpowiedzAIBezCache(persona, pytanie, odpowiedz, dane, his
         const remainingBefore = requestState?.remainingMs?.() ?? null;
         requestState?.recordTiming?.('validator_provider_start', { provider: 'groq', model: AI_MODELS.validator, remainingBefore });
         const groqResult = await walidujOdpowiedzGroq(persona, pytanie, odpowiedz, dane, requestId, requestState, requestMeta);
-        recordValidatorTransportResult('groq', groqResult, remainingBefore, groqTimeoutMs, validatorStartedAt, groqResult);
+        recordValidatorTransportResult('groq', groqResult, requestId);
+        recordValidatorMetric('groq', groqResult.model || AI_MODELS.validator, remainingBefore, groqTimeoutMs, validatorStartedAt, groqResult);
         const validatorElapsedMs = Date.now() - validatorStartedAt;
         const remainingAfter = requestState?.remainingMs?.() ?? null;
         requestState?.recordTiming?.('validator_provider_end', { provider: 'groq', model: groqResult.model || AI_MODELS.validator, status: groqResult.status, validatorElapsedMs, remainingBefore, remainingAfter, reason: String(groqResult.reason || '').slice(0, 180) });
