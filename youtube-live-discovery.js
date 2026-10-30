@@ -42,10 +42,7 @@ function hasLiveBadge(renderer) {
   const badges = Array.isArray(renderer.badges) ? renderer.badges : [];
   for (const badge of badges) {
     const metadata = badge && badge.metadataBadgeRenderer;
-    if (metadata && (
-      LIVE_BADGE_STYLES.has(metadata.style) ||
-      ['LIVE', 'LIVE NOW'].includes(String(metadata.label || '').toUpperCase())
-    )) return true;
+    if (metadata && LIVE_BADGE_STYLES.has(metadata.style)) return true;
   }
 
   const overlays = Array.isArray(renderer.thumbnailOverlays) ? renderer.thumbnailOverlays : [];
