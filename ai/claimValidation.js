@@ -105,7 +105,7 @@ const KNOWN_ENTITY_ALIAS_PATTERNS = [
   { canonical: "alduin's wall", pattern: /\b(?:alduin['’]?s|alduins)\s+wall\b/iu },
   { canonical: 'dragonrend', pattern: /\bdragonrend\b/iu },
   // Minecraft: „End”, „Endu” i „Endzie” oznaczają tę samą krainę.
-  { canonical: 'the end', pattern: /\b(?:the\s+end|end(?:u|em|zie|a)|krawedz(?:i|ia|ie|iach|iom|mi)?)\b/iu },
+  { canonical: 'the end', pattern: /\b(?:the\s+end|end(?:u|em|zie|a)|kraw[eę]dz(?:i|ia|ie|iach|iom|mi)?)\b/iu },
   // Minecraft: polska nazwa Ender Pearl to „perła Kresu” (Kres = End); bez aliasu „Kresu” było
   // wymaganą nazwą własną, której nie ma w angielskim tłumaczeniu.
   { canonical: 'ender pearl', pattern: /\b(?:ender\s+pearls?|per[łl](?:a|y|ę|ą|e|ie|o)?\s+kresu)\b/iu },
