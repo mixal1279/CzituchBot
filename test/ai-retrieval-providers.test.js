@@ -15,7 +15,7 @@ const {
   nextFallbacks,
   classifyFailure,
 } = require('../ai/fallback');
-const { createTavilySearch, filtrujPoScore, normalizujProgScore, normalizujZakresTavily, normalizujDomenyTavily, hostnamePasujeDoDomenyTavily, sanityzujTrescZrodlaTavily, czyWymagaSecondaryRetrieval, snapshotCacheTavily, ograniczCacheTavily } = require('../ai/tavily');
+const { createTavilySearch, classifyTavilyError, filtrujPoScore, normalizujProgScore, normalizujZakresTavily, normalizujDomenyTavily, hostnamePasujeDoDomenyTavily, sanityzujTrescZrodlaTavily, czyWymagaSecondaryRetrieval, snapshotCacheTavily, ograniczCacheTavily } = require('../ai/tavily');
 const { assessEvidence, sourceMatchesRequestContext } = require('../ai/core');
 
 test('retrieval source contract is normalized', () => {
@@ -788,4 +788,58 @@ test('Tavily cache entry limit evicts oldest entries first', () => {
   const cache = new Map([['a', 1], ['b', 2], ['c', 3]]);
   ograniczCacheTavily(cache, 2);
   assert.deepEqual([...cache.keys()], ['b', 'c']);
+});
+
+
+test('Tavily quota classifier distinguishes plan and PAYG limits from unrelated HTTP 432', () => {
+  assert.equal(classifyTavilyError(new Error('Tavily HTTP 429: rate limit exceeded')), 'rate_limited');
+  assert.equal(classifyTavilyError(new Error("Tavily HTTP 432: This request exceeds your plan's set usage limit")), 'plan_limit_exceeded');
+  assert.equal(classifyTavilyError(new Error('Tavily HTTP 432: malformed request')), 'error');
+  assert.equal(classifyTavilyError(new Error('Tavily HTTP 433: pay-as-you-go usage limit exceeded')), 'payg_limit_exceeded');
+  assert.equal(classifyTavilyError(new Error('network timeout')), 'timeout');
+});
+
+test('Tavily quota cooldown skips Tavily and continues with secondary providers', async () => {
+  let tavilyCalls = 0;
+  let exaCalls = 0;
+  const fakeFetch = async url => {
+    if (String(url).includes('api.tavily.com')) {
+      tavilyCalls++;
+      return new Response("This request exceeds your plan's set usage limit", { status: 432 });
+    }
+    if (String(url).includes('generativelanguage.googleapis.com')) {
+      return new Response(JSON.stringify({ error: { message: 'quota exhausted' } }), { status: 429, headers: { 'content-type': 'application/json' } });
+    }
+    if (String(url).includes('api.exa.ai')) {
+      exaCalls++;
+      return new Response(JSON.stringify({
+        results: [{ title: 'Exa evidence', url: 'https://example.com/evidence', highlights: ['Grounded evidence.'] }],
+      }), { status: 200, headers: { 'content-type': 'application/json' } });
+    }
+    throw new Error('Unexpected URL: ' + url);
+  };
+  const search = createTavilySearch({
+    apiKey: 'tavily-test',
+    geminiKey: 'gemini-test',
+    exaKey: 'exa-test',
+    groq: {},
+    fetchZTimeout: fakeFetch,
+    normalizeQuery: value => value,
+    logger: { log() {}, warn() {}, error() {} },
+    cacheFile: '/tmp/czituch-test-tavily-quota-cooldown.json',
+  });
+  const first = await search('test question', { _skipRewrite: true, returnMeta: true });
+  const second = await search('another question', { _skipRewrite: true, returnMeta: true });
+  assert.equal(first.status, 'ok');
+  assert.equal(second.status, 'ok');
+  assert.equal(tavilyCalls, 1, 'second request must skip Tavily during cooldown');
+  assert.equal(exaCalls, 2, 'Exa remains available after Gemini fails');
+});
+
+test('generation fallback tries OpenRouter before Xkiro', () => {
+  const openrouter = GENERATION_FALLBACK_CHAIN.indexOf('openrouter:default');
+  const xkiro = GENERATION_FALLBACK_CHAIN.indexOf('xkiro:default');
+  assert.ok(openrouter >= 0);
+  assert.ok(xkiro >= 0);
+  assert.ok(openrouter < xkiro);
 });
