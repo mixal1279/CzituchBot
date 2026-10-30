@@ -94,7 +94,7 @@ test('xKiro transport timeout cannot fall below the six-second useful-attempt fl
   assert.notEqual(start, -1, 'xKiro validator function must exist');
   assert.notEqual(end, -1, 'xKiro validator function boundary must exist');
   const implementation = source.slice(start, end);
-  assert.match(implementation, /maxTimeoutMs:\\s*xkiroMaxTimeoutMs/);
-  assert.match(implementation, /minTimeoutMs:\\s*6000/);
-  assert.match(implementation, /Math\\.max\\(\\s*6000/);
+  assert.match(implementation, /maxTimeoutMs:\s*xkiroMaxTimeoutMs/);
+  assert.match(implementation, /minTimeoutMs:\s*6000/);
+  assert.match(implementation, /Math\.max\(\s*6000/);
 });
