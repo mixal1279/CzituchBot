@@ -4,29 +4,49 @@ function replaceUntrustedBlockTags(text) {
   const marker = 'UNTRUSTED_';
   let output = '';
   let cursor = 0;
-  let i = 0;
+  let lineStart = 0;
 
-  while (i < text.length) {
-    if (text[i] !== '<') { i++; continue; }
-    let nameStart = i + 1;
-    while (nameStart < text.length && /\s/.test(text[nameStart])) nameStart++;
-    if (text[nameStart] === '/') nameStart++;
-    while (nameStart < text.length && /\s/.test(text[nameStart])) nameStart++;
-    if (text.slice(nameStart, nameStart + marker.length).toUpperCase() !== marker) { i++; continue; }
+  // Work one line at a time. Computing the line boundary once avoids repeated
+  // suffix scans when hostile input contains many malformed marker prefixes.
+  while (lineStart < text.length) {
+    let lineEnd = text.indexOf('\n', lineStart);
+    if (lineEnd === -1) lineEnd = text.length;
+    const carriageReturn = text.indexOf('\r', lineStart);
+    if (carriageReturn !== -1 && carriageReturn < lineEnd) lineEnd = carriageReturn;
 
-    const tagStart = nameStart + marker.length;
-    const close = text.indexOf('>', tagStart);
-    const lineBreakMatch = text.slice(tagStart).match(/[\r\n]/);
-    const lineBreak = lineBreakMatch ? tagStart + lineBreakMatch.index : -1;
-    if (close === -1 || (lineBreak !== -1 && lineBreak < close)) {
-      i = tagStart;
-      continue;
+    let i = lineStart;
+    while (i < lineEnd) {
+      const open = text.indexOf('<', i);
+      if (open === -1 || open >= lineEnd) break;
+
+      let nameStart = open + 1;
+      while (nameStart < lineEnd && /\s/.test(text[nameStart])) nameStart++;
+      if (text[nameStart] === '/') nameStart++;
+      while (nameStart < lineEnd && /\s/.test(text[nameStart])) nameStart++;
+
+      if (text.slice(nameStart, nameStart + marker.length).toUpperCase() !== marker) {
+        i = open + 1;
+        continue;
+      }
+
+      const tagStart = nameStart + marker.length;
+      const close = text.indexOf('>', tagStart);
+      if (close === -1 || close >= lineEnd) {
+        // No closing bracket exists on this line, so no later marker on this
+        // same line can be independently closed either.
+        i = lineEnd;
+        break;
+      }
+
+      output += text.slice(cursor, open) + '[USUNIĘTY_ZNACZNIK_BLOKU]';
+      cursor = close + 1;
+      i = cursor;
     }
 
-    output += text.slice(cursor, i) + '[USUNIĘTY_ZNACZNIK_BLOKU]';
-    cursor = close + 1;
-    i = cursor;
+    if (lineEnd === text.length) break;
+    lineStart = lineEnd + (text[lineEnd] === '\r' && text[lineEnd + 1] === '\n' ? 2 : 1);
   }
+
   return output + text.slice(cursor);
 }
 
