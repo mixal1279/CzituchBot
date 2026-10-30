@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 
-const { dopasowanieSemantyczne, czyOgraniczenieDowodowe, spojnoscTlumaczeniaClaimu, zgodnoscStrukturalna, czyNazwaWlasnaWystepuje, wyodrebnijNazwyWlasne } = require('../ai/claimValidation');
+const { dopasowanieSemantyczne, czyOgraniczenieDowodowe, spojnoscTlumaczeniaClaimu, zgodnoscStrukturalna, pojeciaCrossLanguage, czyNazwaWlasnaWystepuje, wyodrebnijNazwyWlasne } = require('../ai/claimValidation');
 
 test('brak tłumaczenia claimu jest wskazywany wprost, a nie jako brak nazw własnych', () => {
   const withoutTranslation = dopasowanieSemantyczne(
@@ -85,6 +85,8 @@ test('Minecraft End and Krawędź are treated as the same named region', () => {
 
 test('Polish recruitment outcome matches a verbatim English source quote', () => {
   const quote = 'Taking him up on this offer will see him officially join your party.';
+  assert.deepEqual([...pojeciaCrossLanguage('Dzięki temu zostaje zrekrutowany jako towarzysz.')], ['towarzysz']);
+  assert.deepEqual([...pojeciaCrossLanguage(quote)], ['towarzysz']);
   const result = spojnoscTlumaczeniaClaimu(
     'Dzięki temu zostaje zrekrutowany jako towarzysz.',
     quote,
