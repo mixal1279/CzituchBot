@@ -45,3 +45,14 @@ test('handles many angle brackets before a closing bracket without repeated resc
   assert.ok(output.length > 0);
   assert.ok(elapsed < 2000, 'sanitization took ' + elapsed.toFixed(0) + 'ms');
 });
+
+
+test('many malformed marker prefixes on one line are processed without quadratic rescanning', () => {
+  const input = '<UNTRUSTED_'.repeat(30000);
+  const start = performance.now();
+  const output = sanitizeUntrustedText(input);
+  const elapsed = performance.now() - start;
+
+  assert.equal(output, input);
+  assert.ok(elapsed < 2000, 'sanitization took ' + elapsed.toFixed(0) + 'ms');
+});
