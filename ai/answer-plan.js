@@ -137,7 +137,7 @@ function extractAnswerSignals(answer) {
   const whyExplanation = causalExplanation || motiveExplanation;
   const procedural = /\b(nalezy|trzeba|mozna|sposob|krok|najpierw|potem|nastepnie|first|then|step|wystarczy|uzyj|uzywaj|wykorzystaj|skorzystaj|wybierz|zdobadz|znajdz|idz|wejdz|pokonaj|unikaj|zabij|atakuj|zbuduj|stworz|wez|kup|otworz|podejdz|poczekaj|wyposaz|rzuc|cast|use|attack|avoid|equip)\b/.exec(text)?.[0] || '';
   const mechanism = /\b(dziala|funkcjonuje|polega|mechanizm|umozliw\w*|pozwala)\b/.exec(text)?.[0] || '';
-  const relationshipMarker = /(?<![\p{L}])(?:relacj\p{L}*|zwiazk\p{L}*|przyjac\p{L}*|przyjazn\p{L}*|towarzysz\p{L}*|romans\p{L}*|wrog\p{L}*|sojusz\p{L}*|zdrad\p{L}*|partner\p{L}*|relationship\p{L}*|friends?|friendship|enemies?|alliances?)/u.exec(text)?.[0] || '';
+  const relationshipMarker = /(?<![\p{L}])(?:relacj\p{L}*|zwiazk\p{L}*|przyjac\p{L}*|przyjazn\p{L}*|towarzysz\p{L}*|romans\p{L}*|wrog\p{L}*|sojusz\p{L}*|zdrad\p{L}*|partner\p{L}*|relationship\p{L}*|friends?|friendship|enemies?|alliances?)(?![\p{L}])/u.exec(text)?.[0] || '';
 
   const whenUnconfirmed = /\b(?:zrodla?\w*|materialy|dane|sources?|evidence)\b.{0,120}\bnie\s+(?:podaj\w*|precyzuj\w*|okresl\w*|wskazuj\w*|potwierdz\w*|zawier\w*)\b.{0,80}\b(?:dat\w*|moment\w*|czas\w*|rok\w*)\b/.test(text);
 
