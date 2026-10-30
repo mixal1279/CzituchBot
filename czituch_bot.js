@@ -2364,6 +2364,10 @@ function czyWartoDrugaOpinieWalidatora(result) {
 
 async function walidujOdpowiedzAIBezCache(persona, pytanie, odpowiedz, dane, historiaRozmowy = [], requestId = '-', requestState = null, requestMeta = null) {
   if (!dane) {
+    if (requestState) {
+      if (!Array.isArray(requestState.validatorMetrics)) requestState.validatorMetrics = [];
+      requestState.validatorMetrics.push(zbudujKontekstMetrykiWalidatora(requestId, 'gemini', null, odpowiedz, dane, requestState, requestState.remainingMs?.() ?? null, null, null, { status: 'unavailable', reason: 'brak danych referencyjnych' }, 'skipped_provider'));
+    }
     return { status: 'unavailable', ok: false, technicalError: true, provider: 'gemini', model: null, unsupported_claims: [], reason: 'brak danych referencyjnych' };
   }
   const budzetValidatoraPrzekroczony = () => requestState
