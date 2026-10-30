@@ -498,7 +498,8 @@ test('timeout z mockowanego klienta Groq trafia do circuit breakera bez wywołan
     assert.equal(result.status, 'unavailable');
     hooks.recordValidatorTransportResult('groq', result, 'test-groq-timeout-' + i);
   }
-  assert.equal(calls, 2);
+  // The TPM ledger conservatively retains estimated usage after timeout, so the second call is skipped.
+  assert.equal(calls, 1);
   assert.equal(hooks.validatorBreakerIsOpen('groq'), true);
 
   const slotPurposes = [];
