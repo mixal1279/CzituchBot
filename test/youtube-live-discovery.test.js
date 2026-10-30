@@ -65,6 +65,10 @@ test('obsługuje przekierowanie /live bezpośrednio do watch?v=', () => {
   assert.equal(extractLiveVideoId('', 'https://www.youtube.com/watch?v=' + VIDEO_ID), VIDEO_ID);
 });
 
+test('obsługuje bezpośredni URL /live/VIDEO_ID', () => {
+  assert.equal(extractLiveVideoId('', 'https://www.youtube.com/live/' + VIDEO_ID), VIDEO_ID);
+});
+
 test('pobiera stronę kanału /live i parsuje jej HTML bez wywołania Data API', async () => {
   let requestedUrl = '';
   const html = assigned('ytInitialData', {
