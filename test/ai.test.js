@@ -899,3 +899,36 @@ console.log('AI regression tests: OK');
   assert.equal(assessed.sourceCount, 1);
   assert.ok(assessed.sources[0].coreScore >= withBothAnchors.coreScore);
 }
+
+
+test('validator safely normalizes singular and camelCase claim aliases', () => {
+  const payload = {
+    valid: false,
+    reason: 'claim unsupported',
+    confidence: 0.2,
+    supported: false,
+    relevant: true,
+    complete: false,
+    hallucination: false,
+    unsupported_claims: ['claim'],
+    claims: [{
+      claim: 'A claim without sufficient evidence.',
+      supported: false,
+      sourceId: 'SOURCE 1',
+      evidenceQuote: 'A short source quote.',
+    }],
+  };
+  const result = normalizujWynikWalidatora(
+    payload,
+    'test-model',
+    'gemini',
+    new Set(['SOURCE 1']),
+    'SOURCE 1: A short source quote.',
+    'A claim without sufficient evidence.',
+  );
+  assert.ok(result);
+  assert.deepEqual(result.claims[0].source_ids, ['SOURCE 1']);
+  assert.equal(result.claims[0].evidence_quote, 'A short source quote.');
+  assert.equal(result.claims[0].supported, false);
+  assert.equal(result.status, 'rejected');
+});
