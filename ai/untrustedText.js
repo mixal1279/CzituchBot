@@ -4,47 +4,49 @@ function replaceUntrustedBlockTags(text) {
   const marker = 'UNTRUSTED_';
   let output = '';
   let cursor = 0;
-  let lineStart = 0;
+  let i = 0;
 
-  // Work one line at a time. Computing the line boundary once avoids repeated
-  // suffix scans when hostile input contains many malformed marker prefixes.
-  while (lineStart < text.length) {
-    let lineEnd = text.indexOf('\n', lineStart);
-    if (lineEnd === -1) lineEnd = text.length;
-    const carriageReturn = text.indexOf('\r', lineStart);
-    if (carriageReturn !== -1 && carriageReturn < lineEnd) lineEnd = carriageReturn;
-
-    let i = lineStart;
-    while (i < lineEnd) {
-      const open = text.indexOf('<', i);
-      if (open === -1 || open >= lineEnd) break;
-
-      let nameStart = open + 1;
-      while (nameStart < lineEnd && /\s/.test(text[nameStart])) nameStart++;
-      if (text[nameStart] === '/') nameStart++;
-      while (nameStart < lineEnd && /\s/.test(text[nameStart])) nameStart++;
-
-      if (text.slice(nameStart, nameStart + marker.length).toUpperCase() !== marker) {
-        i = open + 1;
-        continue;
-      }
-
-      const tagStart = nameStart + marker.length;
-      const close = text.indexOf('>', tagStart);
-      if (close === -1 || close >= lineEnd) {
-        // No closing bracket exists on this line, so no later marker on this
-        // same line can be independently closed either.
-        i = lineEnd;
-        break;
-      }
-
-      output += text.slice(cursor, open) + '[USUNIĘTY_ZNACZNIK_BLOKU]';
-      cursor = close + 1;
-      i = cursor;
+  // Scan forward once. Whitespace before the marker may include line breaks,
+  // but the closing bracket must remain on the marker's line.
+  while (i < text.length) {
+    if (text[i] !== '<') {
+      i++;
+      continue;
     }
 
-    if (lineEnd === text.length) break;
-    lineStart = lineEnd + (text[lineEnd] === '\r' && text[lineEnd + 1] === '\n' ? 2 : 1);
+    const open = i;
+    let nameStart = open + 1;
+    while (nameStart < text.length && /\s/.test(text[nameStart])) nameStart++;
+    if (text[nameStart] === '/') nameStart++;
+    while (nameStart < text.length && /\s/.test(text[nameStart])) nameStart++;
+
+    let matchesMarker = nameStart + marker.length <= text.length;
+    for (let j = 0; matchesMarker && j < marker.length; j++) {
+      if (text[nameStart + j].toUpperCase() !== marker[j]) matchesMarker = false;
+    }
+
+    if (!matchesMarker) {
+      i = open + 1;
+      continue;
+    }
+
+    const tagStart = nameStart + marker.length;
+    let close = tagStart;
+    while (close < text.length && text[close] !== '>' && text[close] !== '\n' && text[close] !== '\r') {
+      close++;
+    }
+
+    if (text[close] !== '>') {
+      // No closing bracket exists on this line. No later marker on this line
+      // can be closed either, so skip directly to the next line.
+      while (close < text.length && (text[close] === '\n' || text[close] === '\r')) close++;
+      i = close;
+      continue;
+    }
+
+    output += text.slice(cursor, open) + '[USUNIĘTY_ZNACZNIK_BLOKU]';
+    cursor = close + 1;
+    i = cursor;
   }
 
   return output + text.slice(cursor);

@@ -20,8 +20,14 @@ test('does not let a malformed untrusted marker consume text across a line break
   const output = sanitizeUntrustedText(input);
   assert.equal(
     output,
-    '<UNTRUSTED_SOURCE\nordinary text> [USUNIĘTY_ZNACZNIK_BLOKU]payload[USUNIĘTY_ZNACZNIK_BLOKU]',
+    '<UNTRUSTED_SOURCE ordinary text> [USUNIĘTY_ZNACZNIK_BLOKU]payload[USUNIĘTY_ZNACZNIK_BLOKU]',
   );
+});
+
+test('recognizes untrusted markers when whitespace before the marker crosses lines', () => {
+  const input = '<\nUNTRUSTED_SOURCE>payload< /\r\nUNTRUSTED_SOURCE >';
+  const output = sanitizeUntrustedText(input);
+  assert.equal(output, '[USUNIĘTY_ZNACZNIK_BLOKU]payload[USUNIĘTY_ZNACZNIK_BLOKU]');
 });
 
 test('handles adversarial runs of spaces and underscores without losing surrounding text', () => {
@@ -46,7 +52,6 @@ test('handles many angle brackets before a closing bracket without repeated resc
   assert.ok(elapsed < 2000, 'sanitization took ' + elapsed.toFixed(0) + 'ms');
 });
 
-
 test('many malformed marker prefixes on one line are processed without quadratic rescanning', () => {
   const input = '<UNTRUSTED_'.repeat(30000);
   const start = performance.now();
@@ -54,5 +59,15 @@ test('many malformed marker prefixes on one line are processed without quadratic
   const elapsed = performance.now() - start;
 
   assert.equal(output, input);
+  assert.ok(elapsed < 2000, 'sanitization took ' + elapsed.toFixed(0) + 'ms');
+});
+
+test('many plain-text lines are scanned in linear time', () => {
+  const input = 'ordinary page content without tags\n'.repeat(50000);
+  const start = performance.now();
+  const output = sanitizeUntrustedText(input);
+  const elapsed = performance.now() - start;
+
+  assert.equal(output, input.trim());
   assert.ok(elapsed < 2000, 'sanitization took ' + elapsed.toFixed(0) + 'ms');
 });
