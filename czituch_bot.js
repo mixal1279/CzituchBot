@@ -2417,6 +2417,7 @@ async function walidujOdpowiedzAIBezCache(persona, pytanie, odpowiedz, dane, his
     });
   };
   if (budzetValidatoraPrzekroczony()) {
+    recordSkippedValidator('gemini', AI_GEMINI_VALIDATOR_MODEL, 'Gemini validator pominięty: budżet czasu validatora wyczerpany');
     return { status: 'unavailable', ok: false, technicalError: true, provider: 'gemini', model: null, unsupported_claims: [], reason: 'budżet czasu validatora wyczerpany' };
   }
   // Jeden stabilny model wystarcza do prostego JSON fact-checkera i nie
@@ -2645,11 +2646,12 @@ async function walidujOdpowiedzAIBezCache(persona, pytanie, odpowiedz, dane, his
     console.warn(`[AI][${requestId}] ${reason}`);
     return lastRejected || { ...(last || {}), status: 'unavailable', ok: false, technicalError: true, transient: true, skipped: true, provider: 'openrouter', model: KONFIGURACJA.openrouterValidatorModel, unsupported_claims: [], reason };
   }
+  let openRouterTimeoutMs = requestState ? null : 3000;
   if (requestState) {
     const remainingMs = typeof requestState.remainingMs === 'function'
       ? requestState.remainingMs()
       : requestState.maxCzasMs - (Date.now() - requestState.startedAt);
-    const timeoutMs = computeValidatorTimeout(remainingMs, {
+    openRouterTimeoutMs = computeValidatorTimeout(remainingMs, {
       maxTimeoutMs: 3000,
       reserveMs: computeValidatorReserveMs(remainingMs, requestState.validatory + 1, requestState.maxValidatorow, requestState.validationPass === 1 ? INITIAL_VALIDATOR_REPAIR_RESERVE_MS : 0),
       minTimeoutMs: 2000,
@@ -2673,7 +2675,7 @@ async function walidujOdpowiedzAIBezCache(persona, pytanie, odpowiedz, dane, his
   requestState?.recordTiming?.('validator_provider_start', { provider: 'openrouter', model: KONFIGURACJA.openrouterValidatorModel, remainingBefore });
   const fallback = await walidujOdpowiedzOpenRouter(persona, pytanie, odpowiedz, dane, requestId, requestState, requestMeta);
   recordValidatorTransportResult('openrouter', fallback, requestId);
-  recordValidatorMetric('openrouter', fallback.model || KONFIGURACJA.openrouterValidatorModel, remainingBefore, requestState ? computeValidatorTimeout(remainingBefore, { maxTimeoutMs: 3000, reserveMs: computeValidatorReserveMs(remainingBefore, requestState.validatory, requestState.maxValidatorow, requestState.validationPass === 1 ? INITIAL_VALIDATOR_REPAIR_RESERVE_MS : 0), minTimeoutMs: 2000 }) : 3000, validatorStartedAt, fallback);
+  recordValidatorMetric('openrouter', fallback.model || KONFIGURACJA.openrouterValidatorModel, remainingBefore, openRouterTimeoutMs, validatorStartedAt, fallback);
   const validatorElapsedMs = Date.now() - validatorStartedAt;
   const remainingAfter = requestState?.remainingMs?.() ?? null;
   requestState?.recordTiming?.('validator_provider_end', { provider: 'openrouter', model: fallback.model || KONFIGURACJA.openrouterValidatorModel, status: fallback.status, validatorElapsedMs, remainingBefore, remainingAfter, reason: String(fallback.reason || '').slice(0, 180) });
