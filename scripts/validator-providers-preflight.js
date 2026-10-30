@@ -7,6 +7,7 @@
 // Limity produkcyjne są per provider; preflight czeka dłużej, by zmierzyć pełną latencję.
 
 const fs = require('fs');
+const { normalizujGroqBaseUrl } = require('../ai/provider-runtime');
 
 const PROD_TIMEOUT_BY_PROVIDER = Object.freeze({
   xKiro: Number(process.env.AI_XKIRO_VALIDATOR_TIMEOUT_MS) || 4500,
@@ -23,7 +24,7 @@ const OPENROUTER_MODEL = process.env.OPENROUTER_VALIDATOR_MODEL || process.env.A
 const OPENROUTER_BASE = process.env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1';
 const GROQ_KEY = String(process.env.GROQ_API_KEY || '').trim();
 const GROQ_MODEL = process.env.AI_VALIDATOR_MODEL || 'openai/gpt-oss-20b';
-const GROQ_BASE = process.env.GROQ_BASE_URL || 'https://api.groq.com/openai/v1';
+const GROQ_BASE = normalizujGroqBaseUrl(process.env.GROQ_BASE_URL);
 
 // Prawdziwy schemat walidatora (jak w produkcji), jeśli da się go załadować.
 let PROD_SCHEMA = null;
