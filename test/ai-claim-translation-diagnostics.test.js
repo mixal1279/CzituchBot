@@ -72,3 +72,23 @@ test('alias rozszerzony o parafrazę angielską', () => {
   );
   assert.equal(result.ok, true, JSON.stringify(result));
 });
+
+
+test('Minecraft End and Krawędź are treated as the same named region', () => {
+  const result = spojnoscTlumaczeniaClaimu(
+    'Elytra można zdobyć wyłącznie w Endzie, w statku znajdującym się przy niektórych miastach Krawędzi.',
+    'Elytra are found exclusively in End ships, which are located in the outer islands of the End.',
+    { evidenceQuote: 'Elytra are endgame equipment found exclusively in End ships, which are located in the outer islands of the End.' },
+  );
+  assert.equal(result.ok, true, JSON.stringify(result));
+});
+
+test('Polish recruitment outcome matches a verbatim English source quote', () => {
+  const quote = 'Taking him up on this offer will see him officially join your party.';
+  const result = spojnoscTlumaczeniaClaimu(
+    'Dzięki temu zostaje zrekrutowany jako towarzysz.',
+    quote,
+    { evidenceQuote: quote },
+  );
+  assert.equal(result.ok, true, JSON.stringify(result));
+});
