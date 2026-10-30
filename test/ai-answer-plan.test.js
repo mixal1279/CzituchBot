@@ -338,3 +338,9 @@ test('relationship signals do not match inside unrelated words', () => {
   const polish = extractAnswerSignals('Bohaterowie nawiązują przyjaźń i sojusz.');
   assert.equal(polish.relationship, true);
 });
+
+
+test('relationship detection does not treat friendly as a relationship term', () => {
+  assert.equal(extractAnswerSignals('The character is friendly to strangers.').relationship, false);
+  assert.equal(extractAnswerSignals('Geralt is a friend of Yennefer.').relationship, true);
+});
