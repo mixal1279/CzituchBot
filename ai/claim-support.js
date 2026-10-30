@@ -29,14 +29,14 @@ function detectOverclaimTypes(claim, evidence, options = {}) {
   if (!c || !e) return types;
 
   const causalClaim = /\b(?:because|therefore|caused? by|caus\w*|leads? to|resulted? in|as a result|dzieki temu|z powodu|poniewaz|dlatego|spowod\w*|doprowadz\w*|umozliw\w*)\b/u.test(c);
-  const causalEvidencePattern = /\b(?:because|therefore|caused? by|caus\w*|leads? to|resulted? in|as a result|due to|dzieki temu|z powodu|poniewaz|dlatego|spowod\w*|doprowadz\w*|umozliw\w*|w wyniku|w ten sposob|przez co|co umozliw\w*|putting him in control|put him in control|giving (?:him|her|them|it) control|force(?:s|d|ing)? (?:the )?[\p{L}\p{N}]+(?: [\p{L}\p{N}]+){0,1} to [\p{L}\p{N}]+|allow(?:ed|s)?|enabl\w*|in exchange(?: for)?|in return(?: for)?|w zamian(?: za)?|w rewan[zż]u)\b/u;
+  const causalEvidencePattern = /\b(?:because|therefore|caused? by|caus\w*|leads? to|resulted? in|as a result|due to|dzieki temu|z powodu|poniewaz|dlatego|spowod\w*|doprowadz\w*|umozliw\w*|w wyniku|w ten sposob|przez co|co umozliw\w*|putting him in control|put him in control|giving (?:him|her|them|it) control|will see (?:him|her|them|the player|the character) (?:officially )?(?:join|become)|force(?:s|d|ing)? (?:the )?[\p{L}\p{N}]+(?: [\p{L}\p{N}]+){0,1} to [\p{L}\p{N}]+|allow(?:ed|s)?|enabl\w*|in exchange(?: for)?|in return(?: for)?|w zamian(?: za)?|w rewan[zż]u)\b/u;
   const causalEvidence = causalEvidencePattern.test(e)
     || (options.allowContextForCausality === true && causalEvidencePattern.test(context));
   if (causalClaim && !causalEvidence) types.push('correlation_to_causation');
 
-  const sourceHedged = /\b(?:may|might|could|possibly|potentially|suggests?|appears? to|limited evidence|small study|moze|mozliwe|prawdopodobnie|sugeruje|wstepne dane|niewielkim badaniu)\b/u.test(e);
+  const sourceHedged = /\b(?:may|might|could|possibly|potentially|suggests?|appears? to|limited evidence|small study|moze|mozliwe|mozna(?:\s+byc)?|da\s+sie|bywa|prawdopodobnie|sugeruje|wstepne dane|niewielkim badaniu)\b/u.test(e);
   const claimAbsolute = /\b(?:always|never|proves?|guarantees?|definitely|certainly|undoubtedly|all|every|none|must|zawsze|nigdy|dowodzi|udowodniono|gwarantuje|bez watpienia|na pewno|wszyscy|wszystkie|kazdy|kazda|zaden|zadna)\b/u.test(c);
-  const claimHedged = /\b(?:may|might|could|possibly|potentially|suggests?|appears? to|moze|mozliwe|prawdopodobnie|sugeruje|wydaje sie)\b/u.test(c);
+  const claimHedged = /\b(?:may|might|could|possibly|potentially|suggests?|appears? to|moze|mozliwe|mozna(?:\s+byc)?|da\s+sie|bywa|prawdopodobnie|sugeruje|wydaje sie)\b/u.test(c);
   // A source hedge alone does not make an ordinary declarative claim absolute.
   // Hard-fail only when the claim itself adds an explicit absolute/guarantee cue.
   const outcomeVerbPatterns = [

@@ -13,7 +13,7 @@ const NEGATION_STRICT_RE = /(?<![\p{L}])(?:nie|nigdy|brak|bez|zaden|zadna|zadne|
 const REDUCTION_RE = /(?<![\p{L}])(?:zmniejsz\w*|ogranicz\w*|redukuj\w*|zredukow\w*|oslab\w*|chron\w*|neutralizuj\w*|reduc\w*|inhibit\w*|dampen\w*|s?tlumi\w*|mitigat\w*|lower\w*|decreas\w*|protect\w*|prevent\w*|avoid\w*|block\w*|ward\w*|immun\w*|resist\w*|zapobieg\w*|unik\w*|blok\w*|odporn\w*)(?![\p{L}])/iu;
 // „skutkuj\w*” i „w rezultacie” to polskie odpowiedniki „resulting in”/„as a result”: bez nich
 // polski claim z relacją przyczynową przechodził kontrolę parytetu PL↔EN, gdy claim_en ją gubił.
-const CAUSAL_RE = /(?<![\p{L}])(?:bo|poniewaz|gdyz|dlatego|because|therefore|caused|causes|trigger\w*|consequently|hence|as\s+a\s+result|led\s+to|leading\s+to|resulted\s+in|resulting\s+in|because\s+of|due\s+to|thereby|thus|w\s+ten\s+sposob|przez\s+co|co\s+(?:umozliw\w*|spowod\w*)|motyw\w*|zmusz\w*|powoduj\w*|przyczyn\w*|wskutek|w\s+efekcie|skutkuj\w*|w\s+rezultacie|allow(?:s|ed|ing)?|enabl(?:e|es|ed|ing)|which\s+(?:let|lets|allowed|allows|enabled|enables)|putting\s+(?:him|her|them|it)\s+in\s+control|giving\s+(?:him|her|them|it)\s+control|dajac\s+(?:mu|jej|im)\s+(?:wladz\w*|kontrol\w*|panowan\w*)|force(?:s|d|ing)?\s+(?:the\s+)?[\p{L}\p{N}'’_-]+(?:\s+[\p{L}\p{N}'’_-]+){0,1}\s+to\s+[\p{L}\p{N}'’_-]+|so\s+(?:he|she|they|it|we|the)|in\s+exchange(?:\s+for)?|in\s+return(?:\s+for)?|in\s+turn|thanks\s+to|owing\s+to|w\s+zamian(?:\s+za)?|w\s+rewan[zż]u|w\s+wyniku|z\s+powodu|dzieki|spowod\w*|doprowadz\w*|umozliw\w*)(?![\p{L}])/iu;
+const CAUSAL_RE = /(?<![\p{L}])(?:bo|poniewaz|gdyz|dlatego|because|therefore|caused|causes|trigger\w*|consequently|hence|as\s+a\s+result|led\s+to|leading\s+to|resulted\s+in|resulting\s+in|because\s+of|due\s+to|thereby|thus|w\s+ten\s+sposob|przez\s+co|co\s+(?:umozliw\w*|spowod\w*)|motyw\w*|zmusz\w*|powoduj\w*|przyczyn\w*|wskutek|w\s+efekcie|skutkuj\w*|w\s+rezultacie|allow(?:s|ed|ing)?|enabl(?:e|es|ed|ing)|which\s+(?:let|lets|allowed|allows|enabled|enables)|putting\s+(?:him|her|them|it)\s+in\s+control|giving\s+(?:him|her|them|it)\s+control|will\s+see\s+(?:him|her|them|the player|the character)\s+(?:officially\s+)?(?:join|become)|dajac\s+(?:mu|jej|im)\s+(?:wladz\w*|kontrol\w*|panowan\w*)|force(?:s|d|ing)?\s+(?:the\s+)?[\p{L}\p{N}'’_-]+(?:\s+[\p{L}\p{N}'’_-]+){0,1}\s+to\s+[\p{L}\p{N}'’_-]+|so\s+(?:he|she|they|it|we|the)|in\s+exchange(?:\s+for)?|in\s+return(?:\s+for)?|in\s+turn|thanks\s+to|owing\s+to|w\s+zamian(?:\s+za)?|w\s+rewan[zż]u|w\s+wyniku|z\s+powodu|dzieki|spowod\w*|doprowadz\w*|umozliw\w*)(?![\p{L}])/iu;
 // Nie traktujemy samego „force” jako przyczynowości: „forced a core transfer”
 // może opisywać akcję. Rozpoznajemy jednak konstrukcję „force X to Y” oraz
 // bezpośrednie „giving him control”, które wyrażają relację między zdarzeniami.
@@ -28,7 +28,7 @@ const CROSS_LANGUAGE_CONCEPTS = [
   ['transfer_rdzenia', /core transfer|transfer of (?:the )?core|transfer(?:u|em|ze)? rdzenia|transfer rdzenia/i],
   ['obrazenia', /injur\w*|wound\w*|hurt\w*|damage\w*|harm\w*|rann\w*|obraz\w*/i],
   ['zabojstwo', /kill\w*|murder\w*|death|dead|zabij\w*|zabil\w*|zabila\w*|zabici\w*|zabity\w*|zabicie\w*|zgin\w*|smier\w*/i],
-  ['konflikt', /conflict\w*|feud\w*|fight\w*|war\w*|hatred|hate\w*|konflikt\w*|walcz\w*|wojn\w*/i],
+  ['konflikt', /conflict\w*|feud\w*|fight\w*|\bwar\w*|hatred|hate\w*|konflikt\w*|walcz\w*|wojn\w*/i],
   ['zwiazek', /relationship\w*|girlfriend\w*|boyfriend\w*|partner\w*|romanc\w*|romantic\w*|involved|zwi[aą]zk\w*|zwiaz\w*|relacj\w*|dziewczyn\w*|chlopak\w*/i],
   ['pomoc', /help\w*|assist\w*|save\w*|rescu\w*|pomog\w*|pomaga\w*|urat\w*|ocal\w*/i],
   // Granica słowa przed „appear”: „disappears” oznacza przeciwną akcję i nie może być uznane za „appears”.
@@ -57,7 +57,8 @@ const CROSS_LANGUAGE_CONCEPTS = [
   ['elf', /\bhigh\s+elf\b|\belves?\b|elf\w*/i],
   ['wampir', /vampire\w*|wampir\w*/i],
   ['klasa_rogue', /\brogue\b|thief\w*|lotr\w*|zlodziej\w*/i],
-  ['towarzysz', /\bcompanions?\b|recruit\w*|party member\w*|minion\w*|summon\w*|towarzysz\w*|zrekrut\w*|wezw\w*|przywol\w*/i],
+  ['towarzysz', /\bcompanions?\b|recruit\w*|party member\w*|join(?:s|ed|ing)? (?:the|your) party|minion\w*|summon\w*|towarzysz\w*|zrekrut\w*|wezw\w*|przywol\w*/i],
+  ['rekrutacja_towarzysza', /zrekrut\w*|join(?:s|ed|ing)? (?:the|your) party|recruit\w*/i],
   ['ataki_dystansowe', /\branged\b|\bbow\b|luk\w*|dystansow\w*/i],
   ['modyfikacja_zachowania', /\bbehav\w*|make her behave|intelligence dampening|tlumi\w*|zmusz\w*|zachow\w*|rdzen osobowosci|force(?:s|d|ing)?\s+(?:the\s+)?[\w'-]+(?:\s+[\w'-]+){0,1}\s+to\s+[\w'-]+/i],
   ['walka_konna', /horseback|mounted combat|on horseback|konskiego grzbietu|na koniu|z konia|walczac z konia/i],
@@ -105,7 +106,7 @@ const KNOWN_ENTITY_ALIAS_PATTERNS = [
   { canonical: "alduin's wall", pattern: /\b(?:alduin['’]?s|alduins)\s+wall\b/iu },
   { canonical: 'dragonrend', pattern: /\bdragonrend\b/iu },
   // Minecraft: „End”, „Endu” i „Endzie” oznaczają tę samą krainę.
-  { canonical: 'the end', pattern: /\b(?:the\s+end|end(?:u|em|zie|a))\b/iu },
+  { canonical: 'the end', pattern: /\b(?:the\s+end|end(?:u|em|zie|a)|kraw[eę]dz(?:i|ia|ie|iach|iom|mi)?)\b/iu },
   // Minecraft: polska nazwa Ender Pearl to „perła Kresu” (Kres = End); bez aliasu „Kresu” było
   // wymaganą nazwą własną, której nie ma w angielskim tłumaczeniu.
   { canonical: 'ender pearl', pattern: /\b(?:ender\s+pearls?|per[łl](?:a|y|ę|ą|e|ie|o)?\s+kresu)\b/iu },
@@ -832,7 +833,7 @@ function czyRelacjaPrzyczynowaPokrywaClaim(evidence, claim, options = {}) {
     .split(/(?<=[.!?])\s+/)
     .map(s => s.trim())
     .filter(Boolean);
-  const relationRe = /(?<![\p{L}])(?:bo|poniewaz|gdyz|dlatego|z powodu|dzieki|spowod\w*|doprowadz\w*|umozliw\w*|because|therefore|due to|caus\w*|led to|leading to|lead\w*\s+(?:\w+\s+){0,3}to|resulted in|resulting in|so\s+(?:approach|use|avoid|keep|stay|choose|take|do|be)|so\s+that|in\s+order\s+to|so\s+as\s+to|thereby|thus|w\s+ten\s+sposob|przez\s+co|co\s+(?:umozliw\w*|spowod\w*)|allow(?:s|ed|ing)?|enabl(?:e|es|ed|ing)|accidentally|by mistake|which\s+(?:let|lets|allowed|allows|enabled|enables)|putting\s+(?:him|her|them|it)\s+in\s+control|giving\s+(?:him|her|them|it)\s+control|force(?:s|d|ing)?\s+(?:the\s+)?[\w'-]+(?:\s+[\w'-]+){0,1}\s+to\s+[\w'-]+)(?![\p{L}])/iu;
+  const relationRe = /(?<![\p{L}])(?:bo|poniewaz|gdyz|dlatego|z powodu|dzieki|spowod\w*|doprowadz\w*|umozliw\w*|because|therefore|due to|caus\w*|led to|leading to|lead\w*\s+(?:\w+\s+){0,3}to|resulted in|resulting in|so\s+(?:approach|use|avoid|keep|stay|choose|take|do|be)|so\s+that|in\s+order\s+to|so\s+as\s+to|thereby|thus|w\s+ten\s+sposob|przez\s+co|co\s+(?:umozliw\w*|spowod\w*)|allow(?:s|ed|ing)?|enabl(?:e|es|ed|ing)|accidentally|by mistake|which\s+(?:let|lets|allowed|allows|enabled|enables)|putting\s+(?:him|her|them|it)\s+in\s+control|giving\s+(?:him|her|them|it)\s+control|will\s+see\s+(?:him|her|them|the player|the character)\s+(?:officially\s+)?(?:join|become)|force(?:s|d|ing)?\s+(?:the\s+)?[\w'-]+(?:\s+[\w'-]+){0,1}\s+to\s+[\w'-]+)(?![\p{L}])/iu;
   return sentences.some(sentence => {
     const normalized = normalizujClaim(sentence);
     if (!relationRe.test(normalized)) return false;
