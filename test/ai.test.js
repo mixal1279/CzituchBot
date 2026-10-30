@@ -586,7 +586,7 @@ console.log('AI regression tests: OK');
     'gemini:gemini-3.5-flash-lite',
     'openrouter:default',
   ]);
-  assert.equal(GENERATION_FALLBACK_CHAIN.at(-1), 'openrouter:default');
+  assert.equal(GENERATION_FALLBACK_CHAIN.at(-1), 'xkiro:default');
   assert.equal(shouldRetryFailure('unknown'), true);
   assert.equal(shouldRetryFailure('provider_cooldown'), true);
   assert.equal(shouldRetryFailure('validator_inconclusive'), true);
