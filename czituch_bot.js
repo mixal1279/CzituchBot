@@ -36,6 +36,7 @@ require('dotenv').config();
 
 const { youtube: youtubeFactory } = require('@googleapis/youtube');
 const { discoverLiveVideoId } = require('./youtube-live-discovery');
+const { agregujMetrykiWalidatorow, zbudujKontekstMetrykiWalidatora } = require('./ai/validator-telemetry');
 const { OAuth2Client } = require('google-auth-library');
 const Groq       = require('groq-sdk');
 const tmi        = require('tmi.js');
@@ -2367,6 +2368,16 @@ async function walidujOdpowiedzAIBezCache(persona, pytanie, odpowiedz, dane, his
   }
   const budzetValidatoraPrzekroczony = () => requestState
     && Date.now() - requestState.startedAt >= requestState.maxCzasMs;
+  const recordValidatorMetric = (provider, model, remainingMsAtStart, timeoutMs, startedAt, result, outcome = 'attempted') => {
+    if (!requestState) return;
+    if (!Array.isArray(requestState.validatorMetrics)) requestState.validatorMetrics = [];
+    const metric = zbudujKontekstMetrykiWalidatora(
+      requestId, provider, model, odpowiedz, dane, requestState,
+      remainingMsAtStart, timeoutMs, startedAt, result, outcome,
+    );
+    requestState.validatorMetrics.push(metric);
+    console.log(`[AI][${requestId}] VALIDATOR_METRIC ${JSON.stringify(metric)}`);
+  };
   const recordSkippedValidator = (provider, model, reason) => {
     if (!Array.isArray(requestState?.validatorResults)) return;
     const remainingMs = typeof requestState.remainingMs === 'function'
@@ -2392,6 +2403,12 @@ async function walidujOdpowiedzAIBezCache(persona, pytanie, odpowiedz, dane, his
       statusCode: null,
     };
     requestState.validatorResults.push(entry);
+    const outcome = /slot|wyczerpan.*model|budżet validatora\/modeli/i.test(entry.reason)
+      ? 'skipped_slot'
+      : /budżet|remaining|pozostał|czas/i.test(entry.reason)
+        ? 'skipped_budget'
+        : 'skipped_provider';
+    recordValidatorMetric(provider, model, remainingMs, null, null, { status: 'unavailable', reason: entry.reason, skipped: true }, outcome);
     requestState.recordTiming?.('validator_provider_skipped', {
       provider,
       model: model || null,
@@ -2454,6 +2471,7 @@ async function walidujOdpowiedzAIBezCache(persona, pytanie, odpowiedz, dane, his
     // awarii providera każdy kolejny request płacił pełne 12 s za werdykt,
     // którego nie było (live benchmark 2026-10-21: 5/5 przypadków, 0 werdyktów).
     recordValidatorTransportResult('gemini', result, requestId);
+    recordValidatorMetric('gemini', models[i], remainingBefore, timeoutMs, validatorStartedAt, result);
     const validatorElapsedMs = Date.now() - validatorStartedAt;
     const remainingAfter = requestState?.remainingMs?.() ?? null;
     requestState?.recordTiming?.('validator_provider_end', { provider: 'gemini', model: models[i], status: result.status, validatorElapsedMs, remainingBefore, remainingAfter, reason: String(result.reason || '').slice(0, 180) });
@@ -2518,7 +2536,7 @@ async function walidujOdpowiedzAIBezCache(persona, pytanie, odpowiedz, dane, his
         const remainingBefore = requestState?.remainingMs?.() ?? null;
         requestState?.recordTiming?.('validator_provider_start', { provider: 'groq', model: AI_MODELS.validator, remainingBefore });
         const groqResult = await walidujOdpowiedzGroq(persona, pytanie, odpowiedz, dane, requestId, requestState, requestMeta);
-        recordValidatorTransportResult('groq', groqResult, requestId);
+        recordValidatorTransportResult('groq', groqResult, remainingBefore, groqTimeoutMs, validatorStartedAt, groqResult);
         const validatorElapsedMs = Date.now() - validatorStartedAt;
         const remainingAfter = requestState?.remainingMs?.() ?? null;
         requestState?.recordTiming?.('validator_provider_end', { provider: 'groq', model: groqResult.model || AI_MODELS.validator, status: groqResult.status, validatorElapsedMs, remainingBefore, remainingAfter, reason: String(groqResult.reason || '').slice(0, 180) });
@@ -2589,6 +2607,7 @@ async function walidujOdpowiedzAIBezCache(persona, pytanie, odpowiedz, dane, his
       requestState?.recordTiming?.('validator_provider_start', { provider: 'xkiro', model: KONFIGURACJA.xkiroModel, remainingBefore });
       const xkiroResult = await walidujOdpowiedzXKiro(persona, pytanie, odpowiedz, dane, requestId, requestState, requestMeta);
       recordValidatorTransportResult('xkiro', xkiroResult, requestId);
+      recordValidatorMetric('xkiro', xkiroResult.model || KONFIGURACJA.xkiroModel, remainingBefore, xkiroTimeoutMs, validatorStartedAt, xkiroResult);
       const validatorElapsedMs = Date.now() - validatorStartedAt;
       const remainingAfter = requestState?.remainingMs?.() ?? null;
       requestState?.recordTiming?.('validator_provider_end', { provider: 'xkiro', model: xkiroResult.model || KONFIGURACJA.xkiroModel, status: xkiroResult.status, validatorElapsedMs, remainingBefore, remainingAfter, reason: String(xkiroResult.reason || '').slice(0, 180) });
@@ -2653,6 +2672,7 @@ async function walidujOdpowiedzAIBezCache(persona, pytanie, odpowiedz, dane, his
   requestState?.recordTiming?.('validator_provider_start', { provider: 'openrouter', model: KONFIGURACJA.openrouterValidatorModel, remainingBefore });
   const fallback = await walidujOdpowiedzOpenRouter(persona, pytanie, odpowiedz, dane, requestId, requestState, requestMeta);
   recordValidatorTransportResult('openrouter', fallback, requestId);
+  recordValidatorMetric('openrouter', fallback.model || KONFIGURACJA.openrouterValidatorModel, remainingBefore, requestState ? computeValidatorTimeout(remainingBefore, { maxTimeoutMs: 3000, reserveMs: computeValidatorReserveMs(remainingBefore, requestState.validatory, requestState.maxValidatorow, requestState.validationPass === 1 ? INITIAL_VALIDATOR_REPAIR_RESERVE_MS : 0), minTimeoutMs: 2000 }) : 3000, validatorStartedAt, fallback);
   const validatorElapsedMs = Date.now() - validatorStartedAt;
   const remainingAfter = requestState?.remainingMs?.() ?? null;
   requestState?.recordTiming?.('validator_provider_end', { provider: 'openrouter', model: fallback.model || KONFIGURACJA.openrouterValidatorModel, status: fallback.status, validatorElapsedMs, remainingBefore, remainingAfter, reason: String(fallback.reason || '').slice(0, 180) });
@@ -2924,6 +2944,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
       requestId, persona: aiProfile, category: kategoriaAI || 'pending',
       generatorAttempts: aiState.generacje, modelCalls: aiState.modelCalls, validatorCalls: aiState.validatory,
       validatorResults: aiState.validatorResults,
+      validatorMetrics: agregujMetrykiWalidatorow(aiState.validatorMetrics || []),
       fallbackReasons: aiState.fallbackReasons,
       finalProvider: wynikGeneracji?.provider || null,
       finalModel: wynikGeneracji?.model || null, tavilySearches: aiState.tavilySearches,
@@ -2944,7 +2965,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
     };
     console.log(`[AI][${requestId}] SUMMARY ${JSON.stringify(summary)}`);
     if (onAISummary) {
-      try { onAISummary(summary); } catch (err) { console.warn(`[AI][${requestId}] summary hook error: ${err.message}`); }
+      try { onAISummary({ ...summary, validatorMetricsRaw: [...(aiState.validatorMetrics || [])] }); } catch (err) { console.warn(`[AI][${requestId}] summary hook error: ${err.message}`); }
     }
   };
   console.log(`[AI][${requestId}] start kategoria=pending persona=${aiProfile}`);
