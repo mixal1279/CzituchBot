@@ -20,7 +20,7 @@ test('does not let a malformed untrusted marker consume text across a line break
   const output = sanitizeUntrustedText(input);
   assert.equal(
     output,
-    '<UNTRUSTED_SOURCE\\nordinary text> [USUNIĘTY_ZNACZNIK_BLOKU]payload[USUNIĘTY_ZNACZNIK_BLOKU]',
+    '<UNTRUSTED_SOURCE\nordinary text> [USUNIĘTY_ZNACZNIK_BLOKU]payload[USUNIĘTY_ZNACZNIK_BLOKU]',
   );
 });
 
