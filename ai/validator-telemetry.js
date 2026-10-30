@@ -20,6 +20,12 @@
  * blocks using the same rule as SUMMARY.sourceCount. claimCountHeuristic counts
  * sentence-like fragments and is deliberately not an atomic-claim count.
  */
+function stringifyDiagnostic(value) {
+  if (typeof value === 'string') return value;
+  if (!value) return '';
+  try { return JSON.stringify(value); } catch { return String(value); }
+}
+
 function wybierzTimeoutWalidatora(timeoutOverrideMs, computedTimeoutMs) {
   // The preflight timeout is the single source of truth for both telemetry and AbortController.
   return Number.isFinite(timeoutOverrideMs) ? timeoutOverrideMs : computedTimeoutMs;
@@ -77,19 +83,19 @@ function zbudujKontekstMetrykiWalidatora(requestId, validator, model, odpowiedz,
   } catch {}
   const answer = String(odpowiedz || '');
   const diagnosticText = [result?.reason, result?.diagnostic, result?.error]
-    .map(value => typeof value === 'string' ? value : value ? JSON.stringify(value) : '')
+    .map(stringifyDiagnostic)
     .join(' ')
     .toLowerCase();
   const isTerminal = ['accepted', 'soft_accepted', 'rejected'].includes(result?.status);
   const isOverload = /high demand|overloaded|temporarily unavailable|capacity exceeded|server busy/i.test(diagnosticText);
   const isQuota = result?.quota === true
     || /quotaexceeded|quota exceeded|rate.?limit|resource.?exhausted|insufficient quota|billing hard limit/i.test(diagnosticText);
-  const isTimeout = result?.abortLike === true
+  const isTimeout = result?.abortLike === true || result?.timeoutAbort === true
     || /abortlike["']?\s*[:=]\s*["']?true|aborterror|aborted|abort|cancelled|canceled|anulowan|timeout|timed out|etimedout/i.test(diagnosticText);
   const failureReason = resolvedOutcome === 'skipped_budget' ? 'budget_exhausted'
     : resolvedOutcome === 'skipped_slot' ? 'slot_unavailable'
     : resolvedOutcome === 'skipped_provider' && /cooldown|cool down/i.test(diagnosticText) ? 'provider_cooldown'
-    : resolvedOutcome === 'skipped_provider' && /brak .*key|missing credentials|api key/i.test(diagnosticText) ? 'missing_credentials'
+    : resolvedOutcome === 'skipped_provider' && /brak .*key|brak klucz.*api|missing credentials|api key/i.test(diagnosticText) ? 'missing_credentials'
     : resolvedOutcome === 'skipped_provider' && /brak danych referencyjnych|missing sources/i.test(diagnosticText) ? 'missing_sources'
     : isTerminal ? null
     : isQuota ? 'quota'
