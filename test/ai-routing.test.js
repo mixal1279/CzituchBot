@@ -82,8 +82,9 @@ for (const [question, expectedIntent, expectedEntity, expectedType] of cases) {
 }
 
 const selectedDomains = dodajGameFAQsDomenę(['youtube.com', 'example.com']);
-assert.equal(selectedDomains.includes('gamefaqs.gamespot.com'), false);
-assert.ok(selectedDomains.includes('ign.com'));
+// Compare normalized host entries exactly; these are not URL substring checks.
+assert.equal(selectedDomains.some(domain => domain === 'gamefaqs.gamespot.com'), false);
+assert.equal(selectedDomains.some(domain => domain === 'ign.com'), true);
 assert.ok(selectedDomains.includes('gry-online.pl'));
 
 for (const question of [
