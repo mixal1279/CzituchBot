@@ -844,3 +844,38 @@ test('generation fallback tries OpenRouter before Xkiro', () => {
   assert.ok(xkiro >= 0);
   assert.ok(openrouter < xkiro);
 });
+
+
+test('Tavily serves cached evidence before applying an active quota cooldown', async () => {
+  let tavilyCalls = 0;
+  const search = createTavilySearch({
+    apiKey: 'tavily-test',
+    groq: null,
+    fetchZTimeout: async (url, options) => {
+      const hostname = new URL(String(url)).hostname;
+      assert.equal(hostname, 'api.tavily.com');
+      tavilyCalls++;
+      const query = JSON.parse(options.body).query;
+      if (query === 'cached query') {
+        return new Response(JSON.stringify({
+          results: [{ title: 'Cached evidence', url: 'https://example.com/cached', content: 'Cached evidence text.', score: 0.95 }],
+        }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      return new Response("This request exceeds your plan's set usage limit", { status: 432 });
+    },
+    normalizeQuery: value => value,
+    logger: { log() {}, warn() {}, error() {} },
+    cacheFile: '/tmp/czituch-test-tavily-cache-before-cooldown.json',
+    geminiKey: '',
+    exaKey: '',
+  });
+
+  const first = await search('cached query', { _skipRewrite: true, returnMeta: true, sourceQuestion: 'cache question' });
+  assert.equal(first.status, 'ok');
+  const quota = await search('quota trigger', { _skipRewrite: true, returnMeta: true, sourceQuestion: 'quota question' });
+  assert.equal(quota.status, 'plan_limit_exceeded');
+  const cached = await search('cached query', { _skipRewrite: true, returnMeta: true, sourceQuestion: 'cache question' });
+  assert.equal(cached.status, 'ok');
+  assert.equal(cached.cached, true);
+  assert.equal(tavilyCalls, 2, 'a cached query must not be sent to Tavily or secondary providers during cooldown');
+});
