@@ -8816,32 +8816,32 @@ const startBot = async () => {
     } else {
       await wyswietlKontoYoutube();
       oauth2Client.on('tokens', (newTokens) => {
-      // EventEmitter does not await async listeners. Catch every persistence failure
-      // here so a transient Firestore outage cannot become an unhandled rejection.
-      void (async () => {
-        try {
-          let current = oauth2Client.credentials || {};
+        // EventEmitter does not await async listeners. Catch every persistence failure
+        // here so a transient Firestore outage cannot become an unhandled rejection.
+        void (async () => {
           try {
-            current = await FIRESTORE_STATE.readToken('youtube') || current;
-          } catch (readError) {
-            console.warn('[YT Auth] Nie udało się odczytać poprzedniego tokenu z Firestore; używam danych klienta OAuth:', readError.message);
+            let current = oauth2Client.credentials || {};
+            try {
+              current = await FIRESTORE_STATE.readToken('youtube') || current;
+            } catch (readError) {
+              console.warn('[YT Auth] Nie udało się odczytać poprzedniego tokenu z Firestore; używam danych klienta OAuth:', readError.message);
+            }
+            await zapiszTokenYT({ ...current, ...newTokens });
+            console.log('[YT Auth] 🔄 Token automatycznie odświeżony i zapisany');
+          } catch (saveError) {
+            console.error('[YT Auth] Nie udało się trwale zapisać odświeżonego tokenu; token pozostaje w pamięci:', saveError.message);
           }
-          await zapiszTokenYT({ ...current, ...newTokens });
-          console.log('[YT Auth] 🔄 Token automatycznie odświeżony i zapisany');
-        } catch (saveError) {
-          console.error('[YT Auth] Nie udało się trwale zapisać odświeżonego tokenu; token pozostaje w pamięci:', saveError.message);
-        }
-      })();
-    });
-    // Wymuś jedno, pojedyncze odświeżenie tokenu PRZED odpaleniem 4 równoległych
-    // youtubeWatcherów. Bez tego, jeśli token access wygasł, kilka zapytań
-    // odpalonych naraz próbuje odświeżyć go równocześnie — Google losowo odrzuca
-    // jedno z nich błędem "cannot act on behalf of the specified Google account".
-    try {
-      await oauth2Client.getAccessToken();
-      console.log('[YT Auth] ✅ Token dostępu świeży, startuję kanały');
-    } catch (err) {
-      console.error('[YT Auth] ❌ Nie udało się odświeżyć tokenu przed startem:', err.message);
+        })();
+      });
+      // Wymuś jedno, pojedyncze odświeżenie tokenu PRZED odpaleniem 4 równoległych
+      // youtubeWatcherów. Bez tego, jeśli token access wygasł, kilka zapytań
+      // odpalonych naraz próbuje odświeżyć go równocześnie — Google losowo odrzuca
+      // jedno z nich błędem "cannot act on behalf of the specified Google account".
+      try {
+        await oauth2Client.getAccessToken();
+        console.log('[YT Auth] ✅ Token dostępu świeży, startuję kanały');
+      } catch (err) {
+        console.error('[YT Auth] ❌ Nie udało się odświeżyć tokenu przed startem:', err.message);
       }
     }
     youtubeReady = true;
