@@ -375,7 +375,7 @@ function wyodrebnijNazwyWlasne(value, options = {}) {
     // i powodował odrzucenie poprawnego angielskiego tłumaczenia „The exact moment…”.
     'dokladny', 'dokladna', 'dokladne', 'dokladnego', 'dokladnej', 'dokladnym',
     // Liczba mnoga rzeczownika pospolitego: „postać” była na liście, „postacie” nie.
-    'postacie', 'postaci', 'bohaterzy', 'bohaterowie',
+    'postacie', 'postaci', 'bohaterzy', 'bohaterowie', 'źródła', 'zrodla', 'sources',
     // Kwantyfikatory na początku zdania nie są nazwami własnymi (np. „Wszystkie te działania…”).
     'wszystkie', 'wszystkich', 'wszystko', 'wszelkie', 'wszyscy', 'wszystkim', 'każde', 'kazde', 'każda', 'kazda', 'każdy', 'kazdy', 'każdym', 'kazdym',
     // Rzeczownik pospolity na początku claimu nie może zostać uznany za encję.
@@ -1329,7 +1329,14 @@ function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
   // “There is no data confirming the reason why…” opisuje brak wiedzy,
   // a nie dokonuje nowego twierdzenia przyczynowego. CAUSAL_RE pozostaje
   // bez zmian; wyjątek dotyczy wyłącznie równoważnej konstrukcji w tłumaczeniu.
-  if (wyodrebnijMarkery(pl, CAUSAL_RE) !== wyodrebnijMarkery(en, CAUSAL_RE)
+  const plCausal = wyodrebnijMarkery(pl, CAUSAL_RE);
+  const enCausal = wyodrebnijMarkery(en, CAUSAL_RE);
+  // Polish "zmusza" and English "forces" express the same compulsion relation.
+  // Keep this equivalence local; do not broaden the global causal marker set.
+  const plCompulsion = /(?<![\p{L}])zmusz\w*(?![\p{L}])/iu.test(normalizujClaim(pl));
+  const enCompulsion = /(?<![\\p{L}])forc(?:e|es|ed|ing)(?![\\p{L}])/iu.test(normalizujClaim(en));
+  const equivalentCompulsion = plCompulsion && enCompulsion;
+  if (plCausal !== enCausal && !equivalentCompulsion
     && !(polishReasonClause && englishReasonClause)) {
     return { ok: false, reason: 'tłumaczenie claimu zmienia relację przyczynową' };
   }
