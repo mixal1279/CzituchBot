@@ -2366,7 +2366,7 @@ async function walidujOdpowiedzAIBezCache(persona, pytanie, odpowiedz, dane, his
   if (!dane) {
     if (requestState) {
       if (!Array.isArray(requestState.validatorMetrics)) requestState.validatorMetrics = [];
-      requestState.validatorMetrics.push(zbudujKontekstMetrykiWalidatora(requestId, 'gemini', null, odpowiedz, dane, requestState, requestState.remainingMs?.() ?? null, null, null, { status: 'unavailable', reason: 'brak danych referencyjnych' }, 'skipped_provider'));
+      requestState.validatorMetrics.push(zbudujKontekstMetrykiWalidatora(requestId, 'gemini', null, odpowiedz, dane, requestState, (typeof requestState.remainingMs === 'function' ? requestState.remainingMs() : null), null, null, { status: 'unavailable', reason: 'brak danych referencyjnych' }, 'skipped_provider'));
     }
     return { status: 'unavailable', ok: false, technicalError: true, provider: 'gemini', model: null, unsupported_claims: [], reason: 'brak danych referencyjnych' };
   }
