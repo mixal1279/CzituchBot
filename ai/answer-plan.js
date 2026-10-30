@@ -62,6 +62,9 @@ function buildAnswerPlan(question, routing = {}) {
   // Pytania przyczynowe wymagają osobnego dowodu dla faktu i dla przyczyny.
   // Sam fakt, że wydarzenie A poprzedza B, nie jest dowodem relacji A -> B.
   const causalQuestion = slots.has('why');
+  const quantityMayBeVariable = slots.has('quantity')
+    && /\b(?:ile|jak\s+d[łl]ugo|how\s+long)\b/i.test(q)
+    && /\b(?:trwa|trwać|trwac|duration|lasts?|takes?)\b/i.test(q);
 
   const clauses = q.split(
     /(?<=[?;])\s+|\s+(?=(?:i|oraz|a także|natomiast)\s+(?:jak|dlaczego|czemu|kiedy|gdzie|ile|czy|kto|kim|co|czym|jaki|jaka|jakie)\b)/iu,
@@ -95,7 +98,7 @@ function buildAnswerPlan(question, routing = {}) {
   ].filter(Boolean).join(' ');
 
   return {
-    version: 27,
+    version: 28,
     question: q,
     intent: routing.intent || 'conversation',
     entity: routing.entity || routing.resolved_entity?.name || null,
@@ -106,6 +109,7 @@ function buildAnswerPlan(question, routing = {}) {
       ? 'high'
       : requirements.length >= 2 ? 'medium' : 'low',
     causalQuestion,
+    quantityMayBeVariable,
     instruction: requirements.length
       ? 'Odpowiedź musi pokryć: ' + requirements.map(r => r.id).join(', ') + '. Każde zdanie faktograficzne ma być atomowym claimem opartym na jednym zweryfikowanym fragmencie evidence. Dla pytania „dlaczego/czemu” oddziel fakt od przyczyny: podaj przyczynę tylko wtedy, gdy konkretny evidence quote wyraźnie łączy przyczynę ze skutkiem. Nie traktuj kolejności wydarzeń jako przyczynowości. Jeśli źródło jawnie podaje motyw lub cel działania (np. próbę upokorzenia), podaj ten motyw wprost i nie zastępuj go domniemaną przyczyną z sąsiednich zdań. Nie zamieniaj celu działania na przyczynę zdarzenia. Jeśli brak takiego dowodu, powiedz wprost, że źródła nie potwierdzają przyczyny.' + (responseShapeGuidance ? ' ' + responseShapeGuidance : '')
       : 'Odpowiedz bezpośrednio i nie dodawaj niepotwierdzonych faktów.' + (responseShapeGuidance ? ' ' + responseShapeGuidance : ''),
@@ -153,6 +157,7 @@ function extractAnswerSignals(answer) {
       || /\b(?:towarzysz\w*|czlonek|czlonkini|przywodc\w*|dowodc\w*|zalozyciel\w*|wlasciciel\w*|antagonist\w*|protagonist\w*|zloczyn\w*|sojusznik\w*)\b/.test(text))
       && !/^\s*(?:to|jest)\s+(?:posta[cć]|osoba)\b/.test(text),
     quantity: /\b\d+(?:[.,]\d+)?\s*(?:godzin|godz|h|min|sekund|dni|lat|%|gb|mb|tb|zl|pln|usd|eur)?\b/.test(text),
+    quantityVariable: /\b(?:nie ma (?:jednego|stalego|okreslonego)|nie da sie (?:tego )?okreslic|zalezy od|moze trwac roznie|czas jest rozny|to zalezy|depends on|varies|no fixed|not fixed)\b/.test(text),
     comparison: /\b(roznic\w*|rozni\w*|wiecej|mniej|leps\w*|gors\w*|natomiast|podobn\w*|vs|versus|z kolei|w przeciwienstwie|podczas gdy|tymczasem|zas|odmienn\w*|bardziej)\b/.test(text)
       || /\b\w{3,}iejsz\w*\b|\b\w{3,}sz[aeyi]\b/.test(text),
     steps: Boolean(procedural) && hasMeaningfulTail(text, procedural),
@@ -236,7 +241,9 @@ function assessAnswerCompleteness(answer, plan) {
           // Jawnie podany motyw może odpowiedzieć na „dlaczego?”, ale nie zmienia go
           // w twierdzenie o faktycznie zrealizowanym łańcuchu przyczynowym.
           ? Boolean(signals.causal_explanation || (signals.motive_explanation && plan.requirements.some(item => item?.id === 'why')))
-          : Boolean(signals[id]);
+          : id === 'quantity' && plan.quantityMayBeVariable
+            ? Boolean(signals.quantity || signals.quantityVariable)
+            : Boolean(signals[id]);
     checked.push({ id, ok });
     if (!ok) missing.push(id);
   }
