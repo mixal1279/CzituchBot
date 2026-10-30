@@ -1333,7 +1333,7 @@ function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
   const enCausal = wyodrebnijMarkery(en, CAUSAL_RE);
   // Polish "zmusza" and English "forces" express the same compulsion relation.
   // Keep this equivalence local; do not broaden the global causal marker set.
-  const plCompulsion = /(?<![\\p{L}])zmusz\\w*(?![\\p{L}])/iu.test(normalizujClaim(pl));
+  const plCompulsion = /(?<![\p{L}])zmusz\w*(?![\p{L}])/iu.test(normalizujClaim(pl));
   const enCompulsion = /(?<![\\p{L}])forc(?:e|es|ed|ing)(?![\\p{L}])/iu.test(normalizujClaim(en));
   const equivalentCompulsion = plCompulsion && enCompulsion;
   if (plCausal !== enCausal && !equivalentCompulsion
