@@ -6536,10 +6536,17 @@ async function wczytajTokenYT() {
 }
 
 async function zalogujYouTube() {
+  // Bind the callback to this authorization attempt and use PKCE so an
+  // intercepted authorization code cannot be redeemed without the verifier.
+  const oauthState = crypto.randomBytes(32).toString('hex');
+  const { codeVerifier, codeChallenge } = await oauth2Client.generateCodeVerifierAsync();
   const authUrl = oauth2Client.generateAuthUrl({
     access_type: 'offline',
     scope: ['https://www.googleapis.com/auth/youtube', 'https://www.googleapis.com/auth/youtube.force-ssl'],
     prompt: 'consent',
+    state: oauthState,
+    code_challenge: codeChallenge,
+    code_challenge_method: 'S256',
   });
   console.log('\n========================================');
   console.log('🔐 LOGOWANIE DO YOUTUBE');
@@ -6553,26 +6560,44 @@ async function zalogujYouTube() {
     const http = require('http');
     const server = http.createServer((req, res) => {
       const url = new URL(req.url, 'http://localhost:3000');
+      const callbackState = url.searchParams.get('state');
+      const oauthError = url.searchParams.get('error');
       const code = url.searchParams.get('code');
-      if (code) {
-        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-        res.end('<h2>✅ Zalogowano! Możesz zamknąć tę kartę i wrócić do terminala.</h2>');
+
+      if (!callbackState || callbackState !== oauthState) {
+        res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' });
+        res.end('Nieprawidłowy parametr state. Autoryzacja została odrzucona.');
         server.close();
-        resolve(code);
-      } else {
-        res.writeHead(400);
+        reject(new Error('Nieprawidłowy parametr state w callbacku OAuth'));
+        return;
+      }
+      if (oauthError) {
+        res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' });
+        res.end('Autoryzacja Google została anulowana lub odrzucona.');
+        server.close();
+        reject(new Error('Google OAuth zwrócił błąd: ' + oauthError));
+        return;
+      }
+      if (!code) {
+        res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' });
         res.end('Brak kodu autoryzacji.');
         server.close();
         reject(new Error('Brak kodu w callbacku'));
+        return;
       }
+
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.end('<h2>✅ Zalogowano! Możesz zamknąć tę kartę i wrócić do terminala.</h2>');
+      server.close();
+      resolve(code);
     });
+    server.on('error', reject);
     server.listen(3000, () => {
       console.log('[YT Auth] ⏳ Czekam na autoryzację na porcie 3000...');
     });
-    server.on('error', reject);
   });
 
-  const { tokens } = await oauth2Client.getToken(code);
+  const { tokens } = await oauth2Client.getToken({ code, codeVerifier });
   oauth2Client.setCredentials(tokens);
   try {
     await zapiszTokenYT(tokens);
