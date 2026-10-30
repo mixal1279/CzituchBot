@@ -6879,7 +6879,7 @@ async function youtubeLoop(stan) {
 }
 
 // =============================================
-//  INTERWAŁ SPRAWDZANIA STREAMU – stały co 5h
+//  INTERWAŁ SPRAWDZANIA LIVE – co 3 minuty
 // =============================================
 function obliczInterwałSprawdzania() {
   // Wykrywanie live odbywa się przez publiczną stronę kanału, bez kosztu search.list.
