@@ -482,7 +482,13 @@ test('circuit breaker dla Groq, xKiro, OpenRouter i Gemini otwiera się po dwóc
   }
 });
 
-test('timeout z mockowanego klienta Groq trafia do circuit breakera bez wywołania sieci', async () => {
+test('timeout z mockowanego klienta Groq trafia do circuit breakera bez wywołania sieci', async t => {
+  const previousTpmGuard = process.env.AI_GROQ_TPM_GUARD;
+  t.after(() => {
+    if (previousTpmGuard === undefined) delete process.env.AI_GROQ_TPM_GUARD;
+    else process.env.AI_GROQ_TPM_GUARD = previousTpmGuard;
+  });
+  process.env.AI_GROQ_TPM_GUARD = '0';
   hooks.KONFIGURACJA.geminiKey = '';
   hooks.KONFIGURACJA.xkiroKey = '';
   hooks.KONFIGURACJA.openrouterKey = '';
@@ -498,8 +504,7 @@ test('timeout z mockowanego klienta Groq trafia do circuit breakera bez wywołan
     assert.equal(result.status, 'unavailable');
     hooks.recordValidatorTransportResult('groq', result, 'test-groq-timeout-' + i);
   }
-  // The TPM ledger conservatively retains estimated usage after timeout, so the second call is skipped.
-  assert.equal(calls, 1);
+  assert.equal(calls, 2);
   assert.equal(hooks.validatorBreakerIsOpen('groq'), true);
 
   const slotPurposes = [];
