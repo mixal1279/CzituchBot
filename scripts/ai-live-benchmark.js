@@ -7,6 +7,7 @@ const { judgeAnswer } = require('../ai/answer-judge');
 const { normalizeFactText, scoreGoldenFacts } = require('../ai/benchmark-scorer');
 const { summarizeClaimSupportAudits } = require('../ai/claim-support');
 const { resetProviderQuotaCooldowns } = require('../ai/fallback');
+const { agregujMetrykiWalidatorow } = require('../ai/validator-telemetry');
 
 if (require.main === module && process.env.AI_LIVE_BENCHMARK !== '1') {
   console.error('Live benchmark jest celowo zablokowany. Ustaw AI_LIVE_BENCHMARK=1.');
@@ -446,6 +447,7 @@ async function run() {
   resetProviderQuotaCooldowns();
   const started = Date.now();
   const results = [];
+  const validatorMetricsRaw = [];
   for (let i = 0; i < cases.length; i++) {
     const item = cases[i];
     let answer = '';
@@ -513,6 +515,7 @@ async function run() {
         generationAttempts: summary?.generationAttempts || [],
         generationBudget: summary?.generationBudget || null,
         validatorResults: summary?.validatorResults || [],
+        validatorMetrics: summary?.validatorMetrics || {},
         claimSupport: extractClaimSupportAudit(summary),
         timingTrace: summary?.timingTrace || [],
         fallbackReasons: summary?.fallbackReasons || [],
@@ -539,6 +542,7 @@ async function run() {
         generationAttempts: summary?.generationAttempts || [],
         generationBudget: summary?.generationBudget || null,
         validatorResults: summary?.validatorResults || [],
+        validatorMetrics: summary?.validatorMetrics || {},
         claimSupport: extractClaimSupportAudit(summary),
         timingTrace: summary?.timingTrace || [],
         fallbackReasons: summary?.fallbackReasons || [],
@@ -547,6 +551,8 @@ async function run() {
         error: String(error?.message || error),
       });
     }
+
+    validatorMetricsRaw.push(...(summary?.validatorMetricsRaw || []));
 
     if ((i + 1) % 10 === 0 || i + 1 === cases.length) {
       const answeredCount = results.filter(x => x.answered).length;
@@ -596,6 +602,8 @@ async function run() {
     claimSupportPassRate: claimSupport.claimSupportPassRate,
     claimSupportUsableRate: claimSupport.claimSupportUsableRate,
     claimSupport,
+    validatorMetrics: agregujMetrykiWalidatorow(validatorMetricsRaw),
+    validatorMetricsRaw,
     durationMs: Date.now() - started,
     note: 'Ten testuje produkcyjny pipeline, kompletność odpowiedzi i osobny audyt wsparcia claim-cytat. Nie jest niezależnym pomiarem factual accuracy; do tego potrzebny jest ręcznie zweryfikowany gold answer/fact set.',
     categories: [...new Set(results.map(x => x.category))].sort(),
