@@ -183,8 +183,6 @@ which evidence was unavailable.
    deterministic regressions from transient provider failures.
 5. Recommend the smallest fix supported by evidence and a focused regression
    test. Do not label a provider outage as a code bug without supporting proof.
-6. Do not infer a provider outage from a single failed case without checking
-   provider response, quota, and retry diagnostics where available.
 
 ## Report format
 

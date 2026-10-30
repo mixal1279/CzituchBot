@@ -29,10 +29,6 @@ jobs:
     name: Compile and verify gh-aw workflow
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    permissions:
-      actions: write
-      contents: write
-      workflows: write
     steps:
       - name: Check out the tested commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -64,46 +60,7 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-      - name: Commit regenerated lock file to same-repository PR branch
-        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
-        with:
-          script: |
-            const fs = require('fs');
-            const path = '.github/workflows/ai-benchmark-doctor.lock.yml';
-            const generated = fs.readFileSync(path);
-            const owner = context.repo.owner;
-            const repo = context.repo.repo;
-            const branch = context.payload.pull_request.head.ref;
-            const current = await github.rest.repos.getContent({ owner, repo, path, ref: branch });
-            if (current.data.type !== 'file') {
-              throw new Error('Expected the generated lock path to be a file');
-            }
-            const existing = Buffer.from(current.data.content, 'base64');
-            if (existing.equals(generated)) {
-              core.info('Committed lock file already matches gh aw compile output');
-              return;
-            }
-            const result = await github.rest.repos.createOrUpdateFileContents({
-              owner,
-              repo,
-              path,
-              message: 'chore: regenerate AI benchmark doctor lock file',
-              content: generated.toString('base64'),
-              sha: current.data.sha,
-              branch
-            });
-            core.info(`Updated generated lock file in commit ${result.data.commit.sha}`);
-            await github.rest.actions.createWorkflowDispatch({
-              owner,
-              repo,
-              workflow_id: 'compile-gh-aw.yml',
-              ref: branch
-            });
-            core.info('Dispatched a verification run against the updated branch head');
-
       - name: Verify committed lock file is up to date
-        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
         run: |
           git ls-files --error-unmatch .github/workflows/ai-benchmark-doctor.lock.yml
           git diff --exit-code HEAD -- .github/workflows/ai-benchmark-doctor.lock.yml
