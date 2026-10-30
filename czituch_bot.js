@@ -2656,7 +2656,7 @@ async function walidujOdpowiedzAIBezCache(persona, pytanie, odpowiedz, dane, his
       reserveMs: computeValidatorReserveMs(remainingMs, requestState.validatory + 1, requestState.maxValidatorow, requestState.validationPass === 1 ? INITIAL_VALIDATOR_REPAIR_RESERVE_MS : 0),
       minTimeoutMs: 2000,
     });
-    if (timeoutMs === null) {
+    if (openRouterTimeoutMs === null) {
       const reason = 'OpenRouter validator pominięty: zbyt mały pozostały budżet czasu';
       recordSkippedValidator('openrouter', KONFIGURACJA.openrouterValidatorModel, reason);
       return lastRejected || { ...(last || {}), status: 'unavailable', ok: false, technicalError: true, transient: true, skipped: true, provider: 'openrouter', model: KONFIGURACJA.openrouterValidatorModel, unsupported_claims: [], reason };
