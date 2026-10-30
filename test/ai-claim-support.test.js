@@ -222,3 +222,18 @@ test('explicit reciprocal exchange supports a reason without excusing unrelated 
     'Geralt searched for the Baron’s missing family. The Baron had information about Ciri.',
   ).includes('correlation_to_causation'));
 });
+
+
+test('Polish possibility wording preserves a source hedge', () => {
+  assert.deepEqual(detectOverclaimTypes(
+    'W grze postać tę można spotkać i zrekrutować jako towarzysza.',
+    'The character may be encountered and recruited as a companion.',
+  ), []);
+});
+
+test('an explicit offer-to-join outcome supports a Polish causal connector', () => {
+  assert.deepEqual(detectOverclaimTypes(
+    'Dzięki temu zostaje zrekrutowany jako towarzysz.',
+    'Taking him up on this offer will see him officially join your party.',
+  ), []);
+});
