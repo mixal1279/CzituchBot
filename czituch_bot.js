@@ -1859,7 +1859,9 @@ async function walidujOdpowiedzGeminiModel(model, persona, pytanie, odpowiedz, d
       ok: false,
       technicalError: true,
       transient,
+      timeoutAbort: abortLike,
       quota,
+      statusCode: status || null,
       provider: 'gemini',
       model,
       unsupported_claims: [],
@@ -2063,12 +2065,13 @@ async function walidujOdpowiedzOpenRouter(persona, pytanie, odpowiedz, dane, req
     console.log(`[AI][${requestId}] OpenRouter validator: status=${normalized.status} supported=${normalized.supported} complete=${normalized.complete}`);
     return normalized;
   } catch (err) {
+    const statusCode = Number(err?.status ?? err?.statusCode ?? err?.response?.status ?? 0);
     const timeoutAbort = err?.name === 'TimeoutError'
       || err?.name === 'AbortError'
       || /timeout|timed out|aborted|aborterror/i.test(String(err?.message || ''));
     const diagnostic = formatProviderError('openrouter', KONFIGURACJA.openrouterValidatorModel, err, { timeoutMs: validatorTimeoutMs, timeoutAbort });
     console.error(`[AI][${requestId}] OpenRouter validator TRANSPORT_ERROR: ${diagnostic}`);
-    return { status: 'unavailable', ok: false, technicalError: true, transient: timeoutAbort, timeoutAbort, provider: 'openrouter', model: KONFIGURACJA.openrouterValidatorModel, unsupported_claims: [], reason: timeoutAbort ? 'OpenRouter validator timeout/abort' : 'fallback validator niedostępny', error: diagnostic, diagnostic };
+    return { status: 'unavailable', ok: false, technicalError: true, transient: timeoutAbort, timeoutAbort, statusCode: statusCode || null, provider: 'openrouter', model: KONFIGURACJA.openrouterValidatorModel, unsupported_claims: [], reason: timeoutAbort ? 'OpenRouter validator timeout/abort' : 'fallback validator niedostępny', error: diagnostic, diagnostic };
   }
 }
 
@@ -2192,6 +2195,7 @@ async function walidujOdpowiedzGroq(persona, pytanie, odpowiedz, dane, requestId
       transient: timeoutAbort || is429,
       timeoutAbort,
       quota,
+      statusCode: status || null,
       provider: 'groq',
       model,
       unsupported_claims: [],
@@ -2319,6 +2323,7 @@ async function walidujOdpowiedzXKiro(persona, pytanie, odpowiedz, dane, requestI
     console.log(`[AI][${requestId}] xKiro validator: status=${normalized.status} supported=${normalized.supported} complete=${normalized.complete}`);
     return normalized;
   } catch (err) {
+    const statusCode = Number(err?.status ?? err?.statusCode ?? err?.response?.status ?? 0);
     const timeoutAbort = err?.name === 'TimeoutError'
       || err?.name === 'AbortError'
       || /timeout|timed out|aborted|aborterror|cancelled|canceled/i.test(String(err?.message || ''));
@@ -2327,9 +2332,10 @@ async function walidujOdpowiedzXKiro(persona, pytanie, odpowiedz, dane, requestI
       remainingMs: typeof requestState?.remainingMs === 'function' ? requestState.remainingMs() : null,
       abortLike: timeoutAbort,
       timeoutAbort,
+      status: statusCode || null,
     });
     console.error(`[AI][${requestId}] xKiro validator TRANSPORT_ERROR: ${diagnostic}`);
-    return { status: 'unavailable', ok: false, technicalError: true, transient: timeoutAbort, timeoutAbort, provider: 'xkiro', model, unsupported_claims: [], reason: timeoutAbort ? 'xKiro validator timeout/abort' : 'xKiro validator niedostępny', error: diagnostic, diagnostic };
+    return { status: 'unavailable', ok: false, technicalError: true, transient: timeoutAbort, timeoutAbort, statusCode: statusCode || null, provider: 'xkiro', model, unsupported_claims: [], reason: timeoutAbort ? 'xKiro validator timeout/abort' : 'xKiro validator niedostępny', error: diagnostic, diagnostic };
   }
 }
 
@@ -2363,6 +2369,38 @@ async function walidujOdpowiedzAIBezCache(persona, pytanie, odpowiedz, dane, his
   }
   const budzetValidatoraPrzekroczony = () => requestState
     && Date.now() - requestState.startedAt >= requestState.maxCzasMs;
+  const recordSkippedValidator = (provider, model, reason) => {
+    if (!Array.isArray(requestState?.validatorResults)) return;
+    const remainingMs = typeof requestState.remainingMs === 'function'
+      ? requestState.remainingMs()
+      : (Number.isFinite(requestState.maxCzasMs) && Number.isFinite(requestState.startedAt)
+        ? Math.max(0, requestState.maxCzasMs - (Date.now() - requestState.startedAt))
+        : null);
+    const entry = {
+      provider,
+      model: model || null,
+      status: 'unavailable',
+      elapsedMs: 0,
+      remainingMsBefore: remainingMs,
+      remainingMsAfter: remainingMs,
+      complete: false,
+      confidence: null,
+      claimCoverage: null,
+      reason: String(reason || 'validator pominięty').slice(0, 300),
+      technicalError: true,
+      timeoutAbort: false,
+      quota: false,
+      skipped: true,
+      statusCode: null,
+    };
+    requestState.validatorResults.push(entry);
+    requestState.recordTiming?.('validator_provider_skipped', {
+      provider,
+      model: model || null,
+      remainingMs,
+      reason: entry.reason,
+    });
+  };
   if (budzetValidatoraPrzekroczony()) {
     return { status: 'unavailable', ok: false, technicalError: true, provider: 'gemini', model: null, unsupported_claims: [], reason: 'budżet czasu validatora wyczerpany' };
   }
@@ -2375,7 +2413,17 @@ async function walidujOdpowiedzAIBezCache(persona, pytanie, odpowiedz, dane, his
     && !isProviderQuotaBlocked(`gemini:${AI_GEMINI_VALIDATOR_MODEL}`)
     ? [AI_GEMINI_VALIDATOR_MODEL]
     : [];
-  if (!models.length) console.warn(`[AI][${requestId}] Gemini validator w cooldownie lub breaker otwarty — używam fallbacku`);
+  if (!models.length) {
+    const reason = !KONFIGURACJA.geminiKey
+      ? 'Gemini validator pominięty: brak klucza API'
+      : validatorBreakerIsOpen('gemini')
+        ? 'Gemini validator pominięty: circuit breaker aktywny'
+        : isProviderQuotaBlocked(`gemini:${AI_GEMINI_VALIDATOR_MODEL}`)
+          ? 'Gemini validator pominięty: aktywny cooldown limitu dostawcy'
+          : 'Gemini validator pominięty: aktywny cooldown';
+    recordSkippedValidator('gemini', AI_GEMINI_VALIDATOR_MODEL, reason);
+    console.warn(`[AI][${requestId}] ${reason} — używam fallbacku`);
+  }
   let last = null;
   let lastRejected = null;
   for (let i = 0; i < models.length; i++) {
@@ -2388,12 +2436,16 @@ async function walidujOdpowiedzAIBezCache(persona, pytanie, odpowiedz, dane, his
       minTimeoutMs: 4000,
     });
     if (requestState && timeoutMs === null) {
-      last = { status: 'unavailable', ok: false, technicalError: true, transient: true, skipped: true, provider: 'gemini', model: models[i], unsupported_claims: [], reason: 'Gemini validator pominięty: zbyt mały pozostały budżet czasu' };
+      const reason = 'Gemini validator pominięty: zbyt mały pozostały budżet czasu';
+      last = { status: 'unavailable', ok: false, technicalError: true, transient: true, skipped: true, provider: 'gemini', model: models[i], unsupported_claims: [], reason };
+      recordSkippedValidator('gemini', models[i], reason);
       console.warn(`[AI][${requestId}] Gemini validator pominięty przed rezerwacją slotu; remaining=${remainingMs}ms`);
       continue;
     }
     if (!zarezerwujSlotWalidatora(requestState, `validator:${models[i]}`)) {
-      return lastRejected || { status: 'unavailable', ok: false, technicalError: true, provider: 'gemini', model: models[i], unsupported_claims: [], reason: 'budżet validatora/modeli wyczerpany' };
+      const reason = 'budżet validatora/modeli wyczerpany';
+      recordSkippedValidator('gemini', models[i], reason);
+      return lastRejected || { status: 'unavailable', ok: false, technicalError: true, provider: 'gemini', model: models[i], unsupported_claims: [], reason };
     }
     const validatorStartedAt = Date.now();
     const remainingBefore = requestState?.remainingMs?.() ?? null;
@@ -2437,9 +2489,13 @@ async function walidujOdpowiedzAIBezCache(persona, pytanie, odpowiedz, dane, his
   const groqValidatorProviderKey = `groq:${AI_MODELS.validator}`;
   if (process.env.AI_VALIDATOR_GROQ !== '0' && (groqValidatorClientOverride || groq)) {
     if (validatorBreakerIsOpen('groq')) {
-      console.warn(`[AI][${requestId}] Groq validator pominięty przed rezerwacją slotu: circuit breaker aktywny`);
+      const reason = 'Groq validator pominięty: circuit breaker aktywny';
+      recordSkippedValidator('groq', AI_MODELS.validator, reason);
+      console.warn(`[AI][${requestId}] ${reason}`);
     } else if (isProviderQuotaBlocked(groqValidatorProviderKey)) {
-      console.warn(`[AI][${requestId}] Groq validator pominięty przed rezerwacją slotu: aktywny cooldown ${groqValidatorProviderKey}`);
+      const reason = `Groq validator pominięty: aktywny cooldown ${groqValidatorProviderKey}`;
+      recordSkippedValidator('groq', AI_MODELS.validator, reason);
+      console.warn(`[AI][${requestId}] ${reason}`);
     } else {
       const groqRemainingMs = requestState
         ? (typeof requestState.remainingMs === 'function' ? requestState.remainingMs() : requestState.maxCzasMs - (Date.now() - requestState.startedAt))
@@ -2452,9 +2508,13 @@ async function walidujOdpowiedzAIBezCache(persona, pytanie, odpowiedz, dane, his
           })
         : 3000;
       if (groqTimeoutMs === null) {
-        console.warn(`[AI][${requestId}] Groq validator pominięty przed rezerwacją slotu; remaining=${groqRemainingMs}ms`);
+        const reason = 'Groq validator pominięty: zbyt mały pozostały budżet czasu';
+        recordSkippedValidator('groq', AI_MODELS.validator, reason);
+        console.warn(`[AI][${requestId}] ${reason}; remaining=${groqRemainingMs}ms`);
       } else if (!zarezerwujSlotWalidatora(requestState, 'validator:groq')) {
-        return lastRejected || { ...(last || {}), status: 'unavailable', ok: false, technicalError: true, provider: 'groq', model: AI_MODELS.validator, unsupported_claims: [], reason: 'budżet validatora/modeli wyczerpany przed Groq' };
+        const reason = 'budżet validatora/modeli wyczerpany przed Groq';
+        recordSkippedValidator('groq', AI_MODELS.validator, reason);
+        return lastRejected || { ...(last || {}), status: 'unavailable', ok: false, technicalError: true, provider: 'groq', model: AI_MODELS.validator, unsupported_claims: [], reason };
       } else {
         const validatorStartedAt = Date.now();
         const remainingBefore = requestState?.remainingMs?.() ?? null;
@@ -2494,33 +2554,38 @@ async function walidujOdpowiedzAIBezCache(persona, pytanie, odpowiedz, dane, his
         last = groqResult;
       }
     }
+  } else {
+    recordSkippedValidator('groq', AI_MODELS.validator, process.env.AI_VALIDATOR_GROQ === '0' ? 'Groq validator pominięty: wyłączony konfiguracją' : 'Groq validator pominięty: brak klienta lub klucza API');
   }
 
-  // xKiro jest trzecim, niezależnym transportem validatora. Używamy go przed
-  // OpenRouterem, gdy Gemini jest niedostępne, ponieważ live benchmark wykazał,
-  // że xKiro stabilnie generuje odpowiedź, a lokalny validator nadal wykonuje
-  // pełne, deterministyczne sprawdzenie claimów/evidence.
-  if (KONFIGURACJA.xkiroKey && validatorBreakerIsOpen('xkiro')) {
+  // xKiro is the preferred independent validator before OpenRouter when
+  // configured. Keep a minimum six-second attempt budget so a call is not
+  // launched with a timeout too short to produce a useful verdict.
+  if (!KONFIGURACJA.xkiroKey) {
+    recordSkippedValidator('xkiro', KONFIGURACJA.xkiroModel, 'xKiro validator pominięty: brak klucza API');
+  } else if (validatorBreakerIsOpen('xkiro')) {
+    recordSkippedValidator('xkiro', KONFIGURACJA.xkiroModel, 'xKiro validator pominięty: circuit breaker aktywny');
     console.warn(`[AI][${requestId}] xKiro validator pominięty przed rezerwacją slotu: circuit breaker aktywny`);
-  }
-  // xKiro (qwen 397B free) ma zbyt wysoki TTFT dla głównego budżetu requestu.
-  // Pozostaje dostępne przez bezpośredni hook/preflight, ale nie zużywa czasu
-  // produkcyjnego validatora bez jawnego opt-in.
-  if (process.env.AI_ENABLE_XKIRO_VALIDATOR === '1' && KONFIGURACJA.xkiroKey && !validatorBreakerIsOpen('xkiro')) {
+  } else {
     const xkiroRemainingMs = requestState
       ? (typeof requestState.remainingMs === 'function' ? requestState.remainingMs() : requestState.maxCzasMs - (Date.now() - requestState.startedAt))
       : 6000;
+    const configuredXkiroTimeout = Number(process.env.AI_XKIRO_VALIDATOR_TIMEOUT_MS);
+    const xkiroMaxTimeoutMs = Math.max(6000, Number.isFinite(configuredXkiroTimeout) && configuredXkiroTimeout > 0 ? configuredXkiroTimeout : 6000);
     const xkiroTimeoutMs = computeValidatorTimeout(xkiroRemainingMs, {
-      maxTimeoutMs: Number(process.env.AI_XKIRO_VALIDATOR_TIMEOUT_MS) || 4500,
+      maxTimeoutMs: xkiroMaxTimeoutMs,
       reserveMs: computeValidatorReserveMs(xkiroRemainingMs, requestState?.validatory + 1, requestState?.maxValidatorow, requestState?.validationPass === 1 ? INITIAL_VALIDATOR_REPAIR_RESERVE_MS : 0),
-      minTimeoutMs: 1200,
+      minTimeoutMs: 6000,
     });
     if (xkiroTimeoutMs === null) {
-      console.warn(`[AI][${requestId}] xKiro validator pominięty: zbyt mały remaining budget=${xkiroRemainingMs}ms; przechodzę do następnego validatora`);
+      const reason = 'xKiro validator pominięty: mniej niż 6 s użytecznego budżetu po rezerwie';
+      recordSkippedValidator('xkiro', KONFIGURACJA.xkiroModel, reason);
+      console.warn(`[AI][${requestId}] ${reason}; remaining=${xkiroRemainingMs}ms`);
+    } else if (!zarezerwujSlotWalidatora(requestState, 'validator:xkiro')) {
+      const reason = 'budżet validatora/modeli wyczerpany przed xKiro';
+      recordSkippedValidator('xkiro', KONFIGURACJA.xkiroModel, reason);
+      return lastRejected || { ...(last || {}), status: 'unavailable', ok: false, technicalError: true, unsupported_claims: [], reason };
     } else {
-      if (!zarezerwujSlotWalidatora(requestState, 'validator:xkiro')) {
-        return lastRejected || { ...(last || {}), status: 'unavailable', ok: false, technicalError: true, unsupported_claims: [], reason: 'budżet validatora/modeli wyczerpany przed xKiro' };
-      }
       const validatorStartedAt = Date.now();
       const remainingBefore = requestState?.remainingMs?.() ?? null;
       requestState?.recordTiming?.('validator_provider_start', { provider: 'xkiro', model: KONFIGURACJA.xkiroModel, remainingBefore });
@@ -2557,8 +2622,10 @@ async function walidujOdpowiedzAIBezCache(persona, pytanie, odpowiedz, dane, his
     }
   }
   if (validatorBreakerIsOpen('openrouter')) {
-    console.warn(`[AI][${requestId}] OpenRouter validator pominięty przed rezerwacją slotu: circuit breaker aktywny`);
-    return lastRejected || { ...(last || {}), status: 'unavailable', ok: false, technicalError: true, transient: true, skipped: true, provider: 'openrouter', model: KONFIGURACJA.openrouterValidatorModel, unsupported_claims: [], reason: 'OpenRouter validator pominięty: circuit breaker aktywny' };
+    const reason = 'OpenRouter validator pominięty: circuit breaker aktywny';
+    recordSkippedValidator('openrouter', KONFIGURACJA.openrouterValidatorModel, reason);
+    console.warn(`[AI][${requestId}] ${reason}`);
+    return lastRejected || { ...(last || {}), status: 'unavailable', ok: false, technicalError: true, transient: true, skipped: true, provider: 'openrouter', model: KONFIGURACJA.openrouterValidatorModel, unsupported_claims: [], reason };
   }
   if (requestState) {
     const remainingMs = typeof requestState.remainingMs === 'function'
@@ -2570,10 +2637,14 @@ async function walidujOdpowiedzAIBezCache(persona, pytanie, odpowiedz, dane, his
       minTimeoutMs: 2000,
     });
     if (timeoutMs === null) {
-      return lastRejected || { ...(last || {}), status: 'unavailable', ok: false, technicalError: true, transient: true, skipped: true, provider: 'openrouter', model: KONFIGURACJA.openrouterValidatorModel, unsupported_claims: [], reason: 'OpenRouter validator pominięty: zbyt mały pozostały budżet czasu' };
+      const reason = 'OpenRouter validator pominięty: zbyt mały pozostały budżet czasu';
+      recordSkippedValidator('openrouter', KONFIGURACJA.openrouterValidatorModel, reason);
+      return lastRejected || { ...(last || {}), status: 'unavailable', ok: false, technicalError: true, transient: true, skipped: true, provider: 'openrouter', model: KONFIGURACJA.openrouterValidatorModel, unsupported_claims: [], reason };
     }
     if (!zarezerwujSlotWalidatora(requestState, 'validator:openrouter')) {
-      return lastRejected || { ...(last || {}), status: 'unavailable', ok: false, technicalError: true, provider: 'openrouter', model: KONFIGURACJA.openrouterValidatorModel, unsupported_claims: [], reason: 'budżet validatora/modeli wyczerpany' };
+      const reason = 'budżet validatora/modeli wyczerpany';
+      recordSkippedValidator('openrouter', KONFIGURACJA.openrouterValidatorModel, reason);
+      return lastRejected || { ...(last || {}), status: 'unavailable', ok: false, technicalError: true, provider: 'openrouter', model: KONFIGURACJA.openrouterValidatorModel, unsupported_claims: [], reason };
     }
     requestState.validatorResults.push({ provider: 'openrouter', model: KONFIGURACJA.openrouterValidatorModel, status: 'fallback', complete: false, confidence: null, claimCoverage: null });
   }
