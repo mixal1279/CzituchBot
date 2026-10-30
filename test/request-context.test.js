@@ -69,7 +69,9 @@ test('request context snapshot is stable and exposes one shared budget', () => {
   ctx.reserveValidator('validator');
   ctx.reserveTavily('retrieval');
 
+  ctx.validatorMetrics.push({ validator: 'gemini', outcome: 'attempted', status: 'accepted' });
   const snapshot = ctx.snapshot();
+  assert.deepEqual(snapshot.validatorMetrics, [{ validator: 'gemini', outcome: 'attempted', status: 'accepted' }]);
   assert.equal(snapshot.requestId, 'snapshot-test');
   assert.equal(snapshot.generacje, 1);
   assert.equal(snapshot.modelCalls, 1);
