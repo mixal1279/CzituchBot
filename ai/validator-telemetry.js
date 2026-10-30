@@ -95,7 +95,7 @@ function zbudujKontekstMetrykiWalidatora(requestId, validator, model, odpowiedz,
   const failureReason = resolvedOutcome === 'skipped_budget' ? 'budget_exhausted'
     : resolvedOutcome === 'skipped_slot' ? 'slot_unavailable'
     : resolvedOutcome === 'skipped_provider' && /cooldown|cool down/i.test(diagnosticText) ? 'provider_cooldown'
-    : resolvedOutcome === 'skipped_provider' && /brak .*key|brak klucz.*api|missing credentials|api key/i.test(diagnosticText) ? 'missing_credentials'
+    : resolvedOutcome === 'skipped_provider' && /brak .*key|brak .*klucz.*api|missing credentials|api key/i.test(diagnosticText) ? 'missing_credentials'
     : resolvedOutcome === 'skipped_provider' && /brak danych referencyjnych|missing sources/i.test(diagnosticText) ? 'missing_sources'
     : isTerminal ? null
     : isQuota ? 'quota'
