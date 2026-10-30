@@ -901,7 +901,7 @@ console.log('AI regression tests: OK');
 }
 
 
-test('validator safely normalizes singular and camelCase claim aliases', () => {
+{
   const payload = {
     valid: false,
     reason: 'claim unsupported',
@@ -931,9 +931,8 @@ test('validator safely normalizes singular and camelCase claim aliases', () => {
   assert.equal(result.claims[0].evidence_quote, 'A short source quote.');
   assert.equal(result.claims[0].supported, false);
   assert.equal(result.status, 'rejected');
-});
+}
 
-
-test('Polish accusative empty-response wording is classified consistently', () => {
+{
   assert.equal(classifyFailure({ status: 'error', message: 'model returned pustą odpowiedź' }), 'empty_response');
-});
+}
