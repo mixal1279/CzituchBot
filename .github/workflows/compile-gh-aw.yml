@@ -12,6 +12,7 @@ on:
   push:
     branches:
       - main
+      - chore/add-ai-benchmark-doctor-to-main
     paths:
       - ".github/workflows/ai-benchmark-doctor.md"
       - ".github/workflows/ai-benchmark-doctor.lock.yml"
@@ -61,7 +62,7 @@ jobs:
           retention-days: 7
 
       - name: Commit regenerated lock file to same-repository PR
-        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        if: github.event_name == 'push' && github.ref == 'refs/heads/chore/add-ai-benchmark-doctor-to-main'
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           github-token: ${{ secrets.GH_AW_GITHUB_TOKEN }}
@@ -71,7 +72,7 @@ jobs:
             const generated = fs.readFileSync(path);
             const owner = context.repo.owner;
             const repo = context.repo.repo;
-            const branch = context.payload.pull_request.head.ref;
+            const branch = 'chore/add-ai-benchmark-doctor-to-main';
             const current = await github.rest.repos.getContent({ owner, repo, path, ref: branch });
             if (current.data.type !== 'file') {
               throw new Error('Expected the generated lock path to be a file');
@@ -93,7 +94,7 @@ jobs:
             core.info(`Updated generated lock file in commit ${result.data.commit.sha}`);
 
       - name: Verify committed lock file is up to date
-        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
+        if: github.event_name != 'push' || github.ref != 'refs/heads/chore/add-ai-benchmark-doctor-to-main'
         run: |
           git ls-files --error-unmatch .github/workflows/ai-benchmark-doctor.lock.yml
           git diff --exit-code HEAD -- .github/workflows/ai-benchmark-doctor.lock.yml
