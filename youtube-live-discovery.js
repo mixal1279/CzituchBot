@@ -83,6 +83,8 @@ function videoIdFromUrl(value) {
       const id = url.searchParams.get('v');
       return id && /^[a-zA-Z0-9_-]{11}$/.test(id) ? id : null;
     }
+    const livePathMatch = url.pathname.match(/^\/live\/([a-zA-Z0-9_-]{11})$/);
+    if (livePathMatch) return livePathMatch[1];
   } catch {}
   return null;
 }
