@@ -18,7 +18,7 @@ function parseAssignedJson(html, variableName) {
     const char = source[i];
     if (inString) {
       if (escaped) escaped = false;
-      else if (char === '\\\\') escaped = true;
+      else if (char === '\\') escaped = true;
       else if (char === '"') inString = false;
       continue;
     }
