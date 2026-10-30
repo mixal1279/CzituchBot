@@ -35,6 +35,7 @@
 require('dotenv').config();
 
 const { youtube: youtubeFactory } = require('@googleapis/youtube');
+const { discoverLiveVideoId } = require('./youtube-live-discovery');
 const { OAuth2Client } = require('google-auth-library');
 const Groq       = require('groq-sdk');
 const tmi        = require('tmi.js');
@@ -6699,51 +6700,79 @@ async function pobierzInfoOKanaleYT(nazwaKanalu) {
 async function pobierzLiveChatId(nazwaKanalu) {
   console.log(`[YouTube] Szukam kanału "${nazwaKanalu}"...`);
 
-  let channelId, nazwaWyswietlana;
-  const znaneId = YT_KANAL_ID[nazwaKanalu];
+  let channelId = YT_CHANNEL_ID_CACHE.get(nazwaKanalu);
+  let nazwaWyswietlana = nazwaKanalu;
 
-  if (znaneId) {
-    // Mamy na sztywno wpisane prawdziwe ID – pomijamy wyszukiwanie po nazwie,
-    // które bywa zawodne (potrafi trafić na inny kanał o tej samej nazwie).
-    channelId = znaneId;
-    nazwaWyswietlana = nazwaKanalu;
-    console.log(`[YouTube] ✅ Kanał (ID na sztywno): "${nazwaWyswietlana}" (${channelId})`);
-  } else {
-    const searchRes  = await zGoogleRetry(
-      () => youtube.search.list({ part: ['snippet'], q: nazwaKanalu, type: ['channel'], maxResults: 5 }),
-      'wyszukiwanie kanału'
+  if (channelId) {
+    console.log(`[YouTube] ✅ Kanał (cache/ID): "${nazwaWyswietlana}" (${channelId})`);
+  } else if (YT_KANAL_HANDLE[nazwaKanalu]) {
+    const handle = YT_KANAL_HANDLE[nazwaKanalu];
+    const handleRes = await zGoogleRetry(
+      () => youtube.channels.list({ part: ['id', 'snippet'], forHandle: handle }),
+      'pobieranie kanału po uchwycie YouTube'
     );
-    const channels   = searchRes.data.items;
-    if (!channels?.length) throw new Error(`Nie znaleziono kanału "${nazwaKanalu}".`);
-    const dopasowany = channels.find(c => c.snippet.title.toLowerCase() === nazwaKanalu.toLowerCase()) || channels[0];
-    channelId        = dopasowany.snippet.channelId;
-    nazwaWyswietlana = dopasowany.snippet.title;
-    console.log(`[YouTube] ✅ Kanał: "${nazwaWyswietlana}" (${channelId})`);
+    const kanal = handleRes.data.items?.[0];
+    if (!kanal?.id) throw new Error(`Nie znaleziono kanału "${nazwaKanalu}" dla uchwytu ${handle}.`);
+    channelId = kanal.id;
+    nazwaWyswietlana = kanal.snippet?.title || nazwaKanalu;
+    YT_CHANNEL_ID_CACHE.set(nazwaKanalu, channelId);
+    console.log(`[YouTube] ✅ Kanał (uchwyt ${handle}): "${nazwaWyswietlana}" (${channelId})`);
+  } else {
+    // Fallback tylko dla kanałów bez skonfigurowanego ID/uchwytu.
+    // Wynik jest cache'owany, aby polling live nie zużywał search.list przy każdym obrocie.
+    const searchRes = await zGoogleRetry(
+      () => youtube.search.list({ part: ['snippet'], q: nazwaKanalu, type: ['channel'], maxResults: 5 }),
+      'jednorazowe wyszukiwanie kanału'
+    );
+    const channels = searchRes.data.items || [];
+    const dopasowany = channels.find(c =>
+      normalizujNazwe(c.snippet?.title || '') === normalizujNazwe(nazwaKanalu)
+    );
+    if (!dopasowany?.snippet?.channelId) {
+      const wyniki = channels.map(c => c.snippet?.title).filter(Boolean).join(', ') || 'brak';
+      throw new Error(`Nie znaleziono dokładnego kanału "${nazwaKanalu}" (wyniki: ${wyniki}). Ustaw zweryfikowane ID lub uchwyt.`);
+    }
+    channelId = dopasowany.snippet.channelId;
+    nazwaWyswietlana = dopasowany.snippet.title || nazwaKanalu;
+    YT_CHANNEL_ID_CACHE.set(nazwaKanalu, channelId);
+    console.log(`[YouTube] ✅ Kanał (dokładne dopasowanie, zapisano w cache): "${nazwaWyswietlana}" (${channelId})`);
   }
 
-  const streamRes  = await zGoogleRetry(
-    () => youtube.search.list({ part: ['snippet'], channelId, eventType: 'live', type: ['video'], maxResults: 1 }),
-    'sprawdzanie live streamu'
+  // /live jest publiczną stroną kanału. Jej HTML wskazuje bieżący materiał LIVE,
+  // dzięki czemu nie wykonujemy kosztownego search.list przy każdym sprawdzeniu.
+  const videoId = await discoverLiveVideoId(channelId);
+  if (!videoId) {
+    throw new Error(`Brak aktywnego streamu na kanale "${nazwaWyswietlana}".`);
+  }
+  console.log(`[YouTube] 🔎 Strona LIVE wskazała videoId: ${videoId}`);
+
+  // Tanie, oficjalne potwierdzenie: film musi należeć do sprawdzanego kanału
+  // i udostępniać aktywny Live Chat ID.
+  const videoRes = await zGoogleRetry(
+    () => youtube.videos.list({ part: ['snippet', 'liveStreamingDetails'], id: [videoId] }),
+    'weryfikacja wykrytej transmisji'
   );
-  const streams    = streamRes.data.items;
-  if (!streams?.length) throw new Error(`Brak aktywnego streamu na kanale "${nazwaWyswietlana}".`);
-  const videoId    = streams[0].id.videoId;
-  console.log(`[YouTube] ✅ Stream: "${streams[0].snippet.title}" (${videoId})`);
-  const videoRes   = await zGoogleRetry(
-    () => youtube.videos.list({ part: ['liveStreamingDetails'], id: [videoId] }),
-    'pobieranie danych live streamu'
-  );
-  const liveDetails = videoRes.data.items?.[0]?.liveStreamingDetails;
-  const chatId      = liveDetails?.activeLiveChatId;
-  if (!chatId) throw new Error('Nie udało się pobrać Live Chat ID.');
-  const ytStart = liveDetails?.actualStartTime;
+  const video = videoRes.data.items?.[0];
+  if (!video) throw new Error(`YouTube nie zwrócił danych dla wykrytego videoId ${videoId}.`);
+  if (video.snippet?.channelId && video.snippet.channelId !== channelId) {
+    throw new Error(`Wykryty film ${videoId} należy do innego kanału (${video.snippet.channelId}), oczekiwano ${channelId}.`);
+  }
+
+  const liveDetails = video.liveStreamingDetails;
+  const chatId = liveDetails?.activeLiveChatId;
+  if (!chatId) {
+    const status = video.snippet?.liveBroadcastContent || 'nieznany';
+    throw new Error(`Wykryto "${video.snippet?.title || videoId}", ale YouTube nie udostępnia activeLiveChatId (status: ${status}; możliwy brak czatu lub start transmisji).`);
+  }
+
+  const ytStart = liveDetails.actualStartTime;
   const youtubeKanalKey = nazwaKanalu.toLowerCase();
-  streamStart.youtube[youtubeKanalKey]   = ytStart ? new Date(ytStart).getTime() : Date.now();
+  streamStart.youtube[youtubeKanalKey] = ytStart ? new Date(ytStart).getTime() : Date.now();
   streamVideoId.youtube[youtubeKanalKey] = videoId;
+  console.log(`[YouTube] ✅ Stream: "${video.snippet?.title || videoId}" (${videoId})`);
   console.log(`[YouTube] ✅ Live Chat ID: ${chatId}`);
   return chatId;
 }
-
 
 async function wyslijYoutube(tekst, chatId) {
   const id = chatId || liveChatId;
@@ -6850,10 +6879,12 @@ async function youtubeLoop(stan) {
 }
 
 // =============================================
-//  INTERWAŁ SPRAWDZANIA STREAMU – stały co 5h
+//  INTERWAŁ SPRAWDZANIA LIVE – co 3 minuty
 // =============================================
 function obliczInterwałSprawdzania() {
-  return 5 * 60 * 60 * 1000; // 5 godzin
+  // Wykrywanie live odbywa się przez publiczną stronę kanału, bez kosztu search.list.
+  // 3 minuty ograniczają ruch, a jednocześnie nie zostawiają kanału bez kontroli na 5 godzin.
+  return 3 * 60 * 1000;
 }
 
 // =============================================
@@ -6906,8 +6937,14 @@ const YT_KANAL_ID = {
   'Edzzi':             'UCs8_gHgAnCR6ygeddwZdFVQ',
   'Arbuzik_Minecraft': 'UCAjQ3Z824UPJeTLNzOG6jkQ',
   'Angie28':           'UCRm1ZPlkBz94QfNJlKHTvBA',
-  // 'ArbuzikkYT': '...', // jeśli ten kanał też kiedyś nie znajdzie streamu, dopisz tu jego prawdziwe ID
 };
+
+// ArbuzikkYT nie ma wpisanego Channel ID; stały uchwyt usuwa konieczność
+// ponawiania kosztownego search.list przy kolejnych kontrolach LIVE.
+const YT_KANAL_HANDLE = {
+  'ArbuzikkYT': '@arbuzikinnegry',
+};
+const YT_CHANNEL_ID_CACHE = new Map(Object.entries(YT_KANAL_ID));
 
 async function youtubeWatcher(nazwaKanalu, wyslijFn) {
   const tag = `[YouTube:${nazwaKanalu}]`;
@@ -6939,7 +6976,11 @@ async function youtubeWatcher(nazwaKanalu, wyslijFn) {
       await youtubeLoop(stan);
       console.log(`${tag} Stream zakończony. Czekam na następny...`);
     } catch (err) {
-      console.log(`${tag} Brak streamu. (${err.message})`);
+      if (String(err.message || '').startsWith('Brak aktywnego streamu')) {
+        console.log(`${tag} Offline — nie wykryto aktywnej transmisji.`);
+      } else {
+        console.error(`${tag} Błąd wykrywania/podłączania live: ${err.message}`);
+      }
     }
 
     // Wyczyść interwał Angie28 po zakończeniu streamu
