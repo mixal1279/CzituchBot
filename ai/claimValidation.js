@@ -3,6 +3,7 @@
 const { ENTITY_ALIAS_GROUPS, buildEntityAliasPatterns } = require('./entityAliases');
 const { slowaLiczbowe } = require('./polishNumbers');
 const { GAME_ALIASES } = require('./entities');
+const { findQuotePrefix } = require('./evidence');
 
 const NEGATION_RE = /(?<![\p{L}])(?:nie|nigdy|brak|bez|zaden|zadna|zadne|never|no|not|cannot|without|lack\s+of|absence\s+of|unable|neither|nor|fails?\s+to|\p{L}+n['’]t)(?![\p{L}])/iu;
 // Ta sama lista bez gołego „no”: „no damage” to kwantyfikator zerowy, a nie zaprzeczenie czasownika.
@@ -104,7 +105,7 @@ const KNOWN_ENTITY_ALIAS_PATTERNS = [
   { canonical: "alduin's wall", pattern: /\b(?:alduin['’]?s|alduins)\s+wall\b/iu },
   { canonical: 'dragonrend', pattern: /\bdragonrend\b/iu },
   // Minecraft: „End”, „Endu” i „Endzie” oznaczają tę samą krainę.
-  { canonical: 'the end', pattern: /\b(?:the\s+end|end(?:u|em|zie|a)?)\b/iu },
+  { canonical: 'the end', pattern: /\b(?:the\s+end|end(?:u|em|zie|a))\b/iu },
   // Minecraft: polska nazwa Ender Pearl to „perła Kresu” (Kres = End); bez aliasu „Kresu” było
   // wymaganą nazwą własną, której nie ma w angielskim tłumaczeniu.
   { canonical: 'ender pearl', pattern: /\b(?:ender\s+pearls?|per[łl](?:a|y|ę|ą|e|ie|o)?\s+kresu)\b/iu },
@@ -649,18 +650,31 @@ function wybierzKlausuleDowoduDlaClaimu(evidence, claim) {
   const claimTokens = tokenyPokryciaBezStop(claim)
     .filter(token => !NEGATION_RE.test(token) && !scopeStopwords.has(token));
   if (!claimTokens.length) return String(evidence || '');
+  const entityTokens = new Set(
+    wyodrebnijNazwyWlasne(claim).flatMap(name => tokenyPokryciaBezStop(name)),
+  );
   const score = fragment => {
     const fragmentTokens = tokenyPokryciaBezStop(fragment);
     const shared = claimTokens.filter(token => fragmentTokens.some(other => tokenyPokrywajaSie(token, other)));
-    return shared.length / claimTokens.length;
+    // If two clauses have the same lexical coverage, prefer the one matching
+    // more of the claim's non-entity/event tokens. A repeated character name
+    // must not let an unrelated negated clause win a polarity check.
+    const eventMatches = shared.filter(token => !entityTokens.has(token)).length;
+    return { total: shared.length, eventMatches };
   };
   let best = fragments[0];
   let bestScore = score(best);
   for (const fragment of fragments.slice(1)) {
     const fragmentScore = score(fragment);
-    if (fragmentScore > bestScore) { best = fragment; bestScore = fragmentScore; }
+    if (
+      fragmentScore.total > bestScore.total
+      || (fragmentScore.total === bestScore.total && fragmentScore.eventMatches > bestScore.eventMatches)
+    ) {
+      best = fragment;
+      bestScore = fragmentScore;
+    }
   }
-  return bestScore >= 0.2 ? best : String(evidence || '');
+  return bestScore.total / claimTokens.length >= 0.2 ? best : String(evidence || '');
 }
 
 function sprawdzPowiazanieLiczbZeZdarzeniem(evidence, claim, options = {}) {
@@ -676,13 +690,15 @@ function sprawdzPowiazanieLiczbZeZdarzeniem(evidence, claim, options = {}) {
     const shared = claimTokens.filter(token => sentenceTokens.some(other => tokenyPokrywajaSie(token, other)));
     return shared.length / claimTokens.length;
   };
-  const bestOverallScore = Math.max(...sentences.map(score));
+  const bestOverallScore = sentences.reduce((best, sentence) => Math.max(best, score(sentence)), 0);
   const numericSentences = sentences.filter(sentence => {
     const numbers = wyodrebnijLiczbyIDaty(sentence);
     return claimNumbers.every(number => numbers.includes(number));
   });
-  if (!numericSentences.length) return { ok: true };
-  const bestNumericScore = Math.max(...numericSentences.map(score));
+  if (!numericSentences.length) {
+    return { ok: false, reason: 'wartości liczbowe claimu nie występują razem w jednym zdaniu dowodowym' };
+  }
+  const bestNumericScore = numericSentences.reduce((best, sentence) => Math.max(best, score(sentence)), 0);
   if (bestOverallScore >= 0.35 && bestOverallScore - bestNumericScore >= 0.25) return { ok: false, reason: 'wartość liczbowa występuje przy innym zdarzeniu niż w claimie' };
   return { ok: true };
 }
@@ -1335,15 +1351,18 @@ function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
   if (copiedQuote && /^(?:who|which|that|he|she|it|they|his|her|their|its)\s/u.test(enNormalized)) {
     const evidenceContext = String(options.evidenceContext || '');
     const evidenceQuote = String(options.evidenceQuote || '').trim();
-    const quoteOffset = evidenceQuote ? evidenceContext.indexOf(evidenceQuote) : -1;
-    if (quoteOffset < 0) {
-      return { ok: false, reason: 'tłumaczenie claimu gubi nazwy własne: ' + claimNames.slice(0, 3).join(', ') };
-    }
-    if (quoteOffset >= 0) {
-      const sameSentencePrefix = (evidenceContext.slice(0, quoteOffset).split(/[.!?](?:\s+|$)/u).at(-1) || '');
-      const normalizedPrefix = ' ' + normalizujClaim(sameSentencePrefix) + ' ';
-      if (!claimNames.some(name => normalizedPrefix.includes(' ' + normalizujClaim(name) + ' '))) {
-        return { ok: false, reason: 'tłumaczenie claimu gubi nazwy własne: ' + claimNames.slice(0, 3).join(', ') };
+    const missingClaimNames = claimNames.filter(name => !czyNazwaWlasnaWystepuje(name, enNormalized));
+    // The quote verifier normalizes whitespace, punctuation, and accents.
+    // Locate the quote with that same normalization instead of raw indexOf().
+    const quotePrefix = evidenceQuote ? findQuotePrefix(evidenceContext, evidenceQuote) : null;
+    if (missingClaimNames.length) {
+      if (quotePrefix === null) {
+        return { ok: false, reason: 'tłumaczenie claimu gubi nazwy własne: ' + missingClaimNames.slice(0, 3).join(', ') };
+      }
+      const sameSentencePrefix = quotePrefix.split(/\bsentenceboundarytoken\b/u).at(-1) || '';
+      const normalizedPrefix = ' ' + sameSentencePrefix + ' ';
+      if (!missingClaimNames.every(name => normalizedPrefix.includes(' ' + normalizujClaim(name) + ' '))) {
+        return { ok: false, reason: 'tłumaczenie claimu gubi nazwy własne: ' + missingClaimNames.slice(0, 3).join(', ') };
       }
     }
   }

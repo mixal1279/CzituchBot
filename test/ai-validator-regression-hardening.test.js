@@ -80,6 +80,17 @@ test('appearance in a campaign remains equivalent across Polish and English', ()
 });
 
 
+test('relative-clause quote matching uses the same whitespace normalization as quote verification', () => {
+  const claim = 'Wheatley pojawia się w kampanii jednoosobowej gry Portal 2.';
+  const quote = 'who appears in the single-player campaign of Portal 2.';
+  const context = 'The Intelligence Dampening Sphere, more commonly known as Wheatley, is a personality core who  appears in the single-player campaign of Portal 2.';
+  const result = spojnoscTlumaczeniaClaimu(claim, quote, {
+    evidenceQuote: quote,
+    evidenceContext: context,
+  });
+  assert.equal(result.ok, true, JSON.stringify(result));
+});
+
 test('relative-clause quote can inherit a proper-name subject only from its adjacent source context', () => {
   const claim = 'Wheatley pojawia się w kampanii jednoosobowej gry Portal 2.';
   const quote = 'who appears in the single-player campaign of Portal 2.';

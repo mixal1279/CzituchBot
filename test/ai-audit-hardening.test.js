@@ -319,7 +319,18 @@ test('a number attached to a different event does not support the claim', () => 
   assert.equal(result.ok, false, JSON.stringify(result));
 });
 
-test('a number attached to the same event remains supported', () => {
-  const result = zgodnoscStrukturalna('Completing the game takes 40 hours.', 'Completing the game takes 40 hours.');
+test('a number attached to the same event remains supported with unrelated numeric evidence nearby', () => {
+  const result = zgodnoscStrukturalna(
+    'The loading screen lasts 10 minutes. Completing the game takes 40 hours. The credits list 4 chapters.',
+    'Completing the game takes 40 hours.',
+  );
   assert.equal(result.ok, true, JSON.stringify(result));
+});
+
+test('numbers split across different events do not jointly support one compound claim', () => {
+  const result = zgodnoscStrukturalna(
+    'The game was released in 2011. It takes 40 hours to complete.',
+    'The game was released in 2011 and takes 40 hours to complete.',
+  );
+  assert.equal(result.ok, false, JSON.stringify(result));
 });
