@@ -2021,7 +2021,7 @@ async function walidujOdpowiedzOpenRouter(persona, pytanie, odpowiedz, dane, req
         : requestTooExpensive
           ? 'OpenRouter request exceeds available credit budget; reduce prompt or max_tokens'
           : quota ? `OpenRouter limit/credit error (HTTP ${status})` : `OpenRouter HTTP error (${status})`;
-      return { status: 'unavailable', ok: false, technicalError: true, transient, quota, provider: 'openrouter', model: data?.model || KONFIGURACJA.openrouterValidatorModel, unsupported_claims: [], reason, error: diagnostic, diagnostic };
+      return { status: 'unavailable', ok: false, technicalError: true, transient, quota, statusCode: status || null, provider: 'openrouter', model: data?.model || KONFIGURACJA.openrouterValidatorModel, unsupported_claims: [], reason, error: diagnostic, diagnostic };
     }
     const choice = data?.choices?.[0] || {};
     const message = choice?.message || {};
@@ -2283,7 +2283,7 @@ async function walidujOdpowiedzXKiro(persona, pytanie, odpowiedz, dane, requestI
         status, code: data?.error?.code, type: data?.error?.type, param: data?.error?.param,
         retry_after: retryAfter || null, responseData: data,
       });
-      return { status: 'unavailable', ok: false, technicalError: true, transient, quota, provider: 'xkiro', model: data?.model || model, unsupported_claims: [], reason: quota ? `xKiro limit/credit error (HTTP ${status})` : `xKiro HTTP error (${status})`, error: diagnostic, diagnostic };
+      return { status: 'unavailable', ok: false, technicalError: true, transient, quota, statusCode: status || null, provider: 'xkiro', model: data?.model || model, unsupported_claims: [], reason: quota ? `xKiro limit/credit error (HTTP ${status})` : `xKiro HTTP error (${status})`, error: diagnostic, diagnostic };
     }
     const choice = data?.choices?.[0] || {};
     const rawContent = choice?.message?.content;
