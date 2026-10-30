@@ -6575,7 +6575,7 @@ async function zalogujYouTube() {
         res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' });
         res.end('Autoryzacja Google została anulowana lub odrzucona.');
         server.close();
-        reject(new Error('Google OAuth zwrócił błąd: ' + oauthError));
+        reject(new Error('Google OAuth zwrócił błąd; szczegóły odpowiedzi pominięto.'));
         return;
       }
       if (!code) {
@@ -8846,7 +8846,7 @@ const startBot = async () => {
     }
     youtubeReady = true;
   } catch (youtubeError) {
-    console.error('[YouTube] ❌ Nie udało się przygotować YouTube; pomijam watchery, ale uruchamiam pozostałe platformy:', youtubeError?.message || youtubeError);
+    console.error('[YouTube] ❌ Nie udało się przygotować YouTube; pomijam watchery, ale uruchamiam pozostałe platformy. Szczegóły błędu OAuth/API pominięto ze względów bezpieczeństwa.');
   }
 
   // ---- Billy broadcaster token – autoryzacja / auto-refresh ----
