@@ -24,6 +24,20 @@ const TAVILY_CACHE_MAX_BYTES = 700 * 1024; // poniżej limitu 1 MiB pojedynczego
 const TAVILY_REWRITE_MAX_ENTRIES = 500;
 const TAVILY_CACHE_VERSION = 4;
 const TAVILY_REWRITE_CACHE_VERSION = 1;
+const TAVILY_QUOTA_COOLDOWN_MS = Math.max(60_000, Number(process.env.TAVILY_QUOTA_COOLDOWN_MS) || 15 * 60 * 1000);
+const TAVILY_RATE_LIMIT_COOLDOWN_MS = Math.max(1_000, Number(process.env.TAVILY_RATE_LIMIT_COOLDOWN_MS) || 60_000);
+
+function classifyTavilyError(error) {
+  const message = String(error?.message || error || '');
+  const statusMatch = message.match(/\bTavily HTTP (\d{3})\b/i);
+  const status = Number(error?.status ?? error?.statusCode ?? statusMatch?.[1] ?? 0);
+  if (status === 432 && /quota|usage.?limit|exceeds?.{0,30}limit|plan.?limit|limit.{0,30}plan/i.test(message)) return 'plan_limit_exceeded';
+  if (status === 433 && /quota|usage.?limit|pay.?as.?you.?go|payg|limit/i.test(message)) return 'payg_limit_exceeded';
+  if (status === 429 || /\b429\b|rate.?limit|too many requests/i.test(message)) return 'rate_limited';
+  if (/\b(?:quota|usage.?limit)\b/i.test(message)) return 'rate_limited';
+  if (/timeout|abort|timed out/i.test(message)) return 'timeout';
+  return 'error';
+}
 function normalizujProgScore(value, fallback = 0.2) {
   if (value == null || String(value).trim() === '') return fallback;
   const parsed = Number(value);
@@ -529,6 +543,8 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
   const cache = new Map();
   const inFlight = new Map();
   let persistQueue = Promise.resolve();
+  let tavilyCooldownUntil = 0;
+  let tavilyCooldownStatus = 'rate_limited';
   try {
     const stat = fs.statSync(cacheFile);
     if (stat.size <= TAVILY_CACHE_MAX_BYTES) {
@@ -813,6 +829,39 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
         return sformatujWynikWyjsciowyTavily(await dedupeWait, { sourceStartIndex, returnMeta });
       }
 
+    if (Date.now() < tavilyCooldownUntil) {
+      const retryInMs = tavilyCooldownUntil - Date.now();
+      const secondaryTimeoutMs = timeoutFromRemaining(15000);
+      if (secondaryTimeoutMs <= 0) {
+        onStatus({ status: 'timeout', query: original, error: 'Tavily quota cooldown active', retryInMs });
+        return sformatujWynikWyjsciowyTavily({ status: 'timeout', text: '', error: 'Tavily quota cooldown active', retryInMs }, { returnMeta });
+      }
+      const secondary = await searchSecondaryProviders({
+        query: sourceQuestion || original,
+        geminiKey,
+        exaKey,
+        tavilyKey: null,
+        fetchFn: fetchZTimeout,
+        startIndex: 0,
+        domains,
+        prefer: 'gemini',
+        timeoutMs: secondaryTimeoutMs,
+      });
+      if (secondary.status === 'ok' && secondary.text) {
+        const secondaryProviders = [...new Set((secondary.sources || []).map(source => source.provider).filter(Boolean))];
+        onStatus({ status: 'secondary', query: original, providers: secondaryProviders, sourceCount: secondary.sources?.length || 0, fallbackFrom: 'circuit_open', retryInMs });
+        const canonical = {
+          status: 'ok',
+          text: secondary.text,
+          secondary: true,
+          sources: (secondary.sources || []).map((source, index) => ({ ...source, sourceId: `SOURCE ${index + 1}` })),
+        };
+        return sformatujWynikWyjsciowyTavily(canonical, { sourceStartIndex, returnMeta });
+      }
+      onStatus({ status: tavilyCooldownStatus, query: original, error: 'Tavily quota cooldown active', retryInMs });
+      return sformatujWynikWyjsciowyTavily({ status: tavilyCooldownStatus, text: '', error: 'Tavily quota cooldown active', retryInMs }, { returnMeta });
+    }
+
       const promise = (async () => {
         const validTimeRange = normalizujZakresTavily(time_range);
         const historical = !validTimeRange;
@@ -1027,17 +1076,13 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
       } finally { if (inFlight.get(key) === promise) inFlight.delete(key); }
     } catch (err) {
       logger.error('[Tavily] Błąd:', err.message);
-      const errorMessage = String(err.message || '');
-      const tavilyHttpStatus = Number(errorMessage.match(/\bTavily HTTP (\d{3})\b/i)?.[1] || 0);
-      // Tavily distinguishes request-rate limits (429), plan usage limits (432),
-      // and pay-as-you-go limits (433). Keep those operational causes separate.
-      const status = tavilyHttpStatus === 432
-        ? 'plan_limit_exceeded'
-        : tavilyHttpStatus === 433
-          ? 'payg_limit_exceeded'
-          : (tavilyHttpStatus === 429 || /(?:\b429\b|rate.?limit|too many requests|quota)/i.test(errorMessage))
-            ? 'rate_limited'
-            : (/timeout|abort|timed out/i.test(errorMessage) ? 'timeout' : 'error');
+      const status = classifyTavilyError(err);
+      if (['rate_limited', 'plan_limit_exceeded', 'payg_limit_exceeded'].includes(status)) {
+        const cooldownMs = status === 'rate_limited' ? TAVILY_RATE_LIMIT_COOLDOWN_MS : TAVILY_QUOTA_COOLDOWN_MS;
+        tavilyCooldownUntil = Date.now() + cooldownMs;
+        tavilyCooldownStatus = status;
+        logger.warn?.(`[Tavily] quota circuit opened for ${Math.ceil(cooldownMs / 1000)}s`);
+      }
       const secondaryTimeoutMs = timeoutFromRemaining(15000);
       if (secondaryTimeoutMs <= 0) {
         onStatus({ status: 'timeout', query: original, error: err.message });
@@ -1047,7 +1092,7 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
         query: sourceQuestion || original,
         geminiKey,
         exaKey,
-        tavilyKey: apiKey,
+        tavilyKey: ['rate_limited', 'plan_limit_exceeded', 'payg_limit_exceeded'].includes(status) ? null : apiKey,
         fetchFn: fetchZTimeout,
         startIndex: 0,
         domains,
@@ -1092,4 +1137,5 @@ module.exports = {
   sanityzujTrescZrodlaTavily,
   filtrujMaterialPoSlowachTavily,
   czyWymagaSecondaryRetrieval,
+  classifyTavilyError,
 };

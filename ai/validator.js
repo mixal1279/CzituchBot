@@ -555,7 +555,25 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
     ? wynik.claims
     : (Array.isArray(wynik.claims_list) ? wynik.claims_list : []);
   const tooManyClaims = rawClaims.length > 12;
-  const malformedClaimIndexes = rawClaims.map((claim, index) =>
+  // Providers sometimes serialize the same strict-schema fields using
+  // common singular/camelCase aliases. Normalize field names only; never
+  // invent a source ID or evidence quote. Local evidence checks remain strict.
+  const reboundClaims = rawClaims.slice(0, 12).map(claim => {
+    const rawSourceIds = Array.isArray(claim?.source_ids)
+      ? claim.source_ids
+      : Array.isArray(claim?.sourceIds)
+        ? claim.sourceIds
+        : Array.isArray(claim?.sources)
+          ? claim.sources
+          : [claim?.source_id ?? claim?.sourceId ?? claim?.source].filter(value => value != null);
+    const rawQuote = claim?.evidence_quote ?? claim?.evidenceQuote ?? claim?.quote;
+    return {
+      ...claim,
+      source_ids: rawSourceIds,
+      evidence_quote: typeof rawQuote === 'string' ? rawQuote : '',
+    };
+  });
+  const malformedClaimIndexes = reboundClaims.map((claim, index) =>
     !claim || typeof claim !== 'object' || typeof claim.claim !== 'string' || typeof claim.supported !== 'boolean' || !Array.isArray(claim.source_ids) || typeof claim.evidence_quote !== 'string' ? index : -1
   ).filter(index => index >= 0);
   const malformedClaims = malformedClaimIndexes.length > 0;
@@ -563,7 +581,6 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
   // Evidence quote is data, not a suggestion. Never replace an invalid quote
   // with a different candidate: doing so can turn an unsupported validator payload
   // into an accepted one. Normalization is handled by quoteExists itself.
-  const reboundClaims = rawClaims.slice(0, 12);
   const claims = reboundClaims.map((claim) => ({
     claim: typeof claim?.claim === 'string' ? claim.claim.trim().slice(0, 500) : '',
     supported: claim?.supported === true,

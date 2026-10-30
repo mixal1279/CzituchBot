@@ -11,7 +11,7 @@ const SLOT_PATTERNS = Object.freeze({
   comparison: /\b(czym\s+(?:się\s+)?różni|czym\s+różni\s+się|różnica|porównaj|lepszy|gorszy|vs\.?|versus|difference|compare)\b/i,
   steps: /\b(jak zrobić|jak wykonać|jak zdobyć|jak przejść|jak ukończyć|jak ukonczyc|jak pokonać|jak znaleźć|jak znalezc|jak odblokować|jak odblokowac|jak aktywować|jak aktywowac|jak naprawić|jak naprawic|jak użyć|jak uzyc|instrukcja|krok po kroku|how to|walkthrough)\b/i,
   outcome: /\b(co\s+(?:się\s+)?stało(?:\s+się)?|co dalej|jaki był skutek|konsekw\p{L}*|what happened|what happened next)\b/iu,
-  relationship: /\b(relacj\p{L}*|związek|przyjaźń|wróg|sojusz|relationship|friend|enemy|alliance)\b/iu,
+  relationship: /(?<![\p{L}\p{N}_])(?:relacj\p{L}*|związk\p{L}*|przyjaź\p{L}*|wróg\p{L}*|sojusz\p{L}*|relationship\p{L}*|friend(?:s|ship)?|enemies?|alliance\p{L}*)(?![\p{L}\p{N}_])/iu,
 });
 const INTENT_REQUIREMENTS = Object.freeze({
   lore: ['entity_context'],
@@ -62,6 +62,9 @@ function buildAnswerPlan(question, routing = {}) {
   // Pytania przyczynowe wymagają osobnego dowodu dla faktu i dla przyczyny.
   // Sam fakt, że wydarzenie A poprzedza B, nie jest dowodem relacji A -> B.
   const causalQuestion = slots.has('why');
+  const quantityMayBeVariable = slots.has('quantity')
+    && /\b(?:ile|jak\s+d[łl]ugo|how\s+long)\b/i.test(q)
+    && /\b(?:trwa|trwać|trwac|duration|lasts?|takes?)\b/i.test(q);
 
   const clauses = q.split(
     /(?<=[?;])\s+|\s+(?=(?:i|oraz|a także|natomiast)\s+(?:jak|dlaczego|czemu|kiedy|gdzie|ile|czy|kto|kim|co|czym|jaki|jaka|jakie)\b)/iu,
@@ -95,7 +98,7 @@ function buildAnswerPlan(question, routing = {}) {
   ].filter(Boolean).join(' ');
 
   return {
-    version: 27,
+    version: 28,
     question: q,
     intent: routing.intent || 'conversation',
     entity: routing.entity || routing.resolved_entity?.name || null,
@@ -106,6 +109,7 @@ function buildAnswerPlan(question, routing = {}) {
       ? 'high'
       : requirements.length >= 2 ? 'medium' : 'low',
     causalQuestion,
+    quantityMayBeVariable,
     instruction: requirements.length
       ? 'Odpowiedź musi pokryć: ' + requirements.map(r => r.id).join(', ') + '. Każde zdanie faktograficzne ma być atomowym claimem opartym na jednym zweryfikowanym fragmencie evidence. Dla pytania „dlaczego/czemu” oddziel fakt od przyczyny: podaj przyczynę tylko wtedy, gdy konkretny evidence quote wyraźnie łączy przyczynę ze skutkiem. Nie traktuj kolejności wydarzeń jako przyczynowości. Jeśli źródło jawnie podaje motyw lub cel działania (np. próbę upokorzenia), podaj ten motyw wprost i nie zastępuj go domniemaną przyczyną z sąsiednich zdań. Nie zamieniaj celu działania na przyczynę zdarzenia. Jeśli brak takiego dowodu, powiedz wprost, że źródła nie potwierdzają przyczyny.' + (responseShapeGuidance ? ' ' + responseShapeGuidance : '')
       : 'Odpowiedz bezpośrednio i nie dodawaj niepotwierdzonych faktów.' + (responseShapeGuidance ? ' ' + responseShapeGuidance : ''),
@@ -121,7 +125,7 @@ function hasMeaningfulTail(text, marker) {
 
 function extractAnswerSignals(answer) {
   const text = normalize(answer);
-  const where = /\b(?:w(?!\s+(?:wyniku|rezultacie|celu|zamian|zwiazku|odpowiedni\w*|okreslon\w*|miejsc\w*))|we(?!\s+wzgledu)|na(?!\s+(?:skutek|podstawie|poczatku|koncu))|do(?!\s+tego)|z(?!\s+(?:powodu|przyczyny|uwagi|tego))|ze(?!\s+wzgledu))\s+[a-z0-9-]+/.test(text);
+  const where = /\b(?:w(?!\s+(?:wyniku|rezultacie|celu|zamian|zwiazku|odpowiedni\w*|okreslon\w*|miejsc\w*))|we(?!\s+wzgledu)|na(?!\s+(?:skutek|podstawie|poczatku|koncu))|do(?!\s+tego)|z(?!\s+(?:powodu|przyczyny|uwagi|tego))|ze(?!\s+wzgledu))\s+(?!\d)[a-z0-9-]+/.test(text);
   // Przyczyna i motyw to odrębne sygnały: „aby/w celu” opisuje intencję, a nie dowodzi, że skutek nastąpił.
   const causalMarker = /\b(dlaczego|czemu|powod|z powodu|z przyczyny|ze wzgledu na|z uwagi na|poniewaz|dlatego|gdyz|bo|w zamian|w wyniku|w rezultacie|dzieki|because|because of|due to|caused by|led to|resulted in)\b/.exec(text)?.[0] || '';
   const motiveMarker = /\b(?:aby|zeby|w celu|na celu|po to(?:,)? zeby|z zamiarem|w zamiarze|w intencji|so that|in order to|so as to)\b/.exec(text)?.[0] || '';
@@ -131,9 +135,9 @@ function extractAnswerSignals(answer) {
   const motiveExplanation = Boolean(motiveMarker) && hasMeaningfulTail(text, motiveMarker);
   const causalExplanation = (Boolean(causalMarker) && hasMeaningfulTail(text, causalMarker)) || causeUnconfirmed;
   const whyExplanation = causalExplanation || motiveExplanation;
-  const procedural = /\b(nalezy|trzeba|mozna|sposob|krok|najpierw|potem|nastepnie|first|then|step|wystarczy|uzyj|uzywaj|wykorzystaj|skorzystaj|wybierz|zdobadz|znajdz|idz|wejdz|pokonaj|unikaj|zabij|atakuj|zbuduj|stworz|wez|kup|otworz|podejdz|poczekaj)\b/.exec(text)?.[0] || '';
+  const procedural = /\b(nalezy|trzeba|mozna|sposob|krok|najpierw|potem|nastepnie|first|then|step|wystarczy|uzyj|uzywaj|wykorzystaj|skorzystaj|wybierz|zdobadz|znajdz|idz|wejdz|pokonaj|unikaj|zabij|atakuj|zbuduj|stworz|wez|kup|otworz|podejdz|poczekaj|wyposaz|rzuc|cast|use|attack|avoid|equip)\b/.exec(text)?.[0] || '';
   const mechanism = /\b(dziala|funkcjonuje|polega|mechanizm|umozliw\w*|pozwala)\b/.exec(text)?.[0] || '';
-  const relationshipMarker = /\b(?:relacj\p{L}*|zwiazk\p{L}*|przyjac\p{L}*|wrog\p{L}*|sojusz\p{L}*|zdrad\p{L}*|partner\p{L}*)\b/u.exec(text)?.[0] || '';
+  const relationshipMarker = /(?<![\p{L}])(?:relacj\p{L}*|zwiazk\p{L}*|przyjac\p{L}*|przyjazn\p{L}*|towarzysz\p{L}*|romans\p{L}*|wrog\p{L}*|sojusz\p{L}*|zdrad\p{L}*|partner\p{L}*|relationship\p{L}*|friends?|friendship|enemies?|alliances?)(?![\p{L}])/u.exec(text)?.[0] || '';
 
   const whenUnconfirmed = /\b(?:zrodla?\w*|materialy|dane|sources?|evidence)\b.{0,120}\bnie\s+(?:podaj\w*|precyzuj\w*|okresl\w*|wskazuj\w*|potwierdz\w*|zawier\w*)\b.{0,80}\b(?:dat\w*|moment\w*|czas\w*|rok\w*)\b/.test(text);
 
@@ -153,13 +157,14 @@ function extractAnswerSignals(answer) {
       || /\b(?:towarzysz\w*|czlonek|czlonkini|przywodc\w*|dowodc\w*|zalozyciel\w*|wlasciciel\w*|antagonist\w*|protagonist\w*|zloczyn\w*|sojusznik\w*)\b/.test(text))
       && !/^\s*(?:to|jest)\s+(?:posta[cć]|osoba)\b/.test(text),
     quantity: /\b\d+(?:[.,]\d+)?\s*(?:godzin|godz|h|min|sekund|dni|lat|%|gb|mb|tb|zl|pln|usd|eur)?\b/.test(text),
+    quantityVariable: /\b(?:nie ma (?:jednego|stalego|okreslonego)|nie da sie (?:tego )?okreslic|zalezy od|moze trwac roznie|czas jest rozny|to zalezy|depends on|varies|no fixed|not fixed)\b/.test(text),
     comparison: /\b(roznic\w*|rozni\w*|wiecej|mniej|leps\w*|gors\w*|natomiast|podobn\w*|vs|versus|z kolei|w przeciwienstwie|podczas gdy|tymczasem|zas|odmienn\w*|bardziej)\b/.test(text)
       || /\b\w{3,}iejsz\w*\b|\b\w{3,}sz[aeyi]\b/.test(text),
     steps: Boolean(procedural) && hasMeaningfulTail(text, procedural),
-    outcome: /\b(wynik\w*|skutek|skutk\w*|konsekwenc\w*|ostatecznie|pozniej|potem|nastepnie|umar\w*|zgin\w*|zostal\w*)\b/.test(text)
+    outcome: /\b(wynik\w*|skutek|skutk\w*|konsekwenc\w*|ostatecznie|pozniej|potem|nastepnie|umar\w*|zgin\w*|gin\w*|zabij\w*|smier\w*|zostal\w*|zostaj\w*)\b/.test(text)
       && text.split(/\s+/).length >= 4,
     relationship: Boolean(relationshipMarker)
-      && /\b(?:wspolprac|wspolpracy|konflikt|przyjazn|zauf|zdrad|sojusz|wrog|partner|lacz|dziel)\p{L}*/u.test(text),
+      && /(?<![\p{L}])(?:wspolprac\p{L}*|konflikt\p{L}*|przyjazn\p{L}*|zauf\p{L}*|zdrad\p{L}*|sojusz\p{L}*|wrog\p{L}*|partner\p{L}*|towarzysz\p{L}*|romans\p{L}*|lacz\p{L}*|dziel\p{L}*|relationship\p{L}*|friends?|friendship|enemies?|alliances?)(?![\p{L}])/u.test(text),
     entity_context: text.length > 0,
     // Dla slotu „dlaczego” jawnie podany motyw jest wyjaśnieniem, ale pozostaje oznaczony osobno.
     causal_explanation: causalExplanation,
@@ -236,7 +241,9 @@ function assessAnswerCompleteness(answer, plan) {
           // Jawnie podany motyw może odpowiedzieć na „dlaczego?”, ale nie zmienia go
           // w twierdzenie o faktycznie zrealizowanym łańcuchu przyczynowym.
           ? Boolean(signals.causal_explanation || (signals.motive_explanation && plan.requirements.some(item => item?.id === 'why')))
-          : Boolean(signals[id]);
+          : id === 'quantity' && plan.quantityMayBeVariable
+            ? Boolean(signals.quantity || signals.quantityVariable)
+            : Boolean(signals[id]);
     checked.push({ id, ok });
     if (!ok) missing.push(id);
   }

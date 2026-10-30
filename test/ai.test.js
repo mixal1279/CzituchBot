@@ -584,9 +584,9 @@ console.log('AI regression tests: OK');
     'groq:openai/gpt-oss-20b',
     'gemini:gemini-3.8-flash',
     'gemini:gemini-3.5-flash-lite',
-    'xkiro:default',
+    'openrouter:default',
   ]);
-  assert.equal(GENERATION_FALLBACK_CHAIN.at(-1), 'openrouter:default');
+  assert.equal(GENERATION_FALLBACK_CHAIN.at(-1), 'xkiro:default');
   assert.equal(shouldRetryFailure('unknown'), true);
   assert.equal(shouldRetryFailure('provider_cooldown'), true);
   assert.equal(shouldRetryFailure('validator_inconclusive'), true);
@@ -606,7 +606,7 @@ console.log('AI regression tests: OK');
     'openrouter:default',
     'gemini:gemini-3.8-flash',
   ]);
-  assert.deepEqual(nextFallbacks({attempted:['groq:openai/gpt-oss-120b','groq:openai/gpt-oss-20b','gemini:gemini-3.8-flash','gemini:gemini-3.5-flash-lite'], maxFallbacks:1}), ['xkiro:default']);
+  assert.deepEqual(nextFallbacks({attempted:['groq:openai/gpt-oss-120b','groq:openai/gpt-oss-20b','gemini:gemini-3.8-flash','gemini:gemini-3.5-flash-lite'], maxFallbacks:1}), ['openrouter:default']);
   assert.deepEqual(nextFallbacks({
     failure: 'grounded_reject',
     failedProviders: [
@@ -616,7 +616,7 @@ console.log('AI regression tests: OK');
       'gemini:gemini-3.5-flash-lite',
     ],
     maxFallbacks: 1,
-  }), ['xkiro:default']);
+  }), ['openrouter:default']);
 }
 
 {
@@ -898,4 +898,41 @@ console.log('AI regression tests: OK');
   });
   assert.equal(assessed.sourceCount, 1);
   assert.ok(assessed.sources[0].coreScore >= withBothAnchors.coreScore);
+}
+
+
+{
+  const payload = {
+    valid: false,
+    reason: 'claim unsupported',
+    confidence: 0.2,
+    supported: false,
+    relevant: true,
+    complete: false,
+    hallucination: false,
+    unsupported_claims: ['claim'],
+    claims: [{
+      claim: 'A claim without sufficient evidence.',
+      supported: false,
+      sourceId: 'SOURCE 1',
+      evidenceQuote: 'A short source quote.',
+    }],
+  };
+  const result = normalizujWynikWalidatora(
+    payload,
+    'test-model',
+    'gemini',
+    new Set(['SOURCE 1']),
+    'SOURCE 1: A short source quote.',
+    'A claim without sufficient evidence.',
+  );
+  assert.ok(result);
+  assert.deepEqual(result.claims[0].source_ids, ['SOURCE 1']);
+  assert.equal(result.claims[0].evidence_quote, 'A short source quote.');
+  assert.equal(result.claims[0].supported, false);
+  assert.equal(result.status, 'rejected');
+}
+
+{
+  assert.equal(classifyFailure({ status: 'error', message: 'model returned pustą odpowiedź' }), 'empty_response');
 }
