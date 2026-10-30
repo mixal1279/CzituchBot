@@ -2225,13 +2225,21 @@ async function walidujOdpowiedzXKiro(persona, pytanie, odpowiedz, dane, requestI
   // does not mean xKiro is the last provider in the fallback chain.
   // xKiro ma wysoką latencję; timeout 4,5 s jest ograniczany przez pozostały budżet.
   // Nie pomijamy go na podstawie sztywnego progu, jeśli krótsza próba mieści się w rezerwie.
+  const configuredTimeoutMs = Number(process.env.AI_XKIRO_VALIDATOR_TIMEOUT_MS);
+  // xKiro needs at least six seconds to return a useful verdict. The outer
+  // preflight uses the same floor; keep this transport-level deadline aligned
+  // so it cannot silently launch a 1.2s/4.5s attempt after passing preflight.
+  const xkiroMaxTimeoutMs = Math.max(
+    6000,
+    Number.isFinite(configuredTimeoutMs) && configuredTimeoutMs > 0 ? configuredTimeoutMs : 6000,
+  );
   const timeoutMs = requestState
     ? computeValidatorTimeout(remainingMs, {
-        maxTimeoutMs: Number(process.env.AI_XKIRO_VALIDATOR_TIMEOUT_MS) || 4500,
+        maxTimeoutMs: xkiroMaxTimeoutMs,
         reserveMs: computeValidatorReserveMs(remainingMs, requestState.validatory + 1, requestState.maxValidatorow, requestState.validationPass === 1 ? INITIAL_VALIDATOR_REPAIR_RESERVE_MS : 0),
-        minTimeoutMs: 1200,
+        minTimeoutMs: 6000,
       })
-    : (Number(process.env.AI_XKIRO_VALIDATOR_TIMEOUT_MS) || 4500);
+    : xkiroMaxTimeoutMs;
   if (requestState && timeoutMs === null) {
     return { status: 'unavailable', ok: false, technicalError: true, transient: true, skipped: true, provider: 'xkiro', model, unsupported_claims: [], reason: 'xKiro validator pominięty: zbyt mały pozostały budżet czasu' };
   }
