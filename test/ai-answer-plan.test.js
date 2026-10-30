@@ -328,3 +328,13 @@ test('inflected Polish relationship questions create the relationship requiremen
   const plan = buildAnswerPlan('Jaką relację łączy Geralta i Yennefer?', { intent: 'web_fact', is_lore: true });
   assert.ok(plan.requirements.some(item => item.id === 'relationship'));
 });
+
+
+test('relationship signals do not match inside unrelated words', () => {
+  const friendly = extractAnswerSignals('The friendly NPC offers a helpful service.');
+  assert.equal(friendly.relationship, false);
+  const friend = extractAnswerSignals('Geralt and Dandelion are friends.');
+  assert.equal(friend.relationship, true);
+  const polish = extractAnswerSignals('Bohaterowie nawiązują przyjaźń i sojusz.');
+  assert.equal(polish.relationship, true);
+});
