@@ -2,7 +2,7 @@
 
 const SLOT_PATTERNS = Object.freeze({
   why: /\b(dlaczego|czemu|z jakiego powodu|why|how come)\b/i,
-  // „Jak” samo w sobie nie oznacza instrukcji: rozróżniamy mechanizm działania od pytań o czas i procedurę.
+  // „Jak" samo w sobie nie oznacza instrukcji: rozróżniamy mechanizm działania od pytań o czas i procedurę.
   how: /\b(jak działa|jak funkcjonuje|w jaki sposób działa|na czym polega|how does .{1,80} work|how do .{1,80} work)\b/i,
   when: /\b(kiedy|w którym roku|w jakim roku|when)\b/i,
   where: /\b(gdzie|dokąd|skąd|where)\b/i,
@@ -44,10 +44,10 @@ function buildAnswerPlan(question, routing = {}) {
   }
   if (routing.is_lore) slots.add('entity_context');
   // Pytanie o gameplay nie zawsze wymaga kroków: czysto lokalizacyjne pytania
-  // typu „gdzie znaleźć X”, „gdzie jest X” wymagają tylko lokalizacji (where),
+  // typu „gdzie znaleźć X", „gdzie jest X" wymagają tylko lokalizacji (where),
   // a nie procedury. Wymaganie steps/how dla nich powoduje, że poprawna
-  // odpowiedź „znajduje się w Y” zostaje odrzucona przez answer-judge
-  // jako „brakujące kroki” (np. Elden Ring Wielki Miecz).
+  // odpowiedź „znajduje się w Y" zostaje odrzucona przez answer-judge
+  // jako „brakujące kroki" (np. Elden Ring Wielki Miecz).
   const isGameplay = routing.is_gameplay === true || routing.intent === 'gameplay';
   const isLocationOnlyGameplay = isGameplay && slots.has('where')
     && !slots.has('why') && !/jak\s+(?:przej|zrobi|pokona|zdoby|odblokowa|rozwiąza|ukoncz|uzyc|użyc|aktywow|napraw)/i.test(q)
@@ -62,9 +62,12 @@ function buildAnswerPlan(question, routing = {}) {
   // Pytania przyczynowe wymagają osobnego dowodu dla faktu i dla przyczyny.
   // Sam fakt, że wydarzenie A poprzedza B, nie jest dowodem relacji A -> B.
   const causalQuestion = slots.has('why');
+  // \b cannot match after the non-ASCII character ć, so we use (?!\w) instead
+  // of a trailing \b to correctly handle the trwać alternative as well as the
+  // ASCII-terminated ones.
   const quantityMayBeVariable = slots.has('quantity')
     && /\b(?:ile|jak\s+d[łl]ugo|how\s+long)\b/i.test(q)
-    && /\b(?:trwa|trwać|trwac|duration|lasts?|takes?)\b/i.test(q);
+    && /\b(?:trwa|trwać|trwac|duration|lasts?|takes?)(?!\w)/i.test(q);
 
   const clauses = q.split(
     /(?<=[?;])\s+|\s+(?=(?:i|oraz|a także|natomiast)\s+(?:jak|dlaczego|czemu|kiedy|gdzie|ile|czy|kto|kim|co|czym|jaki|jaka|jakie)\b)/iu,
@@ -78,16 +81,16 @@ function buildAnswerPlan(question, routing = {}) {
   }));
   const responseShapeGuidance = [
     slots.has('who')
-      ? 'Dla pytań „kto/kim jest” zacznij od głównej tożsamości lub definiującego statusu postaci, który źródło wyraźnie podaje (np. wampirzy pomiot, nieumarły, bóstwo); następnie podaj istotną rolę lub relację (np. towarzysz lub antagonista). Rasa, klasa i profesja są dodatkowymi atrybutami — nie mogą zastąpić definiującej tożsamości. Nie dopisuj etykiety, której źródło nie potwierdza.'
+      ? 'Dla pytań „kto/kim jest" zacznij od głównej tożsamości lub definiującego statusu postaci, który źródło wyraźnie podaje (np. wampirzy pomiot, nieumarły, bóstwo); następnie podaj istotną rolę lub relację (np. towarzysz lub antagonista). Rasa, klasa i profesja są dodatkowymi atrybutami — nie mogą zastąpić definiującej tożsamości. Nie dopisuj etykiety, której źródło nie potwierdza.'
       : '',
     slots.has('where')
-      ? 'Dla pytań „gdzie” podaj nazwane miejsce docelowe oraz precyzyjny punkt orientacyjny, taki jak ruiny, budowla lub konkretny obiekt, jeśli źródła potwierdzają te szczegóły; nie zastępuj ich samym kierunkiem geograficznym.'
+      ? 'Dla pytań „gdzie" podaj nazwane miejsce docelowe oraz precyzyjny punkt orientacyjny, taki jak ruiny, budowla lub konkretny obiekt, jeśli źródła potwierdzają te szczegóły; nie zastępuj ich samym kierunkiem geograficznym.'
       : '',
     slots.has('when')
-      ? 'Dla pytań „kiedy” nie zgaduj daty ani kolejności wydarzeń. Jeśli źródła nie podają dokładnego momentu, zaznacz to wprost i podaj tylko potwierdzony kontekst.'
+      ? 'Dla pytań „kiedy" nie zgaduj daty ani kolejności wydarzeń. Jeśli źródła nie podają dokładnego momentu, zaznacz to wprost i podaj tylko potwierdzony kontekst.'
       : '',
     slots.has('why')
-      ? 'Zachowuj modalność i etap zdarzenia opisany w źródle: „zaprojektowano/przeznaczono do”, „miało nastąpić” i „może” nie znaczą, że zdarzenie faktycznie nastąpiło. Na przykład „designed to be attached” nie dowodzi, że obiekt rzeczywiście podłączono. Nie przedstawiaj celu projektu jako dokonanego faktu.'
+      ? 'Zachowuj modalność i etap zdarzenia opisany w źródle: „zaprojektowano/przeznaczono do", „miało nastąpić" i „może" nie znaczą, że zdarzenie faktycznie nastąpiło. Na przykład „designed to be attached" nie dowodzi, że obiekt rzeczywiście podłączono. Nie przedstawiaj celu projektu jako dokonanego faktu.'
       : '',
     slots.has('steps')
       ? 'Dla instrukcji i poradnika używaj wyłącznie kroków, które są bezpośrednio potwierdzone w pobranych źródłach. Nie dopisuj typowych porad z własnej wiedzy o grze, nawet jeśli brzmią wiarygodnie. Jeśli źródła potwierdzają tylko część procedury, podaj tę część i jasno zaznacz, że dostępne źródła nie potwierdzają dalszych kroków; nie wymyślaj brakujących działań. Jeśli źródło opisuje konkretnego bossa, postać, zadanie lub wersję gry, nazwij ten przypadek i nie uogólniaj jego mechaniki na wszystkich przeciwników.'
@@ -111,7 +114,7 @@ function buildAnswerPlan(question, routing = {}) {
     causalQuestion,
     quantityMayBeVariable,
     instruction: requirements.length
-      ? 'Odpowiedź musi pokryć: ' + requirements.map(r => r.id).join(', ') + '. Każde zdanie faktograficzne ma być atomowym claimem opartym na jednym zweryfikowanym fragmencie evidence. Dla pytania „dlaczego/czemu” oddziel fakt od przyczyny: podaj przyczynę tylko wtedy, gdy konkretny evidence quote wyraźnie łączy przyczynę ze skutkiem. Nie traktuj kolejności wydarzeń jako przyczynowości. Jeśli źródło jawnie podaje motyw lub cel działania (np. próbę upokorzenia), podaj ten motyw wprost i nie zastępuj go domniemaną przyczyną z sąsiednich zdań. Nie zamieniaj celu działania na przyczynę zdarzenia. Jeśli brak takiego dowodu, powiedz wprost, że źródła nie potwierdzają przyczyny.' + (responseShapeGuidance ? ' ' + responseShapeGuidance : '')
+      ? 'Odpowiedź musi pokryć: ' + requirements.map(r => r.id).join(', ') + '. Każde zdanie faktograficzne ma być atomowym claimem opartym na jednym zweryfikowanym fragmencie evidence. Dla pytania „dlaczego/czemu" oddziel fakt od przyczyny: podaj przyczynę tylko wtedy, gdy konkretny evidence quote wyraźnie łączy przyczynę ze skutkiem. Nie traktuj kolejności wydarzeń jako przyczynowości. Jeśli źródło jawnie podaje motyw lub cel działania (np. próbę upokorzenia), podaj ten motyw wprost i nie zastępuj go domniemaną przyczyną z sąsiednich zdań. Nie zamieniaj celu działania na przyczynę zdarzenia. Jeśli brak takiego dowodu, powiedz wprost, że źródła nie potwierdzają przyczyny.' + (responseShapeGuidance ? ' ' + responseShapeGuidance : '')
       : 'Odpowiedz bezpośrednio i nie dodawaj niepotwierdzonych faktów.' + (responseShapeGuidance ? ' ' + responseShapeGuidance : ''),
   };
 }
@@ -126,11 +129,11 @@ function hasMeaningfulTail(text, marker) {
 function extractAnswerSignals(answer) {
   const text = normalize(answer);
   const where = /\b(?:w(?!\s+(?:wyniku|rezultacie|celu|zamian|zwiazku|odpowiedni\w*|okreslon\w*|miejsc\w*))|we(?!\s+wzgledu)|na(?!\s+(?:skutek|podstawie|poczatku|koncu))|do(?!\s+tego)|z(?!\s+(?:powodu|przyczyny|uwagi|tego))|ze(?!\s+wzgledu))\s+(?!\d)[a-z0-9-]+/.test(text);
-  // Przyczyna i motyw to odrębne sygnały: „aby/w celu” opisuje intencję, a nie dowodzi, że skutek nastąpił.
+  // Przyczyna i motyw to odrębne sygnały: „aby/w celu" opisuje intencję, a nie dowodzi, że skutek nastąpił.
   const causalMarker = /\b(dlaczego|czemu|powod|z powodu|z przyczyny|ze wzgledu na|z uwagi na|poniewaz|dlatego|gdyz|bo|w zamian|w wyniku|w rezultacie|dzieki|because|because of|due to|caused by|led to|resulted in)\b/.exec(text)?.[0] || '';
   const motiveMarker = /\b(?:aby|zeby|w celu|na celu|po to(?:,)? zeby|z zamiarem|w zamiarze|w intencji|so that|in order to|so as to)\b/.exec(text)?.[0] || '';
-  // Instrukcja planu każe napisać „źródła nie potwierdzają przyczyny”, gdy materiał
-  // jej nie podaje. Taka uczciwa odpowiedź spełnia wymaganie „dlaczego”.
+  // Instrukcja planu każe napisać „źródła nie potwierdzają przyczyny", gdy materiał
+  // jej nie podaje. Taka uczciwa odpowiedź spełnia wymaganie „dlaczego".
   const causeUnconfirmed = /\b(?:zrodla|zrodlo|materialy|dane)\b.{0,60}\bnie\s+(?:potwierdza\w*|wskazuja|podaja|precyzuja|wyjasniaja)\b|\bbrak\s+potwierdzon\w*\s+(?:przyczyn|powod)\w*|\bnie\s+wynika\b.{0,40}\b(?:przyczyn|powod|dlaczego)\w*/.test(text);
   const motiveExplanation = Boolean(motiveMarker) && hasMeaningfulTail(text, motiveMarker);
   const causalExplanation = (Boolean(causalMarker) && hasMeaningfulTail(text, causalMarker)) || causeUnconfirmed;
@@ -150,7 +153,7 @@ function extractAnswerSignals(answer) {
     when: /\b(?:1\d{3}|20\d{2})\b|\b(?:po|przed|podczas|w trakcie|pod koniec|na poczatku)\s+\w+|\b(?:w|od|do)\s+(?:styczniu|lutym|marcu|kwietniu|maju|czerwcu|lipcu|sierpniu|wrzesniu|pazdzierniku|listopadzie|grudniu)\b|\b(?:wtedy|nastepnie|pozniej|wcześniej|wczesniej)\b/.test(text) || whenUnconfirmed,
     where,
     location: where,
-    // Po polsku typowa definicja to „X to Y” („Astarion to wampirzy łotrzyk”), nie tylko „X jest Y”.
+    // Po polsku typowa definicja to „X to Y" („Astarion to wampirzy łotrzyk"), nie tylko „X jest Y".
     who: (/\b(?:jest|sa|byl|byla|byli|jako|osoba|postac|gracz|autor|tworca|bohater)\b/.test(text)
       || /\b\w{3,}\s+to\s+\w{4,}/.test(text)
       || /\b(?:jeden|jedna|jedno)\s+z\b/.test(text)
@@ -166,7 +169,7 @@ function extractAnswerSignals(answer) {
     relationship: Boolean(relationshipMarker)
       && /(?<![\p{L}])(?:wspolprac\p{L}*|konflikt\p{L}*|przyjazn\p{L}*|zauf\p{L}*|zdrad\p{L}*|sojusz\p{L}*|wrog\p{L}*|partner\p{L}*|towarzysz\p{L}*|romans\p{L}*|lacz\p{L}*|dziel\p{L}*|relationship\p{L}*|friends?|friendship|enem(?:y|ies)|alliances?)(?![\p{L}])/u.test(text),
     entity_context: text.length > 0,
-    // Dla slotu „dlaczego” jawnie podany motyw jest wyjaśnieniem, ale pozostaje oznaczony osobno.
+    // Dla slotu „dlaczego" jawnie podany motyw jest wyjaśnieniem, ale pozostaje oznaczony osobno.
     causal_explanation: causalExplanation,
   };
 }
@@ -177,7 +180,7 @@ const CONTEXT_QUESTION_STOPWORDS = new Set([
 ]);
 
 function extractQuestionContextTerms(question) {
-  const matches = String(question || '').match(/(?<![\p{L}\p{N}_])[A-ZĄĆĘŁŃÓŚŹŻ][\p{L}\p{N}'’.-]*(?:\s+[A-ZĄĆĘŁŃÓŚŹŻ][\p{L}\p{N}'’.-]*)*/gu) || [];
+  const matches = String(question || '').match(/(?<![\p{L}\p{N}_])[A-ZĄĆĘŁŃÓŚŹŻ][\p{L}\p{N}''.-]*(?:\s+[A-ZĄĆĘŁŃÓŚŹŻ][\p{L}\p{N}''.-]*)*/gu) || [];
   return matches.map(normalize).filter(term => term.length >= 3 && !CONTEXT_QUESTION_STOPWORDS.has(term));
 }
 
@@ -238,7 +241,7 @@ function assessAnswerCompleteness(answer, plan) {
       : id === 'clause_coverage'
         ? coversQuestionClauses(answer, plan.clauses)
         : id === 'causal_explanation'
-          // Jawnie podany motyw może odpowiedzieć na „dlaczego?”, ale nie zmienia go
+          // Jawnie podany motyw może odpowiedzieć na „dlaczego?", ale nie zmienia go
           // w twierdzenie o faktycznie zrealizowanym łańcuchu przyczynowym.
           ? Boolean(signals.causal_explanation || (signals.motive_explanation && plan.requirements.some(item => item?.id === 'why')))
           : id === 'quantity' && plan.quantityMayBeVariable
