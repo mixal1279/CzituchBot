@@ -62,9 +62,12 @@ function buildAnswerPlan(question, routing = {}) {
   // Pytania przyczynowe wymagają osobnego dowodu dla faktu i dla przyczyny.
   // Sam fakt, że wydarzenie A poprzedza B, nie jest dowodem relacji A -> B.
   const causalQuestion = slots.has('why');
+  // \b cannot match after the non-ASCII character ć, so we use (?!\w) instead
+  // of a trailing \b to correctly handle the trwać alternative as well as the
+  // ASCII-terminated ones.
   const quantityMayBeVariable = slots.has('quantity')
     && /\b(?:ile|jak\s+d[łl]ugo|how\s+long)\b/i.test(q)
-    && /\b(?:trwa|trwać|trwac|duration|lasts?|takes?)\b/i.test(q);
+    && /\b(?:trwa|trwać|trwac|duration|lasts?|takes?)(?!\w)/i.test(q);
 
   const clauses = q.split(
     /(?<=[?;])\s+|\s+(?=(?:i|oraz|a także|natomiast)\s+(?:jak|dlaczego|czemu|kiedy|gdzie|ile|czy|kto|kim|co|czym|jaki|jaka|jakie)\b)/iu,
@@ -177,7 +180,7 @@ const CONTEXT_QUESTION_STOPWORDS = new Set([
 ]);
 
 function extractQuestionContextTerms(question) {
-  const matches = String(question || '').match(/(?<![\p{L}\p{N}_])[A-ZĄĆĘŁŃÓŚŹŻ][\p{L}\p{N}'’.-]*(?:\s+[A-ZĄĆĘŁŃÓŚŹŻ][\p{L}\p{N}'’.-]*)*/gu) || [];
+  const matches = String(question || '').match(/(?<![\p{L}\p{N}_])[A-ZĄĆĘŁŃÓŚŹŻ][\p{L}\p{N}'’.-]*(?:\s+[A-ZĄĆĘŁŃÓŚŹŻ][\p{L}\p{N}''.-]*)*/gu) || [];
   return matches.map(normalize).filter(term => term.length >= 3 && !CONTEXT_QUESTION_STOPWORDS.has(term));
 }
 
