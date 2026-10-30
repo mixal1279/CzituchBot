@@ -92,8 +92,8 @@ const GENERATION_FALLBACK_CHAIN = [
   'groq:openai/gpt-oss-20b',
   'gemini:gemini-3.8-flash',
   'gemini:gemini-3.5-flash-lite',
-  'xkiro:default',
   'openrouter:default',
+  'xkiro:default',
 ];
 // Semantic repair is latency- and budget-sensitive. The normal generation
 // chain above stays unchanged; only the repair path uses this preference.
