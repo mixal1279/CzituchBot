@@ -1416,16 +1416,17 @@ function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
     // validates the action, quote, and source binding.
     const evidenceContext = String(options.evidenceContext || '');
     const evidenceQuote = String(options.evidenceQuote || '').trim();
-    const quoteOffset = evidenceQuote ? evidenceContext.indexOf(evidenceQuote) : -1;
+    // Reuse quoteExists' punctuation/whitespace normalization; raw indexOf()
+    // rejected valid quotes when extraction normalized spacing or punctuation.
+    const quotePrefix = evidenceQuote ? findQuotePrefix(evidenceContext, evidenceQuote) : null;
     const anaphoricEn = ['who ', 'which ', 'that ', 'he ', 'she ', 'it ', 'they ', 'his ', 'her ', 'their ', 'its ']
       .some(prefix => enNormalized.startsWith(prefix));
-    const prefix = quoteOffset >= 0 ? evidenceContext.slice(0, quoteOffset) : '';
-    // Jedna odwrotna kreska: w literale regex „\\s” oznaczałoby dosłowny backslash + „s”,
-    // przez co podział na zdania nigdy by nie zadziałał i imię z POPRZEDNIEGO zdania
-    // wiązałoby się z cytatem. Imię musi stać w tym samym zdaniu co cytat.
-    const sameSentencePrefix = prefix.split(/[.!?](?:\s+|$)/u).at(-1) || '';
-    const normalizedPrefix = ' ' + normalizujClaim(sameSentencePrefix) + ' ';
-    const missingEntitiesBound = quoteOffset >= 0
+    // Only the sentence containing the quote may supply the omitted subject.
+    const sameSentencePrefix = quotePrefix !== null
+      ? (quotePrefix.split(/\bsentenceboundarytoken\b/u).at(-1) || '')
+      : '';
+    const normalizedPrefix = ' ' + sameSentencePrefix + ' ';
+    const missingEntitiesBound = quotePrefix !== null
       && anaphoricEn
       && missingFromTranslation.every(name => normalizedPrefix.includes(' ' + normalizujClaim(name) + ' '));
     if (!missingEntitiesBound) {
