@@ -91,7 +91,7 @@ function openrouterProbe(payload, maxTokens) {
 function groqProbe(payload, maxTokens) {
   return {
     provider: 'Groq', model: GROQ_MODEL, variant: `${payload.label} · json_object · max_completion_tokens=${maxTokens}`,
-    url: `${GROQ_BASE}/chat/completions`,
+    url: `${GROQ_BASE}/openai/v1/chat/completions`,
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${GROQ_KEY}` },
     body: { model: GROQ_MODEL, messages: payload.messages, temperature: 0, max_completion_tokens: maxTokens, reasoning_effort: 'low', response_format: { type: 'json_object' } },
   };
