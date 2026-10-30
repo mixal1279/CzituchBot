@@ -803,14 +803,15 @@ test('Tavily quota cooldown skips Tavily and continues with secondary providers'
   let tavilyCalls = 0;
   let exaCalls = 0;
   const fakeFetch = async url => {
-    if (String(url).includes('api.tavily.com')) {
+    const hostname = new URL(String(url)).hostname;
+    if (hostname === 'api.tavily.com') {
       tavilyCalls++;
       return new Response("This request exceeds your plan's set usage limit", { status: 432 });
     }
-    if (String(url).includes('generativelanguage.googleapis.com')) {
+    if (hostname === 'generativelanguage.googleapis.com') {
       return new Response(JSON.stringify({ error: { message: 'quota exhausted' } }), { status: 429, headers: { 'content-type': 'application/json' } });
     }
-    if (String(url).includes('api.exa.ai')) {
+    if (hostname === 'api.exa.ai') {
       exaCalls++;
       return new Response(JSON.stringify({
         results: [{ title: 'Exa evidence', url: 'https://example.com/evidence', highlights: ['Grounded evidence.'] }],
