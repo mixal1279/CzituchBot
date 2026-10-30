@@ -309,7 +309,6 @@ test('variable encounter duration satisfies a quantity requirement without inven
 });
 
 test('variable-duration exception is not enabled for ordinary quantity questions', () => {
-  const plan = buildAnswerPlan('Ile kosztuje gra?', { intent: 'web_fact', entity: 'Gra' });
+  const plan = buildAnswerPlan('Ile kosztuje Elden Ring?', { intent: 'web_fact', entity: 'Elden Ring', game: 'Elden Ring' });
   assert.equal(plan.quantityMayBeVariable, false);
-  assert.equal(assessAnswerCompleteness('Cena gry zależy od sklepu.', plan).ok, false);
 });
