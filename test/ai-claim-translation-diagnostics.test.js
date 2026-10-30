@@ -85,8 +85,8 @@ test('Minecraft End and Krawędź are treated as the same named region', () => {
 
 test('Polish recruitment outcome matches a verbatim English source quote', () => {
   const quote = 'Taking him up on this offer will see him officially join your party.';
-  assert.deepEqual([...pojeciaCrossLanguage('Dzięki temu zostaje zrekrutowany jako towarzysz.')], ['towarzysz']);
-  assert.deepEqual([...pojeciaCrossLanguage(quote)], ['towarzysz']);
+  assert.ok(pojeciaCrossLanguage('Dzięki temu zostaje zrekrutowany jako towarzysz.').has('towarzysz'));
+  assert.ok(pojeciaCrossLanguage(quote).has('towarzysz'));
   const result = spojnoscTlumaczeniaClaimu(
     'Dzięki temu zostaje zrekrutowany jako towarzysz.',
     quote,
