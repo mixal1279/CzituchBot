@@ -20,6 +20,8 @@ test('YouTube OAuth binds callback to state and uses PKCE S256', () => {
   assert.match(oauth, /code_challenge_method:\s*'S256'/);
   assert.match(oauth, /callbackState !== oauthState/);
   assert.match(oauth, /url\.searchParams\.get\('error'\)/);
+  assert.match(oauth, /Google OAuth zwrócił błąd; szczegóły odpowiedzi pominięto/);
+  assert.doesNotMatch(oauth, /'Google OAuth zwrócił błąd: '\s*\+\s*oauthError/);
   assert.match(oauth, /getToken\(\{\s*code,\s*codeVerifier\s*\}\)/);
 });
 
