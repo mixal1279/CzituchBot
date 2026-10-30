@@ -375,7 +375,7 @@ function wyodrebnijNazwyWlasne(value, options = {}) {
     // i powodował odrzucenie poprawnego angielskiego tłumaczenia „The exact moment…”.
     'dokladny', 'dokladna', 'dokladne', 'dokladnego', 'dokladnej', 'dokladnym',
     // Liczba mnoga rzeczownika pospolitego: „postać” była na liście, „postacie” nie.
-    'postacie', 'postaci', 'bohaterzy', 'bohaterowie',
+    'postacie', 'postaci', 'bohaterzy', 'bohaterowie', 'źródła', 'zrodla', 'sources',
     // Kwantyfikatory na początku zdania nie są nazwami własnymi (np. „Wszystkie te działania…”).
     'wszystkie', 'wszystkich', 'wszystko', 'wszelkie', 'wszyscy', 'wszystkim', 'każde', 'kazde', 'każda', 'kazda', 'każdy', 'kazdy', 'każdym', 'kazdym',
     // Rzeczownik pospolity na początku claimu nie może zostać uznany za encję.
