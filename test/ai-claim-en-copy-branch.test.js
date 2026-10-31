@@ -76,7 +76,7 @@ test('copied quote is rejected when it shares an entity but no verifiable action
 test('copied Dragonborn quote accepts a faithful Polish identity claim', () => {
   const quote = 'A Dragonborn or Dovahkiin is a mortal man or woman born with the blood and soul of a dragon';
   const result = spojnoscTlumaczeniaClaimu(
-    'Dragonborn jest śmiertelnikiem obdarzonym krwią i duszą smoka.',
+    'Dovahkiin jest śmiertelnym mężczyzną lub kobietą urodzonym z krwią i duszą smoka.',
     quote,
     { evidenceQuote: quote },
   );
@@ -86,7 +86,7 @@ test('copied Dragonborn quote accepts a faithful Polish identity claim', () => {
 test('copied Dark Brotherhood quote accepts a source-grounded faction and assassination claim', () => {
   const quote = 'The Dragonborn was said to have joined the Dark Brotherhood, taking contracts assassinating various denizens of Skyrim';
   const result = spojnoscTlumaczeniaClaimu(
-    'Dragonborn dołączył do Dark Brotherhood i wykonywał zadania zabójcze.',
+    'Mówiono, że Dragonborn dołączył do Dark Brotherhood, przyjmując kontrakty na zabójstwo różnych mieszkańców Skyrim.',
     quote,
     { evidenceQuote: quote },
   );
