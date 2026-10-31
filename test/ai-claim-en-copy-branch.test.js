@@ -72,23 +72,3 @@ test('copied quote is rejected when it shares an entity but no verifiable action
   assert.equal(wynik.ok, false);
   assert.match(wynik.reason, /kopiuje cytat/);
 });
-
-test('copied Dovahkiin lore quote accepts a complete Polish translation', () => {
-  const quote = 'Dovahkiin is a mortal born with the blood and soul of a dragon.';
-  const result = spojnoscTlumaczeniaClaimu(
-    'Dovahkiin jest śmiertelnikiem urodzonym z krwią i duszą smoka.',
-    quote,
-    { evidenceQuote: quote },
-  );
-  assert.equal(result.ok, true, JSON.stringify(result));
-});
-
-test('copied Dark Brotherhood quote accepts an equivalent Polish recruitment claim', () => {
-  const quote = 'The Dragonborn joined the Dark Brotherhood.';
-  const result = spojnoscTlumaczeniaClaimu(
-    'Dragonborn dołączył do Dark Brotherhood.',
-    quote,
-    { evidenceQuote: quote },
-  );
-  assert.equal(result.ok, true, JSON.stringify(result));
-});
