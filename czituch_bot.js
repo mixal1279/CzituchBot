@@ -2476,7 +2476,7 @@ async function walidujOdpowiedzAIBezCache(persona, pytanie, odpowiedz, dane, his
       ? (typeof requestState.remainingMs === 'function' ? requestState.remainingMs() : requestState.maxCzasMs - (Date.now() - requestState.startedAt))
       : 9000;
     const timeoutMs = computeValidatorTimeout(remainingMs, {
-      maxTimeoutMs: 9000,
+      maxTimeoutMs: 12000,
       reserveMs: computeValidatorReserveMs(remainingMs, requestState?.validatory + 1, requestState?.maxValidatorow, requestState?.validationPass === 1 ? INITIAL_VALIDATOR_REPAIR_RESERVE_MS : 0),
       minTimeoutMs: 4000,
     });
