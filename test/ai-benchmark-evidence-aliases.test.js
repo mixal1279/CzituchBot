@@ -91,14 +91,15 @@ test('causal translation preserves the Polish pozwala / English enables relation
   assert.equal(result.ok, true, JSON.stringify(result));
 });
 
-test('a copied source quote may be broader than the narrower Polish atomic claim', () => {
+test('a copied source quote cannot silently widen a narrower Polish atomic claim', () => {
   const quote = 'To enter, you need to throw the ender pearl onto the roof of the ship or build a one block wide bridge to the ship.';
   const result = spojnoscTlumaczeniaClaimu(
     'Aby wejść do statku, należy wyrzucić perłę Endera na dach lub zbudować jednoblockowy most.',
     quote,
     { evidenceQuote: quote },
   );
-  assert.equal(result.ok, true, JSON.stringify(result));
+  assert.equal(result.ok, false, JSON.stringify(result));
+  assert.match(result.reason, /kopiuje cytat/);
 });
 
 test('the word block in Minecraft bridge width is not a protection/reduction marker', () => {
