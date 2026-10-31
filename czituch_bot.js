@@ -468,7 +468,13 @@ const db = process.env.CZITUCHBOT_SKIP_STARTUP_IO === '1'
       keyFilename: './czituchbot-9c561-firebase-adminsdk-fbsvc-241e465e40.json',
     });
 
-const FIRESTORE_STATE = createFirestoreState(db);\n// Restore provider cooldowns across restarts; writes are best-effort when Firestore is unavailable.\nvoid configureProviderQuotaPersistence(FIRESTORE_STATE.enabled ? {\n  read: FIRESTORE_STATE.read,\n  write: FIRESTORE_STATE.write,\n  logger: console,\n} : null);
+const FIRESTORE_STATE = createFirestoreState(db);
+// Restore provider cooldowns across restarts; writes are best-effort when Firestore is unavailable.
+void configureProviderQuotaPersistence(FIRESTORE_STATE.enabled ? {
+  read: FIRESTORE_STATE.read,
+  write: FIRESTORE_STATE.write,
+  logger: console,
+} : null);
 
 // Lokalna kopia awaryjna jest szyfrowana tak samo jak token w Firestore.
 // 0600 ogranicza uprawnienia pliku, a AES-256-GCM chroni jego zawartość.
