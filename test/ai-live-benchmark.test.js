@@ -128,15 +128,24 @@ test('Dragonrend gold facts match ordinary Polish inflections in the benchmark f
   assert.equal(scoreGoldenFacts(answer, item.expected.factual).passed, true);
 });
 
-test('live benchmark always samples an independent gold case, even with a nonzero seed', () => {
+test('live benchmark samples at least two independent gold cases in a five-case run', () => {
   const benchmark = JSON.parse(fs.readFileSync(path.join(__dirname, 'ai-benchmark.json'), 'utf8'));
   for (const seed of [0, 1, 113, 499]) {
     const selected = stratifiedCases(benchmark.cases, 5, seed);
     assert.equal(selected.length, 5);
     assert.ok(
-      selected.some(item => item.expected?.factual?.independentGold === true),
-      `seed ${seed} did not include an independent gold case`,
+      selected.filter(item => item.expected?.factual?.independentGold === true).length >= 2,
+      `seed ${seed} did not include at least two independent gold cases`,
     );
+  }
+});
+
+test('ten-case live benchmark reserves four independent gold cases', () => {
+  const benchmark = JSON.parse(fs.readFileSync(path.join(__dirname, 'ai-benchmark.json'), 'utf8'));
+  for (const seed of [0, 113, 499]) {
+    const selected = stratifiedCases(benchmark.cases, 10, seed);
+    assert.equal(selected.length, 10);
+    assert.ok(selected.filter(item => item.expected?.factual?.independentGold === true).length >= 4);
   }
 });
 
@@ -165,8 +174,10 @@ test('live diagnostics distinguish validator failures from generation failures a
   assert.equal(diagnostics.tavilyHttpCalls, 1);
   assert.equal(diagnostics.avgTavilyHttpMs, 1200);
   assert.equal(diagnostics.avgElapsedToGenerationCycleMs, 24200);
-  assert.equal(diagnostics.independentGoldCasesInSample.length, 1);
-  assert.equal(diagnostics.goldCoverageByCategory.how.independentGold, 1);
+  assert.ok(diagnostics.independentGoldCasesInSample.length >= 2);
+  for (const goldCase of selected.filter(item => item.expected?.factual?.independentGold === true)) {
+    assert.ok(diagnostics.goldCoverageByCategory[goldCase.category].independentGold >= 1);
+  }
 });
 
 test('live diagnostics report validator unavailability per call and detect outages of any provider', () => {
@@ -485,4 +496,53 @@ test('benchmark run is invalid when provider degradation makes quality incompara
   assert.equal(isBenchmarkRunValid({ providerOutage: true, qualityComparable: true }), false);
   assert.equal(isBenchmarkRunValid({ providerOutage: false, qualityComparable: true }), true);
   assert.equal(isBenchmarkRunValid({}), true);
+});
+ 
+test('Gemini safety blocks are not classified as provider transport outages', () => {
+  const benchmark = JSON.parse(fs.readFileSync(path.join(__dirname, 'ai-benchmark.json'), 'utf8'));
+  const selected = stratifiedCases(benchmark.cases, 5, 113);
+  const diagnostics = buildBenchmarkDiagnostics([{
+    finalStatus: 'accepted',
+    generationAttempts: [{ provider: 'groq', model: 'openai/gpt-oss-120b', status: 'success' }],
+    validatorResults: [
+      { provider: 'gemini', model: 'gemini-3.5-flash-lite', status: 'unavailable', safetyBlocked: true, technicalError: false, reason: 'finishReason=PROHIBITED_CONTENT' },
+      { provider: 'groq', model: 'openai/gpt-oss-20b', status: 'accepted' },
+    ],
+    timingTrace: [],
+  }], benchmark.cases, selected);
+
+  assert.equal(diagnostics.validatorSafetyBlocks, 1);
+  assert.equal(diagnostics.validatorStatusCounts.safety_blocked, 1);
+  assert.equal(diagnostics.validatorUnavailable, 0);
+  assert.equal(diagnostics.validatorUnavailableRate, 0);
+  assert.equal(diagnostics.validatorTransportFailures.length, 0);
+  assert.equal(diagnostics.providerOutage, false);
+  assert.equal(diagnostics.qualityComparable, true);
+});
+
+test('benchmark outcomes classify Gemini safety blocks separately', () => {
+  assert.equal(classifyBenchmarkOutcome({
+    finalStatus: 'rejected',
+    judgeStatus: 'rejected',
+    validatorResults: [{ provider: 'gemini', status: 'unavailable', safetyBlocked: true, reason: 'finishReason=PROHIBITED_CONTENT' }],
+  }), 'provider_safety_block');
+});
+
+test('all-validator Gemini safety blocks invalidate quality comparison without reporting an outage', () => {
+  const benchmark = JSON.parse(fs.readFileSync(path.join(__dirname, 'ai-benchmark.json'), 'utf8'));
+  const selected = stratifiedCases(benchmark.cases, 5, 113);
+  const diagnostics = buildBenchmarkDiagnostics([{
+    finalStatus: 'inconclusive',
+    generationAttempts: [{ provider: 'groq', model: 'openai/gpt-oss-20b', status: 'success' }],
+    validatorResults: [
+      { provider: 'gemini', model: 'gemini-3.5-flash-lite', status: 'unavailable', safetyBlocked: true, technicalError: false, reason: 'finishReason=PROHIBITED_CONTENT' },
+    ],
+    timingTrace: [],
+  }], benchmark.cases, selected);
+
+  assert.equal(diagnostics.validatorSafetyBlocks, 1);
+  assert.equal(diagnostics.validatorVerdictCalls, 0);
+  assert.equal(diagnostics.providerOutage, false);
+  assert.equal(diagnostics.qualityComparable, false);
+  assert.ok(diagnostics.qualityDegradationReasons.includes('all_validator_calls_safety_blocked'));
 });

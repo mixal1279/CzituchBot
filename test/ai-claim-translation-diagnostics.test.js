@@ -88,7 +88,7 @@ test('Polish recruitment outcome matches a verbatim English source quote', () =>
   assert.ok(pojeciaCrossLanguage('Dzięki temu zostaje zrekrutowany jako towarzysz.').has('towarzysz'));
   assert.ok(pojeciaCrossLanguage(quote).has('towarzysz'));
   const result = spojnoscTlumaczeniaClaimu(
-    'Dzięki temu zostaje zrekrutowany jako towarzysz.',
+    'Dzięki przyjęciu tej oferty oficjalnie dołącza do twojej drużyny.',
     quote,
     { evidenceQuote: quote },
   );

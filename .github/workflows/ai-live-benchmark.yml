@@ -27,8 +27,10 @@ jobs:
     env:
       AI_LIVE_BENCHMARK: "1"
       AI_ALLOW_PARTIAL_ANSWERS: "1"
-      AI_BENCHMARK_LIMIT: "5"
+      AI_BENCHMARK_LIMIT: "10"
       AI_BENCHMARK_DELAY_MS: "5000"
+      AI_XKIRO_VALIDATOR_TIMEOUT_MS: "6000"
+      AI_OPENROUTER_VALIDATOR_TIMEOUT_MS: "6000"
       AI_BENCHMARK_SEED: ${{ inputs.seed || '0' }}
       AI_BENCHMARK_REQUIRE_PERFECT: "1"
       AI_BENCHMARK_JSON_PATH: ai-live-benchmark.json
@@ -61,8 +63,13 @@ jobs:
         run: node scripts/tavily-preflight.js
       - name: Preflight Groq
         run: node scripts/groq-preflight.js
+      - name: Preflight validator providers
+        env:
+          PREFLIGHT_STRICT: "1"
+          PREFLIGHT_TIMEOUT_MS: "20000"
+        run: node scripts/validator-providers-preflight.js
 
-      - name: Run 5-case live benchmark
+      - name: Run 10-case live benchmark
         shell: bash
         run: |
           set -o pipefail
@@ -92,6 +99,7 @@ jobs:
               "- ograniczenia jakości: " + ((d.qualityDegradationReasons || []).join(", ") || "brak"),
               "- odrzucone przez walidator: " + d.validatorRejected + ", niejednoznaczne: " + d.validatorInconclusive,
               "- odrzucone odpowiedzi zaakceptowane przez judge: " + (r.discardedJudgeAcceptedCount || 0) + " (" + ((r.discardedJudgeAcceptedCaseIds || []).join(", ") || "brak") + "), z poprawnymi gold facts: " + (r.discardedJudgeAcceptedFactualPassedCount || 0),
+              "- blokady bezpieczeństwa Gemini: " + (d.validatorSafetyBlocks || 0),
               "- wywołania walidatora: " + d.validatorCalls + ", pominięte: " + (d.validatorSkipped || 0) + ", niedostępne: " + d.validatorUnavailable,
               "- klasy wyników: " + Object.entries(d.outcomeCounts || {}).map(([k, v]) => k + "=" + v).join(", "),
               "",

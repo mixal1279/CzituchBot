@@ -49,6 +49,11 @@ jobs:
           node --check ai/policy.js
           node --check ai/response.js
           node --check ai/validator.js
+          node --check ai/claimValidation.js
+          node --check ai/entityAliases.js
+          node --check ai/validator-telemetry.js
+          node --check scripts/ai-live-benchmark.js
+          node --check scripts/validator-providers-preflight.js
           node --check ai/tavily.js
           node --check ai/webRetrieval.js
           node --check czituch_bot.js

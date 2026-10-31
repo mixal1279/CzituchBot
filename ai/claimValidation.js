@@ -10,10 +10,10 @@ const NEGATION_RE = /(?<![\p{L}])(?:nie|nigdy|brak|bez|zaden|zadna|zadne|never|n
 const NEGATION_STRICT_RE = /(?<![\p{L}])(?:nie|nigdy|brak|bez|zaden|zadna|zadne|never|not|cannot|without|lack\s+of|absence\s+of|unable|neither|nor|fails?\s+to|\p{L}+n['’]t)(?![\p{L}])/iu;
 // Claim o redukcji/ograniczeniu jest zgodny z dowodem „no damage / take no damage” (zero implikuje zmniejszenie).
 // „s?tlumi\w*” obejmuje odmiany „tłumić” (tłumiąca, tłumienie, stłumić), ale nie „tłumaczy”/„tłum”.
-const REDUCTION_RE = /(?<![\p{L}])(?:zmniejsz\w*|ogranicz\w*|redukuj\w*|zredukow\w*|oslab\w*|ochron\w*|oslon\w*|chron\w*|neutralizuj\w*|reduc\w*|inhibit\w*|dampen\w*|s?tlumi\w*|mitigat\w*|lower\w*|decreas\w*|protect\w*|prevent\w*|avoid\w*|block\w*|ward\w*|immun\w*|resist\w*|zapobieg\w*|unik\w*|blok\w*|odporn\w*)(?![\p{L}])/iu;
+const REDUCTION_RE = /(?<![\p{L}])(?:zmniejsz\w*|ogranicz\w*|redukuj\w*|zredukow\w*|oslab\w*|ochron\w*|oslon\w*|chron\w*|neutralizuj\w*|reduc\w*|inhibit\w*|dampen\w*|s?tlumi\w*|mitigat\w*|lower\w*|decreas\w*|protect\w*|prevent\w*|avoid\w*|block(?:s|ed|ing)?\s+(?:access|attacks?|damage|the\s+entrance|the\s+path|movement|progress)|ward\w*|immun\w*|resist\w*|zapobieg\w*|unik\w*|blokad\w*|zablokow\w*|blokuj\w*|odporn\w*)(?![\p{L}])/iu;
 // „skutkuj\w*” i „w rezultacie” to polskie odpowiedniki „resulting in”/„as a result”: bez nich
 // polski claim z relacją przyczynową przechodził kontrolę parytetu PL↔EN, gdy claim_en ją gubił.
-const CAUSAL_RE = /(?<![\p{L}])(?:bo|poniewaz|gdyz|dlatego|because|therefore|caused|causes|trigger\w*|consequently|hence|as\s+a\s+result|led\s+to|leading\s+to|resulted\s+in|resulting\s+in|because\s+of|due\s+to|thereby|thus|w\s+ten\s+sposob|przez\s+co|co\s+(?:umozliw\w*|spowod\w*)|motyw\w*|zmusz\w*|powoduj\w*|przyczyn\w*|wskutek|w\s+efekcie|skutkuj\w*|w\s+rezultacie|allow(?:s|ed|ing)?|enabl(?:e|es|ed|ing)|which\s+(?:let|lets|allowed|allows|enabled|enables)|putting\s+(?:him|her|them|it)\s+in\s+control|giving\s+(?:him|her|them|it)\s+control|will\s+see\s+(?:him|her|them|the player|the character)\s+(?:officially\s+)?(?:join|become)|dajac\s+(?:mu|jej|im)\s+(?:wladz\w*|kontrol\w*|panowan\w*)|force(?:s|d|ing)?\s+(?:the\s+)?[\p{L}\p{N}'’_-]+(?:\s+[\p{L}\p{N}'’_-]+){0,1}\s+to\s+[\p{L}\p{N}'’_-]+|so\s+(?:he|she|they|it|we|the)|in\s+exchange(?:\s+for)?|in\s+return(?:\s+for)?|in\s+turn|thanks\s+to|owing\s+to|w\s+zamian(?:\s+za)?|w\s+rewan[zż]u|w\s+wyniku|z\s+powodu|dzieki|spowod\w*|doprowadz\w*|umozliw\w*)(?![\p{L}])/iu;
+const CAUSAL_RE = /(?<![\p{L}])(?:bo|poniewaz|gdyz|dlatego|because|therefore|caused|causes|trigger\w*|consequently|hence|as\s+a\s+result|as\s+(?:they|he|she|it|we)\s+(?:have|has|had|are|were|can|could|will|would|need|needs|needed)\b|led\s+to|leading\s+to|resulted\s+in|resulting\s+in|because\s+of|due\s+to|thereby|thus|w\s+ten\s+sposob|przez\s+co|co\s+(?:umozliw\w*|spowod\w*|pozwal\w*)|motyw\w*|zmusz\w*|powoduj\w*|przyczyn\w*|wskutek|w\s+efekcie|skutkuj\w*|w\s+rezultacie|allow(?:s|ed|ing)?|enabl(?:e|es|ed|ing)|which\s+(?:let|lets|allowed|allows|enabled|enables)|putting\s+(?:him|her|them|it)\s+in\s+control|giving\s+(?:him|her|them|it)\s+control|will\s+see\s+(?:him|her|them|the player|the character)\s+(?:officially\s+)?(?:join|become)|dajac\s+(?:mu|jej|im)\s+(?:wladz\w*|kontrol\w*|panowan\w*)|force(?:s|d|ing)?\s+(?:the\s+)?[\p{L}\p{N}'’_-]+(?:\s+[\p{L}\p{N}'’_-]+){0,1}\s+to\s+[\p{L}\p{N}'’_-]+|so\s+(?:he|she|they|it|we|the)|in\s+exchange(?:\s+for)?|in\s+return(?:\s+for)?|in\s+turn|thanks\s+to|owing\s+to|w\s+zamian(?:\s+za)?|w\s+rewan[zż]u|w\s+wyniku|z\s+powodu|dzieki|spowod\w*|doprowadz\w*|umozliw\w*)(?![\p{L}])/iu;
 // Nie traktujemy samego „force” jako przyczynowości: „forced a core transfer”
 // może opisywać akcję. Rozpoznajemy jednak konstrukcję „force X to Y” oraz
 // bezpośrednie „giving him control”, które wyrażają relację między zdarzeniami.
@@ -38,7 +38,17 @@ const CROSS_LANGUAGE_CONCEPTS = [
   ['szef', /\bboss\w*|szef\w*|leader\w*|przywodc\w*/i],
   ['porazka', /defeat\w*|beaten|overcome\w*|pokon\w*|pora[zż]k\w*/i],
   ['zdrada', /betray\w*|traitor\w*|zdradz\w*|zdrajc\w*/i],
-  ['tworzenie', /creat\w*|develop\w*|build\w*|made\b|stworz\w*|tworz\w*|opracow\w*/i],
+  ['tworzenie', /creat\w*|develop\w*|build\w*|made\b|stworz\w*|tworz\w*|zbudow\w*|budow\w*|opracow\w*/i],
+  ['wejscie_do_miejsca', /\benter(?:s|ed|ing)?\b|\bentrance\b|wejsc\w*|dostac\s+si[eę]|wejsc\s+do/i],
+  ['rzucanie', /\bthrow(?:s|n|ing)?\b|rzuc\w*|wyrzuc\w*/i],
+  ['most', /\bbridg(?:e|es|ed|ing)\b|most\w*/i],
+  ['szansa', /\bchances?\b|szans\w*/i],
+  ['lekarstwo', /\bcures?\b|\bremed(?:y|ies)\b|antidotes?\b|lekarstw\w*|\bterapi\w*/i],
+  ['zbieranie_lootu', /\bcollect(?:s|ed|ing)?\b|\bloot\w*|zabier\w*|zebran\w*|zebr\w*|lup\w*/i],
+  ['ramka_przedmiotow', /\bitem\s+frames?\b|ramk\w*\s+(?:na|z)\s+przedmiot\w*/i],
+  ['skrzynia', /\bchests?\b|skrzyni\w*/i],
+  ['shulker', /\bshulkers?\b/i],
+  ['przyjecie_oferty', /taking (?:him )?up on (?:this|the) offer|przyj[eę]ci\w*\s+(?:tej\s+)?ofert\w*/i],
   ['destrukcja', /destroy\w*|destruct\w*|demolish\w*|ruin\w*|zniszcz\w*|zniszczen\w*|rozbij\w*/i],
   ['praca', /work\w*|employ\w*|job\w*|prac\w*|zatrud\w*/i],
   ['lokalizacja', /found|find\w*|locat\w*|location\w*|znalezc\w*|znajduj\w*|lokaliz\w*|lezy|polozen\w*/i],
@@ -57,8 +67,8 @@ const CROSS_LANGUAGE_CONCEPTS = [
   ['elf', /\bhigh\s+elf\b|\belves?\b|elf\w*/i],
   ['wampir', /vampire\w*|wampir\w*/i],
   ['klasa_rogue', /\brogue\b|thief\w*|lotr\w*|zlodziej\w*/i],
-  ['towarzysz', /\bcompanions?\b|recruit\w*|party member\w*|join(?:s|ed|ing)? (?:the|your) party|minion\w*|summon\w*|towarzysz\w*|zrekrut\w*|wezw\w*|przywol\w*/i],
-  ['rekrutacja_towarzysza', /zrekrut\w*|join(?:s|ed|ing)? (?:the|your) party|recruit\w*/i],
+  ['towarzysz', /\bcompanions?\b|recruit\w*|party member\w*|join(?:s|ed|ing)? (?:the|your) party|druzyn\w*|minion\w*|summon\w*|towarzysz\w*|zrekrut\w*|wezw\w*|przywol\w*/i],
+  ['rekrutacja_towarzysza', /zrekrut\w*|dolacz\w*|join(?:s|ed|ing)? (?:the|your) party|recruit\w*/i],
   ['ataki_dystansowe', /\branged\b|\bbow\b|luk\w*|dystansow\w*/i],
   ['modyfikacja_zachowania', /\bbehav\w*|make her behave|intelligence dampening|tlumi\w*|zmusz\w*|zachow\w*|rdzen osobowosci|force(?:s|d|ing)?\s+(?:the\s+)?[\w'-]+(?:\s+[\w'-]+){0,1}\s+to\s+[\w'-]+/i],
   ['walka_konna', /horseback|mounted combat|on horseback|konskiego grzbietu|na koniu|z konia|walczac z konia/i],
@@ -122,6 +132,7 @@ const KNOWN_ENTITY_ALIAS_PATTERNS = [
   // because the generic token inflector cannot safely infer this proper-name form.
   { canonical: 'eye of nehaleni', pattern: /\b(?:eye\s+of\s+nehaleni|oko\s+nehaleni|oka\s+nehaleni)\b/iu },
   // Localized Dragonborn lore titles remain equivalent across Polish and English.
+  { canonical: 'dragonborn', pattern: /\b(?:dragonborn|dovahkiin|laat\s+dovahkiin)\b/iu },
   { canonical: 'last dragonborn', pattern: /\b(?:last\s+dragonborn|ostatni(?:m|ego|emu|ym)?\s+dragonborn(?:em|a|owi|ie)?)\b/iu },
   { canonical: 'prophecy of the dragonborn', pattern: /\b(?:prophecy\s+of\s+the\s+dragonborn|proroctw(?:o|a|u|ie|em)\s+dragonborn(?:a|u|em|ie)?)\b/iu },
   { canonical: 'wild hunt', pattern: /\b(?:wild\s+hunt|dziki\s+gon|dzikiego\s+gonu|dzikim\s+gonem)\b/iu },
@@ -1273,6 +1284,23 @@ function cytatRozszerzaNazwePoImieniu(quote, nameVariants) {
   return false;
 }
 
+// The Skyrim lore phrase reverses cause/effect when a Polish claim says
+// Thu'um lets the Dragonborn absorb souls, but its English translation says
+// soul absorption grants knowledge of Thu'um. Both contain the same keywords;
+// preserve their direction rather than accepting token overlap as equivalence.
+function czyTlumaczenieOdwracaRelacjeThuUmIPochlaniania(claimPl, claimEn) {
+  const pl = normalizujClaim(claimPl);
+  const en = normalizujClaim(claimEn);
+  const plThuUm = /\bthu\s+um\b/u.exec(pl);
+  const plAbsorb = /\bpochlan\w*\b/u.exec(pl);
+  const enAbsorb = /\babsorb\w*\b/u.exec(en);
+  const enKnowledgeThuUm = /\bknowledge\s+of\s+(?:the\s+)?thu\s+um\b/u.exec(en);
+  return Boolean(
+    plThuUm && plAbsorb && plThuUm.index < plAbsorb.index
+    && enAbsorb && enKnowledgeThuUm && enAbsorb.index < enKnowledgeThuUm.index
+  );
+}
+
 function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
   const pl = String(claimPl || '').trim();
   const en = String(claimEn || '').trim();
@@ -1322,18 +1350,15 @@ function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
     if (sharedConcepts.length === 0 && !directSameLanguageEvidence) {
       return { ok: false, reason: powodNiezgodnosci };
     }
-    // Do not let one shared concept excuse extra source facts in claim_en.
-    // Improve the cross-language dictionary instead when a faithful equivalent
-    // (such as Polish "schwytał" and English "captured") is missing.
+    // When claim_en is a verbatim quotation, require semantic concept parity
+    // in both directions after removing recognized entity names. A quote that
+    // adds source facts is not a faithful translation of a narrower Polish claim.
+    // Add precise cross-language mappings for genuine equivalents; never weaken
+    // this equality check merely to make a copied quotation pass.
     const addedConcepts = [...englishConcepts].filter(concept => !polishConcepts.has(concept));
     if (addedConcepts.length) {
       return { ok: false, reason: powodNiezgodnosci };
     }
-    // Po wycięciu encji pojęcia muszą zgodzić się w OBIE strony. Wcześniej
-    // sprawdzano tylko, że cytat nie dodaje pojęcia, którego nie ma w claimie —
-    // claim mógł więc twierdzić pojęcia nieobecnego w cytacie („zniszczył”
-    // wobec „took control”) i przechodzić, bo jedno wspólne pojęcie to
-    // usprawiedliwiało resztę.
     const missingConcepts = [...polishConcepts].filter(concept => !englishConcepts.has(concept));
     if (missingConcepts.length) {
       return { ok: false, reason: powodNiezgodnosci };
@@ -1369,6 +1394,9 @@ function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
   }
   // Zmianę zdarzenia (np. „przejął kontrolę” → „destroyed”) wykrywają ogólne pary
   // przeciwstawnych pojęć w sprawdzSprzecznosciSemantyczne; tu nie ma wyjątków dla konkretnych fraz.
+  if (czyTlumaczenieOdwracaRelacjeThuUmIPochlaniania(pl, en)) {
+    return { ok: false, reason: "tłumaczenie claimu odwraca relację między pochłanianiem dusz a wiedzą o Thu'um" };
+  }
   const semanticConflict = sprawdzSprzecznosciSemantyczne(pl, en);
   if (!semanticConflict.ok) return { ok: false, reason: 'tłumaczenie claimu zmienia zdarzenie lub relację' };
   const polishReasonClause = /\bprzyczyn\w*\s+(?:dla\s+)?ktorej\b/u.test(normalizujClaim(pl));
@@ -1381,10 +1409,15 @@ function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
   const enCausal = wyodrebnijMarkery(en, CAUSAL_RE);
   // Polish "zmusza" and English "forces" express the same compulsion relation.
   // Keep this equivalence local; do not broaden the global causal marker set.
-  const plCompulsion = /(?<![\p{L}])zmusz\w*(?![\p{L}])/iu.test(normalizujClaim(pl));
-  const enCompulsion = /(?<![\\p{L}])forc(?:e|es|ed|ing)(?![\\p{L}])/iu.test(normalizujClaim(en));
+  const plCompulsion = /\bzmusz\w*/iu.test(normalizujClaim(pl));
+  const enCompulsion = /\bforc(?:e|es|ed|ing)\b/iu.test(normalizujClaim(en));
   const equivalentCompulsion = plCompulsion && enCompulsion;
-  if (plCausal !== enCausal && !equivalentCompulsion
+  const equivalentEnable = /\bpozwal\w*/iu.test(normalizujClaim(pl))
+    && /\benabl(?:e|es|ed|ing)\b/iu.test(normalizujClaim(en));
+  const equivalentOfferOutcome = /przyj[eę]ci\w*\s+(?:tej\s+)?ofert\w*/iu.test(normalizujClaim(pl))
+    && /taking (?:him )?up on (?:this|the) offer/iu.test(normalizujClaim(en))
+    && /\bjoin(?:s|ed|ing)? (?:the|your) party\b/iu.test(normalizujClaim(en));
+  if (plCausal !== enCausal && !equivalentCompulsion && !equivalentEnable && !equivalentOfferOutcome
     && !(polishReasonClause && englishReasonClause)) {
     return { ok: false, reason: 'tłumaczenie claimu zmienia relację przyczynową' };
   }

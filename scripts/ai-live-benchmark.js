@@ -26,40 +26,61 @@ function resolveDelayMs(value, defaultMs = 8000) {
 const delayMs = resolveDelayMs(process.env.AI_BENCHMARK_DELAY_MS);
 function stratifiedCases(all, requested, seed = 0) {
   if (requested >= all.length) return [...all];
+  const offset = Math.max(0, Math.floor(Number(seed)) || 0);
   const groups = new Map();
   for (const item of all) {
     const key = item.category || 'uncategorized';
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(item);
   }
-  // Ziarno przesuwa start w każdej kategorii, żeby nie testować w kółko tych samych pytań
-  // (stały zestaw zachęca do dopasowania kodu do benchmarku). Ziarno 0 zachowuje stary wybór.
-  const offset = Math.max(0, Math.floor(Number(seed)) || 0);
-  if (offset) for (const bucket of groups.values()) if (bucket.length > 1) bucket.push(...bucket.splice(0, offset % bucket.length));
-  const keys = [...groups.keys()];
+  // Rotate each category deterministically so non-gold questions still vary by seed.
+  if (offset) for (const bucket of groups.values()) {
+    if (bucket.length > 1) bucket.push(...bucket.splice(0, offset % bucket.length));
+  }
+
   const selected = [];
+  const selectedIds = new Set();
+  const goldCases = all.filter(item => item.expected?.factual?.independentGold === true);
+  // A single gold example in a small live run is too weak to tell whether factual
+  // accuracy improved. Reserve roughly one third of the sample for independent
+  // gold facts, taking different categories before taking a second item from
+  // the same category. Remaining slots stay category-stratified.
+  const targetGoldCount = Math.min(goldCases.length, Math.max(1, Math.ceil(requested / 3)));
+  const goldByCategory = new Map();
+  for (const item of goldCases) {
+    const key = item.category || 'uncategorized';
+    if (!goldByCategory.has(key)) goldByCategory.set(key, []);
+    goldByCategory.get(key).push(item);
+  }
+  const goldCategories = [...goldByCategory.keys()];
+  if (offset && goldCategories.length > 1) {
+    const shift = offset % goldCategories.length;
+    goldCategories.push(...goldCategories.splice(0, shift));
+  }
+  for (const category of goldCategories) {
+    if (selected.length >= targetGoldCount) break;
+    const candidates = goldByCategory.get(category) || [];
+    if (!candidates.length) continue;
+    const item = candidates[offset % candidates.length];
+    if (!selectedIds.has(item.id)) {
+      selected.push(item);
+      selectedIds.add(item.id);
+    }
+  }
+
+  const keys = [...groups.keys()];
   let cursor = 0;
   while (selected.length < requested && keys.length) {
     const key = keys[cursor % keys.length];
     const bucket = groups.get(key);
-    if (bucket.length) selected.push(bucket.shift());
-    if (!bucket.length) keys.splice(cursor % keys.length, 1);
-    else cursor++;
-  }
-  // Każdy live run, również przy ziarnie > 0, musi zawierać co najmniej
-  // jeden niezależny gold case. Bez tego „factual pass” byłby pustą próbą.
-  if (requested > 0 && !selected.some(item => item.expected?.factual?.independentGold === true)) {
-    const goldCases = all.filter(item => item.expected?.factual?.independentGold === true);
-    if (goldCases.length) {
-      // Wybierz gold z kategorii już obecnej w próbce, aby wymóg factual nie
-      // zmieniał stratified sample w zestaw z duplikatami kategorii.
-      const selectedCategories = new Set(selected.map(item => item.category));
-      const eligibleGoldCases = goldCases.filter(item => selectedCategories.has(item.category));
-      const candidates = eligibleGoldCases.length ? eligibleGoldCases : goldCases;
-      const gold = candidates[offset % candidates.length];
-      const replacementIndex = selected.findIndex(item => item.category === gold.category);
-      if (replacementIndex >= 0) selected[replacementIndex] = gold;
-      else if (selected.length) selected[selected.length - 1] = gold;
+    while (bucket.length && selectedIds.has(bucket[0].id)) bucket.shift();
+    if (bucket.length) {
+      const item = bucket.shift();
+      selected.push(item);
+      selectedIds.add(item.id);
+      cursor++;
+    } else {
+      keys.splice(cursor % keys.length, 1);
     }
   }
   return selected;
@@ -204,6 +225,7 @@ function classifyBenchmarkOutcome(result = {}) {
   if (/(?:quota|rate.?limit|resource.?exhausted|tokens? per (?:day|minute)|\b429\b|\b402\b)/i.test(details)) return 'provider_quota';
   if (/(?:timeout|timed.?out|deadline|abort(?:ed)?|etimedout)/i.test(details)) return 'provider_timeout';
   if (/(?:budget_exhausted|budget|budżet|no_healthy_provider|request_deadline|model_calls_exhausted|generation_budget_exhausted)/i.test(details)) return 'no_fallback_budget';
+  if (result.validatorResults?.some(row => row.safetyBlocked === true) || /(?:PROHIBITED_CONTENT|BLOCKLIST|finishReason=SAFETY|blockReason=SAFETY)/i.test(details)) return 'provider_safety_block';
   if (result.judgeStatus === 'error' || result.finalStatus === 'error') return 'pipeline_error';
   if (result.judgeStatus === 'abstained') return 'abstention';
   const evidenceRejected = /(?:evidence|quote|claim|unsupported|unverified|validator_reject|coverage|coarse)/i.test(details)
@@ -301,7 +323,7 @@ function buildBenchmarkDiagnostics(results, allCases = benchmark.cases, selected
   const validatorStatusCounts = {};
   for (const row of validatorRows) {
     const provider = String(row.provider || 'unknown');
-    const status = row.skipped === true ? 'skipped' : String(row.status || 'unknown');
+    const status = row.skipped === true ? 'skipped' : (row.safetyBlocked === true ? 'safety_blocked' : String(row.status || 'unknown'));
     if (row.skipped !== true) validatorProviderCalls[provider] = (validatorProviderCalls[provider] || 0) + 1;
     validatorStatusCounts[status] = (validatorStatusCounts[status] || 0) + 1;
   }
@@ -349,7 +371,7 @@ function buildBenchmarkDiagnostics(results, allCases = benchmark.cases, selected
   const validatorAttempts = results.flatMap(result =>
     (result.validatorResults || [])
       .filter(row => row.skipped !== true && row.provider)
-      .map(row => ({ provider: String(row.provider), status: row.status }))
+      .map(row => ({ provider: String(row.provider), status: row.safetyBlocked === true ? 'blocked' : row.status }))
   );
   const failedProvidersInRole = attempts => {
     const providers = [...new Set(attempts.map(attempt => attempt.provider))];
@@ -371,11 +393,16 @@ function buildBenchmarkDiagnostics(results, allCases = benchmark.cases, selected
     ...failedValidatorProviders.filter(provider => provider !== 'gemini').map(provider => `${provider}:validator`),
   ])].sort();
   const validatorCalls = validatorRows.filter(row => row.skipped !== true).length;
-  const validatorUnavailable = validatorRows.filter(row => row.status === 'unavailable' && row.skipped !== true).length;
-  const validatorUnavailableRate = validatorCalls ? validatorUnavailable / validatorCalls : 0;
+  const validatorSafetyBlocks = validatorRows.filter(row => row.safetyBlocked === true && row.skipped !== true).length;
+  const validatorVerdictCalls = validatorRows.filter(row => row.skipped !== true && row.safetyBlocked !== true
+    && row.status !== 'unavailable' && row.status !== 'error').length;
+  const validatorUnavailable = validatorRows.filter(row => row.status === 'unavailable' && row.safetyBlocked !== true && row.skipped !== true).length;
+  const validatorAvailabilityChecks = validatorRows.filter(row => row.skipped !== true && row.safetyBlocked !== true).length;
+  const validatorUnavailableRate = validatorAvailabilityChecks ? validatorUnavailable / validatorAvailabilityChecks : 0;
   const qualityDegradationReasons = [];
   if (failedOutageProviders.length > 0) qualityDegradationReasons.push('primary_provider_outage');
   if (validatorCalls === 0) qualityDegradationReasons.push('no_validator_calls');
+  else if (validatorSafetyBlocks > 0 && validatorVerdictCalls === 0) qualityDegradationReasons.push('all_validator_calls_safety_blocked');
   else if (validatorCalls < results.length) qualityDegradationReasons.push('validator_calls_below_case_count');
   if (validatorUnavailableRate > 0.25) qualityDegradationReasons.push('validator_unavailable_rate_above_25_percent');
   if (degradedProviders.length > 0) qualityDegradationReasons.push('fallback_provider_degradation');
@@ -405,13 +432,18 @@ function buildBenchmarkDiagnostics(results, allCases = benchmark.cases, selected
     validatorSkipped: validatorRows.filter(row => row.skipped === true).length,
     requestsUnavailable: results.filter(result => result.finalStatus === 'unavailable').length,
     validatorCalls,
+    validatorVerdictCalls,
     validatorUnavailableRate: Number(validatorUnavailableRate.toFixed(3)),
     qualityComparable,
     qualityDegradationReasons,
     validatorProviderCalls,
     validatorStatusCounts,
+    validatorSafetyBlocks,
+    validatorSafetyBlockDetails: validatorRows
+      .filter(row => row.safetyBlocked === true && row.skipped !== true)
+      .map(row => ({ provider: row.provider || 'unknown', model: row.model || null, reason: row.reason || null, blockReason: row.blockReason || null, finishReason: row.finishReason || null })),
     validatorTransportFailures: validatorRows
-      .filter(row => row.skipped !== true && (row.status === 'unavailable' || row.status === 'error' || row.technicalError === true))
+      .filter(row => row.skipped !== true && row.safetyBlocked !== true && (row.status === 'unavailable' || row.status === 'error' || row.technicalError === true))
       .map(row => ({
         provider: row.provider || 'unknown', model: row.model || null, status: row.status || 'unknown',
         reason: row.reason || null, technicalError: row.technicalError === true,

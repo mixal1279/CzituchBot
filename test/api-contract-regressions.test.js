@@ -97,13 +97,41 @@ test('primary generation honors AI_GENERATOR_MODEL and checks quota cooldown bef
   assert.match(body, /allowPrimary \? classifyFailure\(result\.error \|\| ''\) : 'validator_rejection'/);
 });
 
-test('validator provider preflight uses production timeout budgets', () => {
+test('validator provider preflight covers Gemini, xKiro, OpenRouter and Groq production budgets', () => {
   const source = read('scripts/validator-providers-preflight.js');
-  assert.match(source, /xKiro:\s*Number\(process\.env\.AI_XKIRO_VALIDATOR_TIMEOUT_MS\)\s*\|\|\s*4500/);
-  assert.match(source, /OpenRouter:\s*3000/);
+  assert.match(source, /Gemini:\s*12000/);
+  assert.match(source, /xKiro:\s*Math\.max\(6000, Number\(process\.env\.AI_XKIRO_VALIDATOR_TIMEOUT_MS\) \|\| 6000\)/);
+  assert.match(source, /OpenRouter:\s*Math\.max\(4000, Number\(process\.env\.AI_OPENROUTER_VALIDATOR_TIMEOUT_MS\) \|\| 6000\)/);
   assert.match(source, /Groq:\s*3000/);
+  assert.match(source, /function geminiProbe\(/);
+  assert.match(source, /buildGeminiValidatorGenerationConfig/);
+  assert.match(source, /GEMINI_KEY\) missingRequiredProviders\.push/);
+  assert.match(source, /GROQ_KEY\) missingRequiredProviders\.push/);
+  assert.match(source, /bad\.length > 0 \|\| missingRequiredProviders\.length > 0/);
   assert.match(source, /result\.ms > productionTimeoutMs/);
   assert.doesNotMatch(source, /PROD_TIMEOUT_MS\s*=\s*9000/);
+});
+
+test('Gemini orchestration and transport both allow the twelve-second validator budget', () => {
+  const bot = read('czituch_bot.js');
+  assert.ok((bot.match(/maxTimeoutMs:\s*12000/g) || []).length >= 2);
+});
+
+test('OpenRouter and xKiro validator deadlines use the shared production budget floors', () => {
+  const bot = read('czituch_bot.js');
+  assert.equal((bot.match(/const configuredOpenRouterTimeoutMs/g) || []).length, 2);
+  assert.match(bot, /AI_OPENROUTER_VALIDATOR_TIMEOUT_MS/);
+  assert.match(bot, /maxTimeoutMs:\s*openRouterMaxTimeoutMs/);
+  assert.match(bot, /xkiroMaxTimeoutMs\s*=\s*Math\.max\(\s*6000/);
+  assert.match(bot, /maxTimeoutMs:\s*xkiroMaxTimeoutMs/);
+});
+
+test('live benchmark preflights validator providers before starting a ten-case sample', () => {
+  const workflow = read('.github/workflows/ai-live-benchmark.yml');
+  assert.match(workflow, /AI_BENCHMARK_LIMIT:\s*"10"/);
+  assert.match(workflow, /PREFLIGHT_STRICT:\s*"1"/);
+  assert.match(workflow, /node scripts\/validator-providers-preflight\.js/);
+  assert.ok(workflow.indexOf('Preflight validator providers') < workflow.indexOf('Run 10-case live benchmark'));
 });
 
 test('live benchmark is manual-only so pushes do not spend API quota', () => {
