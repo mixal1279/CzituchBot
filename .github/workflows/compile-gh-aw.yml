@@ -56,21 +56,23 @@ jobs:
           const fs = require('fs');
           const path = '.github/workflows/ai-benchmark-doctor.lock.yml';
           const content = fs.readFileSync(path, 'utf8');
-          // gh-aw v0.93.2 still emits COPILOT_MODEL=auto for model: auto.
+          // gh-aw v0.93.2 may emit COPILOT_MODEL=auto for model: auto.
           // Copilot Free requires the variable to be absent so the CLI can
           // perform native automatic routing. Remove only the agent's exact
           // sentinel assignment; leave detection's independent model policy intact.
-          const marker = '          COPILOT_MODEL: auto\\n';
+          const marker = '          COPILOT_MODEL: auto\n';
           const count = content.split(marker).length - 1;
-          if (count !== 1) {
-            throw new Error(`Expected exactly one agent COPILOT_MODEL: auto assignment; found ${count}`);
+          if (count > 1) {
+            throw new Error(`Expected at most one agent COPILOT_MODEL: auto assignment; found ${count}`);
           }
-          const patched = content.replace(marker, '');
-          if (patched.includes(marker)) {
-            throw new Error('COPILOT_MODEL auto assignment remains after compatibility patch');
+          const patched = count === 1 ? content.replace(marker, '') : content;
+          if (patched.includes(marker) || !patched.includes('GH_AW_INFO_MODEL: "auto"')) {
+            throw new Error('Copilot Free automatic-selection lock validation failed');
           }
           fs.writeFileSync(path, patched);
-          process.stdout.write('Removed explicit COPILOT_MODEL from the Copilot Free agent job.\\n');
+          process.stdout.write(count === 1
+            ? 'Removed explicit COPILOT_MODEL from the Copilot Free agent job.\n'
+            : 'COPILOT_MODEL is already absent from the Copilot Free agent job.\n');
           NODE
 
       - name: Upload generated lock file
