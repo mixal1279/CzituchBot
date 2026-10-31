@@ -1,5 +1,7 @@
 'use strict';
 
+const { boundedText, constantTimeStringEqual } = require('./inputSafety');
+
 const GAME_ALIASES = [
   { name: 'Minecraft', type: 'game', aliases: ['minecraft', 'mc'] },
   { name: 'Portal 2', type: 'game', aliases: ['portal 2', 'portal2'] },
@@ -69,7 +71,7 @@ const CONTEXT_REQUIRED_CHARACTER_ALIASES = new Set([
 ]);
 
 function normalizujEncje(text) {
-  return String(text || '').toLocaleLowerCase('pl-PL')
+  return boundedText(text, 12000).toLocaleLowerCase('pl-PL')
     .replace(/ł/g, 'l')
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     .replace(/[’']/g, '').replace(/[^a-z0-9 ]/gi, ' ')
@@ -81,7 +83,7 @@ function tokenyEncji(text) {
 }
 
 function tokenPasujeDoAliasu(token, aliasToken) {
-  if (token === aliasToken) return true;
+  if (constantTimeStringEqual(token, aliasToken)) return true;
   // Dopuszczamy typowe końcówki fleksyjne (maks. 3 znaki), ale nie dowolny
   // prefiks. To zachowuje np. „Wiedźminem” bez dopasowywania „Minecraftowo”.
   if (aliasToken.length < 6 || !token.startsWith(aliasToken)) return false;
@@ -118,7 +120,7 @@ function containsExactAlias(text, alias) {
   const aliasTokens = tokenyEncji(alias);
   if (!aliasTokens.length || textTokens.length < aliasTokens.length) return false;
   for (let i = 0; i <= textTokens.length - aliasTokens.length; i++) {
-    if (aliasTokens.every((token, offset) => textTokens[i + offset] === token)) return true;
+    if (aliasTokens.every((token, offset) => constantTimeStringEqual(textTokens[i + offset], token))) return true;
   }
   return false;
 }

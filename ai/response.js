@@ -1,5 +1,7 @@
 'use strict';
 
+const { boundedText } = require('./inputSafety');
+
 const { parseEvidenceBlocks, removeLeadingSourceMetadataNoise } = require('./evidence');
 
 function normalizujTokenLiczbowy(token) {
@@ -42,6 +44,8 @@ function maskSentenceAbbreviations(text) {
 }
 
 function zawieraTokenTwardy(refs, token) {
+  refs = boundedText(refs, 8000);
+  token = boundedText(token, 256);
   const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   // Token kończący się literą (jednostka) może się odmieniać; kończący się cyfrą/% wymaga granicy.
   const tail = /\p{L}$/u.test(token) ? '' : '(?![\\p{L}\\p{N}_])';
@@ -60,7 +64,7 @@ const KONTEKSTY_GIER_AI = [
 ];
 
 function wykryjKontekstyGierAI(tekst) {
-  return KONTEKSTY_GIER_AI.filter(kontekst => kontekst.patterns.some(re => re.test(String(tekst || '')))).map(kontekst => kontekst.name);
+  return KONTEKSTY_GIER_AI.filter(kontekst => kontekst.patterns.some(re => re.test(boundedText(tekst, 8000)))).map(kontekst => kontekst.name);
 }
 
 function sprawdzZgodnoscKontekstuGry(odpowiedz, pytanie) {
@@ -72,8 +76,8 @@ function sprawdzZgodnoscKontekstuGry(odpowiedz, pytanie) {
 }
 
 function sprawdzSpojnoscLorePortal2(odpowiedz, pytanie) {
-  const q = String(pytanie || '').toLocaleLowerCase('pl-PL');
-  const a = String(odpowiedz || '').toLocaleLowerCase('pl-PL');
+  const q = boundedText(pytanie, 1000).toLocaleLowerCase('pl-PL');
+  const a = boundedText(odpowiedz, 8000).toLocaleLowerCase('pl-PL');
   const portal = /\bportal\s*2\b|\bwheatley\b|\bglados\b|\bchell\b|\baperture\s+science\b/i.test(q);
   if (!portal) return { ok: true, unsupported: [] };
 
