@@ -421,6 +421,8 @@ function buildEvidenceRepairContext(claims, blocks, allowedSourceIds = null, max
     '- Every evidence_quote must be one contiguous, verbatim fragment from its cited source.',
     '- Never use ellipses, [...] placeholders, paraphrases, or joined fragments as a quote.',
     '- If candidates support different parts of a claim, split it into separate claims and cite each part independently.',
+    '- Copy the selected candidate quote exactly; do not extend it with separately ranked sentences or neighbouring fragments.',
+    '- If no single candidate directly supports the complete atomic claim, mark it unsupported instead of inventing or reconstructing a quotation.',
     '- Remove unsupported advice and finish every sentence; do not leave an example or list unfinished.',
   ].join('\n');
   return instructions + '\n\n' + rows.map((row, index) => [

@@ -48,6 +48,44 @@ test('a stated motive phrased as "miało na celu" satisfies a why answer plan', 
   assert.deepEqual(result.missing, []);
 });
 
+test('Minecraft Elytra instructions keep End City and End Ship distinct', () => {
+  const plan = buildAnswerPlan('Jak zdobyć elytrę w Minecraft Survival?', {
+    intent: 'gameplay', is_gameplay: true, entity: 'Elytra', game: 'Minecraft',
+  });
+  assert.match(plan.instruction, /End City/);
+  assert.match(plan.instruction, /End Ship/);
+  assert.match(plan.instruction, /to różne struktury, nie synonimy/);
+  assert.match(plan.instruction, /Nie twierdź, że każdy End City ma statek/);
+  assert.match(plan.instruction, /nazwij Minecraft/);
+});
+
+test('causal answers require one direct source passage for the named motive', () => {
+  const plan = buildAnswerPlan('Dlaczego Astarion dołączył do drużyny?', {
+    intent: 'web_fact', is_lore: true, entity: 'Astarion', game: "Baldur's Gate 3",
+  });
+  assert.match(plan.instruction, /pojedynczy dosłowny fragment źródła/);
+  assert.match(plan.instruction, /nie dopisuj jej/);
+});
+
+test('Minecraft Elytra instructions keep End City and End Ship distinct', () => {
+  const plan = buildAnswerPlan('Jak zdobyć elytrę w Minecraft Survival?', {
+    intent: 'gameplay', is_gameplay: true, entity: 'Elytra', game: 'Minecraft',
+  });
+  assert.match(plan.instruction, /End City/);
+  assert.match(plan.instruction, /End Ship/);
+  assert.match(plan.instruction, /to różne struktury, nie synonimy/);
+  assert.match(plan.instruction, /Nie twierdź, że każdy End City ma statek/);
+  assert.match(plan.instruction, /nazwij Minecraft/);
+});
+
+test('causal answers require one direct source passage for the named motive', () => {
+  const plan = buildAnswerPlan('Dlaczego Astarion dołączył do drużyny?', {
+    intent: 'web_fact', is_lore: true, entity: 'Astarion', game: "Baldur's Gate 3",
+  });
+  assert.match(plan.instruction, /pojedynczy dosłowny fragment źródła/);
+  assert.match(plan.instruction, /nie dopisuj jej/);
+});
+
 test('procedural guidance forbids generic game advice without retrieved evidence', () => {
   const plan = buildAnswerPlan('Jak pokonać smoka w Skyrim?', {
     intent: 'gameplay', is_gameplay: true, entity: 'dragon', game: 'Skyrim',
@@ -262,6 +300,14 @@ test('retrieval planner targets character identity for who questions', () => {
     intent: 'web_fact', is_lore: true, entity: 'Astarion', game: "Baldur's Gate 3", needs_web: true,
   });
   assert.ok(queries.some(q => /character identity background role companion/i.test(q)), JSON.stringify(queries));
+});
+
+test('Astarion why retrieval targets the explicit Cazador protection motive', () => {
+  const queries = buildRetrievalQueries('Dlaczego Astarion dołączył do drużyny?', {
+    intent: 'web_fact', is_lore: true, entity: 'Astarion', game: "Baldur's Gate 3", needs_web: true,
+  });
+  assert.ok(queries.some(q => /Astarion Cazador Szarr vampire spawn/i.test(q)), JSON.stringify(queries));
+  assert.ok(queries.some(q => /protection|favour|freedom/i.test(q)), JSON.stringify(queries));
 });
 
 test('retrieval planner targets Portal core-transfer lore only in its own game context', () => {

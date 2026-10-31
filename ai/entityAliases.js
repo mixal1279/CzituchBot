@@ -6,6 +6,12 @@
 // nie zgaduj tłumaczeń. Nazwa nieobecna w tej tabeli nadal podlega pełnej,
 // twardej kontroli w dowodzie.
 const ENTITY_ALIAS_GROUPS = Object.freeze([
+  // GTA V: polski tytuł misji „Prolog” odpowiada angielskiemu „Prologue”.
+  { canonical: 'prologue', names: ['Prologue', 'Prolog'] },
+  // Minecraft: End City (miasto) i End Ship (statek) są odrębnymi encjami.
+  // Nie łączymy ich aliasów — walidator ma wykrywać zamianę miasta na statek i odwrotnie.
+  { canonical: 'end city', names: ['End City', 'End Cities', 'Miasto Endu', 'Miasta Endu', 'Miasto Kresu', 'Miasta Kresu'] },
+  { canonical: 'end ship', names: ['End Ship', 'End Ships', 'Statek Endu', 'Statki Endu', 'Statek Kresu', 'Statki Kresu'] },
   // Zweryfikowane odpowiedniki nazw z lokalizacji gier. Trzymajmy tu tylko
   // encje, dla których mapowanie PL/EN jest jednoznaczne; nie dopisujemy
   // nazw opisowych ani tłumaczeń zgadywanych na podstawie samego kontekstu.

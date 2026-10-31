@@ -182,7 +182,7 @@ function buildValidatorEvidenceHints(question, answer, data) {
   );
   if (!hints) return '';
   return [
-    '\\n\\nDOZWOLONE ID ŹRÓDEŁ (używaj wyłącznie tych identyfikatorów, dokładnie w tej pisowni): ' + allowedSourceIds.join(', '),
+    '\n\nDOZWOLONE ID ŹRÓDEŁ (używaj wyłącznie tych identyfikatorów, dokładnie w tej pisowni): ' + allowedSourceIds.join(', '),
     'Nie twórz identyfikatorów z tytułów, nazw gier, nazw stron ani własnych skrótów. Jeśli nie możesz przypisać cytatu do jednego z powyższych ID, oznacz claim jako unsupported.',
     'KANDYDACI NA DOSŁOWNE CYTATY (wskazówki; cytat i ID muszą być zweryfikowane w danych referencyjnych):',
     hints,

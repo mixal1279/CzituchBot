@@ -4,7 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const { resolveClaimSourceIds } = require('../ai/validator');
-const { parseEvidenceBlocks } = require('../ai/evidence');
+const { parseEvidenceBlocks, quoteExists } = require('../ai/evidence');
 const { czyNazwaWlasnaWystepuje } = require('../ai/claimValidation');
 
 test('rebinds a stale source ID only when the exact quote has one unique authorized source', () => {
@@ -37,6 +37,18 @@ test('does not guess when an exact quote occurs in multiple sources', () => {
     resolveClaimSourceIds(blocks, ['SOURCE 8'], 'The same exact sentence appears here.'),
     ['SOURCE 8'],
   );
+});
+
+test('does not bind a reconstructed Astarion quote to merely related source sentences', () => {
+  const sourceText = [
+    '[SOURCE 7]',
+    'TYTUŁ: Astarion background',
+    'TREŚĆ: Astarion seemingly revels in the physical. He is among the first companions to offer sexual relations with the player character.',
+  ].join('\n');
+  const blocks = parseEvidenceBlocks(sourceText);
+  const reconstructed = 'Astarion seemingly revels in the physical and is among the first companions to offer sexual relations with the player character.';
+  assert.equal(quoteExists(blocks[0].content, reconstructed), false);
+  assert.deepEqual(resolveClaimSourceIds(blocks, ['SOURCE 7'], reconstructed), ['SOURCE 7']);
 });
 
 test('does not replace a valid source ID when its source contains the quote', () => {
