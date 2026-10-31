@@ -1358,15 +1358,11 @@ function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
     if (sharedConcepts.length === 0 && !directSameLanguageEvidence) {
       return { ok: false, reason: powodNiezgodnosci };
     }
-    // A verbatim source quotation may contain additional context beyond the
-    // Polish atomic claim. That is safe only when every semantic concept asserted
-    // by the Polish claim is also present in the quotation; extra source concepts
-    // do not turn the narrower Polish claim into an unsupported assertion.
-    // Keep the subset check in the claim-to-source direction: a changed action
-    // still fails because it leaves a Polish concept unmatched.
-    // Do not let one shared concept excuse extra source facts in claim_en.
-    // Add a precise cross-language mapping when a source uses a faithful
-    // equivalent that the dictionary does not yet know.
+    // When claim_en is a verbatim quotation, require semantic concept parity
+    // in both directions after removing recognized entity names. A quote that
+    // adds source facts is not a faithful translation of a narrower Polish claim.
+    // Add precise cross-language mappings for genuine equivalents; never weaken
+    // this equality check merely to make a copied quotation pass.
     const addedConcepts = [...englishConcepts].filter(concept => !polishConcepts.has(concept));
     if (addedConcepts.length) {
       return { ok: false, reason: powodNiezgodnosci };
