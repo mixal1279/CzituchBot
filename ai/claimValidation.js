@@ -10,10 +10,10 @@ const NEGATION_RE = /(?<![\p{L}])(?:nie|nigdy|brak|bez|zaden|zadna|zadne|never|n
 const NEGATION_STRICT_RE = /(?<![\p{L}])(?:nie|nigdy|brak|bez|zaden|zadna|zadne|never|not|cannot|without|lack\s+of|absence\s+of|unable|neither|nor|fails?\s+to|\p{L}+n['’]t)(?![\p{L}])/iu;
 // Claim o redukcji/ograniczeniu jest zgodny z dowodem „no damage / take no damage” (zero implikuje zmniejszenie).
 // „s?tlumi\w*” obejmuje odmiany „tłumić” (tłumiąca, tłumienie, stłumić), ale nie „tłumaczy”/„tłum”.
-const REDUCTION_RE = /(?<![\p{L}])(?:zmniejsz\w*|ogranicz\w*|redukuj\w*|zredukow\w*|oslab\w*|ochron\w*|oslon\w*|chron\w*|neutralizuj\w*|reduc\w*|inhibit\w*|dampen\w*|s?tlumi\w*|mitigat\w*|lower\w*|decreas\w*|protect\w*|prevent\w*|avoid\w*|block\w*|ward\w*|immun\w*|resist\w*|zapobieg\w*|unik\w*|blok\w*|odporn\w*)(?![\p{L}])/iu;
+const REDUCTION_RE = /(?<![\p{L}])(?:zmniejsz\w*|ogranicz\w*|redukuj\w*|zredukow\w*|oslab\w*|ochron\w*|oslon\w*|chron\w*|neutralizuj\w*|reduc\w*|inhibit\w*|dampen\w*|s?tlumi\w*|mitigat\w*|lower\w*|decreas\w*|protect\w*|prevent\w*|avoid\w*|block(?:s|ed|ing)?\s+(?:access|attacks?|damage|the\s+entrance|the\s+path|movement|progress)|ward\w*|immun\w*|resist\w*|zapobieg\w*|unik\w*|blok\w*|odporn\w*)(?![\p{L}])/iu;
 // „skutkuj\w*” i „w rezultacie” to polskie odpowiedniki „resulting in”/„as a result”: bez nich
 // polski claim z relacją przyczynową przechodził kontrolę parytetu PL↔EN, gdy claim_en ją gubił.
-const CAUSAL_RE = /(?<![\p{L}])(?:bo|poniewaz|gdyz|dlatego|because|therefore|caused|causes|trigger\w*|consequently|hence|as\s+a\s+result|led\s+to|leading\s+to|resulted\s+in|resulting\s+in|because\s+of|due\s+to|thereby|thus|w\s+ten\s+sposob|przez\s+co|co\s+(?:umozliw\w*|spowod\w*)|motyw\w*|zmusz\w*|powoduj\w*|przyczyn\w*|wskutek|w\s+efekcie|skutkuj\w*|w\s+rezultacie|allow(?:s|ed|ing)?|enabl(?:e|es|ed|ing)|which\s+(?:let|lets|allowed|allows|enabled|enables)|putting\s+(?:him|her|them|it)\s+in\s+control|giving\s+(?:him|her|them|it)\s+control|will\s+see\s+(?:him|her|them|the player|the character)\s+(?:officially\s+)?(?:join|become)|dajac\s+(?:mu|jej|im)\s+(?:wladz\w*|kontrol\w*|panowan\w*)|force(?:s|d|ing)?\s+(?:the\s+)?[\p{L}\p{N}'’_-]+(?:\s+[\p{L}\p{N}'’_-]+){0,1}\s+to\s+[\p{L}\p{N}'’_-]+|so\s+(?:he|she|they|it|we|the)|in\s+exchange(?:\s+for)?|in\s+return(?:\s+for)?|in\s+turn|thanks\s+to|owing\s+to|w\s+zamian(?:\s+za)?|w\s+rewan[zż]u|w\s+wyniku|z\s+powodu|dzieki|spowod\w*|doprowadz\w*|umozliw\w*)(?![\p{L}])/iu;
+const CAUSAL_RE = /(?<![\p{L}])(?:bo|poniewaz|gdyz|dlatego|because|therefore|caused|causes|trigger\w*|consequently|hence|as\s+a\s+result|as\s+(?:they|he|she|it|we)\b|led\s+to|leading\s+to|resulted\s+in|resulting\s+in|because\s+of|due\s+to|thereby|thus|w\s+ten\s+sposob|przez\s+co|co\s+(?:umozliw\w*|spowod\w*|pozwal\w*)|motyw\w*|zmusz\w*|powoduj\w*|przyczyn\w*|wskutek|w\s+efekcie|skutkuj\w*|w\s+rezultacie|allow(?:s|ed|ing)?|enabl(?:e|es|ed|ing)|which\s+(?:let|lets|allowed|allows|enabled|enables)|putting\s+(?:him|her|them|it)\s+in\s+control|giving\s+(?:him|her|them|it)\s+control|will\s+see\s+(?:him|her|them|the player|the character)\s+(?:officially\s+)?(?:join|become)|dajac\s+(?:mu|jej|im)\s+(?:wladz\w*|kontrol\w*|panowan\w*)|force(?:s|d|ing)?\s+(?:the\s+)?[\p{L}\p{N}'’_-]+(?:\s+[\p{L}\p{N}'’_-]+){0,1}\s+to\s+[\p{L}\p{N}'’_-]+|so\s+(?:he|she|they|it|we|the)|in\s+exchange(?:\s+for)?|in\s+return(?:\s+for)?|in\s+turn|thanks\s+to|owing\s+to|w\s+zamian(?:\s+za)?|w\s+rewan[zż]u|w\s+wyniku|z\s+powodu|dzieki|spowod\w*|doprowadz\w*|umozliw\w*)(?![\p{L}])/iu;
 // Nie traktujemy samego „force” jako przyczynowości: „forced a core transfer”
 // może opisywać akcję. Rozpoznajemy jednak konstrukcję „force X to Y” oraz
 // bezpośrednie „giving him control”, które wyrażają relację między zdarzeniami.
@@ -38,7 +38,16 @@ const CROSS_LANGUAGE_CONCEPTS = [
   ['szef', /\bboss\w*|szef\w*|leader\w*|przywodc\w*/i],
   ['porazka', /defeat\w*|beaten|overcome\w*|pokon\w*|pora[zż]k\w*/i],
   ['zdrada', /betray\w*|traitor\w*|zdradz\w*|zdrajc\w*/i],
-  ['tworzenie', /creat\w*|develop\w*|build\w*|made\b|stworz\w*|tworz\w*|opracow\w*/i],
+  ['tworzenie', /creat\w*|develop\w*|build\w*|made\b|stworz\w*|tworz\w*|zbudow\w*|budow\w*|opracow\w*/i],
+  ['wejscie_do_miejsca', /\benter(?:s|ed|ing)?\b|\bentrance\b|wejsc\w*|dostac\s+si[eę]|wejsc\s+do/i],
+  ['rzucanie', /\bthrow(?:s|n|ing)?\b|rzuc\w*|wyrzuc\w*/i],
+  ['most', /\bbridg(?:e|es|ed|ing)\b|most\w*/i],
+  ['szansa', /\bchances?\b|szans\w*/i],
+  ['lekarstwo', /\bcures?\b|\bremed(?:y|ies)\b|antidotes?\b|lekarstw\w*|\bterapi\w*/i],
+  ['zbieranie_lootu', /\bcollect(?:s|ed|ing)?\b|\bloot\w*|zabier\w*|zebran\w*|zebr\w*|lup\w*/i],
+  ['ramka_przedmiotow', /\bitem\s+frames?\b|ramk\w*\s+(?:na|z)\s+przedmiot\w*/i],
+  ['skrzynia', /\bchests?\b|skrzyni\w*/i],
+  ['shulker', /\bshulkers?\b/i],
   ['destrukcja', /destroy\w*|destruct\w*|demolish\w*|ruin\w*|zniszcz\w*|zniszczen\w*|rozbij\w*/i],
   ['praca', /work\w*|employ\w*|job\w*|prac\w*|zatrud\w*/i],
   ['lokalizacja', /found|find\w*|locat\w*|location\w*|znalezc\w*|znajduj\w*|lokaliz\w*|lezy|polozen\w*/i],
@@ -1322,18 +1331,12 @@ function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
     if (sharedConcepts.length === 0 && !directSameLanguageEvidence) {
       return { ok: false, reason: powodNiezgodnosci };
     }
-    // Do not let one shared concept excuse extra source facts in claim_en.
-    // Improve the cross-language dictionary instead when a faithful equivalent
-    // (such as Polish "schwytał" and English "captured") is missing.
-    const addedConcepts = [...englishConcepts].filter(concept => !polishConcepts.has(concept));
-    if (addedConcepts.length) {
-      return { ok: false, reason: powodNiezgodnosci };
-    }
-    // Po wycięciu encji pojęcia muszą zgodzić się w OBIE strony. Wcześniej
-    // sprawdzano tylko, że cytat nie dodaje pojęcia, którego nie ma w claimie —
-    // claim mógł więc twierdzić pojęcia nieobecnego w cytacie („zniszczył”
-    // wobec „took control”) i przechodzić, bo jedno wspólne pojęcie to
-    // usprawiedliwiało resztę.
+    // A verbatim source quotation may contain additional context beyond the
+    // Polish atomic claim. That is safe only when every semantic concept asserted
+    // by the Polish claim is also present in the quotation; extra source concepts
+    // do not turn the narrower Polish claim into an unsupported assertion.
+    // Keep the subset check in the claim-to-source direction: a changed action
+    // still fails because it leaves a Polish concept unmatched.
     const missingConcepts = [...polishConcepts].filter(concept => !englishConcepts.has(concept));
     if (missingConcepts.length) {
       return { ok: false, reason: powodNiezgodnosci };
