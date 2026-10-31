@@ -118,6 +118,9 @@ const KNOWN_ENTITY_ALIAS_PATTERNS = [
   // zlewałoby się z osobnym wpisem „aperture laboratories” powyżej.
   { canonical: 'aperture science', pattern: /\b(?:aperture\s+science|facility\s+of\s+aperture)\b/iu },
   { canonical: 'bloody baron', pattern: /\b(?:bloody\s+baron|baron(?:a)?\s+krwaw(?:y|ego|ym)|krwaw(?:y|ego|emu)\s+baron(?:a|em|owi)?)\b/iu },
+  // „Oka Nehaleni” is an inflected Polish form; keep an explicit full-name alias
+  // because the generic token inflector cannot safely infer this proper-name form.
+  { canonical: 'eye of nehaleni', pattern: /\b(?:eye\s+of\s+nehaleni|oko\s+nehaleni|oka\s+nehaleni)\b/iu },
   { canonical: 'wild hunt', pattern: /\b(?:wild\s+hunt|dziki\s+gon|dzikiego\s+gonu|dzikim\s+gonem)\b/iu },
   { canonical: 'cathedral of dragon communion', pattern: /\b(?:cathedral\s+of\s+dragon\s+communion|katedr(?:a|y|ę|e|ze)\s+komunii\s+smoka)\b/iu },
 ];
