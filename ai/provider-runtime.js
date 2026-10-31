@@ -13,7 +13,10 @@ function normalizeGroqBaseUrl(value) {
 const REASONING_HEADROOM_TOKENS = { 'openai/gpt-oss-120b': 1500, default: 800 };
 const REASONING_MIN_ANSWER_TOKENS = 300;
 const REASONING_TOKEN_CEILING = 4000;
-const INITIAL_VALIDATOR_REPAIR_RESERVE_MS = 24000;
+// Do not reserve more time than a validator can realistically preserve after
+// slow generation fallbacks. 24s made the entire validator chain skip at ~15s
+// remaining in the 40s live benchmark. Keep a 10.5s tail for recovery/fallback.
+const INITIAL_VALIDATOR_REPAIR_RESERVE_MS = 10500;
 const UNAVAILABLE_REPAIR_MIN_REMAINING_MS = 18000;
 const boostedPayloads = new WeakSet();
 
