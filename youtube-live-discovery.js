@@ -18,7 +18,7 @@ function parseAssignedJson(html, variableName) {
     const char = source[i];
     if (inString) {
       if (escaped) escaped = false;
-      else if (char === '\\\\') escaped = true;
+      else if (char === '\\') escaped = true;
       else if (char === '"') inString = false;
       continue;
     }
@@ -84,12 +84,12 @@ function isVerifiedLiveVideo(video, expectedChannelId) {
 function videoIdFromUrl(value) {
   try {
     const url = new URL(value);
-    if (!/(^|\\.)youtube\\.com$/i.test(url.hostname)) return null;
+    if (!/(^|\.)youtube\.com$/i.test(url.hostname)) return null;
     if (url.pathname === '/watch') {
       const id = url.searchParams.get('v');
       return id && VIDEO_ID_RE.test(id) ? id : null;
     }
-    const match = url.pathname.match(/^\\/live\\/([a-zA-Z0-9_-]{11})$/);
+    const match = url.pathname.match(/^\/live\/([a-zA-Z0-9_-]{11})$/);
     return match ? match[1] : null;
   } catch {
     return null;
@@ -120,7 +120,7 @@ function extractLiveVideoIds(html, finalUrl) {
   // bounded set of videoId fields even when no recognizable LIVE badge exists.
   // False positives are safe: Data API ownership + active chat checks reject them.
   for (const id of findVideoIds(initialData, MAX_VIDEO_CANDIDATES)) add(id);
-  for (const match of source.matchAll(/"videoId"\\s*:\\s*"([a-zA-Z0-9_-]{11})"/g)) {
+  for (const match of source.matchAll(/"videoId"\s*:\s*"([a-zA-Z0-9_-]{11})"/g)) {
     add(match[1]);
     if (ids.size >= MAX_VIDEO_CANDIDATES) break;
   }
