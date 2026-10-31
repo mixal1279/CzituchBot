@@ -10,6 +10,7 @@ const fs = require('fs');
 const { normalizujGroqBaseUrl } = require('../ai/provider-runtime');
 const { GEMINI_VALIDATOR_JSON_SCHEMA } = require('../ai/validator');
 const { buildGeminiGenerateContentUrl, buildGeminiValidatorGenerationConfig } = require('../ai/gemini-response');
+const { isBlockingPreflightFailure } = require('../ai/validator-preflight-policy');
 
 const PROD_TIMEOUT_BY_PROVIDER = Object.freeze({
   Gemini: 12000,
@@ -120,7 +121,10 @@ function groqProbe(payload, maxTokens) {
 if (GEMINI_KEY) probes.push(geminiProbe(SMALL, 900), geminiProbe(REAL, 1600));
 else console.log('[preflight] Gemini: pominięty (brak GEMINI_API_KEY)');
 
-if (XKIRO_KEY) probes.push(xkiroProbe(SMALL, 900), xkiroProbe(REAL, 900), xkiroProbe(REAL, 1600));
+// xKiro is a secondary fallback with a hard 6 s production deadline. One
+// representative probe is enough; repeated slow probes waste CI time and
+// cannot improve the production latency of this free-tier endpoint.
+if (XKIRO_KEY) probes.push(xkiroProbe(REAL, 900));
 else console.log('[preflight] xKiro: pominięty (brak XKIRO_API_KEY)');
 
 if (OPENROUTER_KEY) {
@@ -252,12 +256,17 @@ async function run(probe) {
   }
 
   const bad = results.filter(r => r.verdict !== 'OK');
+  const blockingFailures = bad.filter(isBlockingPreflightFailure);
+  const degradedOptionalProviders = bad.filter(r => !isBlockingPreflightFailure(r));
+  for (const r of degradedOptionalProviders) {
+    console.log(`::warning title=Opcjonalny walidator zdegradowany::${r.provider} pozostaje skonfigurowany, ale nie mieści się w limicie produkcyjnym; benchmark będzie kontynuowany bez zakładania jego dostępności.`);
+  }
   const missingRequiredProviders = [];
   if (!GEMINI_KEY) missingRequiredProviders.push('Gemini (GEMINI_API_KEY — primary validator)');
   if (!GROQ_KEY) missingRequiredProviders.push('Groq (GROQ_API_KEY — primary generator)');
   for (const provider of missingRequiredProviders) {
     console.error(`::error title=Preflight wymagane dane::Brak ${provider}`);
   }
-  if (process.env.PREFLIGHT_STRICT === '1' && (bad.length > 0 || missingRequiredProviders.length > 0)) process.exit(1);
+  if (process.env.PREFLIGHT_STRICT === '1' && (blockingFailures.length > 0 || missingRequiredProviders.length > 0)) process.exit(1);
   process.exit(0);
 })();
