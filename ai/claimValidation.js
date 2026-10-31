@@ -1424,7 +1424,12 @@ function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
   const plCompulsion = /(?<![\p{L}])zmusz\w*(?![\p{L}])/iu.test(normalizujClaim(pl));
   const enCompulsion = /(?<![\\p{L}])forc(?:e|es|ed|ing)(?![\\p{L}])/iu.test(normalizujClaim(en));
   const equivalentCompulsion = plCompulsion && enCompulsion;
-  if (plCausal !== enCausal && !equivalentCompulsion
+  const equivalentEnable = /(?<![\\p{L}])pozwal\\w*(?![\\p{L}])/iu.test(normalizujClaim(pl))
+    && /(?<![\\p{L}])enabl(?:e|es|ed|ing)(?![\\p{L}])/iu.test(normalizujClaim(en));
+  const equivalentOfferOutcome = /przyj[eę]ci\\w*\\s+(?:tej\\s+)?ofert\\w*/iu.test(normalizujClaim(pl))
+    && /taking (?:him )?up on (?:this|the) offer/iu.test(normalizujClaim(en))
+    && /join(?:s|ed|ing)? (?:the|your) party/iu.test(normalizujClaim(en));
+  if (plCausal !== enCausal && !equivalentCompulsion && !equivalentEnable && !equivalentOfferOutcome
     && !(polishReasonClause && englishReasonClause)) {
     return { ok: false, reason: 'tłumaczenie claimu zmienia relację przyczynową' };
   }
