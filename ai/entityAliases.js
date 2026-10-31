@@ -8,6 +8,11 @@
 const ENTITY_ALIAS_GROUPS = Object.freeze([
   // GTA V: polski tytuł misji „Prolog” odpowiada angielskiemu „Prologue”.
   { canonical: 'prologue', names: ['Prologue', 'Prolog'] },
+  // Skyrim: Dovahkiin is the in-world name for the Dragonborn; preserve both
+  // the common spelling and the canonical dragon-language form found in sources.
+  { canonical: 'dovahkiin', names: ['Dovahkiin', 'Dovah-Kiin', 'Laat Dovahkiin', 'Laat Dovah-Kiin'] },
+  // The Witcher 3: School of the Cat is a distinct lore entity, not merely the armor item.
+  { canonical: 'school of the cat', names: ['School of the Cat', 'Cat School', 'Feline School', 'Szkoła Kota', 'Szkoły Kota', 'Kociej Szkoły', 'Szkoły Kotów'] },
   // Minecraft: End City (miasto) i End Ship (statek) są odrębnymi encjami.
   // Nie łączymy ich aliasów — walidator ma wykrywać zamianę miasta na statek i odwrotnie.
   { canonical: 'end city', names: ['End City', 'End Cities', 'Miasto Endu', 'Miasta Endu', 'Miasto Kresu', 'Miasta Kresu'] },
