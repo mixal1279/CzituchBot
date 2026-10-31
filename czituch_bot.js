@@ -2023,6 +2023,10 @@ async function walidujOdpowiedzOpenRouter(persona, pytanie, odpowiedz, dane, req
       ? rawContent.map(part => typeof part === 'string' ? part : (part?.text || '')).join('').trim()
       : (typeof rawContent === 'string' ? rawContent.trim() : '');
     if (!content) {
+      // Empty successful HTTP responses are isolated to this OpenRouter model;
+      // don't disable healthy providers or the rest of the OpenRouter account.
+      const emptyResponseCooldownMs = 30 * 1000;
+      markProviderQuota(providerKey, emptyResponseCooldownMs);
       const diagnostic = formatProviderError('openrouter', data?.model || KONFIGURACJA.openrouterValidatorModel, null, {
         status: response.status,
         finish_reason: choice?.finish_reason || null,
@@ -2281,6 +2285,12 @@ async function walidujOdpowiedzXKiro(persona, pytanie, odpowiedz, dane, requestI
               headers: response.headers,
             });
         markProviderQuota(providerKey, cooldownMs);
+      } else if (status === 401 || status === 403) {
+        // Authentication/disabled-key failures are endpoint-scoped. Avoid
+        // repeatedly sending requests with a credential that cannot succeed.
+        const authCooldownMs = 15 * 60 * 1000;
+        markProviderQuota(providerKey, authCooldownMs);
+        console.warn(`[AI][${requestId}] xKiro auth cooldown opened for ${providerKey} for ${authCooldownMs}ms`);
       }
       const diagnostic = formatProviderError('xkiro', data?.model || model, null, {
         status, code: data?.error?.code, type: data?.error?.type, param: data?.error?.param,
