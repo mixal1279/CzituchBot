@@ -31,7 +31,19 @@ test('zbiera wielu kandydatów LIVE zamiast zwracać przypadkowy pierwszy wynik'
   assert.deepEqual(new Set(extractLiveVideoIds(html)), new Set([OTHER_VIDEO_ID, VIDEO_ID]));
 });
 
-test('nie uznaje zwykłego filmu ani zakończonej transmisji za live', () => {
+test('wykrywa videoId z rendererów bez badge LIVE, pozostawiając weryfikację Data API', () => {
+  const html = assigned('ytInitialData', {
+    contents: { videoRenderer: { videoId: VIDEO_ID, title: { simpleText: 'Stream' } } },
+  });
+  assert.deepEqual(extractLiveVideoIds(html), [VIDEO_ID]);
+});
+
+test('wykrywa videoId bezpośrednio w HTML, gdy format ytInitialData się zmieni', () => {
+  const html = '<script>window.ytData = {"videoId":"' + VIDEO_ID + '"};</script>';
+  assert.deepEqual(extractLiveVideoIds(html), [VIDEO_ID]);
+});
+
+test('nie uznaje zwykłego filmu ani zakończonej transmisji za potwierdzony LIVE', () => {
   assert.equal(findLiveVideoId({
     videoRenderer: {
       videoId: VIDEO_ID,
@@ -104,7 +116,7 @@ test('pobiera stronę kanału /live i parsuje jej HTML', async () => {
   assert.equal(found, VIDEO_ID);
 });
 
-test('zwraca null, gdy strona kanału nie pokazuje aktywnej transmisji', async () => {
+test('zwraca null, gdy strona kanału nie pokazuje żadnych kandydatów', async () => {
   const found = await discoverLiveVideoId(CHANNEL_ID, {
     fetchImpl: async url => ({
       ok: true, status: 200, url,
