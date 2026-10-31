@@ -107,7 +107,10 @@ test('validator provider preflight covers Gemini, xKiro, OpenRouter and Groq pro
   assert.match(source, /buildGeminiValidatorGenerationConfig/);
   assert.match(source, /GEMINI_KEY\) missingRequiredProviders\.push/);
   assert.match(source, /GROQ_KEY\) missingRequiredProviders\.push/);
-  assert.match(source, /bad\.length > 0 \|\| missingRequiredProviders\.length > 0/);
+  assert.match(source, /const blockingFailures = bad\.filter\(isBlockingPreflightFailure\)/);
+  assert.match(source, /blockingFailures\.length > 0 \|\| missingRequiredProviders\.length > 0/);
+  assert.match(source, /degradedOptionalProviders = bad\.filter/);
+  assert.match(source, /PROD_TIMEOUT_MS\s*=\s*9000/);
   assert.match(source, /result\.ms > productionTimeoutMs/);
   assert.doesNotMatch(source, /PROD_TIMEOUT_MS\s*=\s*9000/);
 });
