@@ -26,40 +26,61 @@ function resolveDelayMs(value, defaultMs = 8000) {
 const delayMs = resolveDelayMs(process.env.AI_BENCHMARK_DELAY_MS);
 function stratifiedCases(all, requested, seed = 0) {
   if (requested >= all.length) return [...all];
+  const offset = Math.max(0, Math.floor(Number(seed)) || 0);
   const groups = new Map();
   for (const item of all) {
     const key = item.category || 'uncategorized';
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(item);
   }
-  // Ziarno przesuwa start w każdej kategorii, żeby nie testować w kółko tych samych pytań
-  // (stały zestaw zachęca do dopasowania kodu do benchmarku). Ziarno 0 zachowuje stary wybór.
-  const offset = Math.max(0, Math.floor(Number(seed)) || 0);
-  if (offset) for (const bucket of groups.values()) if (bucket.length > 1) bucket.push(...bucket.splice(0, offset % bucket.length));
-  const keys = [...groups.keys()];
+  // Rotate each category deterministically so non-gold questions still vary by seed.
+  if (offset) for (const bucket of groups.values()) {
+    if (bucket.length > 1) bucket.push(...bucket.splice(0, offset % bucket.length));
+  }
+
   const selected = [];
+  const selectedIds = new Set();
+  const goldCases = all.filter(item => item.expected?.factual?.independentGold === true);
+  // One gold example in a five-case run is too weak to tell whether factual
+  // accuracy improved. Reserve roughly one third of the sample for independent
+  // gold facts, taking different categories before taking a second item from
+  // the same category. Remaining slots stay category-stratified.
+  const targetGoldCount = Math.min(goldCases.length, Math.max(1, Math.ceil(requested / 3)));
+  const goldByCategory = new Map();
+  for (const item of goldCases) {
+    const key = item.category || 'uncategorized';
+    if (!goldByCategory.has(key)) goldByCategory.set(key, []);
+    goldByCategory.get(key).push(item);
+  }
+  const goldCategories = [...goldByCategory.keys()];
+  if (offset && goldCategories.length > 1) {
+    const shift = offset % goldCategories.length;
+    goldCategories.push(...goldCategories.splice(0, shift));
+  }
+  for (const category of goldCategories) {
+    if (selected.length >= targetGoldCount) break;
+    const candidates = goldByCategory.get(category) || [];
+    if (!candidates.length) continue;
+    const item = candidates[offset % candidates.length];
+    if (!selectedIds.has(item.id)) {
+      selected.push(item);
+      selectedIds.add(item.id);
+    }
+  }
+
+  const keys = [...groups.keys()];
   let cursor = 0;
   while (selected.length < requested && keys.length) {
     const key = keys[cursor % keys.length];
     const bucket = groups.get(key);
-    if (bucket.length) selected.push(bucket.shift());
-    if (!bucket.length) keys.splice(cursor % keys.length, 1);
-    else cursor++;
-  }
-  // Każdy live run, również przy ziarnie > 0, musi zawierać co najmniej
-  // jeden niezależny gold case. Bez tego „factual pass” byłby pustą próbą.
-  if (requested > 0 && !selected.some(item => item.expected?.factual?.independentGold === true)) {
-    const goldCases = all.filter(item => item.expected?.factual?.independentGold === true);
-    if (goldCases.length) {
-      // Wybierz gold z kategorii już obecnej w próbce, aby wymóg factual nie
-      // zmieniał stratified sample w zestaw z duplikatami kategorii.
-      const selectedCategories = new Set(selected.map(item => item.category));
-      const eligibleGoldCases = goldCases.filter(item => selectedCategories.has(item.category));
-      const candidates = eligibleGoldCases.length ? eligibleGoldCases : goldCases;
-      const gold = candidates[offset % candidates.length];
-      const replacementIndex = selected.findIndex(item => item.category === gold.category);
-      if (replacementIndex >= 0) selected[replacementIndex] = gold;
-      else if (selected.length) selected[selected.length - 1] = gold;
+    while (bucket.length && selectedIds.has(bucket[0].id)) bucket.shift();
+    if (bucket.length) {
+      const item = bucket.shift();
+      selected.push(item);
+      selectedIds.add(item.id);
+      cursor++;
+    } else {
+      keys.splice(cursor % keys.length, 1);
     }
   }
   return selected;
