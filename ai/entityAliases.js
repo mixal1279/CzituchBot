@@ -10,7 +10,7 @@ const ENTITY_ALIAS_GROUPS = Object.freeze([
   { canonical: 'prologue', names: ['Prologue', 'Prolog'] },
   // Skyrim: Dovahkiin is the in-world name for the Dragonborn; preserve both
   // the common spelling and the canonical dragon-language form found in sources.
-  { canonical: 'dovahkiin', names: ['Dovahkiin', 'Laat Dovahkiin'] },
+  { canonical: 'dragonborn', names: ['Dragonborn', 'Dovahkiin', 'Laat Dovahkiin'] },
   // The Witcher 3: these Polish names identify the Feline Armor/gear item,
   // not a separate School of the Cat faction entity.
   // Minecraft: End City (miasto) i End Ship (statek) są odrębnymi encjami.
