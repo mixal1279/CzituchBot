@@ -77,7 +77,7 @@ function buildRetrievalQueries(question, routing = {}, options = {}) {
   } else if (isWhoQuestion) {
     const dragonbornContext = /\b(?:dragonborn|dovahkiin)\b/iu.test([original, entity].join(' ')) && /\bskyrim\b/iu.test([original, game].join(' '));
     const identityHints = dragonbornContext
-      ? 'Dragonborn Dovahkiin last Dragonborn prophecy dragon soul identity lore'
+      ? 'character identity background role companion lore Dragonborn Dovahkiin last Dragonborn prophecy dragon soul'
       : 'character identity background role companion lore';
     dodajUnikalneQuery(queries, [entity, game, identityHints].filter(Boolean).join(' '));
   } else if (isWhyQuestion) {
