@@ -82,7 +82,7 @@ test('hard timeout releases the pipeline when a provider ignores AbortSignal', a
 });
 
 test('unavailable-validator repair requires evidence, one attempt, and enough remaining time', () => {
-  assert.equal(INITIAL_VALIDATOR_REPAIR_RESERVE_MS, 24000);
+  assert.equal(INITIAL_VALIDATOR_REPAIR_RESERVE_MS, 10500);
   assert.equal(shouldAttemptUnavailableRepair({ remainingMs: 18000, hasEvidence: true, alreadyAttempted: false }), true);
   assert.equal(shouldAttemptUnavailableRepair({ remainingMs: 17999, hasEvidence: true, alreadyAttempted: false }), false);
   assert.equal(shouldAttemptUnavailableRepair({ remainingMs: 30000, hasEvidence: false, alreadyAttempted: false }), false);
@@ -91,14 +91,29 @@ test('unavailable-validator repair requires evidence, one attempt, and enough re
 });
 
 test('initial validation can reserve one repair plus final validation budget', () => {
-  assert.equal(computeValidatorReserveMs(25000, 3, 4, 24000), 24000);
-  assert.equal(computeValidatorReserveMs(16000, 4, 4, 24000), 24000);
+  assert.equal(computeValidatorReserveMs(25000, 3, 4, 10500), 10500);
+  assert.equal(computeValidatorReserveMs(16000, 4, 4, 10500), 10500);
   assert.equal(computeValidatorReserveMs(16000, 4, 4), 2500);
-  assert.equal(computeValidatorTimeout(22500, {
+
+  // Live benchmark regression: after two slow generation fallbacks the request
+  // can have ~15 s left. A 24 s first-pass reserve skipped every validator even
+  // though a bounded first validation attempt still fit in the remaining time.
+  const benchmarkRemainingMs = 15092;
+  const benchmarkReserveMs = computeValidatorReserveMs(
+    benchmarkRemainingMs, 1, 4, INITIAL_VALIDATOR_REPAIR_RESERVE_MS,
+  );
+  assert.equal(benchmarkReserveMs, 10500);
+  assert.equal(computeValidatorTimeout(benchmarkRemainingMs, {
+    maxTimeoutMs: 12000,
+    reserveMs: benchmarkReserveMs,
+    minTimeoutMs: 4000,
+  }), 4592);
+
+  assert.equal(computeValidatorTimeout(12499, {
     maxTimeoutMs: 3000,
-    reserveMs: computeValidatorReserveMs(22500, 4, 4, 24000),
+    reserveMs: 10500,
     minTimeoutMs: 2000,
-  }), null, 'skip final fallback when it would consume the reserved repair budget');
+  }), null, 'do not start a validator that would consume the protected tail reserve');
 });
 
 test('validator timeout is capped and reserves time for fallback', () => {
