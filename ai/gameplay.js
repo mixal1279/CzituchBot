@@ -1,5 +1,7 @@
 'use strict';
 
+const { boundedText } = require('./inputSafety');
+
 const { resolveGameEntity } = require('./entities');
 const GAMEFAQS_DOMAIN = 'gamefaqs.gamespot.com';
 const GAMEFAQS_NAME = 'GameFAQs';
@@ -8,10 +10,10 @@ const GAMEPLAY_INTENT_RE = /(?:jak\s+(?:przej(?:ść|sc)|zrobi(?:ć|c)|pokona(?:
 const GAME_CONTEXT_RE = /(?<![\p{L}\p{N}_])(?:(?:gra|gry|grze|grę|grą|gier|game|gaming)(?![\p{L}\p{N}_])|quest|misj(?:a|ę|i|e)|boss|posta(?:ć|ci)|przedmiot|achievement|trofeum|zagadk|walkthrough|poradnik|w\s+grze|z\s+gry|w\s+(?:tej|tejże)\s+grze)/iu;
 
 function czyPytanieOGameplay(pytanie, domeny = null) {
-  const p = String(pytanie || '').trim();
+  const p = boundedText(pytanie, 500).trim();
   if (!p || !GAMEPLAY_INTENT_RE.test(p)) return false;
   const resolved = resolveGameEntity(p);
-  const gamingDomain = Array.isArray(domeny) && domeny.some(d => /(?:gamefaqs\.gamespot\.com|gamelore\.fandom\.com|minecraft\.wiki|ign\.com|gamespot\.com|pcgamer\.com|eurogamer|thewitcher\.com|rockstargames\.com|bandainamco|playstation\.com|naughtydog\.com|baldursgate3\.game|larian\.com|fortnite\.gg)/i.test(String(d)));
+  const gamingDomain = Array.isArray(domeny) && domeny.some(d => /(?:gamefaqs\.gamespot\.com|gamelore\.fandom\.com|minecraft\.wiki|ign\.com|gamespot\.com|pcgamer\.com|eurogamer|thewitcher\.com|rockstargames\.com|bandainamco|playstation\.com|naughtydog\.com|baldursgate3\.game|larian\.com|fortnite\.gg)/i.test(boundedText(d, 300)));
   return GAME_CONTEXT_RE.test(p) || gamingDomain || Boolean(resolved);
 }
 
