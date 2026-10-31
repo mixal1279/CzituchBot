@@ -7,6 +7,7 @@ const {
   extractLiveVideoId,
   extractLiveVideoIds,
   findLiveVideoId,
+  isVerifiedLiveVideo,
 } = require('../youtube-live-discovery');
 
 const VIDEO_ID = 'a1b2c3d4e5F';
@@ -116,4 +117,32 @@ test('zwraca null, gdy strona kanału nie pokazuje aktywnej transmisji', async (
 
 test('rzuca błąd dla nieprawidłowego Channel ID', async () => {
   await assert.rejects(() => discoverLiveVideoId('not-a-channel'), TypeError);
+});
+
+test('wymaga zgodnego właściciela i aktywnego Live Chat ID', () => {
+  assert.equal(isVerifiedLiveVideo({
+    snippet: { channelId: CHANNEL_ID },
+    liveStreamingDetails: { activeLiveChatId: 'chat-123' },
+  }, CHANNEL_ID), true);
+  assert.equal(isVerifiedLiveVideo({
+    snippet: { channelId: 'UC0000000000000000000000' },
+    liveStreamingDetails: { activeLiveChatId: 'chat-123' },
+  }, CHANNEL_ID), false);
+  assert.equal(isVerifiedLiveVideo({
+    snippet: {},
+    liveStreamingDetails: { activeLiveChatId: 'chat-123' },
+  }, CHANNEL_ID), false);
+  assert.equal(isVerifiedLiveVideo({
+    snippet: { channelId: CHANNEL_ID },
+    liveStreamingDetails: {},
+  }, CHANNEL_ID), false);
+});
+
+test('nie pozwala uruchomić discovery bez walidatora Data API', async () => {
+  await assert.rejects(() => discoverLiveVideoId(CHANNEL_ID, {
+    fetchImpl: async url => ({
+      ok: true, status: 200, url,
+      text: async () => assigned('ytInitialData', { videoRenderer: liveRenderer(VIDEO_ID) }),
+    }),
+  }), /wymaga funkcji verifyVideo/);
 });
