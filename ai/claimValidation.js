@@ -930,11 +930,42 @@ function tokenyPokryciaBezStop(value) {
 function tokenyPokrycia(value) {
   return [...new Set(normalizujClaim(value).split(' ').filter(t => t.length >= 3 && !COVERAGE_STOPWORDS.has(t)))];
 }
+const POLISH_INFLECTION_SUFFIXES = [
+  'owego', 'owych', 'owymi', 'owej', 'iego', 'iemu', 'owie',
+  'ami', 'ach', 'owi', 'iem', 'ow', 'om', 'em', 'ym', 'im', 'ej',
+].sort((a, b) => b.length - a.length);
+const POLISH_SHORT_INFLECTION_SUFFIXES = new Set(['a', 'e', 'y', 'i', 'u']);
+
+function tokenZPolskimRdzeniem(token) {
+  const value = String(token || '');
+  for (const suffix of POLISH_INFLECTION_SUFFIXES) {
+    if (value.endsWith(suffix) && value.length - suffix.length >= 5) {
+      return { value, stem: value.slice(0, -suffix.length), inflected: true };
+    }
+  }
+  return { value, stem: value, inflected: false };
+}
+
 function tokenyPokrywajaSie(a, b) {
   if (a === b) return true;
+
+  // Conservative Polish inflection matching: strip one known case/number ending
+  // from a long token, then allow a single short vowel ending on its counterpart.
+  // The minimum five-character stem avoids collapsing short, ambiguous words.
+  const left = tokenZPolskimRdzeniem(a);
+  const right = tokenZPolskimRdzeniem(b);
+  if (left.stem.length >= 5 && left.stem === right.stem && (left.inflected || right.inflected)) return true;
+  const shortStem = token => {
+    const value = String(token || '');
+    const suffix = value.slice(-1);
+    return POLISH_SHORT_INFLECTION_SUFFIXES.has(suffix) && value.length - 1 >= 5
+      ? value.slice(0, -1)
+      : null;
+  };
+  if (left.inflected && left.stem === shortStem(right.value)) return true;
+  if (right.inflected && right.stem === shortStem(left.value)) return true;
+
   if (Math.min(a.length, b.length) < 6) return false;
-  let prefixLength = 0;
-  while (prefixLength < Math.min(a.length, b.length) && a[prefixLength] === b[prefixLength]) prefixLength++;
   // Do not accept long common prefixes as a substitute for edit distance:
   // unrelated words can share most of a prefix but differ in their suffix.
   // A single typo is allowed only when the complete tokens differ by one edit.
