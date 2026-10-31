@@ -178,10 +178,10 @@ const TYTULY_GIER = (() => {
       if (!tokens.length || key.replace(/ /g, '').length < 5 || seen.has(key)) continue;
       seen.add(key);
       const last = tokens[tokens.length - 1];
-      const romanEdition = /^(?:II|III|IV|V|VI|VII|VIII|IX|X|XI|XII|XIII|XIV|XV|XVI)$/u.test(last);
+      const romanEdition = /^(?:II|III|IV|V|VI|VII|VIII|IX|X|XI|XII|XIII|XIV|XV|XVI)$/u.test(last.toUpperCase());
       const hasEdition = tokens.length > 1 && (/^\d{1,4}$/u.test(last) || romanEdition);
       const edition = hasEdition
-        ? (/^\d+$/u.test(last) ? String(Number(last)) : String(rzymskieNaArabskie(last) ?? last))
+        ? (/^\d+$/u.test(last) ? String(Number(last)) : String(rzymskieNaArabskie(last.toUpperCase()) ?? last.toUpperCase()))
         : null;
       out.push({
         re: new RegExp(`(?<![\\p{L}\\p{N}])${tokens.map(esc).join(sep)}(?![\\p{L}\\p{N}])`, 'giu'),
@@ -205,7 +205,7 @@ function usunTytulyGierZLiczb(claimText, evidenceText = '') {
     if (title.sibling && [...evidence.matchAll(title.sibling)].some(match => {
       const sibling = /^\d+$/u.test(match[1])
         ? String(Number(match[1]))
-        : String(rzymskieNaArabskie(match[1]) ?? match[1]);
+        : String(rzymskieNaArabskie(match[1].toUpperCase()) ?? match[1].toUpperCase());
       return sibling !== title.edition;
     })) continue;
     out = out.replace(title.re, ' ');
