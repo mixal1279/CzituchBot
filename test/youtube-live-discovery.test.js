@@ -31,16 +31,16 @@ test('zbiera wielu kandydatów LIVE zamiast zwracać przypadkowy pierwszy wynik'
   assert.deepEqual(new Set(extractLiveVideoIds(html)), new Set([OTHER_VIDEO_ID, VIDEO_ID]));
 });
 
-test('wykrywa videoId z rendererów bez badge LIVE, pozostawiając weryfikację Data API', () => {
+test('ignoruje videoId z rendererów bez jawnego badge LIVE', () => {
   const html = assigned('ytInitialData', {
     contents: { videoRenderer: { videoId: VIDEO_ID, title: { simpleText: 'Stream' } } },
   });
-  assert.deepEqual(extractLiveVideoIds(html), [VIDEO_ID]);
+  assert.deepEqual(extractLiveVideoIds(html), []);
 });
 
-test('wykrywa videoId bezpośrednio w HTML, gdy format ytInitialData się zmieni', () => {
+test('ignoruje videoId znalezione w surowym HTML bez sygnału LIVE', () => {
   const html = '<script>window.ytData = {"videoId":"' + VIDEO_ID + '"};</script>';
-  assert.deepEqual(extractLiveVideoIds(html), [VIDEO_ID]);
+  assert.deepEqual(extractLiveVideoIds(html), []);
 });
 
 test('nie uznaje zwykłego filmu ani zakończonej transmisji za potwierdzony LIVE', () => {
@@ -133,20 +133,31 @@ test('rzuca błąd dla nieprawidłowego Channel ID', async () => {
 
 test('wymaga zgodnego właściciela i aktywnego Live Chat ID', () => {
   assert.equal(isVerifiedLiveVideo({
-    snippet: { channelId: CHANNEL_ID },
+    snippet: { channelId: CHANNEL_ID, liveBroadcastContent: 'live' },
     liveStreamingDetails: { activeLiveChatId: 'chat-123' },
   }, CHANNEL_ID), true);
   assert.equal(isVerifiedLiveVideo({
-    snippet: { channelId: 'UC0000000000000000000000' },
+    snippet: { channelId: 'UC0000000000000000000000', liveBroadcastContent: 'live' },
     liveStreamingDetails: { activeLiveChatId: 'chat-123' },
   }, CHANNEL_ID), false);
   assert.equal(isVerifiedLiveVideo({
-    snippet: {},
+    snippet: { liveBroadcastContent: 'live' },
     liveStreamingDetails: { activeLiveChatId: 'chat-123' },
   }, CHANNEL_ID), false);
   assert.equal(isVerifiedLiveVideo({
-    snippet: { channelId: CHANNEL_ID },
+    snippet: { channelId: CHANNEL_ID, liveBroadcastContent: 'live' },
     liveStreamingDetails: {},
+  }, CHANNEL_ID), false);
+});
+
+test('odrzuca transmisję bez statusu live nawet z aktywnym chat ID', () => {
+  assert.equal(isVerifiedLiveVideo({
+    snippet: { channelId: CHANNEL_ID, liveBroadcastContent: 'none' },
+    liveStreamingDetails: { activeLiveChatId: 'chat-123' },
+  }, CHANNEL_ID), false);
+  assert.equal(isVerifiedLiveVideo({
+    snippet: { channelId: CHANNEL_ID, liveBroadcastContent: 'upcoming' },
+    liveStreamingDetails: { activeLiveChatId: 'chat-123' },
   }, CHANNEL_ID), false);
 });
 

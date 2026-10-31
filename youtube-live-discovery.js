@@ -76,6 +76,7 @@ function isVerifiedLiveVideo(video, expectedChannelId) {
     video &&
     typeof expectedChannelId === 'string' &&
     video.snippet?.channelId === expectedChannelId &&
+    video.snippet?.liveBroadcastContent === 'live' &&
     typeof video.liveStreamingDetails?.activeLiveChatId === 'string' &&
     video.liveStreamingDetails.activeLiveChatId.length > 0
   );
@@ -114,13 +115,7 @@ function extractLiveVideoIds(html, finalUrl) {
   const initialData = parseAssignedJson(source, 'ytInitialData');
   for (const id of findLiveVideoIds(initialData, 20)) add(id);
 
-  // Broader fallback: renderer and badge schemas change. All IDs are only
-  // candidates; Data API ownership and active-chat checks remain mandatory.
-  for (const id of findVideoIds(initialData, MAX_VIDEO_CANDIDATES)) add(id);
-  for (const match of source.matchAll(/"videoId"\s*:\s*"([a-zA-Z0-9_-]{11})"/g)) {
-    add(match[1]);
-    if (ids.size >= MAX_VIDEO_CANDIDATES) break;
-  }
+
 
   return [...ids];
 }
