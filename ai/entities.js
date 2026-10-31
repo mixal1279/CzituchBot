@@ -71,7 +71,7 @@ const CONTEXT_REQUIRED_CHARACTER_ALIASES = new Set([
 ]);
 
 function normalizujEncje(text) {
-  return boundedText(text, 2000).toLocaleLowerCase('pl-PL')
+  return boundedText(text, 12000).toLocaleLowerCase('pl-PL')
     .replace(/ł/g, 'l')
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     .replace(/[’']/g, '').replace(/[^a-z0-9 ]/gi, ' ')
