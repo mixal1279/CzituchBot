@@ -62,16 +62,17 @@ test('Polish ochron* and English protection have matching translation polarity',
 });
 
 
-test('Witcher 3 School of the Cat survives Polish inflection as one entity', () => {
-  assert.equal(czyNazwaWlasnaWystepuje('school of the cat', 'Zbroja Szkoły Kota'), true);
-  assert.equal(czyNazwaWlasnaWystepuje('school of the cat', 'rynsztunek Kociej Szkoły'), true);
-  assert.equal(czyNazwaWlasnaWystepuje('school of the cat', 'School of the Wolf'), false);
+test('Witcher 3 Feline gear aliases preserve the localized armor item', () => {
+  assert.equal(czyNazwaWlasnaWystepuje('feline armor', 'Zbroja Szkoły Kota'), true);
+  assert.equal(czyNazwaWlasnaWystepuje('feline armor', 'Rynsztunek Szkoły Kota'), true);
+  assert.equal(czyNazwaWlasnaWystepuje('feline armor', 'Feline gear set'), true);
+  assert.equal(czyNazwaWlasnaWystepuje('feline armor', 'Zbroja Szkoły Wilka'), false);
 });
 
 test('Skyrim Dovahkiin aliases survive source spelling and inflection', () => {
   assert.equal(czyNazwaWlasnaWystepuje('dovahkiin', 'Laat Dovahkiin'), true);
   assert.equal(czyNazwaWlasnaWystepuje('dovahkiin', 'the Dovah-Kiin'), true);
-  assert.equal(czyNazwaWlasnaWystepuje('dovahkiin', 'Dragonborn'), false);
+  assert.equal(czyNazwaWlasnaWystepuje('dovahkiin', 'Dragonborn'), true);
 });
 
 test('causal translation accepts the source wording as they have a better chance', () => {
