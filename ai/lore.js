@@ -1,5 +1,7 @@
 'use strict';
 
+const { boundedText } = require('./inputSafety');
+
 const { resolveGameEntity } = require('./entities');
 const GAMELORE_DOMAIN = 'gamelore.fandom.com';
 const GAMELORE_NAME = 'GameLore Wiki';
@@ -9,7 +11,7 @@ const GAME_TITLE_RE = /\b(?:minecraft|portal(?:\s+2)?|red\s+dead(?:\s+redemption
 const GAME_CONTEXT_RE = /(?<![\p{L}\p{N}_])(?:gra|gry|grze|grę|grą|gier|game|gaming|w\s+(?:tej|tejże)\s+grze|w\s+grze|z\s+gry|postać|postaci|boss|bohater|bohaterka|fabuła|lore|kanon|canon|quest|misja|świat\s+gry)(?![\p{L}\p{N}_])/iu;
 
 function czyPytanieOLore(pytanie, domeny = null) {
-  const p = String(pytanie || '').trim();
+  const p = boundedText(pytanie, 500).trim();
   if (!p) return false;
   const resolved = resolveGameEntity(p);
   const loreIntent = LORE_INTENT_RE.test(p) || (resolved && /\b(?:dlaczego|kim|kto|co|histori\w*|lore|pochodzeni\w*|kanon|timeline|zwi[aą]zk\w*|relacj\w*|konflikt\w*|wpływ\w*|wpłyn\w*)\b/i.test(p));
