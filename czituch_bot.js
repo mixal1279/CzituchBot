@@ -1726,10 +1726,12 @@ async function walidujOdpowiedzGeminiModel(model, persona, pytanie, odpowiedz, d
           ? `Gemini nie zwrócił kandydatów: promptFeedback.blockReason=${blockReason}${safetySummary ? `; safetyRatings: ${safetySummary}` : ''}`
           : 'Gemini nie zwrócił kandydatów i nie podał promptFeedback.blockReason';
         console.warn(`[AI][${requestId}] ${model}: ${reason}`);
+        const safetyBlocked = ['SAFETY', 'BLOCKLIST', 'PROHIBITED_CONTENT', 'SPII', 'IMAGE_SAFETY', 'RECITATION'].includes(blockReason);
         return {
           status: 'unavailable',
           ok: false,
-          technicalError: true,
+          technicalError: !safetyBlocked,
+          safetyBlocked,
           transient: false,
           provider: 'gemini',
           model,
@@ -1766,10 +1768,12 @@ async function walidujOdpowiedzGeminiModel(model, persona, pytanie, odpowiedz, d
           safetySummary ? `safetyRatings: ${safetySummary}` : '',
         ].filter(Boolean).join('; ');
         console.warn(`[AI][${requestId}] ${model}: ${reason}`);
+        const safetyBlocked = blockedFinishReasons.has(finishReason);
         return {
           status: 'unavailable',
           ok: false,
-          technicalError: true,
+          technicalError: !safetyBlocked,
+          safetyBlocked,
           transient: false,
           provider: 'gemini',
           model,
@@ -1940,13 +1944,20 @@ async function walidujOdpowiedzOpenRouter(persona, pytanie, odpowiedz, dane, req
   const remainingMs = requestState
     ? (typeof requestState.remainingMs === 'function' ? requestState.remainingMs() : requestState.maxCzasMs - (Date.now() - requestState.startedAt))
     : 12000;
+  const configuredOpenRouterTimeoutMs = Number(process.env.AI_OPENROUTER_VALIDATOR_TIMEOUT_MS);
+  const openRouterMaxTimeoutMs = Math.max(
+    4000,
+    Number.isFinite(configuredOpenRouterTimeoutMs) && configuredOpenRouterTimeoutMs > 0
+      ? configuredOpenRouterTimeoutMs
+      : 6000,
+  );
   const computedValidatorTimeoutMs = requestState
     ? computeValidatorTimeout(remainingMs, {
-        maxTimeoutMs: 9000,
+        maxTimeoutMs: openRouterMaxTimeoutMs,
         reserveMs: computeValidatorReserveMs(remainingMs, requestState?.validatory + 1, requestState?.maxValidatorow, requestState?.validationPass === 1 ? INITIAL_VALIDATOR_REPAIR_RESERVE_MS : 0),
         minTimeoutMs: 4000,
       })
-    : 3000;
+    : openRouterMaxTimeoutMs;
   const validatorTimeoutMs = wybierzTimeoutWalidatora(timeoutOverrideMs, computedValidatorTimeoutMs);
   if (requestState && validatorTimeoutMs === null) {
     return { status: 'unavailable', ok: false, technicalError: true, transient: true, skipped: true, provider: 'openrouter', model: KONFIGURACJA.openrouterValidatorModel, unsupported_claims: [], reason: 'OpenRouter validator pominięty: zbyt mały pozostały budżet czasu' };
@@ -2500,7 +2511,8 @@ async function walidujOdpowiedzAIBezCache(persona, pytanie, odpowiedz, dane, his
       complete: result.complete === true, confidence: Number.isFinite(result.confidence) ? result.confidence : null,
       claimCoverage: Array.isArray(result.claims) && result.claims.length ? result.claims.filter(c => c.supported === true).length / result.claims.length : null,
       reason: typeof result.reason === 'string' ? result.reason.slice(0, 300) : null,
-      technicalError: result.technicalError === true, timeoutAbort: result.timeoutAbort === true,
+      technicalError: result.technicalError === true, safetyBlocked: result.safetyBlocked === true,
+      timeoutAbort: result.timeoutAbort === true,
       quota: result.quota === true, skipped: result.skipped === true,
       statusCode: Number.isFinite(Number(result.statusCode)) && result.statusCode != null ? Number(result.statusCode) : null,
       validationDiagnostics: result.diagnostics || null,
@@ -2664,15 +2676,22 @@ async function walidujOdpowiedzAIBezCache(persona, pytanie, odpowiedz, dane, his
     console.warn(`[AI][${requestId}] ${reason}`);
     return lastRejected || { ...(last || {}), status: 'unavailable', ok: false, technicalError: true, transient: true, skipped: true, provider: 'openrouter', model: KONFIGURACJA.openrouterValidatorModel, unsupported_claims: [], reason };
   }
-  let openRouterTimeoutMs = requestState ? null : 3000;
+  const configuredOpenRouterTimeoutMs = Number(process.env.AI_OPENROUTER_VALIDATOR_TIMEOUT_MS);
+  const openRouterMaxTimeoutMs = Math.max(
+    4000,
+    Number.isFinite(configuredOpenRouterTimeoutMs) && configuredOpenRouterTimeoutMs > 0
+      ? configuredOpenRouterTimeoutMs
+      : 6000,
+  );
+  let openRouterTimeoutMs = requestState ? null : openRouterMaxTimeoutMs;
   if (requestState) {
     const remainingMs = typeof requestState.remainingMs === 'function'
       ? requestState.remainingMs()
       : requestState.maxCzasMs - (Date.now() - requestState.startedAt);
     openRouterTimeoutMs = computeValidatorTimeout(remainingMs, {
-      maxTimeoutMs: 3000,
+      maxTimeoutMs: openRouterMaxTimeoutMs,
       reserveMs: computeValidatorReserveMs(remainingMs, requestState.validatory + 1, requestState.maxValidatorow, requestState.validationPass === 1 ? INITIAL_VALIDATOR_REPAIR_RESERVE_MS : 0),
-      minTimeoutMs: 2000,
+      minTimeoutMs: 4000,
     });
     if (openRouterTimeoutMs === null) {
       const reason = 'OpenRouter validator pominięty: zbyt mały pozostały budżet czasu';
