@@ -17,3 +17,14 @@ test('claim token matching keeps exact matches and rejects short-token fuzzy mat
   assert.equal(tokenyPokrywajaSie('glados', 'glados'), true);
   assert.equal(tokenyPokrywajaSie('cat', 'cut'), false);
 });
+
+
+test('claim token matching recognizes conservative Polish case and number inflections', () => {
+  assert.equal(tokenyPokrywajaSie('obrazenia', 'obrazeniami'), true);
+  assert.equal(tokenyPokrywajaSie('wiedzmina', 'wiedzminem'), true);
+});
+
+test('Polish inflection matching keeps a minimum stem length', () => {
+  assert.equal(tokenyPokrywajaSie('data', 'date'), false);
+  assert.equal(tokenyPokrywajaSie('koty', 'kotami'), false);
+});
