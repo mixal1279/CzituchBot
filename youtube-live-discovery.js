@@ -64,6 +64,16 @@ function findLiveVideoId(data) {
   return findLiveVideoIds(data, 1)[0] || null;
 }
 
+function isVerifiedLiveVideo(video, expectedChannelId) {
+  return Boolean(
+    video &&
+    typeof expectedChannelId === 'string' &&
+    video.snippet?.channelId === expectedChannelId &&
+    typeof video.liveStreamingDetails?.activeLiveChatId === 'string' &&
+    video.liveStreamingDetails.activeLiveChatId.length > 0
+  );
+}
+
 function videoIdFromUrl(value) {
   try {
     const url = new URL(value);
@@ -150,5 +160,6 @@ module.exports = {
   extractLiveVideoIds,
   findLiveVideoId,
   findLiveVideoIds,
+  isVerifiedLiveVideo,
   parseAssignedJson,
 };
