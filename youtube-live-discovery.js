@@ -1,16 +1,15 @@
 'use strict';
 
 const LIVE_BADGE_STYLES = new Set(['BADGE_STYLE_TYPE_LIVE_NOW']);
+const VIDEO_ID_RE = /^[a-zA-Z0-9_-]{11}$/;
 
 function parseAssignedJson(html, variableName) {
   const source = String(html || '');
   const marker = new RegExp(variableName + '\\s*=\\s*');
   const match = marker.exec(source);
   if (!match) return null;
-
   const start = source.indexOf('{', match.index + match[0].length);
   if (start < 0) return null;
-
   let depth = 0;
   let inString = false;
   let escaped = false;
@@ -38,41 +37,41 @@ function parseAssignedJson(html, variableName) {
 function hasLiveBadge(renderer) {
   if (!renderer || typeof renderer !== 'object') return false;
   if (renderer.isLive === true || renderer.isLiveNow === true) return true;
-
   const badges = Array.isArray(renderer.badges) ? renderer.badges : [];
-  for (const badge of badges) {
-    const metadata = badge && badge.metadataBadgeRenderer;
-    if (metadata && LIVE_BADGE_STYLES.has(metadata.style)) return true;
-  }
-
+  if (badges.some(badge => LIVE_BADGE_STYLES.has(badge?.metadataBadgeRenderer?.style))) return true;
   const overlays = Array.isArray(renderer.thumbnailOverlays) ? renderer.thumbnailOverlays : [];
-  return overlays.some(item =>
-    item && item.thumbnailOverlayTimeStatusRenderer &&
-    item.thumbnailOverlayTimeStatusRenderer.style === 'LIVE'
-  );
+  return overlays.some(item => item?.thumbnailOverlayTimeStatusRenderer?.style === 'LIVE');
 }
 
-function findLiveVideoId(data) {
-  if (!data || typeof data !== 'object') return null;
+function findLiveVideoIds(data, limit = 20) {
+  if (!data || typeof data !== 'object') return [];
   const stack = [data];
-  let visited = 0;
-
-  while (stack.length && visited < 100000) {
+  const visitedObjects = new Set();
+  const ids = new Set();
+  while (stack.length && visitedObjects.size < 100000 && ids.size < limit) {
     const current = stack.pop();
-    if (!current || typeof current !== 'object') continue;
-    visited += 1;
-
-    if (typeof current.videoId === 'string' &&
-        /^[a-zA-Z0-9_-]{11}$/.test(current.videoId) &&
-        hasLiveBadge(current)) {
-      return current.videoId;
-    }
-
+    if (!current || typeof current !== 'object' || visitedObjects.has(current)) continue;
+    visitedObjects.add(current);
+    if (VIDEO_ID_RE.test(current.videoId || '') && hasLiveBadge(current)) ids.add(current.videoId);
     for (const value of Object.values(current)) {
       if (value && typeof value === 'object') stack.push(value);
     }
   }
-  return null;
+  return [...ids];
+}
+
+function findLiveVideoId(data) {
+  return findLiveVideoIds(data, 1)[0] || null;
+}
+
+function isVerifiedLiveVideo(video, expectedChannelId) {
+  return Boolean(
+    video &&
+    typeof expectedChannelId === 'string' &&
+    video.snippet?.channelId === expectedChannelId &&
+    typeof video.liveStreamingDetails?.activeLiveChatId === 'string' &&
+    video.liveStreamingDetails.activeLiveChatId.length > 0
+  );
 }
 
 function videoIdFromUrl(value) {
@@ -81,31 +80,32 @@ function videoIdFromUrl(value) {
     if (!/(^|\.)youtube\.com$/i.test(url.hostname)) return null;
     if (url.pathname === '/watch') {
       const id = url.searchParams.get('v');
-      return id && /^[a-zA-Z0-9_-]{11}$/.test(id) ? id : null;
+      return id && VIDEO_ID_RE.test(id) ? id : null;
     }
-    const livePathMatch = url.pathname.match(/^\/live\/([a-zA-Z0-9_-]{11})$/);
-    if (livePathMatch) return livePathMatch[1];
-  } catch {}
-  return null;
+    const match = url.pathname.match(/^\/live\/([a-zA-Z0-9_-]{11})$/);
+    return match ? match[1] : null;
+  } catch {
+    return null;
+  }
+}
+
+function extractLiveVideoIds(html, finalUrl) {
+  const ids = new Set();
+  const redirectedVideoId = videoIdFromUrl(finalUrl);
+  if (redirectedVideoId) ids.add(redirectedVideoId);
+
+  const playerResponse = parseAssignedJson(html, 'ytInitialPlayerResponse');
+  const playerLive = playerResponse?.microformat?.playerMicroformatRenderer?.liveBroadcastDetails?.isLiveNow === true;
+  const playerVideoId = playerResponse?.videoDetails?.videoId;
+  if (playerLive && VIDEO_ID_RE.test(playerVideoId || '')) ids.add(playerVideoId);
+
+  const initialData = parseAssignedJson(html, 'ytInitialData');
+  for (const id of findLiveVideoIds(initialData, 20)) ids.add(id);
+  return [...ids];
 }
 
 function extractLiveVideoId(html, finalUrl) {
-  const redirectedVideoId = videoIdFromUrl(finalUrl);
-  if (redirectedVideoId) return redirectedVideoId;
-
-  const playerResponse = parseAssignedJson(html, 'ytInitialPlayerResponse');
-  const playerLive = playerResponse &&
-    playerResponse.microformat &&
-    playerResponse.microformat.playerMicroformatRenderer &&
-    playerResponse.microformat.playerMicroformatRenderer.liveBroadcastDetails &&
-    playerResponse.microformat.playerMicroformatRenderer.liveBroadcastDetails.isLiveNow === true;
-  const playerVideoId = playerResponse && playerResponse.videoDetails && playerResponse.videoDetails.videoId;
-  if (playerLive && typeof playerVideoId === 'string' && /^[a-zA-Z0-9_-]{11}$/.test(playerVideoId)) {
-    return playerVideoId;
-  }
-
-  const initialData = parseAssignedJson(html, 'ytInitialData');
-  return findLiveVideoId(initialData);
+  return extractLiveVideoIds(html, finalUrl)[0] || null;
 }
 
 async function discoverLiveVideoId(channelId, options) {
@@ -120,7 +120,6 @@ async function discoverLiveVideoId(channelId, options) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   const url = 'https://www.youtube.com/channel/' + encodeURIComponent(channelId) + '/live?hl=en';
-
   try {
     const response = await fetchImpl(url, {
       method: 'GET',
@@ -134,7 +133,19 @@ async function discoverLiveVideoId(channelId, options) {
     });
     if (!response.ok) throw new Error('Strona YouTube /live zwróciła HTTP ' + response.status + '.');
     const html = await response.text();
-    return extractLiveVideoId(html, response.url || url);
+    const candidates = extractLiveVideoIds(html, response.url || url);
+    if (!candidates.length) return null;
+
+    // Redirect i HTML są wyłącznie źródłami kandydatów. Nigdy nie zwracamy
+    // kandydata bez jawnego potwierdzenia właściciela i aktywnego czatu.
+    if (typeof opts.verifyVideo !== 'function') {
+      throw new TypeError('discoverLiveVideoId wymaga funkcji verifyVideo.');
+    }
+    for (const videoId of candidates) {
+      const verified = await opts.verifyVideo(videoId, channelId);
+      if (verified) return videoId;
+    }
+    return null;
   } catch (error) {
     if (error && error.name === 'AbortError') {
       throw new Error('Timeout ' + timeoutMs + ' ms podczas pobierania strony YouTube /live.');
@@ -148,6 +159,9 @@ async function discoverLiveVideoId(channelId, options) {
 module.exports = {
   discoverLiveVideoId,
   extractLiveVideoId,
+  extractLiveVideoIds,
   findLiveVideoId,
+  findLiveVideoIds,
+  isVerifiedLiveVideo,
   parseAssignedJson,
 };
