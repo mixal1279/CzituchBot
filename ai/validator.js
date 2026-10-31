@@ -275,7 +275,7 @@ function resolveClaimSourceIds(blocks, sourceIds, quote) {
     return block && quoteExists(block.content, quote);
   });
   if (hasQuotedSource) return ids;
-  if (/(?:\\[\\s*(?:…|\\.\\.\\.)\\s*\\]|…|\\.\\.\\.)/u.test(String(quote || ''))) return ids;
+  if (/(?:\[\s*(?:…|\.\.\.)\s*\]|…|\.\.\.)/u.test(String(quote || ''))) return ids;
   const matches = blocks.filter(block => quoteExists(block.content, quote));
   return matches.length === 1 ? [matches[0].sourceId] : ids;
 }
