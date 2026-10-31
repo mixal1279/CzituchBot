@@ -103,8 +103,6 @@ function extractLiveVideoIds(html, finalUrl) {
     if (VIDEO_ID_RE.test(id || '') && ids.size < MAX_VIDEO_CANDIDATES) ids.add(id);
   };
 
-  // Redirects and page metadata are candidate sources only. Every candidate
-  // is subsequently checked against the requested channel via YouTube Data API.
   add(videoIdFromUrl(finalUrl));
 
   const playerResponse = parseAssignedJson(source, 'ytInitialPlayerResponse');
@@ -116,9 +114,8 @@ function extractLiveVideoIds(html, finalUrl) {
   const initialData = parseAssignedJson(source, 'ytInitialData');
   for (const id of findLiveVideoIds(initialData, 20)) add(id);
 
-  // YouTube changes its renderer/badge schema frequently. Also collect a
-  // bounded set of videoId fields even when no recognizable LIVE badge exists.
-  // False positives are safe: Data API ownership + active chat checks reject them.
+  // Broader fallback: renderer and badge schemas change. All IDs are only
+  // candidates; Data API ownership and active-chat checks remain mandatory.
   for (const id of findVideoIds(initialData, MAX_VIDEO_CANDIDATES)) add(id);
   for (const match of source.matchAll(/"videoId"\s*:\s*"([a-zA-Z0-9_-]{11})"/g)) {
     add(match[1]);
@@ -128,8 +125,20 @@ function extractLiveVideoIds(html, finalUrl) {
   return [...ids];
 }
 
+// Backward-compatible strict helper: unlike discoverLiveVideoId, this only
+// returns IDs with an explicit LIVE signal (or a direct /live redirect).
 function extractLiveVideoId(html, finalUrl) {
-  return extractLiveVideoIds(html, finalUrl)[0] || null;
+  const redirected = videoIdFromUrl(finalUrl);
+  if (redirected) return redirected;
+  const source = String(html || '');
+  const playerResponse = parseAssignedJson(source, 'ytInitialPlayerResponse');
+  const playerVideoId = playerResponse?.videoDetails?.videoId;
+  if (
+    playerResponse?.microformat?.playerMicroformatRenderer?.liveBroadcastDetails?.isLiveNow === true &&
+    VIDEO_ID_RE.test(playerVideoId || '')
+  ) return playerVideoId;
+  const initialData = parseAssignedJson(source, 'ytInitialData');
+  return findLiveVideoId(initialData);
 }
 
 async function discoverLiveVideoId(channelId, options) {
