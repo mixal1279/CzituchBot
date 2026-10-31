@@ -86,7 +86,7 @@ test('copied Dragonborn quote accepts a faithful Polish identity claim', () => {
 test('copied Dark Brotherhood quote accepts a source-grounded faction and assassination claim', () => {
   const quote = 'The Dragonborn was said to have joined the Dark Brotherhood, taking contracts assassinating various denizens of Skyrim';
   const result = spojnoscTlumaczeniaClaimu(
-    'Mówiono, że Dragonborn dołączył do Dark Brotherhood, przyjmując kontrakty na zabójstwo różnych mieszkańców Skyrim.',
+    'Dragonborn miał dołączyć do Dark Brotherhood, przyjmując kontrakty na zabójstwo różnych mieszkańców Skyrim.',
     quote,
     { evidenceQuote: quote },
   );
