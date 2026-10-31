@@ -12,7 +12,7 @@ delete process.env.AI_VALIDATOR_BREAKER_MS;
 const { __validatorTestHooks: hooks } = require('../czituch_bot');
 const { createAIRequestContext } = require('../ai/requestContext');
 const { normalizeGroqBaseUrl } = require('../ai/provider-runtime');
-const { resetProviderQuotaCooldowns, quotaCooldownMsFromError, shouldOpenQuotaCircuit } = require('../ai/fallback');
+const { resetProviderQuotaCooldowns, quotaCooldownMsFromError, shouldOpenQuotaCircuit, isProviderQuotaBlocked } = require('../ai/fallback');
 const { GROQ_VALIDATOR_JSON_SCHEMA, buildGroqValidatorResponseFormat, buildOpenRouterValidatorResponseFormat } = require('../ai/validator');
 
 const EVIDENCE = [
@@ -858,3 +858,46 @@ test('xKiro is attempted below the former 14.5s hard threshold when the calculat
   assert.equal(result.status, 'accepted');
 });
 
+
+
+test('xKiro auth failures open a provider-scoped cooldown and are not retried on each request', async () => {
+  resetProviderQuotaCooldowns();
+  hooks.KONFIGURACJA.xkiroKey = 'test-xkiro-key';
+  hooks.KONFIGURACJA.xkiroModel = 'qwen/qwen3.5-397b-a17b:free';
+  let calls = 0;
+  mockFetch(async () => {
+    calls += 1;
+    return jsonResponse({ error: { message: 'invalid API key', type: 'authentication_error', code: 'invalid_api_key' } }, 401);
+  });
+
+  const first = await hooks.walidujOdpowiedzXKiro('generic', QUESTION, ANSWER, EVIDENCE, 'test-xkiro-auth-cooldown');
+  assert.equal(first.status, 'unavailable');
+  assert.equal(first.statusCode, 401);
+  assert.equal(first.quota, false);
+  assert.equal(isProviderQuotaBlocked('xkiro:qwen/qwen3.5-397b-a17b:free'), true);
+
+  const second = await hooks.walidujOdpowiedzXKiro('generic', QUESTION, ANSWER, EVIDENCE, 'test-xkiro-auth-cooldown-repeat');
+  assert.equal(second.skipped, true);
+  assert.equal(calls, 1);
+});
+
+test('OpenRouter empty successful responses cool down only the selected model endpoint', async () => {
+  resetProviderQuotaCooldowns();
+  hooks.KONFIGURACJA.openrouterKey = 'test-openrouter-key';
+  hooks.KONFIGURACJA.openrouterValidatorModel = 'openai/gpt-oss-20b';
+  let calls = 0;
+  mockFetch(async () => {
+    calls += 1;
+    return jsonResponse({ model: 'openai/gpt-oss-20b', choices: [{ finish_reason: 'stop', message: { content: '' } }] });
+  });
+
+  const first = await hooks.walidujOdpowiedzOpenRouter('generic', QUESTION, ANSWER, EVIDENCE, 'test-openrouter-empty-cooldown');
+  assert.equal(first.status, 'unavailable');
+  assert.match(first.reason, /pusty content/);
+  assert.equal(isProviderQuotaBlocked('openrouter:openai/gpt-oss-20b'), true);
+  assert.equal(isProviderQuotaBlocked('openrouter:openai/gpt-oss-120b'), false);
+
+  const second = await hooks.walidujOdpowiedzOpenRouter('generic', QUESTION, ANSWER, EVIDENCE, 'test-openrouter-empty-cooldown-repeat');
+  assert.equal(second.skipped, true);
+  assert.equal(calls, 1);
+});
