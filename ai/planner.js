@@ -71,7 +71,7 @@ function buildRetrievalQueries(question, routing = {}, options = {}) {
   } else if (isWhenQuestion) {
     const gtaMeetingContext = /\b(?:gta\s*(?:v|5)|grand theft auto v|michael|trevor)\b/iu.test([original, entity, game].join(' '));
     const timelineHints = gtaMeetingContext
-      ? 'Michael Townley Trevor Philips first encounter Fame or Shame mission Prologue nine years later timeline'
+      ? 'story timeline quest order arrival Michael Townley Trevor Philips first encounter Fame or Shame mission Prologue nine years later'
       : 'story timeline quest order arrival';
     dodajUnikalneQuery(queries, [entity, game, timelineHints].filter(Boolean).join(' '));
   } else if (isWhoQuestion) {
@@ -91,7 +91,7 @@ function buildRetrievalQueries(question, routing = {}, options = {}) {
     const causalHints = portalCoreTransferContext
       ? 'cause reason motivation event core transfer lore'
       : astarionContext
-        ? 'Astarion Cazador Szarr vampire spawn escaped master freedom why joins party motivation backstory'
+        ? 'cause reason motivation story conflict Astarion Cazador Szarr vampire spawn escaped master freedom why joins party backstory'
         : 'cause reason motivation story conflict lore backstory relationship antagonist escape joins party';
     dodajUnikalneQuery(queries, [entity, game, causalHints].filter(Boolean).join(' '));
     if (routing?.is_lore && /(?:astarion|wheatley|glados|chell|arthur|geralt|ciri|johnny|shadowheart|karlach|gale|dragonborn)/iu.test([original, entity].join(' '))) {
@@ -102,7 +102,7 @@ function buildRetrievalQueries(question, routing = {}, options = {}) {
   } else if (routing?.is_gameplay) {
     const minecraftElytraContext = /\b(?:elytra|elytr[ęy])\b/iu.test(original) && /\bminecraft\b/iu.test([original, game].join(' '));
     const gameplayHints = minecraftElytraContext
-      ? 'Minecraft elytra obtain Survival mode End ship End city treasure room shulker how to get'
+      ? 'gameplay strategy mechanics guide walkthrough Minecraft elytra obtain Survival mode End ship End city treasure room shulker how to get'
       : 'gameplay strategy mechanics guide walkthrough';
     dodajUnikalneQuery(queries, [entity || original, game, gameplayHints].filter(Boolean).join(' '));
   } else if (routing?.freshness === 'live') {
