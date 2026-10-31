@@ -55,6 +55,30 @@ test('does not replace a valid source ID when its source contains the quote', ()
   );
 });
 
+test('does not rebind quotes containing plain or bracketed ellipses', () => {
+  const quotes = [
+    'The exact phrase ... remains incomplete.',
+    'The exact phrase [...] remains incomplete.',
+    'The exact phrase … remains incomplete.',
+    'The exact phrase […] remains incomplete.',
+  ];
+  for (const quote of quotes) {
+    const evidence = [
+      '[SOURCE 1]',
+      'TYTUŁ: unrelated page',
+      'TREŚĆ: This page describes another character.',
+      '[SOURCE 2]',
+      'TYTUŁ: page with an ellipsis quote',
+      'TREŚĆ: ' + quote,
+    ].join('\n');
+    assert.deepEqual(
+      resolveClaimSourceIds(parseEvidenceBlocks(evidence), ['SOURCE 8'], quote),
+      ['SOURCE 8'],
+      'must not rebind synthetic ellipsis quote: ' + quote,
+    );
+  }
+});
+
 test('localized Last Dragonborn title is recognized as the same proper name', () => {
   assert.equal(czyNazwaWlasnaWystepuje('last dragonborn', 'The Last Dragonborn was foretold.'), true);
   assert.equal(czyNazwaWlasnaWystepuje('last dragonborn', 'Ostatnim Dragonbornem'), true);
