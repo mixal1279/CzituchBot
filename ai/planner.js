@@ -91,7 +91,7 @@ function buildRetrievalQueries(question, routing = {}, options = {}) {
     const causalHints = portalCoreTransferContext
       ? 'cause reason motivation event core transfer lore'
       : astarionContext
-        ? 'cause reason motivation story conflict Astarion Cazador Szarr vampire spawn escaped master freedom why joins party backstory'
+        ? 'cause reason motivation story conflict Astarion Cazador Szarr vampire spawn escaped master freedom why joins party backstory seeking favour with player character protection from Cazador'
         : 'cause reason motivation story conflict lore backstory relationship antagonist escape joins party';
     dodajUnikalneQuery(queries, [entity, game, causalHints].filter(Boolean).join(' '));
     if (routing?.is_lore && /(?:astarion|wheatley|glados|chell|arthur|geralt|ciri|johnny|shadowheart|karlach|gale|dragonborn)/iu.test([original, entity].join(' '))) {
