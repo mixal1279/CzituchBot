@@ -2232,8 +2232,8 @@ async function walidujOdpowiedzXKiro(persona, pytanie, odpowiedz, dane, requestI
   // OpenRouter remains the next fallback after xKiro, so xKiro must always
   // leave enough time for that final validator. The validator counter alone
   // does not mean xKiro is the last provider in the fallback chain.
-  // xKiro ma wysoką latencję; timeout 4,5 s jest ograniczany przez pozostały budżet.
-  // Nie pomijamy go na podstawie sztywnego progu, jeśli krótsza próba mieści się w rezerwie.
+  // xKiro ma wysoką latencję; minimalny czas sensownej próby to 6 s.
+  // Nie pomijamy go, jeśli pełna próba mieści się w rezerwie budżetu requestu.
   const configuredTimeoutMs = Number(process.env.AI_XKIRO_VALIDATOR_TIMEOUT_MS);
   // xKiro needs at least six seconds to return a useful verdict. The outer
   // preflight uses the same floor; keep this transport-level deadline aligned
