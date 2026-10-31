@@ -97,13 +97,24 @@ test('primary generation honors AI_GENERATOR_MODEL and checks quota cooldown bef
   assert.match(body, /allowPrimary \? classifyFailure\(result\.error \|\| ''\) : 'validator_rejection'/);
 });
 
-test('validator provider preflight uses production timeout budgets', () => {
+test('validator provider preflight covers Gemini, xKiro, OpenRouter and Groq production budgets', () => {
   const source = read('scripts/validator-providers-preflight.js');
-  assert.match(source, /xKiro:\s*Number\(process\.env\.AI_XKIRO_VALIDATOR_TIMEOUT_MS\)\s*\|\|\s*4500/);
-  assert.match(source, /OpenRouter:\s*3000/);
+  assert.match(source, /Gemini:\s*12000/);
+  assert.match(source, /xKiro:\s*Math\.max\(6000, Number\(process\.env\.AI_XKIRO_VALIDATOR_TIMEOUT_MS\) \|\| 6000\)/);
+  assert.match(source, /OpenRouter:\s*Math\.max\(4000, Number\(process\.env\.AI_OPENROUTER_VALIDATOR_TIMEOUT_MS\) \|\| 6000\)/);
   assert.match(source, /Groq:\s*3000/);
+  assert.match(source, /function geminiProbe\(/);
+  assert.match(source, /buildGeminiValidatorGenerationConfig/);
   assert.match(source, /result\.ms > productionTimeoutMs/);
   assert.doesNotMatch(source, /PROD_TIMEOUT_MS\s*=\s*9000/);
+});
+
+test('live benchmark preflights validator providers before starting a ten-case sample', () => {
+  const workflow = read('.github/workflows/ai-live-benchmark.yml');
+  assert.match(workflow, /AI_BENCHMARK_LIMIT:\s*"10"/);
+  assert.match(workflow, /PREFLIGHT_STRICT:\s*"1"/);
+  assert.match(workflow, /node scripts\/validator-providers-preflight\.js/);
+  assert.ok(workflow.indexOf('Preflight validator providers') < workflow.indexOf('Run 10-case live benchmark'));
 });
 
 test('live benchmark is manual-only so pushes do not spend API quota', () => {
