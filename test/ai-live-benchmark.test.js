@@ -527,3 +527,22 @@ test('benchmark outcomes classify Gemini safety blocks separately', () => {
     validatorResults: [{ provider: 'gemini', status: 'unavailable', safetyBlocked: true, reason: 'finishReason=PROHIBITED_CONTENT' }],
   }), 'provider_safety_block');
 });
+
+test('all-validator Gemini safety blocks invalidate quality comparison without reporting an outage', () => {
+  const benchmark = JSON.parse(fs.readFileSync(path.join(__dirname, 'ai-benchmark.json'), 'utf8'));
+  const selected = stratifiedCases(benchmark.cases, 5, 113);
+  const diagnostics = buildBenchmarkDiagnostics([{
+    finalStatus: 'inconclusive',
+    generationAttempts: [{ provider: 'groq', model: 'openai/gpt-oss-20b', status: 'success' }],
+    validatorResults: [
+      { provider: 'gemini', model: 'gemini-3.5-flash-lite', status: 'unavailable', safetyBlocked: true, technicalError: false, reason: 'finishReason=PROHIBITED_CONTENT' },
+    ],
+    timingTrace: [],
+  }], benchmark.cases, selected);
+
+  assert.equal(diagnostics.validatorSafetyBlocks, 1);
+  assert.equal(diagnostics.validatorVerdictCalls, 0);
+  assert.equal(diagnostics.providerOutage, false);
+  assert.equal(diagnostics.qualityComparable, false);
+  assert.ok(diagnostics.qualityDegradationReasons.includes('all_validator_calls_safety_blocked'));
+});
