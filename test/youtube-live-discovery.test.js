@@ -62,8 +62,8 @@ test('obsługuje bezpośredni URL /live/VIDEO_ID', () => {
 
 test('weryfikuje kandydatów po kolei i wybiera dopiero poprawny kanał', async () => {
   const html = assigned('ytInitialData', {
-    first: liveRenderer(OTHER_VIDEO_ID),
-    second: liveRenderer(VIDEO_ID),
+    first: liveRenderer(VIDEO_ID),
+    second: liveRenderer(OTHER_VIDEO_ID),
   });
   const checked = [];
   const found = await discoverLiveVideoId(CHANNEL_ID, {
