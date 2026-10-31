@@ -6955,32 +6955,44 @@ async function pobierzLiveChatId(nazwaKanalu) {
     console.log(`[YouTube] ✅ Kanał (dokładne dopasowanie, zapisano w cache): "${nazwaWyswietlana}" (${channelId})`);
   }
 
-  // /live jest publiczną stroną kanału. Jej HTML wskazuje bieżący materiał LIVE,
-  // dzięki czemu nie wykonujemy kosztownego search.list przy każdym sprawdzeniu.
-  const videoId = await discoverLiveVideoId(channelId);
-  if (!videoId) {
-    throw new Error(`Brak aktywnego streamu na kanale "${nazwaWyswietlana}".`);
+  // Publiczna strona /live dostarcza kandydatów, ale żaden redirect/renderer
+  // nie jest uznawany za prawdę bez potwierdzenia w oficjalnym YouTube Data API.
+  // Kandydaci są sprawdzani po kolei; obcy film nie blokuje poprawnego wyniku niżej.
+  let verifiedVideo = null;
+  const videoId = await discoverLiveVideoId(channelId, {
+    verifyVideo: async candidateId => {
+      const videoRes = await zGoogleRetry(
+        () => youtube.videos.list({ part: ['snippet', 'liveStreamingDetails'], id: [candidateId] }),
+        'weryfikacja kandydata LIVE'
+      );
+      const candidate = videoRes.data.items?.[0];
+      if (!candidate) {
+        console.warn(`[YouTube] Odrzucono kandydata ${candidateId}: brak filmu w Data API.`);
+        return false;
+      }
+      // Brak channelId również oznacza odrzucenie: nie wolno dopuścić do
+      // podłączenia czatu, którego właściciela nie da się jednoznacznie ustalić.
+      if (candidate.snippet?.channelId !== channelId) {
+        console.warn(`[YouTube] Odrzucono kandydata ${candidateId}: channelId=${candidate.snippet?.channelId || 'brak'}, oczekiwano ${channelId}.`);
+        return false;
+      }
+      const candidateChatId = candidate.liveStreamingDetails?.activeLiveChatId;
+      if (!candidateChatId) {
+        console.log(`[YouTube] Kandydat ${candidateId} należy do kanału, ale nie ma aktywnego Live Chat ID.`);
+        return false;
+      }
+      verifiedVideo = candidate;
+      return true;
+    },
+  });
+  if (!videoId || !verifiedVideo) {
+    throw new Error(`Brak potwierdzonej transmisji LIVE z aktywnym czatem na kanale "${nazwaWyswietlana}".`);
   }
-  console.log(`[YouTube] 🔎 Strona LIVE wskazała videoId: ${videoId}`);
-
-  // Tanie, oficjalne potwierdzenie: film musi należeć do sprawdzanego kanału
-  // i udostępniać aktywny Live Chat ID.
-  const videoRes = await zGoogleRetry(
-    () => youtube.videos.list({ part: ['snippet', 'liveStreamingDetails'], id: [videoId] }),
-    'weryfikacja wykrytej transmisji'
-  );
-  const video = videoRes.data.items?.[0];
-  if (!video) throw new Error(`YouTube nie zwrócił danych dla wykrytego videoId ${videoId}.`);
-  if (video.snippet?.channelId && video.snippet.channelId !== channelId) {
-    throw new Error(`Wykryty film ${videoId} należy do innego kanału (${video.snippet.channelId}), oczekiwano ${channelId}.`);
-  }
+  const video = verifiedVideo;
+  console.log(`[YouTube] ✅ Potwierdzono LIVE kanału ${channelId}: ${videoId}`);
 
   const liveDetails = video.liveStreamingDetails;
-  const chatId = liveDetails?.activeLiveChatId;
-  if (!chatId) {
-    const status = video.snippet?.liveBroadcastContent || 'nieznany';
-    throw new Error(`Wykryto "${video.snippet?.title || videoId}", ale YouTube nie udostępnia activeLiveChatId (status: ${status}; możliwy brak czatu lub start transmisji).`);
-  }
+  const chatId = liveDetails.activeLiveChatId;
 
   const ytStart = liveDetails.actualStartTime;
   const youtubeKanalKey = nazwaKanalu.toLowerCase();
