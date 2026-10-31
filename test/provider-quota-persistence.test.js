@@ -20,6 +20,7 @@ test('provider quota cooldowns restore from and persist to the runtime state sto
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(records.get('ai_quota:provider_cooldowns')?.version, 1);
 
+  fallback.configureProviderQuotaPersistence(null);
   fallback.resetProviderQuotaCooldowns();
   await fallback.configureProviderQuotaPersistence(store);
   assert.equal(fallback.isProviderQuotaBlocked('gemini:gemini-3.8-flash'), true);
