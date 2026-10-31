@@ -150,6 +150,17 @@ test('wymaga zgodnego właściciela i aktywnego Live Chat ID', () => {
   }, CHANNEL_ID), false);
 });
 
+test('odrzuca transmisję bez statusu live nawet z aktywnym chat ID', () => {
+  assert.equal(isVerifiedLiveVideo({
+    snippet: { channelId: CHANNEL_ID, liveBroadcastContent: 'none' },
+    liveStreamingDetails: { activeLiveChatId: 'chat-123' },
+  }, CHANNEL_ID), false);
+  assert.equal(isVerifiedLiveVideo({
+    snippet: { channelId: CHANNEL_ID, liveBroadcastContent: 'upcoming' },
+    liveStreamingDetails: { activeLiveChatId: 'chat-123' },
+  }, CHANNEL_ID), false);
+});
+
 test('nie pozwala uruchomić discovery bez walidatora Data API', async () => {
   await assert.rejects(() => discoverLiveVideoId(CHANNEL_ID, {
     fetchImpl: async url => ({
