@@ -79,7 +79,7 @@ jobs:
             const d = r.diagnostics || {};
             const lines = [
               "## AI live benchmark",
-              r.valid === false ? "**WYNIK NIEWAŻNY: niedostępność dostawcy: " + ((d.outageProviders || []).join(", ") || "nieustalony") + ".**" : "",
+              r.valid === false ? "**WYNIK NIEWAŻNY / NIEPORÓWNYWALNY: " + [...(d.outageProviders || []).map(x => "outage=" + x), ...(d.qualityDegradationReasons || [])].join(", ").replace(/^$/, "niewystarczająca dostępność providerów") + ".**" : "",
               "- przypadków: " + r.total + " (ziarno " + (r.seed || 0) + ")",
               "- odpowiedzi: " + r.answeredAccuracy + ", kompletność: " + r.completenessAccuracy + ", factual: " + r.factualAccuracy,
               "- claim-source support: ścisłe=" + r.claimSupportPassRate + ", użyteczne=" + r.claimSupportUsableRate,
