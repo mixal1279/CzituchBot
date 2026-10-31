@@ -66,7 +66,7 @@ function buildAnswerPlan(question, routing = {}) {
   // of a trailing \b to correctly handle the trwać alternative as well as the
   // ASCII-terminated ones.
   const minecraftElytraContext = /\b(?:elytra|elytr\p{L}*)\b/iu.test(q)
-    && /\\bminecraft\\b/iu.test([q, routing.game, routing.entity].filter(Boolean).join(' '));
+    && /\bminecraft\b/iu.test([q, routing.game, routing.entity].filter(Boolean).join(' '));
   const quantityMayBeVariable = slots.has('quantity')
     && /\b(?:ile|jak\s+d[łl]ugo|how\s+long)\b/i.test(q)
     && /\b(?:trwa|trwać|trwac|duration|lasts?|takes?)(?!\w)/i.test(q);
