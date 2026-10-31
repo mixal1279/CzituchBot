@@ -119,4 +119,4 @@ assert.ok(trevorWhenQueries.some(query => /Fame or Shame.*Prologue/i.test(query)
 const elytraHowQueries = buildRetrievalQueries('Jak zdobyć elytrę?', {
   needs_web: true, is_gameplay: true, entity: 'Minecraft', game: 'Minecraft',
 }, { maxQueries: 4 });
-assert.ok(elytraHowQueries.some(query => /elytra obtain Survival mode End ship/i.test(query)));
+assert.ok(elytraHowQueries.some(query => /elytra obtain Survival mode End ship/i.test(query)), JSON.stringify(elytraHowQueries));
