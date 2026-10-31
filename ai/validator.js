@@ -286,6 +286,7 @@ function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '', opt
   }
   const quote = evidenceQuote.trim();
   const blocks = parseEvidenceBlocks(dane);
+  sourceIds = resolveClaimSourceIds(blocks, sourceIds, quote);
   const nameOracle = options.nameOracle instanceof Set ? options.nameOracle : zbudujWyroczniaNazw(blocks);
   // Only exact quotes from one of the claim's own sources can contribute local
   // context to translation checks. This supports a relative clause like
