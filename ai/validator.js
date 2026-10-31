@@ -268,6 +268,18 @@ function normalizujIdZrodla(value) {
   return raw;
 }
 
+function resolveClaimSourceIds(blocks, sourceIds, quote) {
+  const ids = Array.isArray(sourceIds) ? sourceIds : [];
+  const hasQuotedSource = ids.some(id => {
+    const block = blocks.find(item => normalizujIdZrodla(item.sourceId) === normalizujIdZrodla(id));
+    return block && quoteExists(block.content, quote);
+  });
+  if (hasQuotedSource) return ids;
+  if (/(?:\\[\\s*(?:…|\\.\\.\\.)\\s*\\]|…|\\.\\.\\.)/u.test(String(quote || ''))) return ids;
+  const matches = blocks.filter(block => quoteExists(block.content, quote));
+  return matches.length === 1 ? [matches[0].sourceId] : ids;
+}
+
 function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '', options = {}) {
   if (!Array.isArray(sourceIds) || !sourceIds.length || typeof evidenceQuote !== 'string') {
     return { ok: false, reason: 'brak poprawnego source_id lub evidence_quote' };
