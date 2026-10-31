@@ -40,3 +40,40 @@ jobs:
       uses: github/codeql-action/upload-sarif@v3
       with:
         sarif_file: results.sarif
+    - name: Set up Python for JSON report
+      uses: actions/setup-python@v6
+      with:
+        python-version: '3.12'
+    - name: Generate and validate njsscan JSON report
+      shell: bash
+      run: |
+        python -m pip install --disable-pip-version-check njsscan==0.4.3
+        set +e
+        njsscan --json --output njsscan-report.json .
+        scan_status=$?
+        set -e
+        if [[ ! -s njsscan-report.json ]]; then
+          echo "::error::njsscan did not produce a JSON report (exit code: $scan_status)"
+          exit 1
+        fi
+        python - <<'PY'
+        import json
+        from pathlib import Path
+        report = json.loads(Path('njsscan-report.json').read_text(encoding='utf-8'))
+        errors = report.get('errors', [])
+        nodejs = report.get('nodejs', {})
+        findings = sum(len(rule.get('files', [])) for rule in nodejs.values())
+        print(f"njsscan JSON valid; findings={findings}; scanner_errors={len(errors)}")
+        with open('njsscan-summary.txt', 'w', encoding='utf-8') as output:
+            output.write(f"findings={findings}\\nscanner_errors={len(errors)}\\nexit_code={scan_status}\\n")
+        PY
+    - name: Upload njsscan JSON artifact
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: njsscan-json-report
+        path: |
+          njsscan-report.json
+          njsscan-summary.txt
+        if-no-files-found: error
+        retention-days: 14
