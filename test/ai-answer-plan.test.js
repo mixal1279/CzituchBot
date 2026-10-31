@@ -302,6 +302,14 @@ test('retrieval planner targets character identity for who questions', () => {
   assert.ok(queries.some(q => /character identity background role companion/i.test(q)), JSON.stringify(queries));
 });
 
+test('Astarion why retrieval targets the explicit Cazador protection motive', () => {
+  const queries = buildRetrievalQueries('Dlaczego Astarion dołączył do drużyny?', {
+    intent: 'web_fact', is_lore: true, entity: 'Astarion', game: "Baldur's Gate 3", needs_web: true,
+  });
+  assert.ok(queries.some(q => /Astarion Cazador Szarr vampire spawn/i.test(q)), JSON.stringify(queries));
+  assert.ok(queries.some(q => /protection|favour|freedom/i.test(q)), JSON.stringify(queries));
+});
+
 test('retrieval planner targets Portal core-transfer lore only in its own game context', () => {
   const portalQueries = buildRetrievalQueries('Dlaczego Wheatley przejął kontrolę nad GLaDOS?', {
     intent: 'web_fact', is_lore: true, entity: 'Wheatley', game: 'Portal 2', needs_web: true,
