@@ -345,6 +345,9 @@ function shouldBlockProviderQuotaWide(provider, error) {
   const code = String(error?.code || error?.type || '').toLowerCase();
   const metadata = error?.metadata && typeof error.metadata === 'object' ? error.metadata : {};
   const limitSource = String(metadata.limit_source || error?.limit_source || '').toLowerCase();
+  const httpStatus = Number(error?.status ?? error?.statusCode ?? error?.response?.status ?? 0);
+  const paymentOrCreditExhaustion = httpStatus === 402
+    && !(providerName === 'openrouter' && /openrouter_in_flight_budget/i.test(message) && /retry[- ]after/i.test(message));
 
   // A model's own TPM/TPD quota must not suppress sibling models. Shared
   // organization/project/account limits do. Provider-specific daily free-tier
@@ -358,7 +361,7 @@ function shouldBlockProviderQuotaWide(provider, error) {
     && /tokens?\s*(?:per|\/)\s*(?:minute|day)|\bTP[MD]\b/i.test(message);
   const providerSharedDaily = providerName === 'gemini'
     && /(?:project|account).{0,40}(?:daily|quota|limit)|(?:daily|quota|limit).{0,40}(?:project|account)/i.test(message);
-  return explicitAccountScope || dailySharedCode || sharedTokenWindow || providerSharedDaily;
+  return paymentOrCreditExhaustion || explicitAccountScope || dailySharedCode || sharedTokenWindow || providerSharedDaily;
 }
 
 function isProviderQuotaBlocked(provider, now = Date.now()) {
