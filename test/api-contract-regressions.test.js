@@ -114,7 +114,7 @@ test('validator provider preflight covers Gemini, xKiro, OpenRouter and Groq pro
 
 test('Gemini orchestration and transport both allow the twelve-second validator budget', () => {
   const bot = read('czituch_bot.js');
-  assert.ok((bot.match(/maxTimeoutMs:\\s*12000/g) || []).length >= 2);
+  assert.ok((bot.match(/maxTimeoutMs:\s*12000/g) || []).length >= 2);
 });
 
 test('OpenRouter and xKiro validator deadlines use the shared production budget floors', () => {
