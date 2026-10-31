@@ -11,9 +11,16 @@ test('slow optional xKiro is reported but does not block strict benchmark prefli
   }), false);
 });
 
-test('xKiro transport, HTTP and malformed response failures remain blocking', () => {
+test('xKiro preflight deadline timeout is degraded optional capacity, not a strict blocker', () => {
+  for (const verdict of ['TIMEOUT >20000 ms', 'TIMEOUT >15000 ms']) {
+    assert.equal(isBlockingPreflightFailure({ provider: 'xKiro', verdict }), false, verdict);
+  }
+});
+
+test('xKiro explicit network, HTTP and malformed response failures remain blocking', () => {
   for (const verdict of [
-    'TIMEOUT >20000 ms',
+    'BŁĄD SIECI: socket hang up',
+    'BŁĄD HTTP 401: unauthorized',
     'BŁĄD HTTP 429: rate limit',
     'NIEPOPRAWNY JSON',
     'PUSTY content',
