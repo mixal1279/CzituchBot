@@ -128,7 +128,7 @@ async function discoverLiveVideoId(channelId, options) {
 
     // Redirect i HTML są wyłącznie źródłami kandydatów. Produkcja przekazuje
     // verifyVideo, które potwierdza właściciela i aktywny Live Chat przez Data API.
-    if (typeof opts.verifyVideo !== 'function) return candidates[0];
+    if (typeof opts.verifyVideo !== 'function') return candidates[0];
     for (const videoId of candidates) {
       const verified = await opts.verifyVideo(videoId, channelId);
       if (verified) return videoId;
