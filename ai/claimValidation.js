@@ -178,15 +178,19 @@ const TYTULY_GIER = (() => {
       if (!tokens.length || key.replace(/ /g, '').length < 5 || seen.has(key)) continue;
       seen.add(key);
       const last = tokens[tokens.length - 1];
-      const hasEdition = tokens.length > 1 && /^\d{1,4}$/u.test(last);
+      const romanEdition = /^(?:II|III|IV|V|VI|VII|VIII|IX|X|XI|XII|XIII|XIV|XV|XVI)$/u.test(last);
+      const hasEdition = tokens.length > 1 && (/^\d{1,4}$/u.test(last) || romanEdition);
+      const edition = hasEdition
+        ? (/^\d+$/u.test(last) ? String(Number(last)) : String(rzymskieNaArabskie(last) ?? last))
+        : null;
       out.push({
         re: new RegExp(`(?<![\\p{L}\\p{N}])${tokens.map(esc).join(sep)}(?![\\p{L}\\p{N}])`, 'giu'),
-        hasDigit: /\d/u.test(key),
-        edition: hasEdition ? last : null,
+        hasDigit: /\d/u.test(key) || romanEdition,
+        edition,
         // Ta sama seria z innym numerem w dowodzie („Fallout 3” przy claimie o „Fallout 4”)
         // oznacza, że numerał jest realnym rozróżnikiem i nie wolno go zwalniać.
         sibling: hasEdition
-          ? new RegExp(`(?<![\\p{L}\\p{N}])${tokens.slice(0, -1).map(esc).join(sep)}${sep}(\\d{1,4})(?![\\p{L}\\p{N}])`, 'giu')
+          ? new RegExp(`(?<![\\p{L}\\p{N}])${tokens.slice(0, -1).map(esc).join(sep)}${sep}(\\d{1,4}|II|III|IV|V|VI|VII|VIII|IX|X|XI|XII|XIII|XIV|XV|XVI)(?![\\p{L}\\p{N}])`, 'giu')
           : null,
       });
     }
@@ -198,7 +202,12 @@ function usunTytulyGierZLiczb(claimText, evidenceText = '') {
   const evidence = String(evidenceText || '');
   for (const title of TYTULY_GIER) {
     if (!title.hasDigit) continue;
-    if (title.sibling && [...evidence.matchAll(title.sibling)].some(match => match[1] !== title.edition)) continue;
+    if (title.sibling && [...evidence.matchAll(title.sibling)].some(match => {
+      const sibling = /^\d+$/u.test(match[1])
+        ? String(Number(match[1]))
+        : String(rzymskieNaArabskie(match[1]) ?? match[1]);
+      return sibling !== title.edition;
+    })) continue;
     out = out.replace(title.re, ' ');
   }
   return out;
