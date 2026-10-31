@@ -181,6 +181,29 @@ test('Tavily Extract: za flagą podmienia streszczenie Gemini treścią strony',
   assert.equal(offCalls.length, 1);
 });
 
+test('Tavily Extract rejects insecure and local target URLs before making the request', async () => {
+  const calls = [];
+  const result = await web.extractTavilyPages({
+    apiKey: 'test-key',
+    urls: [
+      'http://example.com/insecure',
+      'https://localhost/admin',
+      'https://127.0.0.1/private',
+      'https://service.internal/metadata',
+      'https://user:pass@example.com/private',
+      'https://example.com:8443/nonstandard-port',
+      'https://minecraft.wiki/w/Creeper',
+    ],
+    fetchFn: async (url, options) => {
+      calls.push({ url, body: JSON.parse(options.body) });
+      return { ok: true, status: 200, json: async () => ({ results: [] }) };
+    },
+  });
+  assert.equal(result.size, 0);
+  assert.equal(calls.length, 1);
+  assert.deepEqual(calls[0].body.urls, ['https://minecraft.wiki/w/Creeper']);
+});
+
 test('klucz Gemini jest w nagłówku, nie w adresie URL', async () => {
   const calls = [];
   await web.searchGeminiWeb({ apiKey: 'SECRET-KEY', query: 'creeper', fetchFn: geminiFetch(calls) });
