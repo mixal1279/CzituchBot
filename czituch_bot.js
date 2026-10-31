@@ -80,7 +80,7 @@ const { resolveGameEntity, scoreExternalGameCandidate, externalGameCandidateMatc
 const { extractExplicitUserMemories, mergeMemoryRecords, buildVerifiedMemoryContext, pruneExpiredMemories } = require('./ai/memory');
 const { parseMemoryCommand, forgetMemories, describeMemories } = require('./ai/memory_manager');
 const { decomposeQuestion, isMultiPartQuestion, buildAdvancedRetrievalPlan, buildSupplementalRetrievalQuery, selectRetrievalQueries, selectRetrievalDomains, selectGameSpecificRetrievalDomains, initialRetrievalQueryLimit } = require('./ai/retrieval');
-const { configureProviderQuotaPersistence, classifyFailure, nextFallbacks, selectRepairFallbacks, filterAvailableFallbacks, repairBudgetBlockReason, GENERATION_FALLBACK_CHAIN, configuredMaxFallbackSteps, markProviderQuota, isProviderQuotaBlocked, shouldBlockProviderQuotaWide, quotaCooldownMsFromError, geminiGenerationCooldownMsFromError, retryAfterHint, openRouterErrorMessage, shouldOpenQuotaCircuit } = require('./ai/fallback');
+const { configureProviderQuotaPersistence, quotaStateReady, classifyFailure, nextFallbacks, selectRepairFallbacks, filterAvailableFallbacks, repairBudgetBlockReason, GENERATION_FALLBACK_CHAIN, configuredMaxFallbackSteps, markProviderQuota, isProviderQuotaBlocked, shouldBlockProviderQuotaWide, quotaCooldownMsFromError, geminiGenerationCooldownMsFromError, retryAfterHint, openRouterErrorMessage, shouldOpenQuotaCircuit } = require('./ai/fallback');
 const { normalizeGroqBaseUrl, createGroqCompletion, createGroqCompletionWithSchemaFallback, awaitWithAbortTimeout, computeValidatorTimeout, computeValidatorReserveMs, computeGenerationTimeout, normalizeGroqSdkBaseUrl, INITIAL_VALIDATOR_REPAIR_RESERVE_MS, shouldAttemptUnavailableRepair } = require('./ai/provider-runtime');
 const { createAIMetrics, recordAIMetric, snapshotAIMetrics } = require('./ai/metrics');
 const { DEFAULTS, sanitizeRequestText } = require('./ai/limits');
@@ -1830,8 +1830,9 @@ async function walidujOdpowiedzGeminiModel(model, persona, pytanie, odpowiedz, d
         status,
         message: `${message} ${retryAfterHint(err)}`,
       });
-      markProviderQuota(endpoint, cooldownMs);
-      console.warn(`[AI][${requestId}] quota circuit opened for ${endpoint} for ${cooldownMs}ms`);
+      const sharedQuota = shouldBlockProviderQuotaWide(endpoint, { status, message });
+      const blocked = markProviderQuota(endpoint, cooldownMs, { scope: sharedQuota ? 'provider' : 'endpoint' });
+      console.warn(`[AI][${requestId}] quota circuit opened for ${blocked.join(', ')} for ${cooldownMs}ms`);
       // The shared gate must not outlive a valid Retry-After on 429, and
       // must also prevent another Gemini model bypassing account-wide 402.
       if (status === 402) {
@@ -2295,7 +2296,8 @@ async function walidujOdpowiedzXKiro(persona, pytanie, odpowiedz, dane, requestI
               message: [providerError.message, providerError.type, providerError.code, retryAfter].filter(Boolean).join(' '),
               headers: response.headers,
             });
-        markProviderQuota(providerKey, cooldownMs);
+        const sharedQuota = shouldBlockProviderQuotaWide(providerKey, { status, code: providerError.code, type: providerError.type, message: providerError.message });
+        markProviderQuota(providerKey, cooldownMs, { scope: sharedQuota ? 'provider' : 'endpoint' });
       } else if (status === 401 || status === 403) {
         // Authentication/disabled-key failures are endpoint-scoped. Avoid
         // repeatedly sending requests with a credential that cannot succeed.
@@ -4669,6 +4671,8 @@ let aiAktywne = 0;
 const aiKolejka = [];
 
 async function wykonajWKolejceAI(zadanie) {
+  // Do not start provider selection until persisted cooldowns have been restored.
+  await quotaStateReady();
   if (aiAktywne >= AI_MAX_ROWNOLEGLE) {
     if (aiKolejka.length >= AI_MAX_QUEUED) {
       const err = new Error('AI queue full');
