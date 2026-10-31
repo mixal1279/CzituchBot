@@ -11,8 +11,8 @@ const ENTITY_ALIAS_GROUPS = Object.freeze([
   // Skyrim: Dovahkiin is the in-world name for the Dragonborn; preserve both
   // the common spelling and the canonical dragon-language form found in sources.
   { canonical: 'dovahkiin', names: ['Dovahkiin', 'Dovah-Kiin', 'Laat Dovahkiin', 'Laat Dovah-Kiin', 'Dragonborn', 'The Last Dragonborn'] },
-  // The Witcher 3: School of the Cat is a distinct lore entity, not merely the armor item.
-  
+  // The Witcher 3: these Polish names identify the Feline Armor/gear item,
+  // not a separate School of the Cat faction entity.
   // Minecraft: End City (miasto) i End Ship (statek) są odrębnymi encjami.
   // Nie łączymy ich aliasów — walidator ma wykrywać zamianę miasta na statek i odwrotnie.
   { canonical: 'end city', names: ['End City', 'End Cities', 'Miasto Endu', 'Miasta Endu', 'Miasto Kresu', 'Miasta Kresu'] },
