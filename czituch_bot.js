@@ -7203,7 +7203,6 @@ async function youtubeWatcher(nazwaKanalu, wyslijFn) {
       const startDelay = Number.isFinite(initialPollDelay) && initialPollDelay > 0
         ? initialPollDelay
         : KONFIGURACJA.pollInterval;
-      console.log(`${tag} Pominięto stare wiadomości. Nasłuchuję... (pierwsze poll za ${Math.round(startDelay/1000)}s)`);
       await czekaj(startDelay);
       await youtubeLoop(stan);
       console.log(`${tag} Stream zakończony. Czekam na następny...`);
