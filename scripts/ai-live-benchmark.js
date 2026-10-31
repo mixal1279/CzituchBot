@@ -185,6 +185,12 @@ async function sleep(ms) {
   if (ms > 0) await new Promise(resolve => setTimeout(resolve, ms));
 }
 
+function isBenchmarkRunValid(diagnostics = {}) {
+  // A technically completed run is not a valid quality measurement when a
+  // provider outage, degraded fallback, or missing validator made it incomparable.
+  return diagnostics.providerOutage !== true && diagnostics.qualityComparable !== false;
+}
+
 function classifyBenchmarkOutcome(result = {}) {
   const attempts = Array.isArray(result.generationAttempts) ? result.generationAttempts : [];
   const validatorResults = Array.isArray(result.validatorResults) ? result.validatorResults : [];
@@ -585,7 +591,7 @@ async function run() {
     benchmark: benchmark.name,
     mode: 'live',
     seed: benchmarkSeed,
-    valid: !providerOutage,
+    valid: isBenchmarkRunValid(diagnostic),
     total: results.length,
     answeredAccuracy: Number((answered / results.length).toFixed(4)),
     completenessAccuracy: Number((complete / results.length).toFixed(4)),
@@ -612,9 +618,13 @@ async function run() {
   };
   const serializedReport = writeBenchmarkReport(report);
   if (!process.env.AI_BENCHMARK_JSON_PATH) await writeStdoutAndWait(serializedReport);
-  if (providerOutage) {
-    const outageProviders = (diagnostic.outageProviders || []).join(', ') || 'nieustalony dostawca';
-    console.error(`[LIVE BENCHMARK] WYNIK NIEWAŻNY: wszystkie próby dla dostawcy niedostępne lub zakończone błędem: ${outageProviders}. Nie oceniaj jakości kodu po tym runie.`);
+  if (!report.valid) {
+    const reasons = [
+      ...(diagnostic.outageProviders || []).map(provider => `provider outage: ${provider}`),
+      ...(diagnostic.qualityDegradationReasons || []),
+    ];
+    console.error(`[LIVE BENCHMARK] WYNIK NIEWAŻNY / NIEPORÓWNYWALNY: ${reasons.join('; ') || 'niewystarczająca dostępność providerów'}.`);
+    console.error('[LIVE BENCHMARK] Nie oceniaj jakości kodu po tym runie; sprawdź providerów i uruchom ponownie.');
     console.error('[LIVE BENCHMARK] Szczegóły niezaliczonych przypadków:');
     for (const line of formatBenchmarkFailureDiagnostics(results)) console.error(line);
     process.exitCode = 3;
@@ -637,7 +647,7 @@ async function run() {
   }
 }
 
-module.exports = { resolveDelayMs,
+module.exports = { isBenchmarkRunValid, resolveDelayMs,
   wybierzOdrzuconaOdpowiedz, normalizeFactText, scoreGoldenFacts, stratifiedCases, buildQuestionForBot, isFailureText, evaluateBenchmarkAnswer, isFalseReject, extractClaimSupportAudit, classifyBenchmarkOutcome, buildBenchmarkDiagnostics, formatBenchmarkFailureDiagnostics, writeBenchmarkReport, writeStdoutAndWait, run };
 
 if (require.main === module) {
