@@ -1,5 +1,7 @@
 'use strict';
 
+const { boundedText, constantTimeStringEqual } = require('./inputSafety');
+
 const SLOT_PATTERNS = Object.freeze({
   why: /\b(dlaczego|czemu|z jakiego powodu|why|how come)\b/i,
   // „Jak” samo w sobie nie oznacza instrukcji: rozróżniamy mechanizm działania od pytań o czas i procedurę.
@@ -33,7 +35,7 @@ function normalize(value) {
 }
 
 function buildAnswerPlan(question, routing = {}) {
-  const q = String(question || '').replace(/\s+/g, ' ').trim();
+  const q = boundedText(question, 500).replace(/\s+/g, ' ').trim();
   const slots = new Set(INTENT_REQUIREMENTS[routing.intent] || []);
   const matched = [];
   for (const [slot, re] of Object.entries(SLOT_PATTERNS)) {
@@ -219,11 +221,11 @@ function coversQuestionClauses(answer, clauses) {
     .filter(word => word.length >= 4 && !CLAUSE_STOPWORDS.has(word)))]);
   return tokenLists.every((tokens, index) => {
     const distinctive = tokens.filter(token => !tokenLists.some((other, otherIndex) =>
-      otherIndex !== index && other.some(otherToken => otherToken === token)));
+      !Object.is(otherIndex, index) && other.some(otherToken => constantTimeStringEqual(otherToken, token))));
     const candidates = distinctive.length ? distinctive : tokens;
     if (!candidates.length) return true;
     return candidates.some(token => answerWords.some(word => {
-      if (word === token) return true;
+      if (constantTimeStringEqual(word, token)) return true;
       const prefixLength = Math.min(5, word.length, token.length);
       return prefixLength >= 4 && word.slice(0, prefixLength) === token.slice(0, prefixLength);
     }));
