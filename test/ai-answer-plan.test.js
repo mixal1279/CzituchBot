@@ -48,6 +48,25 @@ test('a stated motive phrased as "miało na celu" satisfies a why answer plan', 
   assert.deepEqual(result.missing, []);
 });
 
+test('Minecraft Elytra instructions keep End City and End Ship distinct', () => {
+  const plan = buildAnswerPlan('Jak zdobyć elytrę w Minecraft Survival?', {
+    intent: 'gameplay', is_gameplay: true, entity: 'Elytra', game: 'Minecraft',
+  });
+  assert.match(plan.instruction, /End City/);
+  assert.match(plan.instruction, /End Ship/);
+  assert.match(plan.instruction, /to różne struktury, nie synonimy/);
+  assert.match(plan.instruction, /Nie twierdź, że każdy End City ma statek/);
+  assert.match(plan.instruction, /nazwij Minecraft/);
+});
+
+test('causal answers require one direct source passage for the named motive', () => {
+  const plan = buildAnswerPlan('Dlaczego Astarion dołączył do drużyny?', {
+    intent: 'web_fact', is_lore: true, entity: 'Astarion', game: "Baldur's Gate 3",
+  });
+  assert.match(plan.instruction, /pojedynczy dosłowny fragment źródła/);
+  assert.match(plan.instruction, /nie dopisuj jej/);
+});
+
 test('procedural guidance forbids generic game advice without retrieved evidence', () => {
   const plan = buildAnswerPlan('Jak pokonać smoka w Skyrim?', {
     intent: 'gameplay', is_gameplay: true, entity: 'dragon', game: 'Skyrim',
