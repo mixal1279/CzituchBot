@@ -152,7 +152,7 @@ for (const entry of buildEntityAliasPatterns(ENTITY_ALIAS_GROUPS)) {
   existing.pattern = new RegExp(`(?:${existing.pattern.source})|(?:${entry.pattern.source})`, 'iu');
 }
 function normalizujClaim(value) {
-  return String(value || '')
+  return boundedText(value, 12000)
     .replace(/\bdoesn['’]t\b/giu, 'does not')
     .replace(/\bisn['’]t\b/giu, 'is not')
     .replace(/\baren['’]t\b/giu, 'are not')
