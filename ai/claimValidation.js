@@ -1,5 +1,7 @@
 'use strict';
 
+const { boundedText, constantTimeStringEqual } = require('./inputSafety');
+
 const { ENTITY_ALIAS_GROUPS, buildEntityAliasPatterns } = require('./entityAliases');
 const { slowaLiczbowe } = require('./polishNumbers');
 const { GAME_ALIASES } = require('./entities');
@@ -659,7 +661,7 @@ function czyNazwaWlasnaWystepuje(entity, evidenceNormalized) {
     const normalized = String(variant || '').split(' ').filter(Boolean);
     if (!normalized.length || normalized.length > evidenceTokens.length) return false;
     for (let start = 0; start <= evidenceTokens.length - normalized.length; start++) {
-      if (normalized.every((token, offset) => evidenceTokens[start + offset] === token)) return true;
+      if (normalized.every((token, offset) => constantTimeStringEqual(evidenceTokens[start + offset], token))) return true;
     }
     return false;
   });
