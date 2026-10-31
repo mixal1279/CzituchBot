@@ -225,6 +225,7 @@ function classifyBenchmarkOutcome(result = {}) {
   if (/(?:quota|rate.?limit|resource.?exhausted|tokens? per (?:day|minute)|\b429\b|\b402\b)/i.test(details)) return 'provider_quota';
   if (/(?:timeout|timed.?out|deadline|abort(?:ed)?|etimedout)/i.test(details)) return 'provider_timeout';
   if (/(?:budget_exhausted|budget|budżet|no_healthy_provider|request_deadline|model_calls_exhausted|generation_budget_exhausted)/i.test(details)) return 'no_fallback_budget';
+  if (result.validatorResults?.some(row => row.safetyBlocked === true) || /(?:PROHIBITED_CONTENT|BLOCKLIST|finishReason=SAFETY|blockReason=SAFETY)/i.test(details)) return 'provider_safety_block';
   if (result.judgeStatus === 'error' || result.finalStatus === 'error') return 'pipeline_error';
   if (result.judgeStatus === 'abstained') return 'abstention';
   const evidenceRejected = /(?:evidence|quote|claim|unsupported|unverified|validator_reject|coverage|coarse)/i.test(details)
