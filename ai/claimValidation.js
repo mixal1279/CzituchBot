@@ -48,6 +48,11 @@ const CROSS_LANGUAGE_CONCEPTS = [
   ['ramka_przedmiotow', /\bitem\s+frames?\b|ramk\w*\s+(?:na|z)\s+przedmiot\w*/i],
   ['skrzynia', /\bchests?\b|skrzyni\w*/i],
   ['shulker', /\bshulkers?\b/i],
+  ['smiertelnik', /\bmortal(?:s|ity)?\b|smiertelnik\w*/i],
+  ['krew', /\bblood\b|krew\w*/i],
+  ['dusza', /\bsoul\w*|dusza\w*/i],
+  ['dolaczenie_do_frakcji', /\bjoin(?:s|ed|ing)?\b|\bdolacz\w*/i],
+  ['zadania_zabojcze', /\bcontract\w*\b|\bassassin\w*\b|zadani\w*|zabojcz\w*/i],
   ['destrukcja', /destroy\w*|destruct\w*|demolish\w*|ruin\w*|zniszcz\w*|zniszczen\w*|rozbij\w*/i],
   ['praca', /work\w*|employ\w*|job\w*|prac\w*|zatrud\w*/i],
   ['lokalizacja', /found|find\w*|locat\w*|location\w*|znalezc\w*|znajduj\w*|lokaliz\w*|lezy|polozen\w*/i],
@@ -1337,7 +1342,14 @@ function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
     // do not turn the narrower Polish claim into an unsupported assertion.
     // Keep the subset check in the claim-to-source direction: a changed action
     // still fails because it leaves a Polish concept unmatched.
-    const missingConcepts = [...polishConcepts].filter(concept => !englishConcepts.has(concept));
+    // Do not let one shared concept excuse extra source facts in claim_en.
+    // Add a precise cross-language mapping when a source uses a faithful
+    // equivalent that the dictionary does not yet know.
+    const addedConcepts = [...englishConcepts].filter(concept => !polishConcepts.has(concept));
+    if (addedConcepts.length) {
+      return { ok: false, reason: powodNiezgodnosci };
+    }
+        const missingConcepts = [...polishConcepts].filter(concept => !englishConcepts.has(concept));
     if (missingConcepts.length) {
       return { ok: false, reason: powodNiezgodnosci };
     }
