@@ -112,6 +112,15 @@ test('validator provider preflight covers Gemini, xKiro, OpenRouter and Groq pro
   assert.doesNotMatch(source, /PROD_TIMEOUT_MS\s*=\s*9000/);
 });
 
+test('OpenRouter and xKiro validator deadlines use the shared production budget floors', () => {
+  const bot = read('czituch_bot.js');
+  assert.equal((bot.match(/const configuredOpenRouterTimeoutMs/g) || []).length, 2);
+  assert.match(bot, /AI_OPENROUTER_VALIDATOR_TIMEOUT_MS/);
+  assert.match(bot, /maxTimeoutMs:\s*openRouterMaxTimeoutMs/);
+  assert.match(bot, /xkiroMaxTimeoutMs\s*=\s*Math\.max\(\s*6000/);
+  assert.match(bot, /maxTimeoutMs:\s*xkiroMaxTimeoutMs/);
+});
+
 test('live benchmark preflights validator providers before starting a ten-case sample', () => {
   const workflow = read('.github/workflows/ai-live-benchmark.yml');
   assert.match(workflow, /AI_BENCHMARK_LIMIT:\s*"10"/);
