@@ -268,12 +268,25 @@ function normalizujIdZrodla(value) {
   return raw;
 }
 
+function resolveClaimSourceIds(blocks, sourceIds, quote) {
+  const ids = Array.isArray(sourceIds) ? sourceIds : [];
+  const hasQuotedSource = ids.some(id => {
+    const block = blocks.find(item => normalizujIdZrodla(item.sourceId) === normalizujIdZrodla(id));
+    return block && quoteExists(block.content, quote);
+  });
+  if (hasQuotedSource) return ids;
+  if (/(?:\[\s*(?:…|\.\.\.)\s*\]|…|\.\.\.)/u.test(String(quote || ''))) return ids;
+  const matches = blocks.filter(block => quoteExists(block.content, quote));
+  return matches.length === 1 ? [matches[0].sourceId] : ids;
+}
+
 function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '', options = {}) {
   if (!Array.isArray(sourceIds) || !sourceIds.length || typeof evidenceQuote !== 'string') {
     return { ok: false, reason: 'brak poprawnego source_id lub evidence_quote' };
   }
   const quote = evidenceQuote.trim();
   const blocks = parseEvidenceBlocks(dane);
+  sourceIds = resolveClaimSourceIds(blocks, sourceIds, quote);
   const nameOracle = options.nameOracle instanceof Set ? options.nameOracle : zbudujWyroczniaNazw(blocks);
   // Only exact quotes from one of the claim's own sources can contribute local
   // context to translation checks. This supports a relative clause like
@@ -1059,6 +1072,7 @@ module.exports = {
   czyWartoDrugaOpinieWalidatora,
   normalizujWynikWalidatora,
   wyodrebnijIdentyfikatoryZrodel,
+  resolveClaimSourceIds,
   sprawdzTwardeFaktyOdpowiedzi,
   sprawdzKompletnoscOdpowiedzi,
 };
