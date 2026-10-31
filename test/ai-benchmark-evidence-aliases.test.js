@@ -70,9 +70,9 @@ test('Witcher 3 Feline gear aliases preserve the localized armor item', () => {
 });
 
 test('Skyrim Dovahkiin aliases cover source spelling, inflection and the Dragonborn title', () => {
-  assert.equal(czyNazwaWlasnaWystepuje('dovahkiin', 'Laat Dovahkiin'), true);
-  assert.equal(czyNazwaWlasnaWystepuje('dovahkiin', 'Dovahkiin'), true);
-  assert.equal(czyNazwaWlasnaWystepuje('dovahkiin', 'Dark Brotherhood'), false);
+  assert.equal(czyNazwaWlasnaWystepuje('dragonborn', 'Laat Dovahkiin'), true);
+  assert.equal(czyNazwaWlasnaWystepuje('dragonborn', 'Dovahkiin'), true);
+  assert.equal(czyNazwaWlasnaWystepuje('dragonborn', 'Dark Brotherhood'), false);
 });
 
 test('causal translation accepts the source wording as they have a better chance', () => {
