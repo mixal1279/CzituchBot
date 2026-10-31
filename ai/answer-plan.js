@@ -65,6 +65,8 @@ function buildAnswerPlan(question, routing = {}) {
   // \b cannot match after the non-ASCII character ć, so we use (?!\w) instead
   // of a trailing \b to correctly handle the trwać alternative as well as the
   // ASCII-terminated ones.
+  const minecraftElytraContext = /\\b(?:elytra|elytr\\p{L}*)\\b/iu.test(q)
+    && /\\bminecraft\\b/iu.test([q, routing.game, routing.entity].filter(Boolean).join(' '));
   const quantityMayBeVariable = slots.has('quantity')
     && /\b(?:ile|jak\s+d[łl]ugo|how\s+long)\b/i.test(q)
     && /\b(?:trwa|trwać|trwac|duration|lasts?|takes?)(?!\w)/i.test(q);
@@ -90,10 +92,13 @@ function buildAnswerPlan(question, routing = {}) {
       ? 'Dla pytań „kiedy” nie zgaduj daty ani kolejności wydarzeń. Jeśli źródła nie podają dokładnego momentu, zaznacz to wprost i podaj tylko potwierdzony kontekst.'
       : '',
     slots.has('why')
-      ? 'Zachowuj modalność i etap zdarzenia opisany w źródle: „zaprojektowano/przeznaczono do”, „miało nastąpić” i „może” nie znaczą, że zdarzenie faktycznie nastąpiło. Na przykład „designed to be attached” nie dowodzi, że obiekt rzeczywiście podłączono. Nie przedstawiaj celu projektu jako dokonanego faktu.'
+      ? 'Zachowuj modalność i etap zdarzenia opisany w źródle: „zaprojektowano/przeznaczono do”, „miało nastąpić” i „może” nie znaczą, że zdarzenie faktycznie nastąpiło. Na przykład „designed to be attached” nie dowodzi, że obiekt rzeczywiście podłączono. Nie przedstawiaj celu projektu jako dokonanego faktu. Motyw lub przyczynę przypisuj tylko wtedy, gdy pojedynczy dosłowny fragment źródła bezpośrednio łączy wskazaną postać z tym motywem lub skutkiem; nie wywódź go z samej kolejności zdarzeń, ogólnego tła ani prawdopodobnej interpretacji. Jeżeli żaden kandydat nie potwierdza przyczyny, nie dopisuj jej i jawnie ogranicz odpowiedź do potwierdzonych faktów.'
       : '',
     slots.has('steps')
       ? 'Dla instrukcji i poradnika używaj wyłącznie kroków, które są bezpośrednio potwierdzone w pobranych źródłach. Nie dopisuj typowych porad z własnej wiedzy o grze, nawet jeśli brzmią wiarygodnie. Jeśli źródła potwierdzają tylko część procedury, podaj tę część i jasno zaznacz, że dostępne źródła nie potwierdzają dalszych kroków; nie wymyślaj brakujących działań. Jeśli źródło opisuje konkretnego bossa, postać, zadanie lub wersję gry, nazwij ten przypadek i nie uogólniaj jego mechaniki na wszystkich przeciwników.'
+      : '',
+    minecraftElytraContext
+      ? 'W pytaniach o elytrę w Minecraft rozróżniaj End City (miasto Endu) i End Ship (statek Endu) — to różne struktury, nie synonimy. Nie zamieniaj jednego terminu na drugi, nie pisz, że trzeba „otworzyć” statek; podaj wyłącznie potwierdzoną przez źródło sekwencję dotarcia do statku i zdobycia elytry. Nie twierdź, że każdy End City ma statek ani że każda skrzynia lub każdy shulker zawiera elytrę. W odpowiedzi nazwij Minecraft, aby zachować kontekst gry.'
       : '',
     (routing.game || routing.resolved_entity?.game || routing.entity)
       ? `Jeśli kontekst tego pytania wymaga wskazania gry lub encji, nazwij ją wprost (np. ${routing.game || routing.resolved_entity?.game || routing.entity}); zachowuj dokładny zakres faktu i nie przenoś szczegółów z jednej postaci lub zadania na inne.`
