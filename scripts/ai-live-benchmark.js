@@ -394,12 +394,15 @@ function buildBenchmarkDiagnostics(results, allCases = benchmark.cases, selected
   ])].sort();
   const validatorCalls = validatorRows.filter(row => row.skipped !== true).length;
   const validatorSafetyBlocks = validatorRows.filter(row => row.safetyBlocked === true && row.skipped !== true).length;
+  const validatorVerdictCalls = validatorRows.filter(row => row.skipped !== true && row.safetyBlocked !== true
+    && row.status !== 'unavailable' && row.status !== 'error').length;
   const validatorUnavailable = validatorRows.filter(row => row.status === 'unavailable' && row.safetyBlocked !== true && row.skipped !== true).length;
   const validatorAvailabilityChecks = validatorRows.filter(row => row.skipped !== true && row.safetyBlocked !== true).length;
   const validatorUnavailableRate = validatorAvailabilityChecks ? validatorUnavailable / validatorAvailabilityChecks : 0;
   const qualityDegradationReasons = [];
   if (failedOutageProviders.length > 0) qualityDegradationReasons.push('primary_provider_outage');
   if (validatorCalls === 0) qualityDegradationReasons.push('no_validator_calls');
+  else if (validatorSafetyBlocks > 0 && validatorVerdictCalls === 0) qualityDegradationReasons.push('all_validator_calls_safety_blocked');
   else if (validatorCalls < results.length) qualityDegradationReasons.push('validator_calls_below_case_count');
   if (validatorUnavailableRate > 0.25) qualityDegradationReasons.push('validator_unavailable_rate_above_25_percent');
   if (degradedProviders.length > 0) qualityDegradationReasons.push('fallback_provider_degradation');
@@ -429,6 +432,7 @@ function buildBenchmarkDiagnostics(results, allCases = benchmark.cases, selected
     validatorSkipped: validatorRows.filter(row => row.skipped === true).length,
     requestsUnavailable: results.filter(result => result.finalStatus === 'unavailable').length,
     validatorCalls,
+    validatorVerdictCalls,
     validatorUnavailableRate: Number(validatorUnavailableRate.toFixed(3)),
     qualityComparable,
     qualityDegradationReasons,
