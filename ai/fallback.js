@@ -130,11 +130,66 @@ function configuredMaxFallbackSteps(value = process.env.AI_MAX_FALLBACK_STEPS) {
 }
 
 const quotaBlockedUntil = new Map();
+let quotaPersistence = null;
+let quotaPersistenceQueue = Promise.resolve();
+let quotaStateReady = Promise.resolve(false);
+
+function quotaStateSnapshot(now = Date.now()) {
+  const entries = [];
+  for (const [key, until] of quotaBlockedUntil) {
+    if (Number.isFinite(until) && until > now) entries.push([key, until]);
+  }
+  return { version: 1, entries, updatedAt: new Date(now).toISOString() };
+}
+
+function persistQuotaState() {
+  if (!quotaPersistence?.write) return quotaPersistenceQueue;
+  const snapshot = quotaStateSnapshot();
+  quotaPersistenceQueue = quotaPersistenceQueue
+    .catch(() => {})
+    .then(() => quotaPersistence.write('ai_quota', 'provider_cooldowns', snapshot))
+    .catch(error => quotaPersistence.logger?.warn?.('[AI quota] Nie udało się utrwalić cooldownów:', error.message));
+  return quotaPersistenceQueue;
+}
+
+/**
+ * Connect quota cooldowns to the existing Firestore runtime-state store.
+ * The manager remains usable without Firestore; persistence is best-effort and
+ * never makes provider selection depend on a database write.
+ */
+function configureProviderQuotaPersistence(store) {
+  if (!store || typeof store.read !== 'function' || typeof store.write !== 'function') {
+    quotaPersistence = null;
+    quotaStateReady = Promise.resolve(false);
+    return quotaStateReady;
+  }
+  quotaPersistence = store;
+  quotaStateReady = Promise.resolve()
+    .then(() => store.read('ai_quota', 'provider_cooldowns'))
+    .then(saved => {
+      if (saved?.version !== 1 || !Array.isArray(saved.entries)) return false;
+      const now = Date.now();
+      for (const item of saved.entries) {
+        if (!Array.isArray(item) || item.length !== 2) continue;
+        const [key, until] = item;
+        if (typeof key === 'string' && Number.isFinite(Number(until)) && Number(until) > now) {
+          quotaBlockedUntil.set(key, Math.max(quotaBlockedUntil.get(key) || 0, Number(until)));
+        }
+      }
+      return true;
+    })
+    .catch(error => {
+      store.logger?.warn?.('[AI quota] Nie udało się odtworzyć cooldownów z Firestore:', error.message);
+      return false;
+    });
+  return quotaStateReady;
+}
 
 function resetProviderQuotaCooldowns() {
   quotaBlockedUntil.clear();
   // Lokalny licznik TPM Groqa jest częścią tego samego stanu cooldownów.
   resetGroqTpmWindow();
+  void persistQuotaState();
 }
 
 function geminiGenerationCooldownMsFromError(error) {
@@ -269,25 +324,41 @@ function normalizeProviderEndpoint(provider) {
   return `${providerName}:${model}`;
 
 }
-function markProviderQuota(provider, cooldownMs = Number(process.env.AI_PROVIDER_QUOTA_COOLDOWN_MS) || 60_000) {
+function markProviderQuota(provider, cooldownMs = Number(process.env.AI_PROVIDER_QUOTA_COOLDOWN_MS) || 60_000, options = {}) {
   const endpoint = normalizeProviderEndpoint(provider);
   if (!endpoint) return [];
+  const providerName = endpoint.slice(0, endpoint.indexOf(':'));
+  const scope = options?.scope === 'provider' ? 'provider' : 'endpoint';
+  const key = scope === 'provider' ? `${providerName}:*` : endpoint;
   const duration = Math.max(1_000, Number(cooldownMs) || 60_000);
-  const until = Math.max(quotaBlockedUntil.get(endpoint) || 0, Date.now() + duration);
-  quotaBlockedUntil.set(endpoint, until);
-  return [endpoint];
+  const until = Math.max(quotaBlockedUntil.get(key) || 0, Date.now() + duration);
+  quotaBlockedUntil.set(key, until);
+  void persistQuotaState();
+  return [key];
 }
 
 function shouldBlockProviderQuotaWide(provider, error) {
   const endpoint = normalizeProviderEndpoint(provider);
   if (!endpoint) return false;
   const providerName = endpoint.slice(0, endpoint.indexOf(':'));
-  if (providerName !== 'groq') return false;
-  const message = String(error?.message || error || '');
-  // Groq TPM/TPD limits are shared across model IDs. Blocking only the 120B
-  // endpoint causes the fallback chain to immediately hit the same exhausted
-  // account quota on 20B. Keep model-specific errors endpoint-scoped.
-  return /tokens?\s*(?:per|\/)\s*(?:minute|day)|\bTP[MD]\b|(?:organization|account|project).{0,40}(?:quota|rate.?limit)/i.test(message);
+  const message = String(error?.message || error?.reason || error?.error || error || '');
+  const code = String(error?.code || error?.type || '').toLowerCase();
+  const metadata = error?.metadata && typeof error.metadata === 'object' ? error.metadata : {};
+  const limitSource = String(metadata.limit_source || error?.limit_source || '').toLowerCase();
+
+  // A model's own TPM/TPD quota must not suppress sibling models. Shared
+  // organization/project/account limits do. Provider-specific daily free-tier
+  // codes are treated as shared only when the provider explicitly identifies
+  // the allowance as account/key/project scoped.
+  const explicitAccountScope = /(?:organization|account|project|api.?key|subscription|billing).{0,50}(?:quota|rate.?limit|limit|exhaust|deplet)|(?:quota|rate.?limit|limit|exhaust|deplet).{0,50}(?:organization|account|project|api.?key|subscription|billing)/i.test(message)
+    || /^(?:account|key|project|organization|subscription)$/.test(limitSource);
+  const dailySharedCode = providerName === 'xkiro'
+    && /^(?:quota_exceeded|daily_quota_exceeded|free_tokens_exhausted)$/.test(code);
+  const sharedTokenWindow = providerName === 'groq'
+    && /tokens?\s*(?:per|\/)\s*(?:minute|day)|\bTP[MD]\b/i.test(message);
+  const providerSharedDaily = providerName === 'gemini'
+    && /(?:project|account).{0,40}(?:daily|quota|limit)|(?:daily|quota|limit).{0,40}(?:project|account)/i.test(message);
+  return explicitAccountScope || dailySharedCode || sharedTokenWindow || providerSharedDaily;
 }
 
 function isProviderQuotaBlocked(provider, now = Date.now()) {
@@ -403,6 +474,8 @@ module.exports = {
   markProviderQuota,
   isProviderQuotaBlocked,
   shouldBlockProviderQuotaWide,
+  configureProviderQuotaPersistence,
+  quotaStateReady: () => quotaStateReady,
   classifyFailure,
   nextFallbacks,
   selectRepairFallbacks,
