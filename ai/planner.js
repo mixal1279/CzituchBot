@@ -100,7 +100,7 @@ function buildRetrievalQueries(question, routing = {}, options = {}) {
   } else if (routing?.is_lore) {
     dodajUnikalneQuery(queries, [entity || original, game, 'character history story lore'].filter(Boolean).join(' '));
   } else if (routing?.is_gameplay) {
-    const minecraftElytraContext = /\b(?:elytra|elytr[ęy])\b/iu.test(original) && /\bminecraft\b/iu.test([original, game].join(' '));
+    const minecraftElytraContext = /\b(?:elytra|elytr\p{L}*)\b/iu.test(original) && /\bminecraft\b/iu.test([original, game].join(' '));
     const gameplayHints = minecraftElytraContext
       ? 'gameplay strategy mechanics guide walkthrough Minecraft elytra obtain Survival mode End ship End city treasure room shulker how to get'
       : 'gameplay strategy mechanics guide walkthrough';
