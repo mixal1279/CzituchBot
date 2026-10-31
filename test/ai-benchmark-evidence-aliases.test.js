@@ -69,10 +69,11 @@ test('Witcher 3 Feline gear aliases preserve the localized armor item', () => {
   assert.equal(czyNazwaWlasnaWystepuje('feline armor', 'Zbroja Szkoły Wilka'), false);
 });
 
-test('Skyrim Dovahkiin aliases survive source spelling and inflection', () => {
+test('Skyrim Dovahkiin aliases cover source spelling, inflection and the Dragonborn title', () => {
   assert.equal(czyNazwaWlasnaWystepuje('dovahkiin', 'Laat Dovahkiin'), true);
   assert.equal(czyNazwaWlasnaWystepuje('dovahkiin', 'the Dovah-Kiin'), true);
-  assert.equal(czyNazwaWlasnaWystepuje('dovahkiin', 'Dragonborn'), true);
+  assert.equal(czyNazwaWlasnaWystepuje('dovahkiin', 'The Last Dragonborn'), true);
+  assert.equal(czyNazwaWlasnaWystepuje('dovahkiin', 'Dark Brotherhood'), false);
 });
 
 test('causal translation accepts the source wording as they have a better chance', () => {
