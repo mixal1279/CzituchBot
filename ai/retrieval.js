@@ -182,4 +182,22 @@ for(const result of list){const tokens=sourceTokens(result);const tokenSet=new S
 const independentHosts=new Set(independent.map(x=>x.host).filter(Boolean));return {hosts:hosts.size,providers:providers.size,independentSources:independent.length,independentHosts:independentHosts.size,duplicatePairs};}
 function shouldRunAdditionalRetrieval({status='ok',text='',sourceCount=0,queryCount=1,results=[],requireDiversity=false}={}){const list=Array.isArray(results)?results:[];if(status!=='ok'||!String(text).trim()||String(text).length<900||sourceCount<2)return true;if(requireDiversity){const d=sourceDiversity(list);if(d.independentHosts<2)return true;}const strong=list.filter(r=>sourceQualityScore(r)>=0.55).length;if(strong<1)return true;return false;}
 function rankRetrievalNeed({routing={},sourceCount=0,textLength=0,validatorStatus=null,results=[]}={}){let score=0;if(routing.needs_fresh_data)score+=3;if(routing.is_lore||routing.is_gameplay)score+=2;if(sourceCount<2)score+=2;if(textLength<900)score++;if(validatorStatus==='rejected'||validatorStatus==='inconclusive')score+=3;const d=sourceDiversity(results);if(sourceCount>=2&&d.independentHosts<2)score+=2;return score>=5?'high':score>=3?'medium':'low';}
-module.exports={decomposeQuestion,isMultiPartQuestion,extractCarryoverEntities,buildAdvancedRetrievalPlan,buildSupplementalRetrievalQuery,selectRetrievalQueries,selectRetrievalDomains,initialRetrievalQueryLimit,shouldRunAdditionalRetrieval,rankRetrievalNeed,sourceDiversity,sourceQualityScore,normalizujToken};
+const GAME_SPECIFIC_RETRIEVAL_DOMAINS = [
+  { pattern: /\\b(?:baldur.?s gate 3|bg3)\\b/iu, domains: ['bg3.wiki'] },
+  { pattern: /\\bskyrim\\b/iu, domains: ['en.uesp.net', 'elderscrolls.fandom.com'] },
+  { pattern: /\\bminecraft\\b/iu, domains: ['minecraft.wiki'] },
+  { pattern: /\\b(?:grand theft auto v|gta\\s*(?:v|5))\\b/iu, domains: ['gta.fandom.com'] },
+];
+
+function selectGameSpecificRetrievalDomains(game, question = '', baseDomains = null) {
+  const base = Array.isArray(baseDomains)
+    ? baseDomains
+    : (typeof baseDomains === 'string' && baseDomains.trim() ? [baseDomains.trim()] : []);
+  const context = [game, question].filter(Boolean).join(' ');
+  const additions = GAME_SPECIFIC_RETRIEVAL_DOMAINS
+    .filter(entry => entry.pattern.test(context))
+    .flatMap(entry => entry.domains);
+  return [...new Set([...base, ...additions])];
+}
+
+module.exports={decomposeQuestion,isMultiPartQuestion,extractCarryoverEntities,buildAdvancedRetrievalPlan,buildSupplementalRetrievalQuery,selectRetrievalQueries,selectRetrievalDomains,selectGameSpecificRetrievalDomains,initialRetrievalQueryLimit,shouldRunAdditionalRetrieval,rankRetrievalNeed,sourceDiversity,sourceQualityScore,normalizujToken};
