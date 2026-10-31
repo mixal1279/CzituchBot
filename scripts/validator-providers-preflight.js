@@ -1,5 +1,5 @@
 'use strict';
-// Diagnostyczny preflight transportów walidatora: xKiro, OpenRouter i Groq (punkt odniesienia).
+// Diagnostyczny preflight transportów walidatora: Gemini, xKiro, OpenRouter i Groq.
 // Wysyła zapytania w kształcie walidatora (mały i realistyczny payload) i mierzy czas, status,
 // finish_reason oraz to, czy odpowiedź jest kompletnym JSON-em. Nigdy nie wywala kroku CI
 // (exit 0), chyba że PREFLIGHT_STRICT=1. Klucze nie są wypisywane.
@@ -8,14 +8,19 @@
 
 const fs = require('fs');
 const { normalizujGroqBaseUrl } = require('../ai/provider-runtime');
+const { GEMINI_VALIDATOR_JSON_SCHEMA } = require('../ai/validator');
+const { buildGeminiGenerateContentUrl, buildGeminiValidatorGenerationConfig } = require('../ai/gemini-response');
 
 const PROD_TIMEOUT_BY_PROVIDER = Object.freeze({
-  xKiro: Number(process.env.AI_XKIRO_VALIDATOR_TIMEOUT_MS) || 4500,
-  OpenRouter: 3000,
+  Gemini: 12000,
+  xKiro: Math.max(6000, Number(process.env.AI_XKIRO_VALIDATOR_TIMEOUT_MS) || 6000),
+  OpenRouter: Math.max(4000, Number(process.env.AI_OPENROUTER_VALIDATOR_TIMEOUT_MS) || 6000),
   Groq: 3000,
 });
 const PROBE_TIMEOUT_MS = Number(process.env.PREFLIGHT_TIMEOUT_MS) || 20000;
 
+const GEMINI_KEY = String(process.env.GEMINI_API_KEY || '').replace(/[\r\n]/g, '').trim();
+const GEMINI_MODEL = process.env.AI_GEMINI_VALIDATOR_MODEL || 'gemini-3.5-flash-lite';
 const XKIRO_KEY = String(process.env.XKIRO_API_KEY || '').replace(/[\r\n]/g, '').trim();
 const XKIRO_MODEL = process.env.XKIRO_MODEL || 'qwen/qwen3.5-397b-a17b:free';
 const XKIRO_BASE = process.env.XKIRO_BASE_URL || 'https://api.xkiro.com/v1';
@@ -71,6 +76,21 @@ const REAL = { label: 'realistyczny', messages: [{ role: 'system', content: SYST
 // --- Definicje sond ---------------------------------------------------------------------------
 const probes = [];
 
+function geminiProbe(payload, maxTokens) {
+  const generationConfig = buildGeminiValidatorGenerationConfig(GEMINI_MODEL, GEMINI_VALIDATOR_JSON_SCHEMA);
+  generationConfig.maxOutputTokens = maxTokens;
+  return {
+    provider: 'Gemini', model: GEMINI_MODEL, variant: `${payload.label} · GenerateContent · maxOutputTokens=${maxTokens}`,
+    url: buildGeminiGenerateContentUrl(GEMINI_MODEL),
+    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': GEMINI_KEY },
+    body: {
+      systemInstruction: { parts: [{ text: SYSTEM }] },
+      contents: [{ role: 'user', parts: [{ text: payload.messages[1].content }] }],
+      generationConfig,
+    },
+  };
+}
+
 function xkiroProbe(payload, maxTokens) {
   return {
     provider: 'xKiro', model: XKIRO_MODEL, variant: `${payload.label} · max_tokens=${maxTokens}`,
@@ -96,6 +116,9 @@ function groqProbe(payload, maxTokens) {
     body: { model: GROQ_MODEL, messages: payload.messages, temperature: 0, max_completion_tokens: maxTokens, reasoning_effort: 'low', response_format: { type: 'json_object' } },
   };
 }
+
+if (GEMINI_KEY) probes.push(geminiProbe(SMALL, 900), geminiProbe(REAL, 1600));
+else console.log('[preflight] Gemini: pominięty (brak GEMINI_API_KEY)');
 
 if (XKIRO_KEY) probes.push(xkiroProbe(SMALL, 900), xkiroProbe(REAL, 900), xkiroProbe(REAL, 1600));
 else console.log('[preflight] xKiro: pominięty (brak XKIRO_API_KEY)');
@@ -163,16 +186,30 @@ async function run(probe) {
     const data = await res.json().catch(() => ({}));
     result.ms = Date.now() - started;
     result.http = res.status;
-    const choice = data?.choices?.[0] || {};
-    result.finish = choice.finish_reason || null;
-    result.completionTokens = data?.usage?.completion_tokens ?? null;
+    const isGemini = probe.provider === 'Gemini';
+    const candidate = isGemini ? (data?.candidates?.[0] || {}) : {};
+    const choice = isGemini ? {} : (data?.choices?.[0] || {});
+    result.finish = isGemini
+      ? (candidate.finishReason || data?.promptFeedback?.blockReason || null)
+      : (choice.finish_reason || null);
+    result.completionTokens = isGemini
+      ? (data?.usageMetadata?.candidatesTokenCount ?? null)
+      : (data?.usage?.completion_tokens ?? null);
     if (!res.ok) {
       const msg = String(data?.error?.message || data?.message || '').replace(/\s+/g, ' ').slice(0, 140);
       result.verdict = `BŁĄD HTTP ${res.status}${msg ? ': ' + msg : ''}`;
       return result;
     }
-    const raw = choice?.message?.content;
-    const content = Array.isArray(raw) ? raw.map(p => (typeof p === 'string' ? p : p?.text || '')).join('') : String(raw || '');
+    const raw = isGemini
+      ? (candidate.content?.parts || []).map(part => part?.text || '').join('')
+      : choice?.message?.content;
+    const content = Array.isArray(raw)
+      ? raw.map(p => (typeof p === 'string' ? p : p?.text || '')).join('')
+      : String(raw || '');
+    if (isGemini && !content.trim() && data?.promptFeedback?.blockReason) {
+      result.verdict = `BLOCKED BY POLICY (${data.promptFeedback.blockReason})`;
+      return result;
+    }
     if (!content.trim()) { result.verdict = `PUSTY content (finish=${result.finish})`; return result; }
     const parsed = parseJsonLoose(content);
     if (!parsed) {
