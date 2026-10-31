@@ -1421,14 +1421,14 @@ function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
   const enCausal = wyodrebnijMarkery(en, CAUSAL_RE);
   // Polish "zmusza" and English "forces" express the same compulsion relation.
   // Keep this equivalence local; do not broaden the global causal marker set.
-  const plCompulsion = /(?<![\p{L}])zmusz\w*(?![\p{L}])/iu.test(normalizujClaim(pl));
-  const enCompulsion = /(?<![\\p{L}])forc(?:e|es|ed|ing)(?![\\p{L}])/iu.test(normalizujClaim(en));
+  const plCompulsion = /\bzmusz\w*/iu.test(normalizujClaim(pl));
+  const enCompulsion = /\bforc(?:e|es|ed|ing)\b/iu.test(normalizujClaim(en));
   const equivalentCompulsion = plCompulsion && enCompulsion;
-  const equivalentEnable = /(?<![\\p{L}])pozwal\\w*(?![\\p{L}])/iu.test(normalizujClaim(pl))
-    && /(?<![\\p{L}])enabl(?:e|es|ed|ing)(?![\\p{L}])/iu.test(normalizujClaim(en));
-  const equivalentOfferOutcome = /przyj[eę]ci\\w*\\s+(?:tej\\s+)?ofert\\w*/iu.test(normalizujClaim(pl))
+  const equivalentEnable = /\bpozwal\w*/iu.test(normalizujClaim(pl))
+    && /\benabl(?:e|es|ed|ing)\b/iu.test(normalizujClaim(en));
+  const equivalentOfferOutcome = /przyj[eę]ci\w*\s+(?:tej\s+)?ofert\w*/iu.test(normalizujClaim(pl))
     && /taking (?:him )?up on (?:this|the) offer/iu.test(normalizujClaim(en))
-    && /join(?:s|ed|ing)? (?:the|your) party/iu.test(normalizujClaim(en));
+    && /\bjoin(?:s|ed|ing)? (?:the|your) party\b/iu.test(normalizujClaim(en));
   if (plCausal !== enCausal && !equivalentCompulsion && !equivalentEnable && !equivalentOfferOutcome
     && !(polishReasonClause && englishReasonClause)) {
     return { ok: false, reason: 'tłumaczenie claimu zmienia relację przyczynową' };
