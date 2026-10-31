@@ -16,6 +16,10 @@ const ENTITY_ALIAS_GROUPS = Object.freeze([
   { canonical: 'wandering in the dark', names: ['Wandering in the Dark', 'Wędrowanie w ciemności'] },
   { canonical: 'ladies of the wood', names: ['Ladies of the Wood', 'Damy lasu'] },
   { canonical: 'bloody baron', names: ['Bloody Baron', 'Krwawy Baron', 'Baron Krwawy'] },
+  // Zweryfikowane nazwy przedmiotów i lokacji z Wiedźmina 3 (PL/EN).
+  { canonical: 'feline armor', names: ['Feline Armor', 'Zbroja Szkoły Kota', 'Zbroja wiedźmińskiego cechu kota'] },
+  { canonical: 'temple isle', names: ['Temple Isle', 'Wyspa Świątynna'] },
+  { canonical: 'eye of nehaleni', names: ['Eye of Nehaleni', 'Oko Nehaleni'] },
   // Keep the Skyrim item separate from Dragonrend; only the English item name is unambiguous.
   { canonical: 'dragonbane', names: ['Dragonbane'] },
   { canonical: "alduin's wall", names: ['Alduins Wall'] },

@@ -10,7 +10,7 @@ const NEGATION_RE = /(?<![\p{L}])(?:nie|nigdy|brak|bez|zaden|zadna|zadne|never|n
 const NEGATION_STRICT_RE = /(?<![\p{L}])(?:nie|nigdy|brak|bez|zaden|zadna|zadne|never|not|cannot|without|lack\s+of|absence\s+of|unable|neither|nor|fails?\s+to|\p{L}+n['’]t)(?![\p{L}])/iu;
 // Claim o redukcji/ograniczeniu jest zgodny z dowodem „no damage / take no damage” (zero implikuje zmniejszenie).
 // „s?tlumi\w*” obejmuje odmiany „tłumić” (tłumiąca, tłumienie, stłumić), ale nie „tłumaczy”/„tłum”.
-const REDUCTION_RE = /(?<![\p{L}])(?:zmniejsz\w*|ogranicz\w*|redukuj\w*|zredukow\w*|oslab\w*|chron\w*|neutralizuj\w*|reduc\w*|inhibit\w*|dampen\w*|s?tlumi\w*|mitigat\w*|lower\w*|decreas\w*|protect\w*|prevent\w*|avoid\w*|block\w*|ward\w*|immun\w*|resist\w*|zapobieg\w*|unik\w*|blok\w*|odporn\w*)(?![\p{L}])/iu;
+const REDUCTION_RE = /(?<![\p{L}])(?:zmniejsz\w*|ogranicz\w*|redukuj\w*|zredukow\w*|oslab\w*|ochron\w*|oslon\w*|chron\w*|neutralizuj\w*|reduc\w*|inhibit\w*|dampen\w*|s?tlumi\w*|mitigat\w*|lower\w*|decreas\w*|protect\w*|prevent\w*|avoid\w*|block\w*|ward\w*|immun\w*|resist\w*|zapobieg\w*|unik\w*|blok\w*|odporn\w*)(?![\p{L}])/iu;
 // „skutkuj\w*” i „w rezultacie” to polskie odpowiedniki „resulting in”/„as a result”: bez nich
 // polski claim z relacją przyczynową przechodził kontrolę parytetu PL↔EN, gdy claim_en ją gubił.
 const CAUSAL_RE = /(?<![\p{L}])(?:bo|poniewaz|gdyz|dlatego|because|therefore|caused|causes|trigger\w*|consequently|hence|as\s+a\s+result|led\s+to|leading\s+to|resulted\s+in|resulting\s+in|because\s+of|due\s+to|thereby|thus|w\s+ten\s+sposob|przez\s+co|co\s+(?:umozliw\w*|spowod\w*)|motyw\w*|zmusz\w*|powoduj\w*|przyczyn\w*|wskutek|w\s+efekcie|skutkuj\w*|w\s+rezultacie|allow(?:s|ed|ing)?|enabl(?:e|es|ed|ing)|which\s+(?:let|lets|allowed|allows|enabled|enables)|putting\s+(?:him|her|them|it)\s+in\s+control|giving\s+(?:him|her|them|it)\s+control|will\s+see\s+(?:him|her|them|the player|the character)\s+(?:officially\s+)?(?:join|become)|dajac\s+(?:mu|jej|im)\s+(?:wladz\w*|kontrol\w*|panowan\w*)|force(?:s|d|ing)?\s+(?:the\s+)?[\p{L}\p{N}'’_-]+(?:\s+[\p{L}\p{N}'’_-]+){0,1}\s+to\s+[\p{L}\p{N}'’_-]+|so\s+(?:he|she|they|it|we|the)|in\s+exchange(?:\s+for)?|in\s+return(?:\s+for)?|in\s+turn|thanks\s+to|owing\s+to|w\s+zamian(?:\s+za)?|w\s+rewan[zż]u|w\s+wyniku|z\s+powodu|dzieki|spowod\w*|doprowadz\w*|umozliw\w*)(?![\p{L}])/iu;
@@ -118,6 +118,9 @@ const KNOWN_ENTITY_ALIAS_PATTERNS = [
   // zlewałoby się z osobnym wpisem „aperture laboratories” powyżej.
   { canonical: 'aperture science', pattern: /\b(?:aperture\s+science|facility\s+of\s+aperture)\b/iu },
   { canonical: 'bloody baron', pattern: /\b(?:bloody\s+baron|baron(?:a)?\s+krwaw(?:y|ego|ym)|krwaw(?:y|ego|emu)\s+baron(?:a|em|owi)?)\b/iu },
+  // „Oka Nehaleni” is an inflected Polish form; keep an explicit full-name alias
+  // because the generic token inflector cannot safely infer this proper-name form.
+  { canonical: 'eye of nehaleni', pattern: /\b(?:eye\s+of\s+nehaleni|oko\s+nehaleni|oka\s+nehaleni)\b/iu },
   { canonical: 'wild hunt', pattern: /\b(?:wild\s+hunt|dziki\s+gon|dzikiego\s+gonu|dzikim\s+gonem)\b/iu },
   { canonical: 'cathedral of dragon communion', pattern: /\b(?:cathedral\s+of\s+dragon\s+communion|katedr(?:a|y|ę|e|ze)\s+komunii\s+smoka)\b/iu },
 ];
@@ -927,11 +930,42 @@ function tokenyPokryciaBezStop(value) {
 function tokenyPokrycia(value) {
   return [...new Set(normalizujClaim(value).split(' ').filter(t => t.length >= 3 && !COVERAGE_STOPWORDS.has(t)))];
 }
+const POLISH_INFLECTION_SUFFIXES = [
+  'owego', 'owych', 'owymi', 'owej', 'iego', 'iemu', 'owie',
+  'ami', 'ach', 'owi', 'iem', 'ow', 'om', 'em', 'ym', 'im', 'ej',
+].sort((a, b) => b.length - a.length);
+const POLISH_SHORT_INFLECTION_SUFFIXES = new Set(['a', 'e', 'y', 'i', 'u']);
+
+function tokenZPolskimRdzeniem(token) {
+  const value = String(token || '');
+  for (const suffix of POLISH_INFLECTION_SUFFIXES) {
+    if (value.endsWith(suffix) && value.length - suffix.length >= 5) {
+      return { value, stem: value.slice(0, -suffix.length), inflected: true };
+    }
+  }
+  return { value, stem: value, inflected: false };
+}
+
 function tokenyPokrywajaSie(a, b) {
   if (a === b) return true;
+
+  // Conservative Polish inflection matching: strip one known case/number ending
+  // from a long token, then allow a single short vowel ending on its counterpart.
+  // The minimum five-character stem avoids collapsing short, ambiguous words.
+  const left = tokenZPolskimRdzeniem(a);
+  const right = tokenZPolskimRdzeniem(b);
+  if (left.stem.length >= 5 && left.stem === right.stem && (left.inflected || right.inflected)) return true;
+  const shortStem = token => {
+    const value = String(token || '');
+    const suffix = value.slice(-1);
+    return POLISH_SHORT_INFLECTION_SUFFIXES.has(suffix) && value.length - 1 >= 5
+      ? value.slice(0, -1)
+      : null;
+  };
+  if (left.inflected && left.stem === shortStem(right.value)) return true;
+  if (right.inflected && right.stem === shortStem(left.value)) return true;
+
   if (Math.min(a.length, b.length) < 6) return false;
-  let prefixLength = 0;
-  while (prefixLength < Math.min(a.length, b.length) && a[prefixLength] === b[prefixLength]) prefixLength++;
   // Do not accept long common prefixes as a substitute for edit distance:
   // unrelated words can share most of a prefix but differ in their suffix.
   // A single typo is allowed only when the complete tokens differ by one edit.
