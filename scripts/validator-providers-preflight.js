@@ -252,6 +252,12 @@ async function run(probe) {
   }
 
   const bad = results.filter(r => r.verdict !== 'OK');
-  if (process.env.PREFLIGHT_STRICT === '1' && bad.length) process.exit(1);
+  const missingRequiredProviders = [];
+  if (!GEMINI_KEY) missingRequiredProviders.push('Gemini (GEMINI_API_KEY — primary validator)');
+  if (!GROQ_KEY) missingRequiredProviders.push('Groq (GROQ_API_KEY — primary generator)');
+  for (const provider of missingRequiredProviders) {
+    console.error(`::error title=Preflight wymagane dane::Brak ${provider}`);
+  }
+  if (process.env.PREFLIGHT_STRICT === '1' && (bad.length > 0 || missingRequiredProviders.length > 0)) process.exit(1);
   process.exit(0);
 })();
