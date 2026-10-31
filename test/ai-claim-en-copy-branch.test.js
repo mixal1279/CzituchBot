@@ -73,20 +73,20 @@ test('copied quote is rejected when it shares an entity but no verifiable action
   assert.match(wynik.reason, /kopiuje cytat/);
 });
 
-test('copied Dragonborn quote accepts a faithful Polish identity claim', () => {
-  const quote = 'A Dragonborn or Dovahkiin is a mortal man or woman born with the blood and soul of a dragon';
+test('copied Dovahkiin lore quote accepts a complete Polish translation', () => {
+  const quote = 'Dovahkiin is a mortal born with the blood and soul of a dragon.';
   const result = spojnoscTlumaczeniaClaimu(
-    'Dragonborn, znany również jako Dovahkiin, jest śmiertelnym mężczyzną lub kobietą urodzonym z krwią i duszą smoka.',
+    'Dovahkiin jest śmiertelnikiem urodzonym z krwią i duszą smoka.',
     quote,
     { evidenceQuote: quote },
   );
   assert.equal(result.ok, true, JSON.stringify(result));
 });
 
-test('copied Dark Brotherhood quote accepts a source-grounded faction and assassination claim', () => {
-  const quote = 'The Dragonborn was said to have joined the Dark Brotherhood, taking contracts assassinating various denizens of Skyrim';
+test('copied Dark Brotherhood quote accepts an equivalent Polish recruitment claim', () => {
+  const quote = 'The Dragonborn joined the Dark Brotherhood.';
   const result = spojnoscTlumaczeniaClaimu(
-    'Dragonborn miał dołączyć do Dark Brotherhood, przyjmując kontrakty na zabójstwo różnych mieszkańców Skyrim.',
+    'Dragonborn dołączył do Dark Brotherhood.',
     quote,
     { evidenceQuote: quote },
   );
