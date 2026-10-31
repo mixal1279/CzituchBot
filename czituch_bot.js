@@ -6970,10 +6970,23 @@ async function pobierzLiveChatId(nazwaKanalu) {
         console.warn(`[YouTube] Odrzucono kandydata ${candidateId}: brak filmu w Data API.`);
         return false;
       }
-      // Brak channelId również oznacza odrzucenie: nie wolno dopuścić do
-      // podłączenia czatu, którego właściciela nie da się jednoznacznie ustalić.
+      // Rozdzielamy przyczyny odrzucenia, aby odróżnić obce filmy
+      // od transmisji właściwego kanału, które nie mają aktywnego czatu.
+      const actualChannelId = candidate.snippet?.channelId || null;
+      if (actualChannelId !== channelId) {
+        console.warn(`[YouTube] Odrzucono kandydata ${candidateId}: właściciel=${actualChannelId || 'brak channelId'}, oczekiwano=${channelId}.`);
+        return false;
+      }
+      const activeLiveChatId = candidate.liveStreamingDetails?.activeLiveChatId;
+      if (typeof activeLiveChatId !== 'string' || activeLiveChatId.length === 0) {
+        const broadcastState = candidate.snippet?.liveBroadcastContent || 'nieznany';
+        const actualStartTime = candidate.liveStreamingDetails?.actualStartTime || 'brak';
+        const actualEndTime = candidate.liveStreamingDetails?.actualEndTime || 'brak';
+        console.warn(`[YouTube] Odrzucono kandydata ${candidateId}: właściwy kanał, ale brak aktywnego Live Chat ID (broadcast=${broadcastState}, start=${actualStartTime}, koniec=${actualEndTime}).`);
+        return false;
+      }
       if (!isVerifiedLiveVideo(candidate, channelId)) {
-        console.warn(`[YouTube] Odrzucono kandydata ${candidateId}: niezgodny właściciel lub brak aktywnego Live Chat ID.`);
+        console.warn(`[YouTube] Odrzucono kandydata ${candidateId}: nie spełnia warunków potwierdzonego LIVE.`);
         return false;
       }
       verifiedVideo = candidate;
