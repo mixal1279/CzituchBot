@@ -109,3 +109,12 @@ test('the word block in Minecraft bridge width is not a protection/reduction mar
   );
   assert.equal(result.ok, true, JSON.stringify(result));
 });
+
+test('causal translation rejects reversing Thuum knowledge and dragon-soul absorption', () => {
+  const result = spojnoscTlumaczeniaClaimu(
+    "Dragonborn wykorzystuje Thu'um, co pozwala mu pochłaniać dusze smoków.",
+    "It enables them to use the dragon's ability to absorb a slain dragon's soul to receive knowledge of the Thu'um.",
+  );
+  assert.equal(result.ok, false, JSON.stringify(result));
+  assert.match(result.reason, /odwraca relację/);
+});
