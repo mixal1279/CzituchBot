@@ -216,8 +216,8 @@ const CLAUSE_STOPWORDS = new Set([
 
 function coversQuestionClauses(answer, clauses) {
   if (!Array.isArray(clauses) || clauses.length < 2) return true;
-  const answerWords = normalize(answer).split(/\s+/).filter(Boolean);
-  const tokenLists = clauses.map(clause => [...new Set(normalize(clause).split(/\s+/)
+  const answerWords = normalize(boundedText(answer, 8000)).split(/\s+/).filter(Boolean);
+  const tokenLists = clauses.slice(0, 12).map(clause => [...new Set(normalize(boundedText(clause, 1000)).split(/\s+/)
     .filter(word => word.length >= 4 && !CLAUSE_STOPWORDS.has(word)))]);
   return tokenLists.every((tokens, index) => {
     const distinctive = tokens.filter(token => !tokenLists.some((other, otherIndex) =>
