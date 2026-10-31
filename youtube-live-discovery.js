@@ -2,6 +2,7 @@
 
 const LIVE_BADGE_STYLES = new Set(['BADGE_STYLE_TYPE_LIVE_NOW']);
 const VIDEO_ID_RE = /^[a-zA-Z0-9_-]{11}$/;
+const MAX_VIDEO_CANDIDATES = 30;
 
 function parseAssignedJson(html, variableName) {
   const source = String(html || '');
@@ -43,7 +44,7 @@ function hasLiveBadge(renderer) {
   return overlays.some(item => item?.thumbnailOverlayTimeStatusRenderer?.style === 'LIVE');
 }
 
-function findLiveVideoIds(data, limit = 20) {
+function findVideoIds(data, limit = MAX_VIDEO_CANDIDATES, requireLiveBadge = false) {
   if (!data || typeof data !== 'object') return [];
   const stack = [data];
   const visitedObjects = new Set();
@@ -52,12 +53,18 @@ function findLiveVideoIds(data, limit = 20) {
     const current = stack.pop();
     if (!current || typeof current !== 'object' || visitedObjects.has(current)) continue;
     visitedObjects.add(current);
-    if (VIDEO_ID_RE.test(current.videoId || '') && hasLiveBadge(current)) ids.add(current.videoId);
+    if (VIDEO_ID_RE.test(current.videoId || '') && (!requireLiveBadge || hasLiveBadge(current))) {
+      ids.add(current.videoId);
+    }
     for (const value of Object.values(current)) {
       if (value && typeof value === 'object') stack.push(value);
     }
   }
   return [...ids];
+}
+
+function findLiveVideoIds(data, limit = 20) {
+  return findVideoIds(data, limit, true);
 }
 
 function findLiveVideoId(data) {
@@ -90,22 +97,48 @@ function videoIdFromUrl(value) {
 }
 
 function extractLiveVideoIds(html, finalUrl) {
+  const source = String(html || '');
   const ids = new Set();
-  const redirectedVideoId = videoIdFromUrl(finalUrl);
-  if (redirectedVideoId) ids.add(redirectedVideoId);
+  const add = id => {
+    if (VIDEO_ID_RE.test(id || '') && ids.size < MAX_VIDEO_CANDIDATES) ids.add(id);
+  };
 
-  const playerResponse = parseAssignedJson(html, 'ytInitialPlayerResponse');
-  const playerLive = playerResponse?.microformat?.playerMicroformatRenderer?.liveBroadcastDetails?.isLiveNow === true;
+  add(videoIdFromUrl(finalUrl));
+
+  const playerResponse = parseAssignedJson(source, 'ytInitialPlayerResponse');
   const playerVideoId = playerResponse?.videoDetails?.videoId;
-  if (playerLive && VIDEO_ID_RE.test(playerVideoId || '')) ids.add(playerVideoId);
+  if (playerResponse?.microformat?.playerMicroformatRenderer?.liveBroadcastDetails?.isLiveNow === true) {
+    add(playerVideoId);
+  }
 
-  const initialData = parseAssignedJson(html, 'ytInitialData');
-  for (const id of findLiveVideoIds(initialData, 20)) ids.add(id);
+  const initialData = parseAssignedJson(source, 'ytInitialData');
+  for (const id of findLiveVideoIds(initialData, 20)) add(id);
+
+  // Broader fallback: renderer and badge schemas change. All IDs are only
+  // candidates; Data API ownership and active-chat checks remain mandatory.
+  for (const id of findVideoIds(initialData, MAX_VIDEO_CANDIDATES)) add(id);
+  for (const match of source.matchAll(/"videoId"\s*:\s*"([a-zA-Z0-9_-]{11})"/g)) {
+    add(match[1]);
+    if (ids.size >= MAX_VIDEO_CANDIDATES) break;
+  }
+
   return [...ids];
 }
 
+// Backward-compatible strict helper: unlike discoverLiveVideoId, this only
+// returns IDs with an explicit LIVE signal (or a direct /live redirect).
 function extractLiveVideoId(html, finalUrl) {
-  return extractLiveVideoIds(html, finalUrl)[0] || null;
+  const redirected = videoIdFromUrl(finalUrl);
+  if (redirected) return redirected;
+  const source = String(html || '');
+  const playerResponse = parseAssignedJson(source, 'ytInitialPlayerResponse');
+  const playerVideoId = playerResponse?.videoDetails?.videoId;
+  if (
+    playerResponse?.microformat?.playerMicroformatRenderer?.liveBroadcastDetails?.isLiveNow === true &&
+    VIDEO_ID_RE.test(playerVideoId || '')
+  ) return playerVideoId;
+  const initialData = parseAssignedJson(source, 'ytInitialData');
+  return findLiveVideoId(initialData);
 }
 
 async function discoverLiveVideoId(channelId, options) {
@@ -134,10 +167,12 @@ async function discoverLiveVideoId(channelId, options) {
     if (!response.ok) throw new Error('Strona YouTube /live zwróciła HTTP ' + response.status + '.');
     const html = await response.text();
     const candidates = extractLiveVideoIds(html, response.url || url);
-    if (!candidates.length) return null;
+    if (!candidates.length) {
+      console.warn('[YouTube LIVE] Strona /live nie zwróciła kandydatów videoId dla kanału ' + channelId +
+        ' (HTTP ' + response.status + ', HTML: ' + html.length + ' znaków, URL: ' + (response.url || url) + ').');
+      return null;
+    }
 
-    // Redirect i HTML są wyłącznie źródłami kandydatów. Nigdy nie zwracamy
-    // kandydata bez jawnego potwierdzenia właściciela i aktywnego czatu.
     if (typeof opts.verifyVideo !== 'function') {
       throw new TypeError('discoverLiveVideoId wymaga funkcji verifyVideo.');
     }
