@@ -41,7 +41,7 @@ function stratifiedCases(all, requested, seed = 0) {
   const selected = [];
   const selectedIds = new Set();
   const goldCases = all.filter(item => item.expected?.factual?.independentGold === true);
-  // One gold example in a five-case run is too weak to tell whether factual
+  // A single gold example in a small live run is too weak to tell whether factual
   // accuracy improved. Reserve roughly one third of the sample for independent
   // gold facts, taking different categories before taking a second item from
   // the same category. Remaining slots stay category-stratified.
