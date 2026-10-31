@@ -6967,26 +6967,19 @@ async function pobierzLiveChatId(nazwaKanalu) {
       );
       const candidate = videoRes.data.items?.[0];
       if (!candidate) {
-        console.warn(`[YouTube] Odrzucono kandydata ${candidateId}: brak filmu w Data API.`);
         return false;
       }
       // Rozdzielamy przyczyny odrzucenia, aby odróżnić obce filmy
       // od transmisji właściwego kanału, które nie mają aktywnego czatu.
       const actualChannelId = candidate.snippet?.channelId || null;
       if (actualChannelId !== channelId) {
-        console.warn(`[YouTube] Odrzucono kandydata ${candidateId}: właściciel=${actualChannelId || 'brak channelId'}, oczekiwano=${channelId}.`);
         return false;
       }
       const activeLiveChatId = candidate.liveStreamingDetails?.activeLiveChatId;
       if (typeof activeLiveChatId !== 'string' || activeLiveChatId.length === 0) {
-        const broadcastState = candidate.snippet?.liveBroadcastContent || 'nieznany';
-        const actualStartTime = candidate.liveStreamingDetails?.actualStartTime || 'brak';
-        const actualEndTime = candidate.liveStreamingDetails?.actualEndTime || 'brak';
-        console.warn(`[YouTube] Odrzucono kandydata ${candidateId}: właściwy kanał, ale brak aktywnego Live Chat ID (broadcast=${broadcastState}, start=${actualStartTime}, koniec=${actualEndTime}).`);
         return false;
       }
       if (!isVerifiedLiveVideo(candidate, channelId)) {
-        console.warn(`[YouTube] Odrzucono kandydata ${candidateId}: nie spełnia warunków potwierdzonego LIVE.`);
         return false;
       }
       verifiedVideo = candidate;
@@ -6997,8 +6990,6 @@ async function pobierzLiveChatId(nazwaKanalu) {
     throw new Error(`Brak potwierdzonej transmisji LIVE z aktywnym czatem na kanale "${nazwaWyswietlana}".`);
   }
   const video = verifiedVideo;
-  console.log(`[YouTube] ✅ Potwierdzono LIVE kanału ${channelId}: ${videoId}`);
-
   const liveDetails = video.liveStreamingDetails;
   const chatId = liveDetails.activeLiveChatId;
 
@@ -7006,8 +6997,6 @@ async function pobierzLiveChatId(nazwaKanalu) {
   const youtubeKanalKey = nazwaKanalu.toLowerCase();
   streamStart.youtube[youtubeKanalKey] = ytStart ? new Date(ytStart).getTime() : Date.now();
   streamVideoId.youtube[youtubeKanalKey] = videoId;
-  console.log(`[YouTube] ✅ Stream: "${video.snippet?.title || videoId}" (${videoId})`);
-  console.log(`[YouTube] ✅ Live Chat ID: ${chatId}`);
   return chatId;
 }
 
@@ -7185,11 +7174,17 @@ const YT_CHANNEL_ID_CACHE = new Map(Object.entries(YT_KANAL_ID));
 
 async function youtubeWatcher(nazwaKanalu, wyslijFn) {
   const tag = `[YouTube:${nazwaKanalu}]`;
+  let lastLoggedState = 'unknown';
   while (true) {
     const stan = { liveChatId: null, nextPageToken: null, nazwaKanalu, wyslijFn };
     try {
       stan.liveChatId = await pobierzLiveChatId(nazwaKanalu);
-      console.log(`\n✅ ${tag} CzituchBot ONLINE!\n`);
+      const detectedVideoId = streamVideoId.youtube[nazwaKanalu.toLowerCase()];
+      const liveState = `live:${detectedVideoId || 'active'}`;
+      if (lastLoggedState !== liveState) {
+        console.log(`${tag} LIVE wykryty — podłączono czat${detectedVideoId ? ` (https://youtu.be/${detectedVideoId})` : ''}.`);
+        lastLoggedState = liveState;
+      }
 
       // Auto-wiadomość co 30 min dla Angie28
       if (nazwaKanalu === 'Angie28' && !angieAutoMsgInterval) {
@@ -7213,10 +7208,17 @@ async function youtubeWatcher(nazwaKanalu, wyslijFn) {
       await youtubeLoop(stan);
       console.log(`${tag} Stream zakończony. Czekam na następny...`);
     } catch (err) {
-      if (String(err.message || '').startsWith('Brak aktywnego streamu')) {
-        console.log(`${tag} Offline — nie wykryto aktywnej transmisji.`);
+      if (String(err.message || '').startsWith('Brak potwierdzonej transmisji LIVE')) {
+        if (lastLoggedState !== 'offline') {
+          console.log(`${tag} Brak aktywnego LIVE.`);
+          lastLoggedState = 'offline';
+        }
       } else {
-        console.error(`${tag} Błąd wykrywania/podłączania live: ${err.message}`);
+        const errorState = `error:${err.message}`;
+        if (lastLoggedState !== errorState) {
+          console.error(`${tag} Błąd wykrywania/podłączania LIVE: ${err.message}`);
+          lastLoggedState = errorState;
+        }
       }
     }
 
@@ -7231,7 +7233,6 @@ async function youtubeWatcher(nazwaKanalu, wyslijFn) {
 
 
     const interwał = obliczInterwałSprawdzania();
-    console.log(`${tag} Następne sprawdzenie za ${Math.round(interwał / 60000)} min`);
     await czekaj(interwał);
   }
 }
