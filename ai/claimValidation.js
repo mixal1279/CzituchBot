@@ -53,6 +53,7 @@ const CROSS_LANGUAGE_CONCEPTS = [
   ['czlowiek', /\bhumans?\b|\bmen\b|\bman\b|\bwomen\b|\bwoman\b|czlowiek\w*|mezczyzn\w*|kobiet\w*/i],
   ['kontrakt', /\bcontracts?\b|kontrakt\w*/i],
   ['mieszkaniec', /\bdenizens?\b|\binhabitants?\b|mieszkanc\w*/i],
+  ['relacja_podawana', /\bwas said to\b|\breportedly\b|\ballegedly\b|mial\w*|podobno|rzekom\w*/i],
   ['przyjecie_oferty', /taking (?:him )?up on (?:this|the) offer|przyj[eę]ci\w*\s+(?:tej\s+)?ofert\w*/i],
   ['krew', /\bblood\b|krw\w*/i],
   ['dusza', /\bsoul\w*|dusza\w*/i],
@@ -141,6 +142,7 @@ const KNOWN_ENTITY_ALIAS_PATTERNS = [
   // because the generic token inflector cannot safely infer this proper-name form.
   { canonical: 'eye of nehaleni', pattern: /\b(?:eye\s+of\s+nehaleni|oko\s+nehaleni|oka\s+nehaleni)\b/iu },
   // Localized Dragonborn lore titles remain equivalent across Polish and English.
+  { canonical: 'dragonborn', pattern: /\b(?:dragonborn|dovahkiin|laat\s+dovahkiin)\b/iu },
   { canonical: 'last dragonborn', pattern: /\b(?:last\s+dragonborn|ostatni(?:m|ego|emu|ym)?\s+dragonborn(?:em|a|owi|ie)?)\b/iu },
   { canonical: 'prophecy of the dragonborn', pattern: /\b(?:prophecy\s+of\s+the\s+dragonborn|proroctw(?:o|a|u|ie|em)\s+dragonborn(?:a|u|em|ie)?)\b/iu },
   { canonical: 'wild hunt', pattern: /\b(?:wild\s+hunt|dziki\s+gon|dzikiego\s+gonu|dzikim\s+gonem)\b/iu },
