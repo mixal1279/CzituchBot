@@ -7,6 +7,7 @@ const { okreslKategorieAI } = require('../ai/policy');
 const { dodajGameFAQsDomenę, czyPytanieOGameplay } = require('../ai/gameplay');
 
 const policy = (q, recipe) => {
+  q = String(q || '').slice(0, 500);
   if (/czy warto|co myślisz|co sadzisz|opinia/i.test(q)) return 'conversation';
   if (recipe(q)) return 'minecraft_recipe';
   if (/pogod|temperatur|deszcz|wiatr/i.test(q)) return 'weather';
