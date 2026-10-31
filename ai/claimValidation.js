@@ -175,7 +175,8 @@ const TYTULY_GIER = (() => {
     for (const alias of [entry.name, ...entry.aliases]) {
       const tokens = String(alias || '').split(/[^\p{L}\p{N}]+/u).filter(Boolean);
       const key = tokens.join(' ').toLocaleLowerCase('pl-PL');
-      if (!tokens.length || key.replace(/ /g, '').length < 5 || seen.has(key)) continue;
+      const unambiguousShortGameTitle = /^(?:gta v|gta 5)$/iu.test(key);
+      if (!tokens.length || (key.replace(/ /g, '').length < 5 && !unambiguousShortGameTitle) || seen.has(key)) continue;
       seen.add(key);
       const last = tokens[tokens.length - 1];
       const romanEdition = /^(?:II|III|IV|V|VI|VII|VIII|IX|X|XI|XII|XIII|XIV|XV|XVI)$/u.test(last.toUpperCase());
