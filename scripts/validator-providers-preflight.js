@@ -206,14 +206,16 @@ async function run(probe) {
     const content = Array.isArray(raw)
       ? raw.map(p => (typeof p === 'string' ? p : p?.text || '')).join('')
       : String(raw || '');
-    if (isGemini && !content.trim() && data?.promptFeedback?.blockReason) {
-      result.verdict = `BLOCKED BY POLICY (${data.promptFeedback.blockReason})`;
+    if (isGemini && !content.trim()
+      && (data?.promptFeedback?.blockReason
+        || /^(?:SAFETY|BLOCKLIST|PROHIBITED_CONTENT|SPII|IMAGE_SAFETY|RECITATION)$/i.test(String(result.finish || '')))) {
+      result.verdict = `BLOCKED BY POLICY (${data?.promptFeedback?.blockReason || result.finish})`;
       return result;
     }
     if (!content.trim()) { result.verdict = `PUSTY content (finish=${result.finish})`; return result; }
     const parsed = parseJsonLoose(content);
     if (!parsed) {
-      result.verdict = result.finish === 'length' ? 'UCIĘTY JSON (finish=length: max_tokens za małe)' : `NIEPOPRAWNY JSON (finish=${result.finish})`;
+      result.verdict = ['length', 'MAX_TOKENS'].includes(result.finish) ? `UCIĘTY JSON (finish=${result.finish}: limit output tokens za mały)` : `NIEPOPRAWNY JSON (finish=${result.finish})`;
       return result;
     }
     const claims = Array.isArray(parsed.claims) ? parsed.claims : [];
@@ -244,7 +246,7 @@ async function run(probe) {
   }
 
   if (process.env.GITHUB_STEP_SUMMARY && results.length) {
-    const lines = ['## Preflight walidatorów', '', `Limity produkcyjne: xKiro ${PROD_TIMEOUT_BY_PROVIDER.xKiro} ms, OpenRouter ${PROD_TIMEOUT_BY_PROVIDER.OpenRouter} ms, Groq ${PROD_TIMEOUT_BY_PROVIDER.Groq} ms (tu czekamy do ${PROBE_TIMEOUT_MS} ms).`, '', '| provider | model | wariant | wynik | czas | limit prod. | tokeny | claimy / claim_en |', '|---|---|---|---|---|---:|---:|---|'];
+    const lines = ['## Preflight walidatorów', '', `Limity produkcyjne: Gemini ${PROD_TIMEOUT_BY_PROVIDER.Gemini} ms, xKiro ${PROD_TIMEOUT_BY_PROVIDER.xKiro} ms, OpenRouter ${PROD_TIMEOUT_BY_PROVIDER.OpenRouter} ms, Groq ${PROD_TIMEOUT_BY_PROVIDER.Groq} ms (tu czekamy do ${PROBE_TIMEOUT_MS} ms).`, '', '| provider | model | wariant | wynik | czas | limit prod. | tokeny | claimy / claim_en |', '|---|---|---|---|---|---:|---:|---|'];
     for (const r of results) lines.push(`| ${r.provider} | ${r.model} | ${r.variant} | ${r.verdict} | ${r.ms} ms | ${r.productionTimeoutMs ?? PROD_TIMEOUT_BY_PROVIDER[r.provider] ?? 3000} ms | ${r.completionTokens ?? '–'} | ${r.claims != null ? `${r.claims} / ${r.claimEn}` : '–'} |`);
     try { fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, lines.join('\n') + '\n'); } catch (_) { /* podsumowanie jest opcjonalne */ }
   }
