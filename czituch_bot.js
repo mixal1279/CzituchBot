@@ -80,7 +80,7 @@ const { resolveGameEntity, scoreExternalGameCandidate, externalGameCandidateMatc
 const { extractExplicitUserMemories, mergeMemoryRecords, buildVerifiedMemoryContext, pruneExpiredMemories } = require('./ai/memory');
 const { parseMemoryCommand, forgetMemories, describeMemories } = require('./ai/memory_manager');
 const { decomposeQuestion, isMultiPartQuestion, buildAdvancedRetrievalPlan, buildSupplementalRetrievalQuery, selectRetrievalQueries, selectRetrievalDomains, selectGameSpecificRetrievalDomains, initialRetrievalQueryLimit } = require('./ai/retrieval');
-const { classifyFailure, nextFallbacks, selectRepairFallbacks, filterAvailableFallbacks, repairBudgetBlockReason, GENERATION_FALLBACK_CHAIN, configuredMaxFallbackSteps, markProviderQuota, isProviderQuotaBlocked, shouldBlockProviderQuotaWide, quotaCooldownMsFromError, geminiGenerationCooldownMsFromError, retryAfterHint, openRouterErrorMessage, shouldOpenQuotaCircuit } = require('./ai/fallback');
+const { configureProviderQuotaPersistence, classifyFailure, nextFallbacks, selectRepairFallbacks, filterAvailableFallbacks, repairBudgetBlockReason, GENERATION_FALLBACK_CHAIN, configuredMaxFallbackSteps, markProviderQuota, isProviderQuotaBlocked, shouldBlockProviderQuotaWide, quotaCooldownMsFromError, geminiGenerationCooldownMsFromError, retryAfterHint, openRouterErrorMessage, shouldOpenQuotaCircuit } = require('./ai/fallback');
 const { normalizeGroqBaseUrl, createGroqCompletion, createGroqCompletionWithSchemaFallback, awaitWithAbortTimeout, computeValidatorTimeout, computeValidatorReserveMs, computeGenerationTimeout, normalizeGroqSdkBaseUrl, INITIAL_VALIDATOR_REPAIR_RESERVE_MS, shouldAttemptUnavailableRepair } = require('./ai/provider-runtime');
 const { createAIMetrics, recordAIMetric, snapshotAIMetrics } = require('./ai/metrics');
 const { DEFAULTS, sanitizeRequestText } = require('./ai/limits');
@@ -468,7 +468,7 @@ const db = process.env.CZITUCHBOT_SKIP_STARTUP_IO === '1'
       keyFilename: './czituchbot-9c561-firebase-adminsdk-fbsvc-241e465e40.json',
     });
 
-const FIRESTORE_STATE = createFirestoreState(db);
+const FIRESTORE_STATE = createFirestoreState(db);\n// Restore provider cooldowns across restarts; writes are best-effort when Firestore is unavailable.\nvoid configureProviderQuotaPersistence(FIRESTORE_STATE.enabled ? {\n  read: FIRESTORE_STATE.read,\n  write: FIRESTORE_STATE.write,\n  logger: console,\n} : null);
 
 // Lokalna kopia awaryjna jest szyfrowana tak samo jak token w Firestore.
 // 0600 ogranicza uprawnienia pliku, a AES-256-GCM chroni jego zawartość.
