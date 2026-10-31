@@ -15,8 +15,8 @@ function isBlockingPreflightFailure(result) {
   if (!result || result.verdict === 'OK') return false;
   const verdict = String(result.verdict);
   if (result.provider === 'xKiro' && /^ZA WOLNY dla produkcji/.test(verdict)) return false;
-  if (result.provider === 'xKiro' && /^TIMEOUT >\\d+ ms$/.test(verdict)) return false;
-  if (result.provider === 'OpenRouter' && /^PUSTY content \\(finish=null\\)$/.test(verdict)) return false;
+  if (result.provider === 'xKiro' && /^TIMEOUT >\d+ ms$/.test(verdict)) return false;
+  if (result.provider === 'OpenRouter' && /^PUSTY content \(finish=null\)$/.test(verdict)) return false;
   return true;
 }
 
