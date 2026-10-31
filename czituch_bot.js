@@ -35,7 +35,7 @@
 require('dotenv').config();
 
 const { youtube: youtubeFactory } = require('@googleapis/youtube');
-const { discoverLiveVideoId } = require('./youtube-live-discovery');
+const { discoverLiveVideoId, isVerifiedLiveVideo } = require('./youtube-live-discovery');
 const { agregujMetrykiWalidatorow, zbudujKontekstMetrykiWalidatora, wybierzTimeoutWalidatora } = require('./ai/validator-telemetry');
 const { OAuth2Client } = require('google-auth-library');
 const Groq       = require('groq-sdk');
@@ -6972,13 +6972,8 @@ async function pobierzLiveChatId(nazwaKanalu) {
       }
       // Brak channelId również oznacza odrzucenie: nie wolno dopuścić do
       // podłączenia czatu, którego właściciela nie da się jednoznacznie ustalić.
-      if (candidate.snippet?.channelId !== channelId) {
-        console.warn(`[YouTube] Odrzucono kandydata ${candidateId}: channelId=${candidate.snippet?.channelId || 'brak'}, oczekiwano ${channelId}.`);
-        return false;
-      }
-      const candidateChatId = candidate.liveStreamingDetails?.activeLiveChatId;
-      if (!candidateChatId) {
-        console.log(`[YouTube] Kandydat ${candidateId} należy do kanału, ale nie ma aktywnego Live Chat ID.`);
+      if (!isVerifiedLiveVideo(candidate, channelId)) {
+        console.warn(`[YouTube] Odrzucono kandydata ${candidateId}: niezgodny właściciel lub brak aktywnego Live Chat ID.`);
         return false;
       }
       verifiedVideo = candidate;
