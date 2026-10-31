@@ -636,14 +636,14 @@ function wariantyNazwyDoDopasowania(entity) {
 }
 
 function czyNazwaWlasnaWystepuje(entity, evidenceNormalized) {
-  const evidenceTokens = normalizujClaim(evidenceNormalized).split(' ').filter(Boolean);
+  const evidenceText = boundedText(evidenceNormalized, 12000);
+  const evidenceTokens = normalizujClaim(evidenceText).split(' ').filter(Boolean);
   if (!evidenceTokens.length) return false;
 
   // Preserve spaces for canonical multi-word aliases. The inflection helper is
   // optimized for single-token names and intentionally removes whitespace.
-  const entityNormalized = normalizujClaim(entity);
+  const entityNormalized = normalizujClaim(boundedText(entity, 256));
   const knownAlias = KNOWN_ENTITY_ALIAS_PATTERNS.find(alias => normalizujClaim(alias.canonical) === entityNormalized);
-  const evidenceText = String(evidenceNormalized || '');
   if (knownAlias && knownAlias.pattern.test(evidenceText)) return true;
   // "the Baron" is used as shorthand for the Bloody Baron in Witcher 3 sources;
   // require identifying names from the same game in the passage.
