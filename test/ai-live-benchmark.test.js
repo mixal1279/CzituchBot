@@ -519,3 +519,11 @@ test('Gemini safety blocks are not classified as provider transport outages', ()
   assert.equal(diagnostics.providerOutage, false);
   assert.equal(diagnostics.qualityComparable, true);
 });
+
+test('benchmark outcomes classify Gemini safety blocks separately', () => {
+  assert.equal(classifyBenchmarkOutcome({
+    finalStatus: 'rejected',
+    judgeStatus: 'rejected',
+    validatorResults: [{ provider: 'gemini', status: 'unavailable', safetyBlocked: true, reason: 'finishReason=PROHIBITED_CONTENT' }],
+  }), 'provider_safety_block');
+});
