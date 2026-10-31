@@ -6,7 +6,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { normalizeFactText, scoreGoldenFacts } = require('../ai/benchmark-scorer');
-const { buildQuestionForBot, evaluateBenchmarkAnswer, classifyBenchmarkOutcome, buildBenchmarkDiagnostics, formatBenchmarkFailureDiagnostics, stratifiedCases, isFailureText, writeBenchmarkReport, writeStdoutAndWait, wybierzOdrzuconaOdpowiedz, isFalseReject } = require('../scripts/ai-live-benchmark');
+const { buildQuestionForBot, evaluateBenchmarkAnswer, classifyBenchmarkOutcome, isBenchmarkRunValid, buildBenchmarkDiagnostics, formatBenchmarkFailureDiagnostics, stratifiedCases, isFailureText, writeBenchmarkReport, writeStdoutAndWait, wybierzOdrzuconaOdpowiedz, isFalseReject } = require('../scripts/ai-live-benchmark');
 
 test('live benchmark delay can be explicitly disabled with zero', () => {
   const { resolveDelayMs } = require('../scripts/ai-live-benchmark');
@@ -477,4 +477,12 @@ test('benchmark failure diagnostics include rejected claims and deterministic ev
   assert.match(lines[0], /evidence_not_verified/);
   assert.match(lines[0], /SOURCE 4/);
   assert.match(lines[0], /Dragonbane/);
+});
+
+ 
+test('benchmark run is invalid when provider degradation makes quality incomparable', () => {
+  assert.equal(isBenchmarkRunValid({ providerOutage: false, qualityComparable: false }), false);
+  assert.equal(isBenchmarkRunValid({ providerOutage: true, qualityComparable: true }), false);
+  assert.equal(isBenchmarkRunValid({ providerOutage: false, qualityComparable: true }), true);
+  assert.equal(isBenchmarkRunValid({}), true);
 });
