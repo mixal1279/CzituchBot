@@ -1294,10 +1294,10 @@ function cytatRozszerzaNazwePoImieniu(quote, nameVariants) {
 function czyTlumaczenieOdwracaRelacjeThuUmIPochlaniania(claimPl, claimEn) {
   const pl = normalizujClaim(claimPl);
   const en = normalizujClaim(claimEn);
-  const plThuUm = /\\bthu\\s+um\\b/u.exec(pl);
-  const plAbsorb = /\\bpochlan\\w*\\b/u.exec(pl);
-  const enAbsorb = /\\babsorb\\w*\\b/u.exec(en);
-  const enKnowledgeThuUm = /\\bknowledge\\s+of\\s+(?:the\\s+)?thu\\s+um\\b/u.exec(en);
+  const plThuUm = /\bthu\s+um\b/u.exec(pl);
+  const plAbsorb = /\bpochlan\w*\b/u.exec(pl);
+  const enAbsorb = /\babsorb\w*\b/u.exec(en);
+  const enKnowledgeThuUm = /\bknowledge\s+of\s+(?:the\s+)?thu\s+um\b/u.exec(en);
   return Boolean(
     plThuUm && plAbsorb && plThuUm.index < plAbsorb.index
     && enAbsorb && enKnowledgeThuUm && enAbsorb.index < enKnowledgeThuUm.index
