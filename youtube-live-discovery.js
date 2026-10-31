@@ -138,7 +138,7 @@ function extractLiveVideoId(html, finalUrl) {
 
 async function discoverLiveVideoId(channelId, options) {
   const opts = options || {};
-  if (typeof channelId !== 'string' || !/^UC[a-zA-Z0-9_-]{20,}$/.test(channelId)) {
+  if (typeof channelId !== 'string' || channelId.length !== 24 || !/^UC[a-zA-Z0-9_-]{22}$/.test(channelId)) {
     throw new TypeError('Nieprawidłowy YouTube Channel ID.');
   }
   const fetchImpl = opts.fetchImpl || globalThis.fetch;
