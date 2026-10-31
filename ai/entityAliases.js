@@ -10,9 +10,9 @@ const ENTITY_ALIAS_GROUPS = Object.freeze([
   { canonical: 'prologue', names: ['Prologue', 'Prolog'] },
   // Skyrim: Dovahkiin is the in-world name for the Dragonborn; preserve both
   // the common spelling and the canonical dragon-language form found in sources.
-  { canonical: 'dovahkiin', names: ['Dovahkiin', 'Dovah-Kiin', 'Laat Dovahkiin', 'Laat Dovah-Kiin'] },
+  { canonical: 'dovahkiin', names: ['Dovahkiin', 'Dovah-Kiin', 'Laat Dovahkiin', 'Laat Dovah-Kiin', 'Dragonborn', 'The Last Dragonborn'] },
   // The Witcher 3: School of the Cat is a distinct lore entity, not merely the armor item.
-  { canonical: 'school of the cat', names: ['School of the Cat', 'Cat School', 'Feline School', 'Szkoła Kota', 'Szkoły Kota', 'Kociej Szkoły', 'Szkoły Kotów'] },
+  
   // Minecraft: End City (miasto) i End Ship (statek) są odrębnymi encjami.
   // Nie łączymy ich aliasów — walidator ma wykrywać zamianę miasta na statek i odwrotnie.
   { canonical: 'end city', names: ['End City', 'End Cities', 'Miasto Endu', 'Miasta Endu', 'Miasto Kresu', 'Miasta Kresu'] },
@@ -28,7 +28,7 @@ const ENTITY_ALIAS_GROUPS = Object.freeze([
   { canonical: 'ladies of the wood', names: ['Ladies of the Wood', 'Damy lasu'] },
   { canonical: 'bloody baron', names: ['Bloody Baron', 'Krwawy Baron', 'Baron Krwawy'] },
   // Zweryfikowane nazwy przedmiotów i lokacji z Wiedźmina 3 (PL/EN).
-  { canonical: 'feline armor', names: ['Feline Armor', 'Zbroja Szkoły Kota', 'Zbroja wiedźmińskiego cechu kota'] },
+  { canonical: 'feline armor', names: ['Feline Armor', 'Feline Gear', 'Feline Gear Set', 'Cat School Gear', 'Zbroja Szkoły Kota', 'Zbroja wiedźmińskiego cechu kota', 'Rynsztunek Szkoły Kota', 'Rynsztunek Kociej Szkoły'] },
   { canonical: 'temple isle', names: ['Temple Isle', 'Wyspa Świątynna'] },
   { canonical: 'eye of nehaleni', names: ['Eye of Nehaleni', 'Oko Nehaleni'] },
   // Keep the Skyrim item separate from Dragonrend; only the English item name is unambiguous.
