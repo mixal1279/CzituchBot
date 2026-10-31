@@ -99,3 +99,18 @@ test('preflight timeout remains authoritative when the wrapper recomputes a diff
   assert.equal(wybierzTimeoutWalidatora(9000, 9000), 9000);
   assert.equal(wybierzTimeoutWalidatora(null, 5206), 5206);
 });
+
+test('Gemini policy blocks are recorded separately from transport unavailability', () => {
+  const raw = [
+    metric({
+      status: 'unavailable',
+      safetyBlocked: true,
+      reason: 'Gemini blocked response: finishReason=PROHIBITED_CONTENT',
+    }),
+  ];
+  assert.equal(raw[0].failureReason, 'safety_block');
+  assert.equal(raw[0].safetyBlocked, true);
+  const aggregate = agregujMetrykiWalidatorow(raw).gemini;
+  assert.equal(aggregate.safetyBlocks, 1);
+  assert.equal(aggregate.unavailable, 0);
+});
