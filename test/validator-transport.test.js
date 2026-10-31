@@ -166,6 +166,8 @@ test('Gemini zachowuje promptFeedback, gdy prompt jest zablokowany i nie ma kand
   assert.match(result.reason, /HARM_CATEGORY_DANGEROUS_CONTENT/);
   assert.equal(result.safetyRatings[0].blocked, true);
   assert.equal(result.transient, false);
+  assert.equal(result.safetyBlocked, true);
+  assert.equal(result.technicalError, false);
 });
 
 test('Gemini raportuje brak kandydatów bez promptFeedback jako osobny błąd odpowiedzi', async () => {
@@ -182,6 +184,8 @@ test('Gemini raportuje brak kandydatów bez promptFeedback jako osobny błąd od
   assert.match(result.reason, /nie podał promptFeedback\.blockReason/);
   assert.equal(Object.hasOwn(result, 'blockReason'), false);
   assert.equal(result.transient, false);
+  assert.equal(result.safetyBlocked, undefined);
+  assert.equal(result.technicalError, true);
 });
 
 test('Gemini zachowuje finishReason i safetyRatings, gdy kandydat nie zawiera tekstu', async () => {
@@ -208,6 +212,8 @@ test('Gemini zachowuje finishReason i safetyRatings, gdy kandydat nie zawiera te
   assert.match(result.reason, /HARM_CATEGORY_HARASSMENT/);
   assert.equal(result.safetyRatings[0].blocked, true);
   assert.equal(result.transient, false);
+  assert.equal(result.safetyBlocked, true);
+  assert.equal(result.technicalError, false);
 });
 
 test('Gemini oznacza niekompletny JSON jako ucięty, gdy finishReason to MAX_TOKENS', async () => {
