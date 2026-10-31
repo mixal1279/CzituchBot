@@ -13,7 +13,7 @@
  * rejected); otherwise it is one of budget_exhausted, slot_unavailable,
  * missing_credentials, provider_cooldown, missing_sources, quota,
  * provider_overload, timeout, empty_response, invalid_json, http_error, or
- * provider_unavailable. More specific causes take precedence over generic HTTP
+ * provider_unavailable, safety_block. More specific causes take precedence over generic HTTP
  * status detection, so "high demand" is not misreported as an ordinary HTTP error.
  *
  * actualMs is null for skipped attempts. sourceCount counts SOURCE/REFERENCE
@@ -38,7 +38,7 @@ function agregujMetrykiWalidatorow(metrics = []) {
     const row = byValidator[key] ||= {
       attempted: 0, skippedBudget: 0, skippedSlot: 0, skippedProvider: 0, avgMs: null,
       timeouts: 0, quotas: 0, providerOverloads: 0, httpErrors: 0,
-      emptyResponses: 0, invalidJson: 0,
+      emptyResponses: 0, invalidJson: 0, safetyBlocks: 0,
       unavailable: 0, accepted: 0, softAccepted: 0, rejected: 0,
     };
     if (metric.outcome === 'attempted') row.attempted++;
@@ -51,7 +51,8 @@ function agregujMetrykiWalidatorow(metrics = []) {
     if (metric.failureReason === 'http_error') row.httpErrors++;
     if (metric.failureReason === 'empty_response') row.emptyResponses++;
     if (metric.failureReason === 'invalid_json') row.invalidJson++;
-    if (metric.status === 'unavailable') row.unavailable++;
+    if (metric.failureReason === 'safety_block') row.safetyBlocks++;
+    if (metric.status === 'unavailable' && metric.failureReason !== 'safety_block') row.unavailable++;
     if (metric.status === 'accepted') row.accepted++;
     if (metric.status === 'soft_accepted') row.softAccepted++;
     if (metric.status === 'rejected') row.rejected++;
@@ -92,11 +93,14 @@ function zbudujKontekstMetrykiWalidatora(requestId, validator, model, odpowiedz,
     || /quotaexceeded|quota exceeded|rate.?limit|resource.?exhausted|insufficient quota|billing hard limit/i.test(diagnosticText);
   const isTimeout = result?.abortLike === true || result?.timeoutAbort === true
     || /abortlike["']?\s*[:=]\s*["']?true|aborterror|aborted|abort|cancelled|canceled|anulowan|timeout|timed out|etimedout/i.test(diagnosticText);
+  const isSafetyBlocked = result?.safetyBlocked === true
+    || /(?:blockReason|finishReason)\s*[=:]\s*["']?(?:SAFETY|BLOCKLIST|PROHIBITED_CONTENT|SPII|IMAGE_SAFETY|RECITATION)\b/i.test(diagnosticText);
   const failureReason = resolvedOutcome === 'skipped_budget' ? 'budget_exhausted'
     : resolvedOutcome === 'skipped_slot' ? 'slot_unavailable'
     : resolvedOutcome === 'skipped_provider' && /cooldown|cool down/i.test(diagnosticText) ? 'provider_cooldown'
     : resolvedOutcome === 'skipped_provider' && /brak .*key|brak .*klucz.*api|missing credentials|api key/i.test(diagnosticText) ? 'missing_credentials'
     : resolvedOutcome === 'skipped_provider' && /brak danych referencyjnych|missing sources/i.test(diagnosticText) ? 'missing_sources'
+    : isSafetyBlocked ? 'safety_block'
     : isTerminal ? null
     : isQuota ? 'quota'
     : isOverload ? 'provider_overload'
@@ -114,7 +118,7 @@ function zbudujKontekstMetrykiWalidatora(requestId, validator, model, odpowiedz,
     actualMs: resolvedOutcome === 'attempted' && Number.isFinite(startedAt)
       ? Math.max(0, Date.now() - startedAt)
       : null,
-    status: result?.status || 'unavailable', failureReason, sourceCount,
+    status: result?.status || 'unavailable', failureReason, safetyBlocked: isSafetyBlocked, sourceCount,
     skipReason: resolvedOutcome.startsWith('skipped_') ? String(result?.reason || result?.error || 'unspecified') : null,
     answerLength: answer.length, claimCountHeuristic, tavilyChars: null,
   };
