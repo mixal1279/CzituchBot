@@ -301,7 +301,7 @@ function buildBenchmarkDiagnostics(results, allCases = benchmark.cases, selected
   const validatorStatusCounts = {};
   for (const row of validatorRows) {
     const provider = String(row.provider || 'unknown');
-    const status = row.skipped === true ? 'skipped' : String(row.status || 'unknown');
+    const status = row.skipped === true ? 'skipped' : (row.safetyBlocked === true ? 'safety_blocked' : String(row.status || 'unknown'));
     if (row.skipped !== true) validatorProviderCalls[provider] = (validatorProviderCalls[provider] || 0) + 1;
     validatorStatusCounts[status] = (validatorStatusCounts[status] || 0) + 1;
   }
@@ -349,7 +349,7 @@ function buildBenchmarkDiagnostics(results, allCases = benchmark.cases, selected
   const validatorAttempts = results.flatMap(result =>
     (result.validatorResults || [])
       .filter(row => row.skipped !== true && row.provider)
-      .map(row => ({ provider: String(row.provider), status: row.status }))
+      .map(row => ({ provider: String(row.provider), status: row.safetyBlocked === true ? 'blocked' : row.status }))
   );
   const failedProvidersInRole = attempts => {
     const providers = [...new Set(attempts.map(attempt => attempt.provider))];
@@ -371,8 +371,10 @@ function buildBenchmarkDiagnostics(results, allCases = benchmark.cases, selected
     ...failedValidatorProviders.filter(provider => provider !== 'gemini').map(provider => `${provider}:validator`),
   ])].sort();
   const validatorCalls = validatorRows.filter(row => row.skipped !== true).length;
-  const validatorUnavailable = validatorRows.filter(row => row.status === 'unavailable' && row.skipped !== true).length;
-  const validatorUnavailableRate = validatorCalls ? validatorUnavailable / validatorCalls : 0;
+  const validatorSafetyBlocks = validatorRows.filter(row => row.safetyBlocked === true && row.skipped !== true).length;
+  const validatorUnavailable = validatorRows.filter(row => row.status === 'unavailable' && row.safetyBlocked !== true && row.skipped !== true).length;
+  const validatorAvailabilityChecks = validatorRows.filter(row => row.skipped !== true && row.safetyBlocked !== true).length;
+  const validatorUnavailableRate = validatorAvailabilityChecks ? validatorUnavailable / validatorAvailabilityChecks : 0;
   const qualityDegradationReasons = [];
   if (failedOutageProviders.length > 0) qualityDegradationReasons.push('primary_provider_outage');
   if (validatorCalls === 0) qualityDegradationReasons.push('no_validator_calls');
@@ -410,8 +412,12 @@ function buildBenchmarkDiagnostics(results, allCases = benchmark.cases, selected
     qualityDegradationReasons,
     validatorProviderCalls,
     validatorStatusCounts,
+    validatorSafetyBlocks,
+    validatorSafetyBlockDetails: validatorRows
+      .filter(row => row.safetyBlocked === true && row.skipped !== true)
+      .map(row => ({ provider: row.provider || 'unknown', model: row.model || null, reason: row.reason || null, blockReason: row.blockReason || null, finishReason: row.finishReason || null })),
     validatorTransportFailures: validatorRows
-      .filter(row => row.skipped !== true && (row.status === 'unavailable' || row.status === 'error' || row.technicalError === true))
+      .filter(row => row.skipped !== true && row.safetyBlocked !== true && (row.status === 'unavailable' || row.status === 'error' || row.technicalError === true))
       .map(row => ({
         provider: row.provider || 'unknown', model: row.model || null, status: row.status || 'unknown',
         reason: row.reason || null, technicalError: row.technicalError === true,
