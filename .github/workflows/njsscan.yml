@@ -56,8 +56,9 @@ jobs:
           echo "::error::njsscan did not produce a JSON report (exit code: $scan_status)"
           exit 1
         fi
-        python - <<'PY'
+        NJSSCAN_EXIT_CODE="$scan_status" python - <<'PY'
         import json
+        import os
         from pathlib import Path
         report = json.loads(Path('njsscan-report.json').read_text(encoding='utf-8'))
         errors = report.get('errors', [])
@@ -65,7 +66,7 @@ jobs:
         findings = sum(len(rule.get('files', [])) for rule in nodejs.values())
         print(f"njsscan JSON valid; findings={findings}; scanner_errors={len(errors)}")
         with open('njsscan-summary.txt', 'w', encoding='utf-8') as output:
-            output.write(f"findings={findings}\\nscanner_errors={len(errors)}\\nexit_code={scan_status}\\n")
+            output.write(f"findings={findings}\\nscanner_errors={len(errors)}\\nexit_code={os.environ['NJSSCAN_EXIT_CODE']}\\n")
         PY
     - name: Upload njsscan JSON artifact
       if: always()
