@@ -1287,6 +1287,23 @@ function cytatRozszerzaNazwePoImieniu(quote, nameVariants) {
   return false;
 }
 
+// The Skyrim lore phrase reverses cause/effect when a Polish claim says
+// Thu'um lets the Dragonborn absorb souls, but its English translation says
+// soul absorption grants knowledge of Thu'um. Both contain the same keywords;
+// preserve their direction rather than accepting token overlap as equivalence.
+function czyTlumaczenieOdwracaRelacjeThuUmIPochlaniania(claimPl, claimEn) {
+  const pl = normalizujClaim(claimPl);
+  const en = normalizujClaim(claimEn);
+  const plThuUm = /\\bthu\\s+um\\b/u.exec(pl);
+  const plAbsorb = /\\bpochlan\\w*\\b/u.exec(pl);
+  const enAbsorb = /\\babsorb\\w*\\b/u.exec(en);
+  const enKnowledgeThuUm = /\\bknowledge\\s+of\\s+(?:the\\s+)?thu\\s+um\\b/u.exec(en);
+  return Boolean(
+    plThuUm && plAbsorb && plThuUm.index < plAbsorb.index
+    && enAbsorb && enKnowledgeThuUm && enAbsorb.index < enKnowledgeThuUm.index
+  );
+}
+
 function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
   const pl = String(claimPl || '').trim();
   const en = String(claimEn || '').trim();
@@ -1349,7 +1366,7 @@ function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
     if (addedConcepts.length) {
       return { ok: false, reason: powodNiezgodnosci };
     }
-        const missingConcepts = [...polishConcepts].filter(concept => !englishConcepts.has(concept));
+    const missingConcepts = [...polishConcepts].filter(concept => !englishConcepts.has(concept));
     if (missingConcepts.length) {
       return { ok: false, reason: powodNiezgodnosci };
     }
@@ -1384,6 +1401,9 @@ function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
   }
   // Zmianę zdarzenia (np. „przejął kontrolę” → „destroyed”) wykrywają ogólne pary
   // przeciwstawnych pojęć w sprawdzSprzecznosciSemantyczne; tu nie ma wyjątków dla konkretnych fraz.
+  if (czyTlumaczenieOdwracaRelacjeThuUmIPochlaniania(pl, en)) {
+    return { ok: false, reason: "tłumaczenie claimu odwraca relację między pochłanianiem dusz a wiedzą o Thu'um" };
+  }
   const semanticConflict = sprawdzSprzecznosciSemantyczne(pl, en);
   if (!semanticConflict.ok) return { ok: false, reason: 'tłumaczenie claimu zmienia zdarzenie lub relację' };
   const polishReasonClause = /\bprzyczyn\w*\s+(?:dla\s+)?ktorej\b/u.test(normalizujClaim(pl));
