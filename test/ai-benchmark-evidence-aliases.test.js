@@ -41,6 +41,16 @@ test('Minecraft End City and End Ship are separate localized entities', () => {
   assert.equal(czyNazwaWlasnaWystepuje('end ship', 'Statek Endu'), true);
   assert.equal(czyNazwaWlasnaWystepuje('end ship', 'End City'), false);
   assert.equal(czyNazwaWlasnaWystepuje('end city', 'End Ship'), false);
+  const correctTranslation = spojnoscTlumaczeniaClaimu(
+    'End City znajduje się na zewnętrznych wyspach Endu.',
+    'End City is located on the outer islands of the End.',
+  );
+  assert.equal(correctTranslation.ok, true, JSON.stringify(correctTranslation));
+  const swappedStructure = spojnoscTlumaczeniaClaimu(
+    'End City znajduje się na zewnętrznych wyspach Endu.',
+    'End Ship is located on the outer islands of the End.',
+  );
+  assert.equal(swappedStructure.ok, false, JSON.stringify(swappedStructure));
 });
 
 test('Polish ochron* and English protection have matching translation polarity', () => {
