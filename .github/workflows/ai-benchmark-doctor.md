@@ -4,12 +4,11 @@ description: |
   root causes from logs and repository context, and reports evidence-backed
   recommendations without modifying code.
 engine: copilot
-model: gpt-5-mini
 on:
   workflow_run:
     workflows: ["AI live benchmark"]
     types: [completed]
-    branches: ["main", "fix/validator-false-rejection-regressions"]
+    branches: ["main", "fix/validator-false-rejection-regressions", "fix/doctor-copilot-free-auto-model"]
 if: ${{ github.event.workflow_run.conclusion == 'failure' }}
 permissions:
   actions: read
@@ -32,7 +31,7 @@ steps:
     run: |
       node <<'NODE'
       const fs = require('fs');
-      const allowedBranches = new Set(['main', 'fix/validator-false-rejection-regressions']);
+      const allowedBranches = new Set(['main', 'fix/validator-false-rejection-regressions', 'fix/doctor-copilot-free-auto-model']);
       const sameRepo = process.env.REPOSITORY_ID === process.env.PRODUCER_REPOSITORY_ID &&
         process.env.REPOSITORY_ID === process.env.PRODUCER_HEAD_REPOSITORY_ID;
       const trusted = sameRepo &&
