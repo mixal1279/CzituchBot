@@ -57,3 +57,23 @@ test('game title words do not have to occur in the evidence, other names still d
   );
   assert.equal(swapped.ok, false, JSON.stringify(swapped));
 });
+
+
+ 
+test('GTA V title numeral is not mistaken for a factual number in a cited claim', () => {
+  const result = sprawdzTwardeKonflikty(
+    'Nine years after a failed robbery, Michael unexpectedly encounters Trevor Philips.',
+    'Michael meets Trevor in GTA V.',
+    { ignoreNegation: true },
+  );
+  assert.equal(result.ok, true, JSON.stringify(result));
+});
+
+test('a different GTA sequel in the evidence still conflicts with GTA V in the claim', () => {
+  const result = zgodnoscStrukturalna(
+    'Michael meets Trevor in GTA IV.',
+    'Michael meets Trevor in GTA V.',
+    { allowCrossLanguageExactEvidence: true },
+  );
+  assert.equal(result.ok, false, JSON.stringify(result));
+});
