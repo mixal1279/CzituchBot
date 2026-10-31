@@ -60,3 +60,50 @@ test('Polish ochron* and English protection have matching translation polarity',
   );
   assert.equal(result.ok, true, JSON.stringify(result));
 });
+
+
+test('Witcher 3 School of the Cat survives Polish inflection as one entity', () => {
+  assert.equal(czyNazwaWlasnaWystepuje('school of the cat', 'Zbroja Szkoły Kota'), true);
+  assert.equal(czyNazwaWlasnaWystepuje('school of the cat', 'rynsztunek Kociej Szkoły'), true);
+  assert.equal(czyNazwaWlasnaWystepuje('school of the cat', 'School of the Wolf'), false);
+});
+
+test('Skyrim Dovahkiin aliases survive source spelling and inflection', () => {
+  assert.equal(czyNazwaWlasnaWystepuje('dovahkiin', 'Laat Dovahkiin'), true);
+  assert.equal(czyNazwaWlasnaWystepuje('dovahkiin', 'the Dovah-Kiin'), true);
+  assert.equal(czyNazwaWlasnaWystepuje('dovahkiin', 'Dragonborn'), false);
+});
+
+test('causal translation accepts the source wording as they have a better chance', () => {
+  const result = spojnoscTlumaczeniaClaimu(
+    'Astarion chętnie dołącza do drużyny, gdyż jako grupa mają większe szanse na znalezienie lekarstwa na kijanki.',
+    'After clearing up the misunderstanding, Astarion happily joins the party as they have a better chance of finding a cure for their tadpoles together.',
+  );
+  assert.equal(result.ok, true, JSON.stringify(result));
+});
+
+test('causal translation preserves the Polish pozwala / English enables relation', () => {
+  const result = spojnoscTlumaczeniaClaimu(
+    'To pozwala Dragonbornowi wykorzystać zdolność smoków do pochłaniania dusz poległych smoków.',
+    'It enables the Dragonborn to use the dragons’ ability to absorb a slain dragon’s soul.',
+  );
+  assert.equal(result.ok, true, JSON.stringify(result));
+});
+
+test('a copied source quote may be broader than the narrower Polish atomic claim', () => {
+  const quote = 'To enter, you need to throw the ender pearl onto the roof of the ship or build a one block wide bridge to the ship.';
+  const result = spojnoscTlumaczeniaClaimu(
+    'Aby wejść do statku, należy wyrzucić perłę Endera na dach lub zbudować jednoblockowy most.',
+    quote,
+    { evidenceQuote: quote },
+  );
+  assert.equal(result.ok, true, JSON.stringify(result));
+});
+
+test('the word block in Minecraft bridge width is not a protection/reduction marker', () => {
+  const result = spojnoscTlumaczeniaClaimu(
+    'Aby zbudować jednoblockowy most do statku, należy postawić most o szerokości jednego bloku.',
+    'To build a one block wide bridge to the ship, build a bridge that is one block wide.',
+  );
+  assert.equal(result.ok, true, JSON.stringify(result));
+});
