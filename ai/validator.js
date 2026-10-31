@@ -1072,6 +1072,7 @@ module.exports = {
   czyWartoDrugaOpinieWalidatora,
   normalizujWynikWalidatora,
   wyodrebnijIdentyfikatoryZrodel,
+  resolveClaimSourceIds,
   sprawdzTwardeFaktyOdpowiedzi,
   sprawdzKompletnoscOdpowiedzi,
 };
