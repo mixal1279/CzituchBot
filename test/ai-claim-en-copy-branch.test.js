@@ -76,7 +76,7 @@ test('copied quote is rejected when it shares an entity but no verifiable action
 test('copied Dragonborn quote accepts a faithful Polish identity claim', () => {
   const quote = 'A Dragonborn or Dovahkiin is a mortal man or woman born with the blood and soul of a dragon';
   const result = spojnoscTlumaczeniaClaimu(
-    'Dovahkiin jest śmiertelnym mężczyzną lub kobietą urodzonym z krwią i duszą smoka.',
+    'Dragonborn, znany również jako Dovahkiin, jest śmiertelnym mężczyzną lub kobietą urodzonym z krwią i duszą smoka.',
     quote,
     { evidenceQuote: quote },
   );
