@@ -4,6 +4,7 @@ description: |
   root causes from logs and repository context, and reports evidence-backed
   recommendations without modifying code.
 engine: copilot
+model: auto
 on:
   workflow_run:
     workflows: ["AI live benchmark"]
