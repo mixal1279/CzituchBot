@@ -121,6 +121,9 @@ const KNOWN_ENTITY_ALIAS_PATTERNS = [
   // „Oka Nehaleni” is an inflected Polish form; keep an explicit full-name alias
   // because the generic token inflector cannot safely infer this proper-name form.
   { canonical: 'eye of nehaleni', pattern: /\b(?:eye\s+of\s+nehaleni|oko\s+nehaleni|oka\s+nehaleni)\b/iu },
+  // Localized Dragonborn lore titles remain equivalent across Polish and English.
+  { canonical: 'last dragonborn', pattern: /\b(?:last\s+dragonborn|ostatni(?:m|ego|emu|ym)?\s+dragonborn(?:em|a|owi|ie)?)\b/iu },
+  { canonical: 'prophecy of the dragonborn', pattern: /\b(?:prophecy\s+of\s+the\s+dragonborn|proroctw(?:o|a|u|ie|em)\s+dragonborn(?:a|u|em|ie)?)\b/iu },
   { canonical: 'wild hunt', pattern: /\b(?:wild\s+hunt|dziki\s+gon|dzikiego\s+gonu|dzikim\s+gonem)\b/iu },
   { canonical: 'cathedral of dragon communion', pattern: /\b(?:cathedral\s+of\s+dragon\s+communion|katedr(?:a|y|ę|e|ze)\s+komunii\s+smoka)\b/iu },
 ];
