@@ -50,6 +50,29 @@ jobs:
           gh aw version
           gh aw compile .github/workflows/ai-benchmark-doctor.md
 
+      - name: Apply Copilot Free automatic-selection compatibility patch
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const path = '.github/workflows/ai-benchmark-doctor.lock.yml';
+          const content = fs.readFileSync(path, 'utf8');
+          // gh-aw v0.93.2 still emits COPILOT_MODEL=auto for model: auto.
+          // Copilot Free requires the variable to be absent so the CLI can
+          // perform native automatic routing. Remove only the agent's exact
+          // sentinel assignment; leave detection's independent model policy intact.
+          const marker = '          COPILOT_MODEL: auto\\n';
+          const count = content.split(marker).length - 1;
+          if (count !== 1) {
+            throw new Error(`Expected exactly one agent COPILOT_MODEL: auto assignment; found ${count}`);
+          }
+          const patched = content.replace(marker, '');
+          if (patched.includes(marker)) {
+            throw new Error('COPILOT_MODEL auto assignment remains after compatibility patch');
+          }
+          fs.writeFileSync(path, patched);
+          process.stdout.write('Removed explicit COPILOT_MODEL from the Copilot Free agent job.\\n');
+          NODE
+
       - name: Upload generated lock file
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
