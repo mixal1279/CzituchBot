@@ -79,7 +79,7 @@ const { planAIRequest, responseContract, RESPONSE_PROFILES, buildRetrievalQuerie
 const { resolveGameEntity, scoreExternalGameCandidate, externalGameCandidateMatchesQuery } = require('./ai/entities');
 const { extractExplicitUserMemories, mergeMemoryRecords, buildVerifiedMemoryContext, pruneExpiredMemories } = require('./ai/memory');
 const { parseMemoryCommand, forgetMemories, describeMemories } = require('./ai/memory_manager');
-const { decomposeQuestion, isMultiPartQuestion, buildAdvancedRetrievalPlan, buildSupplementalRetrievalQuery, selectRetrievalQueries, selectRetrievalDomains, initialRetrievalQueryLimit } = require('./ai/retrieval');
+const { decomposeQuestion, isMultiPartQuestion, buildAdvancedRetrievalPlan, buildSupplementalRetrievalQuery, selectRetrievalQueries, selectRetrievalDomains, selectGameSpecificRetrievalDomains, initialRetrievalQueryLimit } = require('./ai/retrieval');
 const { classifyFailure, nextFallbacks, selectRepairFallbacks, filterAvailableFallbacks, repairBudgetBlockReason, GENERATION_FALLBACK_CHAIN, configuredMaxFallbackSteps, markProviderQuota, isProviderQuotaBlocked, shouldBlockProviderQuotaWide, quotaCooldownMsFromError, geminiGenerationCooldownMsFromError, retryAfterHint, openRouterErrorMessage, shouldOpenQuotaCircuit } = require('./ai/fallback');
 const { normalizeGroqBaseUrl, createGroqCompletion, createGroqCompletionWithSchemaFallback, awaitWithAbortTimeout, computeValidatorTimeout, computeValidatorReserveMs, computeGenerationTimeout, normalizeGroqSdkBaseUrl, INITIAL_VALIDATOR_REPAIR_RESERVE_MS, shouldAttemptUnavailableRepair } = require('./ai/provider-runtime');
 const { createAIMetrics, recordAIMetric, snapshotAIMetrics } = require('./ai/metrics');
@@ -3198,6 +3198,8 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
   if ((pytanieOLore || pytanieOGameplay) && Array.isArray(domenySpecjalistyczne)) {
     domenySpecjalistyczne = [...new Set(domenySpecjalistyczne)];
   }
+  // Game-specific reference domains are preferences, never overrides for strict persona allowlists.
+  domenySpecjalistyczne = selectGameSpecificRetrievalDomains(aiPlan.game || aiPlan.entity || '', pytanie, domenySpecjalistyczne);
   if (pytanieOLore) console.log(`[Lore] 📚 Wykryto pytanie lore — preferowane źródło: ${GAMELORE_DOMAIN}`);
   if (pytanieOGameplay) console.log(`[Gameplay] 🎮 Wykryto pytanie gameplay — preferowane źródło: ${GAMEFAQS_DOMAIN}`);
   // Dla AI Billy, jeśli pytanie jednoznacznie dotyczy Billy/jej kanału,

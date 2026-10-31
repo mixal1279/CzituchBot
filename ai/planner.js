@@ -69,9 +69,17 @@ function buildRetrievalQueries(question, routing = {}, options = {}) {
   if (isWhereQuestion) {
     dodajUnikalneQuery(queries, [entity, game, 'exact location landmark nearby map'].filter(Boolean).join(' '));
   } else if (isWhenQuestion) {
-    dodajUnikalneQuery(queries, [entity, game, 'story timeline quest order arrival'].filter(Boolean).join(' '));
+    const gtaMeetingContext = /\b(?:gta\s*(?:v|5)|grand theft auto v|michael|trevor)\b/iu.test([original, entity, game].join(' '));
+    const timelineHints = gtaMeetingContext
+      ? 'story timeline quest order arrival Michael Townley Trevor Philips first encounter Fame or Shame mission Prologue nine years later'
+      : 'story timeline quest order arrival';
+    dodajUnikalneQuery(queries, [entity, game, timelineHints].filter(Boolean).join(' '));
   } else if (isWhoQuestion) {
-    dodajUnikalneQuery(queries, [entity, game, 'character identity background role companion lore'].filter(Boolean).join(' '));
+    const dragonbornContext = /\b(?:dragonborn|dovahkiin)\b/iu.test([original, entity].join(' ')) && /\bskyrim\b/iu.test([original, game].join(' '));
+    const identityHints = dragonbornContext
+      ? 'character identity background role companion lore Dragonborn Dovahkiin last Dragonborn prophecy dragon soul'
+      : 'character identity background role companion lore';
+    dodajUnikalneQuery(queries, [entity, game, identityHints].filter(Boolean).join(' '));
   } else if (isWhyQuestion) {
     // Core transfer jest bardzo charakterystyczny dla wątku Portal 2/Wheatleya.
     // Dodawanie go do KAŻDEGO pytania „dlaczego” tworzy szum (np. wyniki Magic:
@@ -79,9 +87,12 @@ function buildRetrievalQueries(question, routing = {}, options = {}) {
     // pytania rzeczywiście wskazuje ten wątek; pozostałe pytania dostają neutralne,
     // ale tematycznie sensowne frazy do wyszukiwarki.
     const portalCoreTransferContext = /\b(?:portal\s*2|wheatley|glados|core\s+transfer|transfer\s+rdzenia|rdzen\w*)\b/iu.test([original, entity, game].join(' '));
+    const astarionContext = /\bastarion\b/iu.test([original, entity].join(' ')) && /baldur/iu.test([original, game].join(' '));
     const causalHints = portalCoreTransferContext
       ? 'cause reason motivation event core transfer lore'
-      : 'cause reason motivation story conflict lore backstory relationship antagonist escape joins party';
+      : astarionContext
+        ? 'cause reason motivation story conflict Astarion Cazador Szarr vampire spawn escaped master freedom why joins party backstory'
+        : 'cause reason motivation story conflict lore backstory relationship antagonist escape joins party';
     dodajUnikalneQuery(queries, [entity, game, causalHints].filter(Boolean).join(' '));
     if (routing?.is_lore && /(?:astarion|wheatley|glados|chell|arthur|geralt|ciri|johnny|shadowheart|karlach|gale|dragonborn)/iu.test([original, entity].join(' '))) {
       dodajUnikalneQuery(queries, [entity, game, 'motivation backstory antagonist freedom why joins party'].filter(Boolean).join(' '));
@@ -89,7 +100,11 @@ function buildRetrievalQueries(question, routing = {}, options = {}) {
   } else if (routing?.is_lore) {
     dodajUnikalneQuery(queries, [entity || original, game, 'character history story lore'].filter(Boolean).join(' '));
   } else if (routing?.is_gameplay) {
-    dodajUnikalneQuery(queries, [entity || original, game, 'gameplay strategy mechanics guide walkthrough'].filter(Boolean).join(' '));
+    const minecraftElytraContext = /\b(?:elytra|elytr\p{L}*)\b/iu.test(original) && /\bminecraft\b/iu.test([original, game].join(' '));
+    const gameplayHints = minecraftElytraContext
+      ? 'gameplay strategy mechanics guide walkthrough Minecraft elytra obtain Survival mode End ship End city treasure room shulker how to get'
+      : 'gameplay strategy mechanics guide walkthrough';
+    dodajUnikalneQuery(queries, [entity || original, game, gameplayHints].filter(Boolean).join(' '));
   } else if (routing?.freshness === 'live') {
     dodajUnikalneQuery(queries, [entity, ...keywords.slice(0, 8), 'latest today'].filter(Boolean).join(' '));
   } else if (routing?.freshness === 'recent') {

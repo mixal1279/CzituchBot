@@ -106,3 +106,25 @@ test('retrieval planning keeps original atomic question and specialized query fo
     'Skyrim combat guide for dragon fights',
   ]);
 });
+
+
+ 
+test('game-specific reference domains are added without replacing configured domains', () => {
+  const { selectGameSpecificRetrievalDomains } = require('../ai/retrieval');
+  assert.deepEqual(
+    selectGameSpecificRetrievalDomains('Skyrim', 'Kim jest Dragonborn?', ['ign.com']),
+    ['ign.com', 'en.uesp.net', 'elderscrolls.fandom.com'],
+  );
+  assert.deepEqual(
+    selectGameSpecificRetrievalDomains('Minecraft', 'Jak zdobyć elytrę?', ['minecraft.wiki']),
+    ['minecraft.wiki'],
+  );
+  assert.deepEqual(
+    selectGameSpecificRetrievalDomains("Baldur's Gate 3", 'Dlaczego Astarion?', null),
+    ['bg3.wiki'],
+  );
+  assert.deepEqual(
+    selectGameSpecificRetrievalDomains('GTA V', 'Kiedy Michael poznaje Trevora?', []),
+    ['gta.fandom.com'],
+  );
+});

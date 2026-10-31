@@ -98,3 +98,25 @@ for (const question of [
 }
 
 console.log('AI routing benchmark: OK');
+
+
+ 
+const astarionWhyQueries = buildRetrievalQueries('Dlaczego Astarion dołączył do drużyny?', {
+  needs_web: true, is_lore: true, entity: 'Astarion', game: "Baldur's Gate 3",
+}, { maxQueries: 4 });
+assert.ok(astarionWhyQueries.some(query => /Cazador.*vampire spawn.*escape/i.test(query)));
+
+const dragonbornWhoQueries = buildRetrievalQueries('Kim jest Dragonborn?', {
+  needs_web: true, is_lore: true, entity: 'Dragonborn', game: 'Skyrim',
+}, { maxQueries: 4 });
+assert.ok(dragonbornWhoQueries.some(query => /Dovahkiin.*last Dragonborn.*prophecy/i.test(query)));
+
+const trevorWhenQueries = buildRetrievalQueries('Kiedy Michael poznaje Trevora?', {
+  needs_web: true, entity: 'Michael', game: 'GTA V',
+}, { maxQueries: 4 });
+assert.ok(trevorWhenQueries.some(query => /Fame or Shame.*Prologue/i.test(query)));
+
+const elytraHowQueries = buildRetrievalQueries('Jak zdobyć elytrę?', {
+  needs_web: true, is_gameplay: true, entity: 'Minecraft', game: 'Minecraft',
+}, { maxQueries: 4 });
+assert.ok(elytraHowQueries.some(query => /elytra obtain Survival mode End ship/i.test(query)), JSON.stringify(elytraHowQueries));
