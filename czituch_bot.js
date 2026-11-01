@@ -6697,6 +6697,54 @@ const oauth2Client = new OAuth2Client(
 );
 const youtube = youtubeFactory({ version: 'v3', auth: oauth2Client });
 
+// search.list ma osobny limit 100 zapytań/dobę. Rezerwujemy maksymalnie 80
+// wywołań w ruchomym oknie 24 h dla CAŁEGO bota, zostawiając 20 na
+// ewentualne inne integracje/wywołania spoza tego modułu.
+const YT_SEARCH_QUOTA_WINDOW_MS = 24 * 60 * 60 * 1000;
+const YT_SEARCH_QUOTA_MAX_CALLS = 80;
+const YT_SEARCH_QUOTA_CALLS = [];
+function youtubeSearchList(params) {
+  const now = Date.now();
+  while (YT_SEARCH_QUOTA_CALLS.length && now - YT_SEARCH_QUOTA_CALLS[0] >= YT_SEARCH_QUOTA_WINDOW_MS) {
+    YT_SEARCH_QUOTA_CALLS.shift();
+  }
+  if (YT_SEARCH_QUOTA_CALLS.length >= YT_SEARCH_QUOTA_MAX_CALLS) {
+    const error = new Error('Osiągnięto lokalny limit 80 wywołań YouTube search.list w ruchomym oknie 24 h.');
+    error.code = 'YT_SEARCH_LOCAL_QUOTA_LIMIT';
+    throw error;
+  }
+  // Liczymy próbę przed requestem, także wtedy, gdy API zwróci błąd.
+  YT_SEARCH_QUOTA_CALLS.push(now);
+  return youtube.search.list(params);
+}
+
+// Cache negatywnej weryfikacji ogranicza ponowne sprawdzanie tego samego VOD
+// przy 45-sekundowym pollingu. Upcoming ma krótszy TTL, by nie opóźniać LIVE.
+const YT_VIDEO_VERIFY_CACHE = new Map();
+const YT_VIDEO_VERIFY_NEGATIVE_TTL_MS = 5 * 60 * 1000;
+const YT_VIDEO_VERIFY_UPCOMING_TTL_MS = 30 * 1000;
+function getCachedYouTubeVideoVerification(channelId, videoId) {
+  const key = channelId + ':' + videoId;
+  const entry = YT_VIDEO_VERIFY_CACHE.get(key);
+  if (!entry) return null;
+  if (entry.expiresAt <= Date.now()) {
+    YT_VIDEO_VERIFY_CACHE.delete(key);
+    return null;
+  }
+  return entry.video || false;
+}
+function cacheYouTubeVideoVerification(channelId, videoId, video, ttl = YT_VIDEO_VERIFY_NEGATIVE_TTL_MS) {
+  const key = channelId + ':' + videoId;
+  YT_VIDEO_VERIFY_CACHE.set(key, { video: video || null, expiresAt: Date.now() + ttl });
+  if (YT_VIDEO_VERIFY_CACHE.size > 1000) {
+    const now = Date.now();
+    for (const [cacheKey, entry] of YT_VIDEO_VERIFY_CACHE) {
+      if (entry.expiresAt <= now) YT_VIDEO_VERIFY_CACHE.delete(cacheKey);
+    }
+    while (YT_VIDEO_VERIFY_CACHE.size > 1000) YT_VIDEO_VERIFY_CACHE.delete(YT_VIDEO_VERIFY_CACHE.keys().next().value);
+  }
+}
+
 // COFNIĘCIE youtubePublic — wracamy do jednego klienta OAuth dla wszystkich wywołań.
 // Powód: `auth: KONFIGURACJA.googleApiKey` wysyłał klucz API jako bearer token,
 // co Google odrzucał komunikatem "The authenticated user cannot act on behalf
@@ -6948,7 +6996,7 @@ function czyPasujeNazwaKanalu(szukana, znaleziona) {
 async function pobierzInfoOKanaleYT(nazwaKanalu) {
   try {
     const searchRes = await zGoogleRetry(
-      () => youtube.search.list({ part: ['snippet'], q: nazwaKanalu, type: ['channel'], maxResults: 3 }),
+      () => youtubeSearchList({ part: ['snippet'], q: nazwaKanalu, type: ['channel'], maxResults: 3 }),
       'wyszukiwanie kanału (info)'
     );
     const kandydaci = searchRes.data.items || [];
@@ -7007,7 +7055,7 @@ async function pobierzLiveChatId(nazwaKanalu) {
     // Fallback tylko dla kanałów bez skonfigurowanego ID/uchwytu.
     // Wynik jest cache'owany, aby polling live nie zużywał search.list przy każdym obrocie.
     const searchRes = await zGoogleRetry(
-      () => youtube.search.list({ part: ['snippet'], q: nazwaKanalu, type: ['channel'], maxResults: 5 }),
+      () => youtubeSearchList({ part: ['snippet'], q: nazwaKanalu, type: ['channel'], maxResults: 5 }),
       'jednorazowe wyszukiwanie kanału'
     );
     const channels = searchRes.data.items || [];
@@ -7029,41 +7077,59 @@ async function pobierzLiveChatId(nazwaKanalu) {
   // Kandydaci są sprawdzani po kolei; obcy film nie blokuje poprawnego wyniku niżej.
   let verifiedVideo = null;
   const videoId = await discoverLiveVideoId(channelId, {
-    // /live jest źródłem podstawowym. Oficjalne search.list to zapas,
-    // uruchamiany z limitem częstotliwości, bo kosztuje 100 jednostek quota.
+    // /live jest źródłem podstawowym; search.list jest ograniczany globalnie.
     searchLive: async requestedChannelId => {
       const now = Date.now();
-      const lastAttempt = YT_LIVE_API_FALLBACK_AT.get(requestedChannelId) || { at: 0, failed: false };
-      const cooldown = lastAttempt.failed
-        ? YT_LIVE_API_FALLBACK_FAILURE_INTERVAL_MS
-        : YT_LIVE_API_FALLBACK_INTERVAL_MS;
-      if (now - lastAttempt.at < cooldown) return null;
-      // Zapisz próbę przed requestem, żeby awaria/quota nie powodowała retry co 45 s.
-      YT_LIVE_API_FALLBACK_AT.set(requestedChannelId, { at: now, failed: true });
+      const lastAttempt = YT_LIVE_API_FALLBACK_AT.get(requestedChannelId) || { at: 0 };
+      if (now - lastAttempt.at < YT_LIVE_API_FALLBACK_INTERVAL_MS) return null;
+      // Zapis próby przed requestem zapobiega retry co 45 s po błędzie.
+      YT_LIVE_API_FALLBACK_AT.set(requestedChannelId, { at: now });
       const response = await zGoogleRetry(
-        () => youtube.search.list({
+        () => youtubeSearchList({
           part: ['snippet'], channelId: requestedChannelId,
           eventType: 'live', type: ['video'], maxResults: 5,
         }),
         'zapasowe wyszukiwanie aktywnych transmisji LIVE'
       );
-      YT_LIVE_API_FALLBACK_AT.set(requestedChannelId, { at: Date.now(), failed: false });
       return (response.data.items || [])
         .filter(item => item?.id?.videoId)
         .map(item => item.id.videoId);
     },
     throwIfAllSourcesFail: true,
-    verifyVideo: async candidateId => {
+    verifyVideos: async candidateIds => {
+      const uniqueIds = [...new Set(candidateIds)].filter(Boolean);
+      const uncachedIds = [];
+      for (const candidateId of uniqueIds) {
+        const cached = getCachedYouTubeVideoVerification(channelId, candidateId);
+        if (cached && cached !== false) {
+          verifiedVideo = cached;
+          return candidateId;
+        }
+        if (cached === null) uncachedIds.push(candidateId);
+      }
+      if (!uncachedIds.length) return null;
+
+      // videos.list przyjmuje wiele ID w jednym żądaniu (maks. 50).
       const videoRes = await zGoogleRetry(
-        () => youtube.videos.list({ part: ['snippet', 'liveStreamingDetails'], id: [candidateId] }),
-        'weryfikacja kandydata LIVE'
+        () => youtube.videos.list({
+          part: ['snippet', 'liveStreamingDetails'],
+          id: uncachedIds.slice(0, 50),
+        }),
+        'zbiorcza weryfikacja kandydatów LIVE'
       );
-      const candidate = videoRes.data.items?.[0];
-      // Tylko rzeczywista transmisja z dokładnie tego kanału. Sam kandydat
-      // z HTML lub search.list nigdy nie jest traktowany jako potwierdzenie.
-      if (!isLiveVideoFromChannel(candidate, channelId)) return false;
-      verifiedVideo = candidate;
-      return true;
+      const byId = new Map((videoRes.data.items || []).map(video => [video.id, video]));
+      for (const candidateId of uncachedIds) {
+        const candidate = byId.get(candidateId) || null;
+        if (isLiveVideoFromChannel(candidate, channelId)) {
+          verifiedVideo = candidate;
+          return candidateId;
+        }
+        const ttl = candidate?.snippet?.liveBroadcastContent === 'upcoming'
+          ? YT_VIDEO_VERIFY_UPCOMING_TTL_MS
+          : YT_VIDEO_VERIFY_NEGATIVE_TTL_MS;
+        cacheYouTubeVideoVerification(channelId, candidateId, null, ttl);
+      }
+      return null;
     },
   });
   if (!videoId || !verifiedVideo) {
@@ -7256,10 +7322,9 @@ const YT_KANAL_HANDLE = {
   'ArbuzikkYT': '@arbuzikinnegry',
 };
 const YT_CHANNEL_ID_CACHE = new Map(Object.entries(YT_KANAL_ID));
-// search.list kosztuje 100 jednostek quota. Przy pięciu monitorowanych kanałach
-// fallback co 3 godziny ogranicza zużycie do ok. 4 000 jednostek/dobę.
+// search.list ma osobny limit 100 zapytań/dobę; wszystkie wywołania bota
+// przechodzą przez youtubeSearchList z globalnym limitem 80/24 h.
 const YT_LIVE_API_FALLBACK_INTERVAL_MS = 3 * 60 * 60 * 1000;
-const YT_LIVE_API_FALLBACK_FAILURE_INTERVAL_MS = 30 * 60 * 1000;
 const YT_LIVE_API_FALLBACK_AT = new Map();
 
 async function youtubeWatcher(nazwaKanalu, wyslijFn) {
