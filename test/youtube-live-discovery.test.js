@@ -210,3 +210,37 @@ test('nie pyta zapasowego źródła ponownie dla duplikatu kandydata', async () 
   assert.equal(found, OTHER_VIDEO_ID);
   assert.deepEqual(checked, [VIDEO_ID, OTHER_VIDEO_ID]);
 });
+
+test('weryfikuje kandydatów zbiorczo jednym wywołaniem verifyVideos', async () => {
+  const html = assigned('ytInitialData', {
+    first: liveRenderer(OTHER_VIDEO_ID),
+    second: liveRenderer(VIDEO_ID),
+  });
+  const batches = [];
+  const found = await discoverLiveVideoId(CHANNEL_ID, {
+    fetchImpl: async url => ({ ok: true, status: 200, url, text: async () => html }),
+    verifyVideos: async (ids, channelId) => {
+      batches.push({ ids, channelId });
+      return ids.includes(VIDEO_ID) ? VIDEO_ID : null;
+    },
+  });
+  assert.equal(found, VIDEO_ID);
+  assert.equal(batches.length, 1);
+  assert.deepEqual(new Set(batches[0].ids), new Set([OTHER_VIDEO_ID, VIDEO_ID]));
+  assert.equal(batches[0].channelId, CHANNEL_ID);
+});
+
+test('weryfikacja zbiorcza nie sprawdza ponownie ID obecnego już w źródle podstawowym', async () => {
+  const html = assigned('ytInitialData', { videoRenderer: liveRenderer(VIDEO_ID) });
+  const batches = [];
+  const found = await discoverLiveVideoId(CHANNEL_ID, {
+    fetchImpl: async url => ({ ok: true, status: 200, url, text: async () => html }),
+    searchLive: async () => [VIDEO_ID, OTHER_VIDEO_ID],
+    verifyVideos: async ids => {
+      batches.push(ids);
+      return null;
+    },
+  });
+  assert.equal(found, null);
+  assert.deepEqual(batches, [[VIDEO_ID], [OTHER_VIDEO_ID]]);
+});
