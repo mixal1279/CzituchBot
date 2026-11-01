@@ -44,7 +44,6 @@ test('slow or timed-out optional OpenRouter is degraded capacity, not a strict b
 
 test('other OpenRouter failures remain blocking so real provider faults are visible', () => {
   for (const verdict of [
-    'ZA WOLNY dla produkcji (>6000 ms)',
     'BŁĄD HTTP 503',
     'NIEPOPRAWNY JSON (finish=stop)',
     'TIMEOUT >20000 ms',
