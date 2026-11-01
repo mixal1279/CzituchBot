@@ -150,8 +150,8 @@ async function discoverLiveVideoId(channelId, options) {
   }
   const fetchImpl = opts.fetchImpl || globalThis.fetch;
   if (typeof fetchImpl !== 'function') throw new Error('Środowisko Node.js nie udostępnia fetch().');
-  if (typeof opts.verifyVideo !== 'function') {
-    throw new TypeError('discoverLiveVideoId wymaga funkcji verifyVideo.');
+  if (typeof opts.verifyVideo !== 'function' && typeof opts.verifyVideos !== 'function') {
+    throw new TypeError('discoverLiveVideoId wymaga funkcji verifyVideo lub verifyVideos.');
   }
 
   const timeoutMs = Number.isFinite(opts.timeoutMs) ? Math.max(1000, opts.timeoutMs) : 12000;
@@ -189,9 +189,14 @@ async function discoverLiveVideoId(channelId, options) {
 
   const checked = new Set();
   async function verifyCandidates(candidates) {
-    for (const videoId of candidates || []) {
-      if (!VIDEO_ID_RE.test(videoId || '') || checked.has(videoId)) continue;
-      checked.add(videoId);
+    const unique = [...new Set((candidates || []).filter(id => VIDEO_ID_RE.test(id || '') && !checked.has(id)))];
+    unique.forEach(id => checked.add(id));
+    if (!unique.length) return null;
+    if (typeof opts.verifyVideos === 'function') {
+      return opts.verifyVideos(unique, channelId);
+    }
+    // Kompatybilność wsteczna dla integracji/testów używających verifyVideo.
+    for (const videoId of unique) {
       if (await opts.verifyVideo(videoId, channelId)) return videoId;
     }
     return null;
@@ -200,14 +205,12 @@ async function discoverLiveVideoId(channelId, options) {
   const pageMatch = await verifyCandidates(pageCandidates);
   if (pageMatch) return pageMatch;
 
-  // Źródło zapasowe: oficjalne search.list(eventType=live). Wywołujący
-  // odpowiada za limit częstotliwości, bo ta metoda zużywa znaczący limit API.
+  // Źródło zapasowe: oficjalne search.list(eventType=live).
   let fallbackError = null;
   let fallbackSkipped = false;
   if (typeof opts.searchLive === 'function') {
     try {
       const apiCandidates = await opts.searchLive(channelId);
-      // null oznacza, że wywołujący pominął API z powodu cooldownu/quota.
       if (apiCandidates === null) {
         fallbackSkipped = true;
       } else {
