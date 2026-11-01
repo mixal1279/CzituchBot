@@ -6723,6 +6723,7 @@ function youtubeSearchList(params) {
 const YT_VIDEO_VERIFY_CACHE = new Map();
 const YT_VIDEO_VERIFY_NEGATIVE_TTL_MS = 5 * 60 * 1000;
 const YT_VIDEO_VERIFY_UPCOMING_TTL_MS = 30 * 1000;
+const YT_VIDEO_VERIFY_LIVE_TTL_MS = 60 * 1000;
 function getCachedYouTubeVideoVerification(channelId, videoId) {
   const key = channelId + ':' + videoId;
   const entry = YT_VIDEO_VERIFY_CACHE.get(key);
@@ -7122,6 +7123,7 @@ async function pobierzLiveChatId(nazwaKanalu) {
         const candidate = byId.get(candidateId) || null;
         if (isLiveVideoFromChannel(candidate, channelId)) {
           verifiedVideo = candidate;
+          cacheYouTubeVideoVerification(channelId, candidateId, candidate, YT_VIDEO_VERIFY_LIVE_TTL_MS);
           return candidateId;
         }
         const ttl = candidate?.snippet?.liveBroadcastContent === 'upcoming'
