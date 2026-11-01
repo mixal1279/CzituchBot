@@ -71,12 +71,19 @@ function findLiveVideoId(data) {
   return findLiveVideoIds(data, 1)[0] || null;
 }
 
-function isVerifiedLiveVideo(video, expectedChannelId) {
+function isLiveVideoFromChannel(video, expectedChannelId) {
   return Boolean(
     video &&
     typeof expectedChannelId === 'string' &&
     video.snippet?.channelId === expectedChannelId &&
-    video.snippet?.liveBroadcastContent === 'live' &&
+    video.snippet?.liveBroadcastContent === 'live'
+  );
+}
+
+// Czat jest osobną funkcją transmisji. Jego brak nie oznacza, że kanał jest offline.
+function isVerifiedLiveVideo(video, expectedChannelId) {
+  return Boolean(
+    isLiveVideoFromChannel(video, expectedChannelId) &&
     typeof video.liveStreamingDetails?.activeLiveChatId === 'string' &&
     video.liveStreamingDetails.activeLiveChatId.length > 0
   );
@@ -143,16 +150,21 @@ async function discoverLiveVideoId(channelId, options) {
   }
   const fetchImpl = opts.fetchImpl || globalThis.fetch;
   if (typeof fetchImpl !== 'function') throw new Error('Środowisko Node.js nie udostępnia fetch().');
+  if (typeof opts.verifyVideo !== 'function') {
+    throw new TypeError('discoverLiveVideoId wymaga funkcji verifyVideo.');
+  }
 
   const timeoutMs = Number.isFinite(opts.timeoutMs) ? Math.max(1000, opts.timeoutMs) : 12000;
+  const url = 'https://www.youtube.com/channel/' + encodeURIComponent(channelId) + '/live?hl=en';
+  let pageError = null;
+  let pageCandidates = [];
+
+  // Źródło podstawowe: publiczna strona kanału /live.
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
-  const url = 'https://www.youtube.com/channel/' + encodeURIComponent(channelId) + '/live?hl=en';
   try {
     const response = await fetchImpl(url, {
-      method: 'GET',
-      redirect: 'follow',
-      signal: controller.signal,
+      method: 'GET', redirect: 'follow', signal: controller.signal,
       headers: {
         'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
@@ -161,29 +173,60 @@ async function discoverLiveVideoId(channelId, options) {
     });
     if (!response.ok) throw new Error('Strona YouTube /live zwróciła HTTP ' + response.status + '.');
     const html = await response.text();
-    const candidates = extractLiveVideoIds(html, response.url || url);
-    if (!candidates.length) {
+    pageCandidates = extractLiveVideoIds(html, response.url || url);
+    if (!pageCandidates.length) {
       console.warn('[YouTube LIVE] Strona /live nie zwróciła kandydatów videoId dla kanału ' + channelId +
         ' (HTTP ' + response.status + ', HTML: ' + html.length + ' znaków, URL: ' + (response.url || url) + ').');
-      return null;
     }
-
-    if (typeof opts.verifyVideo !== 'function') {
-      throw new TypeError('discoverLiveVideoId wymaga funkcji verifyVideo.');
-    }
-    for (const videoId of candidates) {
-      const verified = await opts.verifyVideo(videoId, channelId);
-      if (verified) return videoId;
-    }
-    return null;
   } catch (error) {
-    if (error && error.name === 'AbortError') {
-      throw new Error('Timeout ' + timeoutMs + ' ms podczas pobierania strony YouTube /live.');
-    }
-    throw error;
+    pageError = error?.name === 'AbortError'
+      ? new Error('Timeout ' + timeoutMs + ' ms podczas pobierania strony YouTube /live.')
+      : error;
+    console.warn('[YouTube LIVE] Źródło /live niedostępne dla ' + channelId + ': ' + pageError.message);
   } finally {
     clearTimeout(timeout);
   }
+
+  const checked = new Set();
+  async function verifyCandidates(candidates) {
+    for (const videoId of candidates || []) {
+      if (!VIDEO_ID_RE.test(videoId || '') || checked.has(videoId)) continue;
+      checked.add(videoId);
+      if (await opts.verifyVideo(videoId, channelId)) return videoId;
+    }
+    return null;
+  }
+
+  const pageMatch = await verifyCandidates(pageCandidates);
+  if (pageMatch) return pageMatch;
+
+  // Źródło zapasowe: oficjalne search.list(eventType=live). Wywołujący
+  // odpowiada za limit częstotliwości, bo ta metoda zużywa znaczący limit API.
+  let fallbackError = null;
+  let fallbackSkipped = false;
+  if (typeof opts.searchLive === 'function') {
+    try {
+      const apiCandidates = await opts.searchLive(channelId);
+      // null oznacza, że wywołujący pominął API z powodu cooldownu/quota.
+      if (apiCandidates === null) {
+        fallbackSkipped = true;
+      } else {
+        const apiMatch = await verifyCandidates(apiCandidates);
+        if (apiMatch) return apiMatch;
+      }
+    } catch (error) {
+      fallbackError = error;
+      console.warn('[YouTube LIVE] Zapasowe wyszukiwanie API nie powiodło się dla ' + channelId + ': ' + error.message);
+    }
+  }
+
+  if (pageError && opts.throwIfAllSourcesFail === true) {
+    if (fallbackError) {
+      throw new Error('Nie działają oba źródła wykrywania LIVE. /live: ' + pageError.message + '; API: ' + fallbackError.message);
+    }
+    if (fallbackSkipped || typeof opts.searchLive !== 'function') throw pageError;
+  }
+  return null;
 }
 
 module.exports = {
@@ -192,6 +235,7 @@ module.exports = {
   extractLiveVideoIds,
   findLiveVideoId,
   findLiveVideoIds,
+  isLiveVideoFromChannel,
   isVerifiedLiveVideo,
   parseAssignedJson,
 };
