@@ -7060,7 +7060,7 @@ async function pobierzLiveChatId(nazwaKanalu) {
       );
       const candidate = videoRes.data.items?.[0];
       // Tylko rzeczywista transmisja z dokładnie tego kanału. Sam kandydat
-      // z HTML lub search.list nigdy не jest traktowany jako potwierdzenie.
+      // z HTML lub search.list nigdy nie jest traktowany jako potwierdzenie.
       if (!isLiveVideoFromChannel(candidate, channelId)) return false;
       verifiedVideo = candidate;
       return true;
