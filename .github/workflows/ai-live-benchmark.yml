@@ -71,6 +71,7 @@ jobs:
         run: node scripts/validator-providers-preflight.js
 
       - name: Run 10-case live benchmark
+        id: live-benchmark
         shell: bash
         run: |
           set -o pipefail
