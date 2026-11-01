@@ -8,7 +8,7 @@ Quota safeguards:
 - All `search.list` calls in the bot pass through one process-wide rolling 24-hour limiter capped at 80 requests. This leaves 20 requests of headroom for other consumers of the same Search Queries quota.
 - The fallback cooldown is three hours even after failures, preventing repeated retries during an outage.
 - Candidate IDs from each discovery source are verified in a single `videos.list` request (up to 50 IDs per request), rather than one request per candidate.
-- Negative video verifications are cached for five minutes. Upcoming broadcasts use a 30-second cache so a transition to LIVE is detected promptly.
+- Negative video verifications are cached for five minutes, upcoming broadcasts for 30 seconds, and confirmed LIVE videos for 60 seconds.
 
 Each candidate must belong to the configured channel and have `snippet.liveBroadcastContent === 'live'`. Upcoming broadcasts, VODs, and videos from other channels are rejected.
 
