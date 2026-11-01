@@ -6702,19 +6702,38 @@ const youtube = youtubeFactory({ version: 'v3', auth: oauth2Client });
 // ewentualne inne integracje/wywołania spoza tego modułu.
 const YT_SEARCH_QUOTA_WINDOW_MS = 24 * 60 * 60 * 1000;
 const YT_SEARCH_QUOTA_MAX_CALLS = 80;
-const YT_SEARCH_QUOTA_CALLS = [];
+const YT_SEARCH_QUOTA_STATE_FILE = path.join(__dirname, '.youtube-search-quota.json');
+function loadYouTubeSearchQuotaCalls() {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(YT_SEARCH_QUOTA_STATE_FILE, 'utf8'));
+    return Array.isArray(parsed) ? parsed.filter(value => Number.isFinite(value)) : [];
+  } catch (error) {
+    if (error.code !== 'ENOENT') {
+      console.error('[YouTube quota] Nie można odczytać trwałego licznika search.list:', error.message);
+      throw error;
+    }
+    return [];
+  }
+}
+let YT_SEARCH_QUOTA_CALLS = loadYouTubeSearchQuotaCalls();
+function persistYouTubeSearchQuotaCalls() {
+  const tempFile = YT_SEARCH_QUOTA_STATE_FILE + '.' + process.pid + '.tmp';
+  fs.writeFileSync(tempFile, JSON.stringify(YT_SEARCH_QUOTA_CALLS), { mode: 0o600 });
+  fs.renameSync(tempFile, YT_SEARCH_QUOTA_STATE_FILE);
+}
 function youtubeSearchList(params) {
   const now = Date.now();
-  while (YT_SEARCH_QUOTA_CALLS.length && now - YT_SEARCH_QUOTA_CALLS[0] >= YT_SEARCH_QUOTA_WINDOW_MS) {
-    YT_SEARCH_QUOTA_CALLS.shift();
-  }
+  YT_SEARCH_QUOTA_CALLS = YT_SEARCH_QUOTA_CALLS.filter(
+    timestamp => now - timestamp < YT_SEARCH_QUOTA_WINDOW_MS
+  );
   if (YT_SEARCH_QUOTA_CALLS.length >= YT_SEARCH_QUOTA_MAX_CALLS) {
     const error = new Error('Osiągnięto lokalny limit 80 wywołań YouTube search.list w ruchomym oknie 24 h.');
     error.code = 'YT_SEARCH_LOCAL_QUOTA_LIMIT';
     throw error;
   }
-  // Liczymy próbę przed requestem, także wtedy, gdy API zwróci błąd.
+  // Trwały zapis PRZED requestem: błąd API lub restart procesu nie zeruje licznika.
   YT_SEARCH_QUOTA_CALLS.push(now);
+  persistYouTubeSearchQuotaCalls();
   return youtube.search.list(params);
 }
 
@@ -7075,7 +7094,7 @@ async function pobierzLiveChatId(nazwaKanalu) {
 
   // Publiczna strona /live dostarcza kandydatów, ale żaden redirect/renderer
   // nie jest uznawany za prawdę bez potwierdzenia w oficjalnym YouTube Data API.
-  // Kandydaci są sprawdzani po kolei; obcy film nie blokuje poprawnego wyniku niżej.
+  // Kandydaci są weryfikowani zbiorczo; obcy film nie blokuje poprawnego wyniku.
   let verifiedVideo = null;
   const videoId = await discoverLiveVideoId(channelId, {
     // /live jest źródłem podstawowym; search.list jest ograniczany globalnie.
