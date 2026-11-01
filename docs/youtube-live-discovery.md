@@ -14,6 +14,6 @@ Each candidate must belong to the configured channel and have `snippet.liveBroad
 
 An active broadcast is not treated as offline merely because Live Chat is disabled. In that case the watcher logs the live video once and retries discovery after the normal interval; it only starts chat polling when `activeLiveChatId` exists.
 
-The 80-request limiter and verification cache are in-memory and reset when the Node.js process restarts. The normal 3-hour per-channel cooldown also applies independently. For a strict quota guarantee across process restarts or multiple bot instances, the rolling counters would need durable shared storage.
+The 80-request rolling counter is persisted in `.youtube-search-quota.json`, so it survives normal process restarts and deployments that preserve this file. The file is excluded from Git. The counter is designed for one bot process/instance; multiple concurrent instances would require a shared atomic store. The verification cache is in-memory and resets on restart. The normal 3-hour per-channel fallback cooldown also applies independently.
 
 Tests: `node --test test/youtube-live-discovery.test.js`.
