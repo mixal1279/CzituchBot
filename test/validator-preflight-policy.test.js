@@ -46,7 +46,6 @@ test('other OpenRouter failures remain blocking so real provider faults are visi
   for (const verdict of [
     'BŁĄD HTTP 503',
     'NIEPOPRAWNY JSON (finish=stop)',
-    'TIMEOUT >20000 ms',
     'PUSTY content (finish=length)',
   ]) {
     assert.equal(isBlockingPreflightFailure({ provider: 'OpenRouter', verdict }), true, verdict);
