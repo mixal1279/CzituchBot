@@ -64,6 +64,7 @@ jobs:
       - name: Preflight Groq
         run: node scripts/groq-preflight.js
       - name: Preflight validator providers
+        id: validator-preflight
         env:
           PREFLIGHT_STRICT: "1"
           PREFLIGHT_TIMEOUT_MS: "20000"
@@ -74,6 +75,31 @@ jobs:
         run: |
           set -o pipefail
           npm run ai:benchmark:live 2>&1 | tee ai-live-benchmark-report.txt
+
+      # A strict preflight can stop the job before the benchmark command creates
+      # its tee output. Always leave a downloadable diagnostic report in that case.
+      - name: Ensure benchmark diagnostic report exists
+        if: always()
+        env:
+          PREFLIGHT_OUTCOME: ${{ steps.validator-preflight.outcome || 'skipped' }}
+          BENCHMARK_OUTCOME: ${{ steps.live-benchmark.outcome || 'skipped' }}
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const report = 'ai-live-benchmark-report.txt';
+          if (!fs.existsSync(report)) {
+            const lines = [
+              '# AI live benchmark — diagnostyka',
+              '',
+              'Benchmark nie wygenerował raportu JSON.',
+              `Preflight walidatorów: ${process.env.PREFLIGHT_OUTCOME || 'unknown'}`,
+              `Uruchomienie benchmarku: ${process.env.BENCHMARK_OUTCOME || 'unknown'}`,
+              '',
+              'Sprawdź logi kroków preflight i konfigurację sekretów GitHub Actions.',
+            ];
+            fs.writeFileSync(report, lines.join('\n') + '\n', { encoding: 'utf8', flag: 'wx' });
+          }
+          NODE
 
       - name: Publish summary
         if: always()
