@@ -36,6 +36,12 @@ test('empty HTTP 200 OpenRouter completion is degraded optional capacity, not a 
   }), false);
 });
 
+test('slow or timed-out optional OpenRouter is degraded capacity, not a strict blocker', () => {
+  for (const verdict of ['ZA WOLNY dla produkcji (>6000 ms)', 'TIMEOUT >20000 ms']) {
+    assert.equal(isBlockingPreflightFailure({ provider: 'OpenRouter', verdict }), false, verdict);
+  }
+});
+
 test('other OpenRouter failures remain blocking so real provider faults are visible', () => {
   for (const verdict of [
     'ZA WOLNY dla produkcji (>6000 ms)',
