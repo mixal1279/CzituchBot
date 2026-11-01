@@ -9,13 +9,17 @@
 // the probe budget, and production already enforces a shorter per-request
 // deadline. Keep explicit network, HTTP, authentication, malformed-output and
 // other provider failures blocking so genuine configuration faults stay visible.
-// For OpenRouter, tolerate only an empty successful response (HTTP 200,
-// finish=null); other malformed responses remain blocking.
+// OpenRouter is also secondary capacity: a valid but over-budget response
+// (or probe deadline timeout) is degraded optional capacity, not a reason to
+// skip the independent Gemini/Groq benchmark. Empty successful responses are
+// tolerated as before; HTTP/auth/network and malformed-output failures block.
 function isBlockingPreflightFailure(result) {
   if (!result || result.verdict === 'OK') return false;
   const verdict = String(result.verdict);
   if (result.provider === 'xKiro' && /^ZA WOLNY dla produkcji/.test(verdict)) return false;
   if (result.provider === 'xKiro' && /^TIMEOUT >\d+ ms$/.test(verdict)) return false;
+  if (result.provider === 'OpenRouter' && /^ZA WOLNY dla produkcji/.test(verdict)) return false;
+  if (result.provider === 'OpenRouter' && /^TIMEOUT >\d+ ms$/.test(verdict)) return false;
   if (result.provider === 'OpenRouter' && /^PUSTY content \(finish=null\)$/.test(verdict)) return false;
   return true;
 }
