@@ -35,7 +35,7 @@
 require('dotenv').config();
 
 const { youtube: youtubeFactory } = require('@googleapis/youtube');
-const { discoverLiveVideoId, isVerifiedLiveVideo } = require('./youtube-live-discovery');
+const { discoverLiveVideoId, isLiveVideoFromChannel } = require('./youtube-live-discovery');
 const { agregujMetrykiWalidatorow, zbudujKontekstMetrykiWalidatora, wybierzTimeoutWalidatora } = require('./ai/validator-telemetry');
 const { OAuth2Client } = require('google-auth-library');
 const Groq       = require('groq-sdk');
@@ -6574,6 +6574,75 @@ async function obslugaWiadomosci(nick, message, platforma, wyslijFn, kanal = nul
 
   if (kanalNorm === 'angie28') {
 
+    // !cm: stały wynik 1–30 cm dla użytkownika w obrębie jednego streamu Angie28.
+    if (platforma === 'youtube' && /^!cm(?:\s|$)/i.test(message.trim())) {
+      ostatnieUzycie[cooldownKey] = teraz;
+
+      const argument = message.trim().split(/\s+/).slice(1).join(' ').trim();
+      const cel = (argument || nick).replace(/^@/, '').trim();
+      if (!cel) return await wyslijFn('Użycie: !cm [@nick]');
+
+      const streamId = streamVideoId.youtube[kanalNorm]
+        || (streamStart.youtube[kanalNorm] ? String(streamStart.youtube[kanalNorm]) : null);
+      if (!streamId) {
+        return await wyslijFn('!cm jest chwilowo niedostępne — bot nie ustalił jeszcze ID aktualnego streamu.');
+      }
+
+      const userKey = cel.toLocaleLowerCase('pl-PL');
+      const streamPrefix = `${platforma}:${kanalNorm}:`;
+      const currentStreamPrefix = `${streamPrefix}${streamId}:`;
+      const cacheKey = `${currentStreamPrefix}${userKey}`;
+      let wynik = cmStreamCache[cacheKey];
+
+      if (!Number.isInteger(wynik) || wynik < 1 || wynik > 30) {
+        for (const key of Object.keys(cmStreamCache)) {
+          if (key.startsWith(streamPrefix) && !key.startsWith(currentStreamPrefix)) delete cmStreamCache[key];
+        }
+        wynik = Math.floor(Math.random() * 30) + 1;
+        cmStreamCache[cacheKey] = wynik;
+        await zapiszCacheCm(cmStreamCache);
+      }
+
+      const komentarzeAngie = [
+        { max: 5, tekst: 'Okej… nie będę zadawać pytań.' },
+        { max: 10, tekst: 'No cóż, liczy się podobno charakter.' },
+        { max: 15, tekst: 'Przeciętnie. Ale bez paniki.' },
+        { max: 20, tekst: 'Całkiem nieźle, proszę proszę.' },
+        { max: 25, tekst: 'Widzę, że mamy tu pewność siebie.' },
+        { max: 30, tekst: 'Dobra, dobra, nie chwal się tak.' },
+      ];
+      const komentarz = komentarzeAngie.find(item => wynik <= item.max)?.tekst || '';
+      return await wyslijFn(`@${cel} ma ${wynik} cm. ${komentarz}`);
+    }
+
+    if (msgLower === '!spierdalam') {
+      ostatnieUzycie[cooldownKey] = teraz;
+      const odpowiedziAngie = [
+        'Co tak szybko? Live już nie daje rady?',
+        'No i uciekł. Klasyka.',
+        'A dokąd to, jeszcze się nie skończyło!',
+        'Kolejny, który nie wytrzymał.',
+        'Uciekaj, uciekaj, ja nie oceniam. No dobra, trochę oceniam.',
+        'Coś cię chyba wystraszyło.',
+        'No to narka, uciekinierze.',
+        'Nie no, zostań… żartowałam.',
+        'I cyk, widz wyparował.',
+        'Tchórzostwo czy ważniejsze sprawy?',
+        'Spokojnie, nie gryzę. Zazwyczaj.',
+        'Dopiero przyszedłeś, a już spierdalasz?',
+        'Miło było, chociaż krótko.',
+        'Ktoś tu chyba ma limit wytrzymałości.',
+        'No dobra, droga wolna. Następny!',
+        'Live za mocny? Zdarza się.',
+        'Okej, nie będę cię zatrzymywać. Chyba.',
+        'I tak długo wytrzymałeś, gratulacje.',
+        'Kurwa, nawet się nie pożegnał.',
+        'Do zobaczenia… jeśli starczy odwagi.'
+      ];
+      const odpowiedz = odpowiedziAngie[Math.floor(Math.random() * odpowiedziAngie.length)];
+      return await wyslijFn(`@${nick} ${odpowiedz}`);
+    }
+
     if (msgLower === '!discord') {
       ostatnieUzycie[cooldownKey] = teraz;
       return await wyslijFn(`💬 Discord Angie28: ${angieLinki.discord}`);
@@ -6960,43 +7029,61 @@ async function pobierzLiveChatId(nazwaKanalu) {
   // Kandydaci są sprawdzani po kolei; obcy film nie blokuje poprawnego wyniku niżej.
   let verifiedVideo = null;
   const videoId = await discoverLiveVideoId(channelId, {
+    // /live jest źródłem podstawowym. Oficjalne search.list to zapas,
+    // uruchamiany z limitem częstotliwości, bo kosztuje 100 jednostek quota.
+    searchLive: async requestedChannelId => {
+      const now = Date.now();
+      const lastAttempt = YT_LIVE_API_FALLBACK_AT.get(requestedChannelId) || { at: 0, failed: false };
+      const cooldown = lastAttempt.failed
+        ? YT_LIVE_API_FALLBACK_FAILURE_INTERVAL_MS
+        : YT_LIVE_API_FALLBACK_INTERVAL_MS;
+      if (now - lastAttempt.at < cooldown) return null;
+      // Zapisz próbę przed requestem, żeby awaria/quota nie powodowała retry co 45 s.
+      YT_LIVE_API_FALLBACK_AT.set(requestedChannelId, { at: now, failed: true });
+      const response = await zGoogleRetry(
+        () => youtube.search.list({
+          part: ['snippet'], channelId: requestedChannelId,
+          eventType: 'live', type: ['video'], maxResults: 5,
+        }),
+        'zapasowe wyszukiwanie aktywnych transmisji LIVE'
+      );
+      YT_LIVE_API_FALLBACK_AT.set(requestedChannelId, { at: Date.now(), failed: false });
+      return (response.data.items || [])
+        .filter(item => item?.id?.videoId)
+        .map(item => item.id.videoId);
+    },
+    throwIfAllSourcesFail: true,
     verifyVideo: async candidateId => {
       const videoRes = await zGoogleRetry(
         () => youtube.videos.list({ part: ['snippet', 'liveStreamingDetails'], id: [candidateId] }),
         'weryfikacja kandydata LIVE'
       );
       const candidate = videoRes.data.items?.[0];
-      if (!candidate) {
-        return false;
-      }
-      // Rozdzielamy przyczyny odrzucenia, aby odróżnić obce filmy
-      // od transmisji właściwego kanału, które nie mają aktywnego czatu.
-      const actualChannelId = candidate.snippet?.channelId || null;
-      if (actualChannelId !== channelId) {
-        return false;
-      }
-      const activeLiveChatId = candidate.liveStreamingDetails?.activeLiveChatId;
-      if (typeof activeLiveChatId !== 'string' || activeLiveChatId.length === 0) {
-        return false;
-      }
-      if (!isVerifiedLiveVideo(candidate, channelId)) {
-        return false;
-      }
+      // Tylko rzeczywista transmisja z dokładnie tego kanału. Sam kandydat
+      // z HTML lub search.list nigdy не jest traktowany jako potwierdzenie.
+      if (!isLiveVideoFromChannel(candidate, channelId)) return false;
       verifiedVideo = candidate;
       return true;
     },
   });
   if (!videoId || !verifiedVideo) {
-    throw new Error(`Brak potwierdzonej transmisji LIVE z aktywnym czatem na kanale "${nazwaWyswietlana}".`);
+    throw new Error(`Brak potwierdzonej transmisji LIVE na kanale "${nazwaWyswietlana}".`);
   }
-  const video = verifiedVideo;
-  const liveDetails = video.liveStreamingDetails;
-  const chatId = liveDetails.activeLiveChatId;
 
-  const ytStart = liveDetails.actualStartTime;
+  const liveDetails = verifiedVideo.liveStreamingDetails || {};
   const youtubeKanalKey = nazwaKanalu.toLowerCase();
-  streamStart.youtube[youtubeKanalKey] = ytStart ? new Date(ytStart).getTime() : Date.now();
+  streamStart.youtube[youtubeKanalKey] = liveDetails.actualStartTime
+    ? new Date(liveDetails.actualStartTime).getTime()
+    : Date.now();
   streamVideoId.youtube[youtubeKanalKey] = videoId;
+
+  const chatId = liveDetails.activeLiveChatId;
+  if (typeof chatId !== 'string' || chatId.length === 0) {
+    const error = new Error(`Transmisja LIVE wykryta na kanale "${nazwaWyswietlana}", ale czat jest wyłączony lub niedostępny.`);
+    error.code = 'LIVE_CHAT_UNAVAILABLE';
+    error.videoId = videoId;
+    throw error;
+  }
   return chatId;
 }
 
@@ -7105,12 +7192,10 @@ async function youtubeLoop(stan) {
 }
 
 // =============================================
-//  INTERWAŁ SPRAWDZANIA LIVE – co 3 minuty
+//  INTERWAŁ SPRAWDZANIA LIVE – co 45 sekund
 // =============================================
 function obliczInterwałSprawdzania() {
-  // Wykrywanie live odbywa się przez publiczną stronę kanału, bez kosztu search.list.
-  // 3 minuty ograniczają ruch, a jednocześnie nie zostawiają kanału bez kontroli na 5 godzin.
-  return 3 * 60 * 1000;
+  return 45 * 1000;
 }
 
 // =============================================
@@ -7171,6 +7256,11 @@ const YT_KANAL_HANDLE = {
   'ArbuzikkYT': '@arbuzikinnegry',
 };
 const YT_CHANNEL_ID_CACHE = new Map(Object.entries(YT_KANAL_ID));
+// search.list kosztuje 100 jednostek quota. Przy pięciu monitorowanych kanałach
+// fallback co 3 godziny ogranicza zużycie do ok. 4 000 jednostek/dobę.
+const YT_LIVE_API_FALLBACK_INTERVAL_MS = 3 * 60 * 60 * 1000;
+const YT_LIVE_API_FALLBACK_FAILURE_INTERVAL_MS = 30 * 60 * 1000;
+const YT_LIVE_API_FALLBACK_AT = new Map();
 
 async function youtubeWatcher(nazwaKanalu, wyslijFn) {
   const tag = `[YouTube:${nazwaKanalu}]`;
@@ -7207,7 +7297,13 @@ async function youtubeWatcher(nazwaKanalu, wyslijFn) {
       await youtubeLoop(stan);
       console.log(`${tag} Stream zakończony. Czekam na następny...`);
     } catch (err) {
-      if (String(err.message || '').startsWith('Brak potwierdzonej transmisji LIVE')) {
+      if (err.code === 'LIVE_CHAT_UNAVAILABLE') {
+        const liveState = `live-no-chat:${err.videoId || 'unknown'}`;
+        if (lastLoggedState !== liveState) {
+          console.log(`${tag} LIVE wykryty (${err.videoId || 'brak ID'}), ale czat jest wyłączony lub niedostępny. Wykrywanie będzie kontynuowane.`);
+          lastLoggedState = liveState;
+        }
+      } else if (String(err.message || '').startsWith('Brak potwierdzonej transmisji LIVE')) {
         if (lastLoggedState !== 'offline') {
           console.log(`${tag} Brak aktywnego LIVE.`);
           lastLoggedState = 'offline';
