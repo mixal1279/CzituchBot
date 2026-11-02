@@ -245,6 +245,16 @@ test('weryfikacja zbiorcza nie sprawdza ponownie ID obecnego już w źródle pod
   assert.deepEqual(batches, [[VIDEO_ID], [OTHER_VIDEO_ID]]);
 });
 
+test('akceptuje wynik offline z API, gdy strona /live jest niedostępna', async () => {
+  const found = await discoverLiveVideoId(CHANNEL_ID, {
+    fetchImpl: async () => { throw new Error('network unavailable'); },
+    searchLive: async () => [],
+    verifyVideo: async () => false,
+    throwIfAllSourcesFail: true,
+  });
+  assert.equal(found, null);
+});
+
 test('nie oznacza kanału jako offline, gdy zapasowe search.list zawiedzie', async () => {
   const html = assigned('ytInitialData', { contents: {} });
   await assert.rejects(
