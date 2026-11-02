@@ -76,6 +76,10 @@ jobs:
               mirror --reverse --verbose --parallel=2 \
                 --exclude-glob '.git/' \
                 --exclude-glob '.github/' \
+                --exclude-glob 'test/' \
+                --exclude-glob 'tests/' \
+                --exclude-glob 'scripts/' \
+                --exclude-glob 'docs/' \
                 --exclude-glob node_modules \
                 --exclude-glob .env \
                 --exclude-glob '.env.*' \
