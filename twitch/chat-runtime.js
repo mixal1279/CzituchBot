@@ -5,7 +5,7 @@ function normalizeTwitchChannel(value) {
 }
 
 function getTwitchCommandName(message) {
-  const match = String(message || '').trim().match(/^(![^\\s]+)/);
+  const match = String(message || '').trim().match(/^(![^\s]+)/);
   return match ? match[1].toLowerCase() : '__message__';
 }
 

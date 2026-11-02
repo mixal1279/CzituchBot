@@ -8962,6 +8962,13 @@ function uruchomTwitch(config) {
   let validationInterval = null;
 
   const walidujTokenCzatu = async () => {
+    const tokenState = twitchChatTokeny[config.botKey];
+    if (tokenState?.refreshPromise) {
+      await tokenState.refreshPromise;
+    } else if (tokenState?.refresh && (!tokenState.wygasaO || tokenState.wygasaO <= Date.now() + 60000)) {
+      // Nie waliduj starego access tokena w trakcie zaplanowanego odświeżenia.
+      await odswiezTokenTwitchChat(config.botKey);
+    }
     const configuredToken = getTwitchChatToken(config.botKey) || config.token;
     const accessToken = normalizeTwitchOAuthToken(configuredToken);
     if (!accessToken) {
