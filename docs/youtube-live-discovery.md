@@ -12,7 +12,7 @@ Quota safeguards:
 
 Each candidate must belong to the configured channel and have `snippet.liveBroadcastContent === 'live'`. Upcoming broadcasts, VODs, and videos from other channels are rejected.
 
-An active broadcast is not treated as offline merely because Live Chat is disabled. In that case the watcher logs the live video once and retries discovery after the normal interval; it only starts chat polling when `activeLiveChatId` exists.
+An active broadcast is not treated as offline merely because Live Chat is disabled. In that case the watcher logs the live video once and retries discovery after the normal interval; it only starts chat polling when `activeLiveChatId` exists. If the primary page and fallback API cannot establish the state (for example, quota exhaustion or fallback cooldown), discovery reports an unknown/error state rather than falsely logging the channel as offline. A successful empty `search.list(eventType=live)` response is still treated as offline.
 
 The 80-request rolling counter is persisted in `.youtube-search-quota.json`, so it survives normal process restarts and deployments that preserve this file. The file is excluded from Git. The counter is designed for one bot process/instance; multiple concurrent instances would require a shared atomic store. The verification cache is in-memory and resets on restart. The normal 3-hour per-channel fallback cooldown also applies independently.
 
