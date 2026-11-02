@@ -8962,7 +8962,7 @@ function uruchomTwitch(config) {
   let validationRetryTimer = null;
   let periodicValidationRetryTimer = null;
 
-  const walidujTokenCzatu = async () => {
+  const walidujTokenCzatu = async (allowRefreshRetry = true) => {
     const tokenState = twitchChatTokeny[config.botKey];
     if (tokenState?.refreshPromise) {
       await tokenState.refreshPromise;
@@ -8984,6 +8984,15 @@ function uruchomTwitch(config) {
     }, 10000);
 
     if (!response.ok) {
+      if (response.status === 401 && allowRefreshRetry && tokenState?.refresh && !tokenState.dead) {
+        const previousToken = accessToken;
+        await odswiezTokenTwitchChat(config.botKey);
+        const refreshedToken = normalizeTwitchOAuthToken(getTwitchChatToken(config.botKey));
+        if (refreshedToken && refreshedToken !== previousToken) {
+          return walidujTokenCzatu(false);
+        }
+      }
+
       const error = new Error(`Twitch OAuth validate zwrócił HTTP ${response.status}.`);
       error.fatal = isFatalTwitchChatValidationStatus(response.status, {
         hasRefreshToken: Boolean(tokenState?.refresh),
