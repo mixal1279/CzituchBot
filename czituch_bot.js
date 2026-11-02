@@ -40,6 +40,13 @@ const { agregujMetrykiWalidatorow, zbudujKontekstMetrykiWalidatora, wybierzTimeo
 const { OAuth2Client } = require('google-auth-library');
 const Groq       = require('groq-sdk');
 const tmi        = require('tmi.js');
+const {
+  createTwitchJoinTracker,
+  buildTwitchCommandCooldownKey,
+  getTwitchCommandName,
+  inspectTwitchChatToken,
+  normalizeTwitchOAuthToken,
+} = require('./twitch/chat-runtime');
 const WebSocket  = require('ws');
 
 // Fix: siatka bezpieczeństwa na poziomie procesu. Bez tego JEDEN nieobsłużony
@@ -8008,25 +8015,32 @@ async function pobierzStartStreamu(config = TWITCH_CONFIG_BILLYBULKA) {
 
 async function obslugaTwitch(nick, message, wyslijFn, config = TWITCH_CONFIG_BILLYBULKA, tags = {}) {
   if (!nick || !message) return;
-  await ensurePersistentCachesReady();
-  await BILLY_BAKERY.initialize(FIRESTORE_STATE);
-  if (nick.toLowerCase() === config.botNick.toLowerCase()) return;
+  const login = String(tags?.username || nick).toLowerCase();
+  if (login === config.botNick.toLowerCase()) return;
 
   const msgLower    = message.toLowerCase().trim();
   const teraz       = Date.now();
   const kanal       = config.kanal;
-  const cooldownKey = `twitch:${nick}`;
+  const commandName = getTwitchCommandName(message);
+  const cooldownKey = buildTwitchCommandCooldownKey({
+    channel: kanal,
+    login,
+    message,
+  });
 
   // Dodatkowi użytkownicy zawsze traktowani jak moderator (niezależnie od statusu mod na danym kanale)
   const ZAWSZE_UPRAWNIENI = ['michal_shotmaker'];
   const isMod       = tags?.mod === true || tags?.mod === '1'
     || tags?.badges?.broadcaster === '1' || tags?.badges?.moderator === '1'
-    || ZAWSZE_UPRAWNIENI.includes(nick.toLowerCase());
+    || ZAWSZE_UPRAWNIENI.includes(login);
 
-  if (ostatnieUzycie[cooldownKey] && teraz - ostatnieUzycie[cooldownKey] < KONFIGURACJA.cooldown) return;
+  if (ostatnieUzycie[cooldownKey] && teraz - ostatnieUzycie[cooldownKey] < KONFIGURACJA.cooldown) {
+    console.debug(`[Twitch Chat] Cooldown: ${login} / ${commandName} na #${kanal}`);
+    return;
+  }
 
   const kanalNorm = kanal ? kanal.toLowerCase() : '';
-  const historiaKlucz = `twitch:${kanalNorm || 'brak-kanalu'}:${nick.toLowerCase()}`;
+  const historiaKlucz = `twitch:${kanalNorm || 'brak-kanalu'}:${login}`;
 
   // Komendy specyficzne dla Billy
   if (kanal === 'billybulka') {
@@ -8943,6 +8957,48 @@ function uruchomTwitch(config) {
     channels: config.obserwowaneKanaly,
   });
 
+  const joinTracker = createTwitchJoinTracker(config.obserwowaneKanaly);
+  let validationRetryTimer = null;
+  let validationInterval = null;
+
+  const walidujTokenCzatu = async () => {
+    const configuredToken = getTwitchChatToken(config.botKey) || config.token;
+    const accessToken = normalizeTwitchOAuthToken(configuredToken);
+    if (!accessToken) {
+      const error = new Error('Brak tokena użytkownika Twitch dla IRC. Ustaw TWITCH_OAUTH_TOKEN_EDLOR lub ponownie autoryzuj konto bota.');
+      error.fatal = true;
+      throw error;
+    }
+
+    const response = await fetchZTimeout('https://id.twitch.tv/oauth2/validate', {
+      method: 'GET',
+      headers: { Authorization: `OAuth ${accessToken}` },
+    }, 10000);
+
+    if (!response.ok) {
+      const error = new Error(`Twitch OAuth validate zwrócił HTTP ${response.status}.`);
+      error.fatal = response.status === 400 || response.status === 401;
+      throw error;
+    }
+
+    const validation = await response.json();
+    // IRC odbiera wiadomości przez chat:read. Odpowiedzi bota idą przez Helix,
+    // dlatego chat:edit nie jest wymagany dla tej sesji IRC.
+    const result = inspectTwitchChatToken(validation, {
+      expectedLogin: config.botNick,
+      expectedClientId: config.clientId,
+      requiredScopes: ['chat:read'],
+    });
+    if (!result.ok) {
+      const error = new Error(result.errors.join('; '));
+      error.fatal = true;
+      throw error;
+    }
+
+    console.log(`[Twitch OAuth] Token zweryfikowany dla ${validation.login}; scope IRC: ${result.scopes.join(', ')}`);
+    return validation;
+  };
+
   const obslugaBleduAuth = (err) => {
     const tresc = (err && err.message) ? err.message : String(err);
     console.error(`[Twitch] Błąd połączenia (${config.botNick}):`, tresc);
@@ -8950,22 +9006,51 @@ function uruchomTwitch(config) {
     if (authFail) odswiezTokenTwitchChat(config.botKey).catch(() => {});
   };
 
-  client.connect().catch(obslugaBleduAuth);
-  client.on('disconnected', obslugaBleduAuth);
+  const zaplanujPonownaWalidacje = () => {
+    if (validationRetryTimer) return;
+    validationRetryTimer = setTimeout(() => {
+      validationRetryTimer = null;
+      uruchomPoWalidacji().catch(obslugaBleduAuth);
+    }, 30000);
+    validationRetryTimer.unref?.();
+  };
+
+  const uruchomPoWalidacji = async () => {
+    try {
+      await walidujTokenCzatu();
+    } catch (err) {
+      console.error(`[Twitch OAuth] Nie uruchamiam IRC: ${err.message}`);
+      if (!err.fatal) zaplanujPonownaWalidacje();
+      else console.error('[Twitch OAuth] Wymagana jest ponowna autoryzacja tokena konta czituch_industries ze scope chat:read.');
+      return;
+    }
+
+    try {
+      await client.connect();
+    } catch (err) {
+      obslugaBleduAuth(err);
+    }
+  };
+
+  client.on('disconnected', (reason) => {
+    joinTracker.disconnected();
+    console.warn(`[Twitch IRC] Rozłączono ${config.botNick}; status JOIN wyzerowany. Powód: ${String(reason || 'nieznany')}`);
+  });
 
   client.on('connected', () => {
+    joinTracker.connected();
     twitchChatTokeny[config.botKey].dead = false;
+    console.log(`[Twitch IRC] Uwierzytelniono połączenie dla ${config.botNick}; oczekuję na potwierdzenie JOIN: ${config.obserwowaneKanaly.join(', ')}`);
+
     streamStart.twitch[config.kanal.toLowerCase()] = Date.now();
     pobierzStartStreamu(config).then((jestLive) => {
-      // Fix: jeśli bot startuje/restartuje się GDY stream już trwa, event 'stream.online'
-      // z EventSub nie przyjdzie ponownie (Twitch wysyła go tylko raz, na starcie streama).
-      // Bez tego sprawdzenia przypominajka Discord nigdy by się nie uruchomiła tego dnia.
       if (jestLive && config.kanal === 'billybulka') {
         uruchomBillyDiscordInterval(client, config);
         console.log('[Twitch] ℹ️ Stream już trwał przy starcie bota – interwał Billy dołączony');
       }
-    });
-    console.log(`\n✅ [Twitch] ${config.botNick} ONLINE na kanałach: ${config.obserwowaneKanaly.join(', ')}!\n`);
+    }).catch(err => console.error('[Twitch API] Błąd pobierania czasu startu streamu:', err.message));
+
+    // EventSub obsługuje status streamu i redemption; nie jest potwierdzeniem JOIN do czatu.
     uruchomEventSub(client, config);
 
     if (config.kanal === 'billybulka' && !global._tiktokBillySledzenieAktywne) {
@@ -8975,18 +9060,69 @@ function uruchomTwitch(config) {
           .catch(err => console.error('[TikTok/Twitch] Błąd:', err.message));
       });
     }
+  });
 
-    // Automatyczne przypomnienie dla billybulka uruchamiane przez EventSub stream.online
+  client.on('join', (channel, username, self) => {
+    if (!self) return;
+    const ready = joinTracker.markJoined(channel);
+    console.log(`[Twitch IRC] Potwierdzono JOIN ${channel} jako ${username}.`);
+    if (ready) {
+      console.log(`\n✅ [Twitch Chat] READY — ${config.botNick} dołączył do wszystkich kanałów: ${config.obserwowaneKanaly.join(', ')}.\n`);
+    } else {
+      console.log(`[Twitch IRC] Oczekuję jeszcze na JOIN: ${joinTracker.missingChannels().join(', ')}`);
+    }
+  });
+
+  client.on('part', (channel, username, self) => {
+    if (!self) return;
+    joinTracker.markPart(channel);
+    console.warn(`[Twitch IRC] Bot opuścił #${channel} (PART jako ${username}).`);
+  });
+
+  client.on('notice', (channel, msgid) => {
+    // Nie zapisujemy treści NOTICE ani wiadomości czatu; msg-id wystarcza do diagnozy.
+    console.warn(`[Twitch IRC] NOTICE na ${channel || 'serwerze'}: ${msgid || 'bez msg-id'}`);
+  });
+
+  client.on('reconnect', () => {
+    joinTracker.disconnected();
+    console.warn('[Twitch IRC] Rozpoczynam ponowne łączenie; oczekuję na nowe potwierdzenie JOIN.');
+  });
+
+  client.on('maxreconnect', () => {
+    joinTracker.disconnected();
+    console.error('[Twitch IRC] Osiągnięto limit prób reconnectu tmi.js.');
   });
 
   client.on('message', (channel, tags, message, self) => {
     if (self) return;
-    
-    const nick     = tags['display-name'] || tags.username;
-    const wyslijFn = (tekst) =>
-      wyslijTwitchHelix(tekst, channel, config);
-    obslugaTwitch(nick, message, wyslijFn, config, tags).catch(err => console.error('[Twitch] Błąd:', err));
+    if (!joinTracker.isReady()) {
+      console.warn(`[Twitch IRC] Odrzucono wiadomość przed potwierdzeniem JOIN na ${channel}.`);
+      return;
+    }
+
+    const nick = tags['display-name'] || tags.username;
+    const wyslijFn = (tekst) => wyslijTwitchHelix(tekst, channel, config);
+    obslugaTwitch(nick, message, wyslijFn, config, tags)
+      .catch(err => console.error('[Twitch] Błąd obsługi komendy:', err));
   });
+
+  // Twitch wymaga walidacji tokena przy starcie i cyklicznie w trakcie działania.
+  validationInterval = setInterval(async () => {
+    try {
+      await walidujTokenCzatu();
+    } catch (err) {
+      console.error(`[Twitch OAuth] Okresowa walidacja nie powiodła się: ${err.message}`);
+      if (err.fatal) {
+        joinTracker.disconnected();
+        client.disconnect().catch(disconnectError => obslugaBleduAuth(disconnectError));
+      }
+    }
+  }, 60 * 60 * 1000);
+  validationInterval.unref?.();
+
+  uruchomPoWalidacji().catch(obslugaBleduAuth);
+  return client;
 }
 
 // =============================================
