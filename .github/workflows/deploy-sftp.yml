@@ -108,8 +108,8 @@ jobs:
                 set net:max-retries 1;
                 set net:reconnect-interval-base 2;
                 set sftp:auto-confirm yes;
-                mirror --reverse --verbose --parallel=2 \
-                  \"$DEPLOY_DIR/\" ./;
+                lcd $DEPLOY_DIR;
+                mirror --reverse --verbose --parallel=2 ./ ./;
                 bye
               "
 
