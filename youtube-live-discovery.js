@@ -223,11 +223,25 @@ async function discoverLiveVideoId(channelId, options) {
     }
   }
 
-  if (pageError && opts.throwIfAllSourcesFail === true) {
+  if (opts.throwIfAllSourcesFail === true) {
+    // Brak kandydata na stronie /live nie jest dowodem, że kanał jest offline.
+    // Jeśli źródło zapasowe zawiodło lub jest w cooldownie, zgłaszamy stan
+    // nierozstrzygnięty zamiast zwracać null, które watcher interpretuje jako offline.
     if (fallbackError) {
-      throw new Error('Nie działają oba źródła wykrywania LIVE. /live: ' + pageError.message + '; API: ' + fallbackError.message);
+      const error = new Error(
+        'Nie udało się potwierdzić stanu LIVE. ' +
+        (pageError ? '/live: ' + pageError.message + '; ' : '/live nie zwróciło kandydata; ') +
+        'API: ' + fallbackError.message
+      );
+      error.code = 'LIVE_DISCOVERY_SOURCES_FAILED';
+      throw error;
     }
-    if (fallbackSkipped || typeof opts.searchLive !== 'function') throw pageError;
+    if (fallbackSkipped) {
+      const error = new Error('Nie udało się potwierdzić stanu LIVE: zapasowe wyszukiwanie YouTube jest chwilowo w cooldownie.');
+      error.code = 'LIVE_DISCOVERY_DEFERRED';
+      throw error;
+    }
+    if (pageError) throw pageError;
   }
   return null;
 }
