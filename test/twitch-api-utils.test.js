@@ -15,9 +15,11 @@ test('user ID cache expires entries and refreshes LRU order', () => {
   cache.set('c', '3');
   assert.equal(cache.get('b'), null);
   assert.equal(cache.get('a'), '1');
+  time = 149;
+  assert.equal(cache.get('a'), '1');
   time = 151;
   assert.equal(cache.get('a'), null);
-  assert.equal(cache.size, 1);
+  assert.equal(cache.size, 0);
 });
 
 test('cache skips empty IDs and enforces its size limit', () => {
