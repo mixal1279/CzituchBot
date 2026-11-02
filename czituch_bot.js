@@ -41,6 +41,7 @@ const { OAuth2Client } = require('google-auth-library');
 const Groq       = require('groq-sdk');
 const tmi        = require('tmi.js');
 const WebSocket  = require('ws');
+const { createTwitchUserIdCache, createTwitchHelixRequester, validateTwitchEventSubReconnectUrl } = require('./twitch/api-utils');
 
 // Fix: siatka bezpieczeństwa na poziomie procesu. Bez tego JEDEN nieobsłużony
 // wyjątek/odrzucenie Promise (np. dziwna odpowiedź jakiegoś API w środku streama)
@@ -7814,6 +7815,12 @@ async function uruchomKick() {
 //     ╚═╝    ╚══╝╚══╝ ╚═╝   ╚═╝    ╚═════╝╚═╝  ╚═╝
 // ============================================================
 
+const twitchUserIdCache = createTwitchUserIdCache({ ttlMs: 6 * 60 * 60 * 1000, maxEntries: 500 });
+const fetchTwitchHelix = createTwitchHelixRequester(
+  (url, options, timeoutMs) => fetchZTimeout(url, options, timeoutMs),
+  { maxRetries: 2, maxRetryDelayMs: 60_000 }
+);
+
 const TWITCH_CONFIG_BILLYBULKA = {
   botNick:      'czituch_industries',
   botKey:       'edlor',
@@ -7885,7 +7892,7 @@ async function wyslijTwitchHelix(tekst, kanal, config = TWITCH_CONFIG_BILLYBULKA
     }
 
     const message = String(tekst).slice(0, 500);
-    const wyslij = token => fetchZTimeout('https://api.twitch.tv/helix/chat/messages', {
+    const wyslij = token => fetchTwitchHelix('https://api.twitch.tv/helix/chat/messages', {
       method: 'POST',
       headers: {
         'Client-ID': config.clientId,
@@ -7943,7 +7950,7 @@ async function utworzMarker(nick, opis, config = TWITCH_CONFIG_BILLYBULKA) {
     const opis_fin = opis || `Czas momentu – @${nick}`;
 
     // Pobierz broadcaster_id
-    const userRes  = await fetchZTimeout(`https://api.twitch.tv/helix/users?login=${config.kanal}`, {
+    const userRes  = await fetchTwitchHelix(`https://api.twitch.tv/helix/users?login=${config.kanal}`, {
       headers: {
         'Client-ID':     config.clientId,
         'Authorization': `Bearer ${token}`,
@@ -7953,7 +7960,7 @@ async function utworzMarker(nick, opis, config = TWITCH_CONFIG_BILLYBULKA) {
     const userId   = userData.data?.[0]?.id;
     if (!userId) throw new Error('Nie znaleziono ID kanału');
 
-    const res  = await fetchZTimeout('https://api.twitch.tv/helix/streams/markers', {
+    const res  = await fetchTwitchHelix('https://api.twitch.tv/helix/streams/markers', {
       method: 'POST',
       headers: {
         'Client-ID':     config.clientId,
@@ -7984,7 +7991,7 @@ async function pobierzStartStreamu(config = TWITCH_CONFIG_BILLYBULKA) {
     // Zawsze pobieramy świeżą wartość (funkcja jest tania — bez requestu sieciowego),
     // żeby złapać kolejne odświeżenia tokenu zamiast trzymać jednorazowy cache na zawsze.
     await pobierzTwitchAppToken(config);
-    const res  = await fetchZTimeout(`https://api.twitch.tv/helix/streams?user_login=${config.kanal}`, {
+    const res  = await fetchTwitchHelix(`https://api.twitch.tv/helix/streams?user_login=${config.kanal}`, {
       headers: {
         'Client-ID':     config.clientId,
         'Authorization': `Bearer ${twitchAppTokens[config.botNick]}`,
@@ -8185,30 +8192,31 @@ function getEventSubState(botNick) {
 }
 
 async function pobierzUserId(login, config = TWITCH_CONFIG_BILLYBULKA) {
-  // tmi.js mutuje tablicę channels dodając '#' do loginów – usuwamy go na wszelki wypadek
-  const czystyLogin = login.replace(/^#/, '');
+  // tmi.js mutuje tablicę channels dodając '#' do loginów – usuwamy go na wszelki wypadek.
+  const czystyLogin = String(login).replace(/^#/, '').toLowerCase();
+  const cacheKey = `${config.clientId || ''}:${czystyLogin}`;
+  const cachedId = twitchUserIdCache.get(cacheKey);
+  if (cachedId) return cachedId;
+
   try {
-    // Zawsze pobieramy świeżą wartość (funkcja jest tania — bez requestu sieciowego),
-    // żeby złapać kolejne odświeżenia tokenu zamiast trzymać jednorazowy cache na zawsze.
     await pobierzTwitchAppToken(config);
-    const res  = await fetchZTimeout(`https://api.twitch.tv/helix/users?login=${czystyLogin}`, {
+    const res = await fetchTwitchHelix(`https://api.twitch.tv/helix/users?login=${encodeURIComponent(czystyLogin)}`, {
       headers: {
-        'Client-ID':     config.clientId,
+        'Client-ID': config.clientId,
         'Authorization': `Bearer ${twitchAppTokens[config.botNick]}`,
       },
     }, 3000);
-    if (res.status === 429) {
-      const retryAfter = res.headers.get('retry-after');
-      console.error(`[EventSub] ❌ Rate-limit (429) przy pobieraniu userId dla "${czystyLogin}"${retryAfter ? ` — Twitch każe czekać ${retryAfter}s` : ''}.`);
-      return null;
-    }
     if (!res.ok) {
       console.error(`[EventSub] ❌ HTTP ${res.status} przy pobieraniu userId dla "${czystyLogin}"`);
       return null;
     }
     const data = await res.json();
-    const id   = data.data?.[0]?.id || null;
-    if (!id) console.error(`[EventSub] ❌ Brak userId dla "${czystyLogin}" – sprawdź login w konfiguracji kanału`);
+    const id = data.data?.[0]?.id || null;
+    if (!id) {
+      console.error(`[EventSub] ❌ Brak userId dla "${czystyLogin}" – sprawdź login w konfiguracji kanału`);
+      return null;
+    }
+    twitchUserIdCache.set(cacheKey, id);
     return id;
   } catch (err) {
     console.error(`[EventSub] Błąd pobierania ID dla ${czystyLogin}:`, err.message);
@@ -8224,7 +8232,7 @@ async function pobierzAktualneVodTwitch(kanal, config = TWITCH_CONFIG_BILLYBULKA
     const userId = await pobierzUserId(kanal, config);
     if (!userId) return null;
     await pobierzTwitchAppToken(config);
-    const res = await fetchZTimeout(`https://api.twitch.tv/helix/videos?user_id=${userId}&type=archive&first=1`, {
+    const res = await fetchTwitchHelix(`https://api.twitch.tv/helix/videos?user_id=${userId}&type=archive&first=1`, {
       headers: {
         'Client-ID':     config.clientId,
         'Authorization': `Bearer ${twitchAppTokens[config.botNick]}`,
@@ -8248,7 +8256,7 @@ async function subskrybujStreamOnline(userId, login, config = TWITCH_CONFIG_BILL
   // UWAGA: config.token to statyczna wartość z .env z momentu startu — trzeba brać
   // żywy, odświeżany token (ten sam bug co w pobierzTwitchAppToken).
   const userToken = (getTwitchChatToken(config.botKey) || config.token).replace(/^oauth:/i, '');
-  const wyslijSubskrypcje = (typ) => fetchZTimeout('https://api.twitch.tv/helix/eventsub/subscriptions', {
+  const wyslijSubskrypcje = (typ) => fetchTwitchHelix('https://api.twitch.tv/helix/eventsub/subscriptions', {
     method: 'POST',
     headers: {
       'Client-ID':     config.clientId,
@@ -8315,7 +8323,7 @@ async function subskrybujRedemption(userId, login, config, rewardId, label) {
     return false;
   }
 
-  const wykonajFetch = async (tkn) => fetchZTimeout('https://api.twitch.tv/helix/eventsub/subscriptions', {
+  const wykonajFetch = async (tkn) => fetchTwitchHelix('https://api.twitch.tv/helix/eventsub/subscriptions', {
     method: 'POST',
     headers: {
       'Client-ID':     config.clientId,
@@ -8403,23 +8411,7 @@ async function subskrybujZRetry(funkcjaSubskrypcji, opis, maxProby = 2, opoznien
 }
 
 function walidujEventSubReconnectUrl(reconnectUrl) {
-  if (typeof reconnectUrl !== 'string' || !reconnectUrl) return null;
-  try {
-    const parsed = new URL(reconnectUrl);
-    const DOZWOLONY_HOST = 'eventsub.wss.twitch.tv';
-    const DOZWOLONY_ORIGIN = 'wss://eventsub.wss.twitch.tv';
-
-    if (parsed.protocol !== 'wss:') return null;
-    if (parsed.hostname !== DOZWOLONY_HOST) return null;
-    if (parsed.username || parsed.password) return null;
-    if (parsed.port && parsed.port !== '443') return null;
-
-    // Rekonstruujemy URL na bazie stałego, zaufanego originu, aby nie używać
-    // bezpośrednio nieufnego stringa jako celu połączenia.
-    return new URL(`${parsed.pathname}${parsed.search}`, DOZWOLONY_ORIGIN).toString();
-  } catch (_) {
-    return null;
-  }
+  return validateTwitchEventSubReconnectUrl(reconnectUrl);
 }
 
 function podepnijHandleryEventSub(ws, twitchClient, config) {
@@ -8463,18 +8455,17 @@ function podepnijHandleryEventSub(ws, twitchClient, config) {
     }
 
     if (type === 'session_reconnect') {
-      // Twitch prosi o przeniesienie na nowy URL – nie zamykamy starego do czasu nowego welcome
+      // Twitch wymaga przeniesienia sesji na dokładny reconnect_url z wiadomości.
+      // Walidator ogranicza origin do oficjalnego hosta Twitcha, zachowując parametry sesji.
       const reconnectUrl = msg.payload.session.reconnect_url;
       const bezpiecznyReconnectUrl = walidujEventSubReconnectUrl(reconnectUrl);
       if (!bezpiecznyReconnectUrl) {
         console.warn('[EventSub] ⚠️ Odrzucono nieprawidłowy reconnect_url:', reconnectUrl);
         return;
       }
-      console.log('[EventSub] 🔄 Reconnect URL otrzymany (zaakceptowany), przełączam...');
+      console.log('[EventSub] 🔄 Reconnect URL otrzymany (zaakceptowany), przenoszę sesję...');
       getEventSubState(config.botNick).reconnecting = true;
-      // Hardened SSRF fix: endpoint połączenia jest stały i zaufany.
-      // reconnect_url traktujemy wyłącznie jako sygnał/proof od Twitcha, nie jako URL docelowy.
-      const nowyWs = new WebSocket('wss://eventsub.wss.twitch.tv/ws');
+      const nowyWs = new WebSocket(bezpiecznyReconnectUrl);
       podepnijHandleryEventSub(nowyWs, twitchClient, config);
       getEventSubState(config.botNick).ws = nowyWs;
     }
@@ -8748,7 +8739,7 @@ async function czyKanalJestLive(login, config = TWITCH_CONFIG_BILLYBULKA) {
     // Zawsze pobieramy świeżą wartość (funkcja jest tania — bez requestu sieciowego),
     // żeby złapać kolejne odświeżenia tokenu zamiast trzymać jednorazowy cache na zawsze.
     await pobierzTwitchAppToken(config);
-    const res  = await fetchZTimeout(`https://api.twitch.tv/helix/streams?user_login=${login}`, {
+    const res  = await fetchTwitchHelix(`https://api.twitch.tv/helix/streams?user_login=${login}`, {
       headers: {
         'Client-ID':     config.clientId,
         'Authorization': `Bearer ${twitchAppTokens[config.botNick]}`,
