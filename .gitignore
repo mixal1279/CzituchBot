@@ -8,3 +8,7 @@ ai_verified_memory.json
 tavily_cache.json
 tavily_cache.json.tmp-*
 node_modules/
+
+# Local persistent YouTube Data API search.list quota counter
+.youtube-search-quota.json
+.youtube-search-quota.json.*.tmp

@@ -7,6 +7,7 @@ const {
   extractLiveVideoId,
   extractLiveVideoIds,
   findLiveVideoId,
+  isLiveVideoFromChannel,
   isVerifiedLiveVideo,
 } = require('../youtube-live-discovery');
 
@@ -169,3 +170,114 @@ test('nie pozwala uruchomić discovery bez walidatora Data API', async () => {
     }),
   }), /wymaga funkcji verifyVideo/);
 });
+
+
+test('rozpoznaje LIVE kanału niezależnie od dostępności czatu', () => {
+  assert.equal(isLiveVideoFromChannel({
+    snippet: { channelId: CHANNEL_ID, liveBroadcastContent: 'live' },
+    liveStreamingDetails: {},
+  }, CHANNEL_ID), true);
+  assert.equal(isVerifiedLiveVideo({
+    snippet: { channelId: CHANNEL_ID, liveBroadcastContent: 'live' },
+    liveStreamingDetails: {},
+  }, CHANNEL_ID), false);
+});
+
+test('używa zapasowego search.list, gdy strona /live nie zwraca kandydatów', async () => {
+  const html = assigned('ytInitialData', { contents: {} });
+  let fallbackCalls = 0;
+  const found = await discoverLiveVideoId(CHANNEL_ID, {
+    fetchImpl: async url => ({ ok: true, status: 200, url, text: async () => html }),
+    searchLive: async channelId => {
+      fallbackCalls += 1;
+      assert.equal(channelId, CHANNEL_ID);
+      return [OTHER_VIDEO_ID, VIDEO_ID];
+    },
+    verifyVideo: async id => id === VIDEO_ID,
+  });
+  assert.equal(found, VIDEO_ID);
+  assert.equal(fallbackCalls, 1);
+});
+
+test('nie pyta zapasowego źródła ponownie dla duplikatu kandydata', async () => {
+  const html = assigned('ytInitialData', { videoRenderer: liveRenderer(VIDEO_ID) });
+  const checked = [];
+  const found = await discoverLiveVideoId(CHANNEL_ID, {
+    fetchImpl: async url => ({ ok: true, status: 200, url, text: async () => html }),
+    searchLive: async () => [VIDEO_ID, OTHER_VIDEO_ID],
+    verifyVideo: async id => { checked.push(id); return id === OTHER_VIDEO_ID; },
+  });
+  assert.equal(found, OTHER_VIDEO_ID);
+  assert.deepEqual(checked, [VIDEO_ID, OTHER_VIDEO_ID]);
+});
+
+test('weryfikuje kandydatów zbiorczo jednym wywołaniem verifyVideos', async () => {
+  const html = assigned('ytInitialData', {
+    first: liveRenderer(OTHER_VIDEO_ID),
+    second: liveRenderer(VIDEO_ID),
+  });
+  const batches = [];
+  const found = await discoverLiveVideoId(CHANNEL_ID, {
+    fetchImpl: async url => ({ ok: true, status: 200, url, text: async () => html }),
+    verifyVideos: async (ids, channelId) => {
+      batches.push({ ids, channelId });
+      return ids.includes(VIDEO_ID) ? VIDEO_ID : null;
+    },
+  });
+  assert.equal(found, VIDEO_ID);
+  assert.equal(batches.length, 1);
+  assert.deepEqual(new Set(batches[0].ids), new Set([OTHER_VIDEO_ID, VIDEO_ID]));
+  assert.equal(batches[0].channelId, CHANNEL_ID);
+});
+
+test('weryfikacja zbiorcza nie sprawdza ponownie ID obecnego już w źródle podstawowym', async () => {
+  const html = assigned('ytInitialData', { videoRenderer: liveRenderer(VIDEO_ID) });
+  const batches = [];
+  const found = await discoverLiveVideoId(CHANNEL_ID, {
+    fetchImpl: async url => ({ ok: true, status: 200, url, text: async () => html }),
+    searchLive: async () => [VIDEO_ID, OTHER_VIDEO_ID],
+    verifyVideos: async ids => {
+      batches.push(ids);
+      return null;
+    },
+  });
+  assert.equal(found, null);
+  assert.deepEqual(batches, [[VIDEO_ID], [OTHER_VIDEO_ID]]);
+});
+
+test('akceptuje wynik offline z API, gdy strona /live jest niedostępna', async () => {
+  const found = await discoverLiveVideoId(CHANNEL_ID, {
+    fetchImpl: async () => { throw new Error('network unavailable'); },
+    searchLive: async () => [],
+    verifyVideo: async () => false,
+    throwIfAllSourcesFail: true,
+  });
+  assert.equal(found, null);
+});
+
+test('nie oznacza kanału jako offline, gdy zapasowe search.list zawiedzie', async () => {
+  const html = assigned('ytInitialData', { contents: {} });
+  await assert.rejects(
+    () => discoverLiveVideoId(CHANNEL_ID, {
+      fetchImpl: async url => ({ ok: true, status: 200, url, text: async () => html }),
+      searchLive: async () => { throw new Error('quotaExceeded'); },
+      verifyVideo: async () => false,
+      throwIfAllSourcesFail: true,
+    }),
+    error => error.code === 'LIVE_DISCOVERY_SOURCES_FAILED' && /quotaExceeded/.test(error.message)
+  );
+});
+
+test('nie oznacza kanału jako offline, gdy fallback jest pominięty przez cooldown', async () => {
+  const html = assigned('ytInitialData', { contents: {} });
+  await assert.rejects(
+    () => discoverLiveVideoId(CHANNEL_ID, {
+      fetchImpl: async url => ({ ok: true, status: 200, url, text: async () => html }),
+      searchLive: async () => null,
+      verifyVideo: async () => false,
+      throwIfAllSourcesFail: true,
+    }),
+    error => error.code === 'LIVE_DISCOVERY_DEFERRED'
+  );
+});
+

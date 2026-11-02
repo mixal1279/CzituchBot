@@ -35,7 +35,7 @@
 require('dotenv').config();
 
 const { youtube: youtubeFactory } = require('@googleapis/youtube');
-const { discoverLiveVideoId, isVerifiedLiveVideo } = require('./youtube-live-discovery');
+const { discoverLiveVideoId, isLiveVideoFromChannel } = require('./youtube-live-discovery');
 const { agregujMetrykiWalidatorow, zbudujKontekstMetrykiWalidatora, wybierzTimeoutWalidatora } = require('./ai/validator-telemetry');
 const { OAuth2Client } = require('google-auth-library');
 const Groq       = require('groq-sdk');
@@ -6582,6 +6582,75 @@ async function obslugaWiadomosci(nick, message, platforma, wyslijFn, kanal = nul
 
   if (kanalNorm === 'angie28') {
 
+    // !cm: stały wynik 1–30 cm dla użytkownika w obrębie jednego streamu Angie28.
+    if (platforma === 'youtube' && /^!cm(?:\s|$)/i.test(message.trim())) {
+      ostatnieUzycie[cooldownKey] = teraz;
+
+      const argument = message.trim().split(/\s+/).slice(1).join(' ').trim();
+      const cel = (argument || nick).replace(/^@/, '').trim();
+      if (!cel) return await wyslijFn('Użycie: !cm [@nick]');
+
+      const streamId = streamVideoId.youtube[kanalNorm]
+        || (streamStart.youtube[kanalNorm] ? String(streamStart.youtube[kanalNorm]) : null);
+      if (!streamId) {
+        return await wyslijFn('!cm jest chwilowo niedostępne — bot nie ustalił jeszcze ID aktualnego streamu.');
+      }
+
+      const userKey = cel.toLocaleLowerCase('pl-PL');
+      const streamPrefix = `${platforma}:${kanalNorm}:`;
+      const currentStreamPrefix = `${streamPrefix}${streamId}:`;
+      const cacheKey = `${currentStreamPrefix}${userKey}`;
+      let wynik = cmStreamCache[cacheKey];
+
+      if (!Number.isInteger(wynik) || wynik < 1 || wynik > 30) {
+        for (const key of Object.keys(cmStreamCache)) {
+          if (key.startsWith(streamPrefix) && !key.startsWith(currentStreamPrefix)) delete cmStreamCache[key];
+        }
+        wynik = Math.floor(Math.random() * 30) + 1;
+        cmStreamCache[cacheKey] = wynik;
+        await zapiszCacheCm(cmStreamCache);
+      }
+
+      const komentarzeAngie = [
+        { max: 5, tekst: 'Okej… nie będę zadawać pytań.' },
+        { max: 10, tekst: 'No cóż, liczy się podobno charakter.' },
+        { max: 15, tekst: 'Przeciętnie. Ale bez paniki.' },
+        { max: 20, tekst: 'Całkiem nieźle, proszę proszę.' },
+        { max: 25, tekst: 'Widzę, że mamy tu pewność siebie.' },
+        { max: 30, tekst: 'Dobra, dobra, nie chwal się tak.' },
+      ];
+      const komentarz = komentarzeAngie.find(item => wynik <= item.max)?.tekst || '';
+      return await wyslijFn(`@${cel} ma ${wynik} cm. ${komentarz}`);
+    }
+
+    if (msgLower === '!spierdalam') {
+      ostatnieUzycie[cooldownKey] = teraz;
+      const odpowiedziAngie = [
+        'Co tak szybko? Live już nie daje rady?',
+        'No i uciekł. Klasyka.',
+        'A dokąd to, jeszcze się nie skończyło!',
+        'Kolejny, który nie wytrzymał.',
+        'Uciekaj, uciekaj, ja nie oceniam. No dobra, trochę oceniam.',
+        'Coś cię chyba wystraszyło.',
+        'No to narka, uciekinierze.',
+        'Nie no, zostań… żartowałam.',
+        'I cyk, widz wyparował.',
+        'Tchórzostwo czy ważniejsze sprawy?',
+        'Spokojnie, nie gryzę. Zazwyczaj.',
+        'Dopiero przyszedłeś, a już spierdalasz?',
+        'Miło było, chociaż krótko.',
+        'Ktoś tu chyba ma limit wytrzymałości.',
+        'No dobra, droga wolna. Następny!',
+        'Live za mocny? Zdarza się.',
+        'Okej, nie będę cię zatrzymywać. Chyba.',
+        'I tak długo wytrzymałeś, gratulacje.',
+        'Kurwa, nawet się nie pożegnał.',
+        'Do zobaczenia… jeśli starczy odwagi.'
+      ];
+      const odpowiedz = odpowiedziAngie[Math.floor(Math.random() * odpowiedziAngie.length)];
+      return await wyslijFn(`@${nick} ${odpowiedz}`);
+    }
+
     if (msgLower === '!discord') {
       ostatnieUzycie[cooldownKey] = teraz;
       return await wyslijFn(`💬 Discord Angie28: ${angieLinki.discord}`);
@@ -6635,6 +6704,76 @@ const oauth2Client = new OAuth2Client(
   'http://localhost:3000/callback'
 );
 const youtube = youtubeFactory({ version: 'v3', auth: oauth2Client });
+
+// search.list ma osobny limit 100 zapytań/dobę. Rezerwujemy maksymalnie 80
+// wywołań w ruchomym oknie 24 h dla CAŁEGO bota, zostawiając 20 na
+// ewentualne inne integracje/wywołania spoza tego modułu.
+const YT_SEARCH_QUOTA_WINDOW_MS = 24 * 60 * 60 * 1000;
+const YT_SEARCH_QUOTA_MAX_CALLS = 80;
+const YT_SEARCH_QUOTA_STATE_FILE = path.join(__dirname, '.youtube-search-quota.json');
+function loadYouTubeSearchQuotaCalls() {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(YT_SEARCH_QUOTA_STATE_FILE, 'utf8'));
+    return Array.isArray(parsed) ? parsed.filter(value => Number.isFinite(value)) : [];
+  } catch (error) {
+    if (error.code !== 'ENOENT') {
+      console.error('[YouTube quota] Nie można odczytać trwałego licznika search.list:', error.message);
+      throw error;
+    }
+    return [];
+  }
+}
+let YT_SEARCH_QUOTA_CALLS = loadYouTubeSearchQuotaCalls();
+function persistYouTubeSearchQuotaCalls() {
+  const tempFile = YT_SEARCH_QUOTA_STATE_FILE + '.' + process.pid + '.tmp';
+  fs.writeFileSync(tempFile, JSON.stringify(YT_SEARCH_QUOTA_CALLS), { mode: 0o600 });
+  fs.renameSync(tempFile, YT_SEARCH_QUOTA_STATE_FILE);
+}
+function youtubeSearchList(params) {
+  const now = Date.now();
+  YT_SEARCH_QUOTA_CALLS = YT_SEARCH_QUOTA_CALLS.filter(
+    timestamp => Number.isFinite(timestamp) &&
+      timestamp <= now &&
+      now - timestamp < YT_SEARCH_QUOTA_WINDOW_MS
+  );
+  if (YT_SEARCH_QUOTA_CALLS.length >= YT_SEARCH_QUOTA_MAX_CALLS) {
+    const error = new Error('Osiągnięto lokalny limit 80 wywołań YouTube search.list w ruchomym oknie 24 h.');
+    error.code = 'YT_SEARCH_LOCAL_QUOTA_LIMIT';
+    throw error;
+  }
+  // Trwały zapis PRZED requestem: błąd API lub restart procesu nie zeruje licznika.
+  YT_SEARCH_QUOTA_CALLS.push(now);
+  persistYouTubeSearchQuotaCalls();
+  return youtube.search.list(params);
+}
+
+// Cache negatywnej weryfikacji ogranicza ponowne sprawdzanie tego samego VOD
+// przy 45-sekundowym pollingu. Upcoming ma krótszy TTL, by nie opóźniać LIVE.
+const YT_VIDEO_VERIFY_CACHE = new Map();
+const YT_VIDEO_VERIFY_NEGATIVE_TTL_MS = 5 * 60 * 1000;
+const YT_VIDEO_VERIFY_UPCOMING_TTL_MS = 30 * 1000;
+const YT_VIDEO_VERIFY_LIVE_TTL_MS = 60 * 1000;
+function getCachedYouTubeVideoVerification(channelId, videoId) {
+  const key = channelId + ':' + videoId;
+  const entry = YT_VIDEO_VERIFY_CACHE.get(key);
+  if (!entry) return null;
+  if (entry.expiresAt <= Date.now()) {
+    YT_VIDEO_VERIFY_CACHE.delete(key);
+    return null;
+  }
+  return entry.video || false;
+}
+function cacheYouTubeVideoVerification(channelId, videoId, video, ttl = YT_VIDEO_VERIFY_NEGATIVE_TTL_MS) {
+  const key = channelId + ':' + videoId;
+  YT_VIDEO_VERIFY_CACHE.set(key, { video: video || null, expiresAt: Date.now() + ttl });
+  if (YT_VIDEO_VERIFY_CACHE.size > 1000) {
+    const now = Date.now();
+    for (const [cacheKey, entry] of YT_VIDEO_VERIFY_CACHE) {
+      if (entry.expiresAt <= now) YT_VIDEO_VERIFY_CACHE.delete(cacheKey);
+    }
+    while (YT_VIDEO_VERIFY_CACHE.size > 1000) YT_VIDEO_VERIFY_CACHE.delete(YT_VIDEO_VERIFY_CACHE.keys().next().value);
+  }
+}
 
 // COFNIĘCIE youtubePublic — wracamy do jednego klienta OAuth dla wszystkich wywołań.
 // Powód: `auth: KONFIGURACJA.googleApiKey` wysyłał klucz API jako bearer token,
@@ -6887,7 +7026,7 @@ function czyPasujeNazwaKanalu(szukana, znaleziona) {
 async function pobierzInfoOKanaleYT(nazwaKanalu) {
   try {
     const searchRes = await zGoogleRetry(
-      () => youtube.search.list({ part: ['snippet'], q: nazwaKanalu, type: ['channel'], maxResults: 3 }),
+      () => youtubeSearchList({ part: ['snippet'], q: nazwaKanalu, type: ['channel'], maxResults: 3 }),
       'wyszukiwanie kanału (info)'
     );
     const kandydaci = searchRes.data.items || [];
@@ -6946,7 +7085,7 @@ async function pobierzLiveChatId(nazwaKanalu) {
     // Fallback tylko dla kanałów bez skonfigurowanego ID/uchwytu.
     // Wynik jest cache'owany, aby polling live nie zużywał search.list przy każdym obrocie.
     const searchRes = await zGoogleRetry(
-      () => youtube.search.list({ part: ['snippet'], q: nazwaKanalu, type: ['channel'], maxResults: 5 }),
+      () => youtubeSearchList({ part: ['snippet'], q: nazwaKanalu, type: ['channel'], maxResults: 5 }),
       'jednorazowe wyszukiwanie kanału'
     );
     const channels = searchRes.data.items || [];
@@ -6965,46 +7104,83 @@ async function pobierzLiveChatId(nazwaKanalu) {
 
   // Publiczna strona /live dostarcza kandydatów, ale żaden redirect/renderer
   // nie jest uznawany za prawdę bez potwierdzenia w oficjalnym YouTube Data API.
-  // Kandydaci są sprawdzani po kolei; obcy film nie blokuje poprawnego wyniku niżej.
+  // Kandydaci są weryfikowani zbiorczo; obcy film nie blokuje poprawnego wyniku.
   let verifiedVideo = null;
   const videoId = await discoverLiveVideoId(channelId, {
-    verifyVideo: async candidateId => {
-      const videoRes = await zGoogleRetry(
-        () => youtube.videos.list({ part: ['snippet', 'liveStreamingDetails'], id: [candidateId] }),
-        'weryfikacja kandydata LIVE'
+    // /live jest źródłem podstawowym; search.list jest ograniczany globalnie.
+    searchLive: async requestedChannelId => {
+      const now = Date.now();
+      const lastAttempt = YT_LIVE_API_FALLBACK_AT.get(requestedChannelId) || { at: 0 };
+      if (now - lastAttempt.at < YT_LIVE_API_FALLBACK_INTERVAL_MS) return null;
+      // Zapis próby przed requestem zapobiega retry co 45 s po błędzie.
+      YT_LIVE_API_FALLBACK_AT.set(requestedChannelId, { at: now });
+      const response = await zGoogleRetry(
+        () => youtubeSearchList({
+          part: ['snippet'], channelId: requestedChannelId,
+          eventType: 'live', type: ['video'], maxResults: 5,
+        }),
+        'zapasowe wyszukiwanie aktywnych transmisji LIVE'
       );
-      const candidate = videoRes.data.items?.[0];
-      if (!candidate) {
-        return false;
+      return (response.data.items || [])
+        .filter(item => item?.id?.videoId)
+        .map(item => item.id.videoId);
+    },
+    throwIfAllSourcesFail: true,
+    verifyVideos: async candidateIds => {
+      const uniqueIds = [...new Set(candidateIds)].filter(Boolean);
+      const uncachedIds = [];
+      for (const candidateId of uniqueIds) {
+        const cached = getCachedYouTubeVideoVerification(channelId, candidateId);
+        if (cached && cached !== false) {
+          verifiedVideo = cached;
+          return candidateId;
+        }
+        if (cached === null) uncachedIds.push(candidateId);
       }
-      // Rozdzielamy przyczyny odrzucenia, aby odróżnić obce filmy
-      // od transmisji właściwego kanału, które nie mają aktywnego czatu.
-      const actualChannelId = candidate.snippet?.channelId || null;
-      if (actualChannelId !== channelId) {
-        return false;
+      if (!uncachedIds.length) return null;
+
+      // videos.list przyjmuje wiele ID w jednym żądaniu (maks. 50).
+      const videoRes = await zGoogleRetry(
+        () => youtube.videos.list({
+          part: ['snippet', 'liveStreamingDetails'],
+          id: uncachedIds.slice(0, 50),
+        }),
+        'zbiorcza weryfikacja kandydatów LIVE'
+      );
+      const byId = new Map((videoRes.data.items || []).map(video => [video.id, video]));
+      for (const candidateId of uncachedIds) {
+        const candidate = byId.get(candidateId) || null;
+        if (isLiveVideoFromChannel(candidate, channelId)) {
+          verifiedVideo = candidate;
+          cacheYouTubeVideoVerification(channelId, candidateId, candidate, YT_VIDEO_VERIFY_LIVE_TTL_MS);
+          return candidateId;
+        }
+        const ttl = candidate?.snippet?.liveBroadcastContent === 'upcoming'
+          ? YT_VIDEO_VERIFY_UPCOMING_TTL_MS
+          : YT_VIDEO_VERIFY_NEGATIVE_TTL_MS;
+        cacheYouTubeVideoVerification(channelId, candidateId, null, ttl);
       }
-      const activeLiveChatId = candidate.liveStreamingDetails?.activeLiveChatId;
-      if (typeof activeLiveChatId !== 'string' || activeLiveChatId.length === 0) {
-        return false;
-      }
-      if (!isVerifiedLiveVideo(candidate, channelId)) {
-        return false;
-      }
-      verifiedVideo = candidate;
-      return true;
+      return null;
     },
   });
   if (!videoId || !verifiedVideo) {
-    throw new Error(`Brak potwierdzonej transmisji LIVE z aktywnym czatem na kanale "${nazwaWyswietlana}".`);
+    throw new Error(`Brak potwierdzonej transmisji LIVE na kanale "${nazwaWyswietlana}".`);
   }
-  const video = verifiedVideo;
-  const liveDetails = video.liveStreamingDetails;
-  const chatId = liveDetails.activeLiveChatId;
 
-  const ytStart = liveDetails.actualStartTime;
+  const liveDetails = verifiedVideo.liveStreamingDetails || {};
   const youtubeKanalKey = nazwaKanalu.toLowerCase();
-  streamStart.youtube[youtubeKanalKey] = ytStart ? new Date(ytStart).getTime() : Date.now();
+  streamStart.youtube[youtubeKanalKey] = liveDetails.actualStartTime
+    ? new Date(liveDetails.actualStartTime).getTime()
+    : Date.now();
   streamVideoId.youtube[youtubeKanalKey] = videoId;
+
+  const chatId = liveDetails.activeLiveChatId;
+  if (typeof chatId !== 'string' || chatId.length === 0) {
+    const error = new Error(`Transmisja LIVE wykryta na kanale "${nazwaWyswietlana}", ale czat jest wyłączony lub niedostępny.`);
+    error.code = 'LIVE_CHAT_UNAVAILABLE';
+    error.videoId = videoId;
+    throw error;
+  }
   return chatId;
 }
 
@@ -7113,12 +7289,10 @@ async function youtubeLoop(stan) {
 }
 
 // =============================================
-//  INTERWAŁ SPRAWDZANIA LIVE – co 3 minuty
+//  INTERWAŁ SPRAWDZANIA LIVE – co 45 sekund
 // =============================================
 function obliczInterwałSprawdzania() {
-  // Wykrywanie live odbywa się przez publiczną stronę kanału, bez kosztu search.list.
-  // 3 minuty ograniczają ruch, a jednocześnie nie zostawiają kanału bez kontroli na 5 godzin.
-  return 3 * 60 * 1000;
+  return 45 * 1000;
 }
 
 // =============================================
@@ -7179,6 +7353,10 @@ const YT_KANAL_HANDLE = {
   'ArbuzikkYT': '@arbuzikinnegry',
 };
 const YT_CHANNEL_ID_CACHE = new Map(Object.entries(YT_KANAL_ID));
+// search.list ma osobny limit 100 zapytań/dobę; wszystkie wywołania bota
+// przechodzą przez youtubeSearchList z globalnym limitem 80/24 h.
+const YT_LIVE_API_FALLBACK_INTERVAL_MS = 3 * 60 * 60 * 1000;
+const YT_LIVE_API_FALLBACK_AT = new Map();
 
 async function youtubeWatcher(nazwaKanalu, wyslijFn) {
   const tag = `[YouTube:${nazwaKanalu}]`;
@@ -7215,7 +7393,13 @@ async function youtubeWatcher(nazwaKanalu, wyslijFn) {
       await youtubeLoop(stan);
       console.log(`${tag} Stream zakończony. Czekam na następny...`);
     } catch (err) {
-      if (String(err.message || '').startsWith('Brak potwierdzonej transmisji LIVE')) {
+      if (err.code === 'LIVE_CHAT_UNAVAILABLE') {
+        const liveState = `live-no-chat:${err.videoId || 'unknown'}`;
+        if (lastLoggedState !== liveState) {
+          console.log(`${tag} LIVE wykryty (${err.videoId || 'brak ID'}), ale czat jest wyłączony lub niedostępny. Wykrywanie będzie kontynuowane.`);
+          lastLoggedState = liveState;
+        }
+      } else if (String(err.message || '').startsWith('Brak potwierdzonej transmisji LIVE')) {
         if (lastLoggedState !== 'offline') {
           console.log(`${tag} Brak aktywnego LIVE.`);
           lastLoggedState = 'offline';
