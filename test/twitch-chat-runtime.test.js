@@ -85,8 +85,12 @@ test('join tracker becomes ready only after every configured channel is joined',
   assert.equal(tracker.isReady(), false);
   assert.equal(tracker.markJoined('#billybulka'), false);
   assert.deepEqual(tracker.missingChannels(), ['other']);
+  assert.equal(tracker.isJoined('billybulka'), true);
+  assert.equal(tracker.isJoined('other'), false);
   assert.equal(tracker.markJoined('other'), true);
   assert.equal(tracker.isReady(), true);
+  assert.equal(tracker.isJoined('#billybulka'), true);
+  assert.equal(tracker.isJoined('other'), true);
   tracker.markPart('billybulka');
   assert.equal(tracker.isReady(), false);
   assert.deepEqual(tracker.missingChannels(), ['billybulka']);

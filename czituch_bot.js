@@ -9096,7 +9096,7 @@ function uruchomTwitch(config) {
 
   client.on('message', (channel, tags, message, self) => {
     if (self) return;
-    if (!joinTracker.isReady()) {
+    if (!joinTracker.isJoined(channel)) {
       console.warn(`[Twitch IRC] Odrzucono wiadomość przed potwierdzeniem JOIN na ${channel}.`);
       return;
     }

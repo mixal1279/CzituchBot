@@ -70,6 +70,9 @@ function createTwitchJoinTracker(channels = []) {
     isReady() {
       return expected.size > 0 && [...expected].every(channel => joined.has(channel));
     },
+    isJoined(channel) {
+      return joined.has(normalizeTwitchChannel(channel));
+    },
     missingChannels() {
       return [...expected].filter(channel => !joined.has(channel));
     },
