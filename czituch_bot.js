@@ -45,6 +45,7 @@ const {
   buildTwitchCommandCooldownKey,
   getTwitchCommandName,
   inspectTwitchChatToken,
+  isFatalTwitchChatValidationStatus,
   normalizeTwitchOAuthToken,
 } = require('./twitch/chat-runtime');
 const WebSocket  = require('ws');
@@ -8959,7 +8960,7 @@ function uruchomTwitch(config) {
 
   const joinTracker = createTwitchJoinTracker(config.obserwowaneKanaly);
   let validationRetryTimer = null;
-  let validationInterval = null;
+  let periodicValidationRetryTimer = null;
 
   const walidujTokenCzatu = async () => {
     const tokenState = twitchChatTokeny[config.botKey];
@@ -8984,7 +8985,10 @@ function uruchomTwitch(config) {
 
     if (!response.ok) {
       const error = new Error(`Twitch OAuth validate zwrócił HTTP ${response.status}.`);
-      error.fatal = response.status === 400 || response.status === 401;
+      error.fatal = isFatalTwitchChatValidationStatus(response.status, {
+        hasRefreshToken: Boolean(tokenState?.refresh),
+        refreshDead: Boolean(tokenState?.dead),
+      });
       throw error;
     }
 
@@ -9020,6 +9024,25 @@ function uruchomTwitch(config) {
       uruchomPoWalidacji().catch(obslugaBleduAuth);
     }, 30000);
     validationRetryTimer.unref?.();
+  };
+
+  const zaplanujPonownaWalidacjeOkresowa = () => {
+    if (periodicValidationRetryTimer) return;
+    periodicValidationRetryTimer = setTimeout(async () => {
+      periodicValidationRetryTimer = null;
+      try {
+        await walidujTokenCzatu();
+      } catch (err) {
+        console.error(`[Twitch OAuth] Ponowna walidacja okresowa nie powiodła się: ${err.message}`);
+        if (err.fatal) {
+          joinTracker.disconnected();
+          client.disconnect().catch(disconnectError => obslugaBleduAuth(disconnectError));
+        } else {
+          zaplanujPonownaWalidacjeOkresowa();
+        }
+      }
+    }, 30000);
+    periodicValidationRetryTimer.unref?.();
   };
 
   const uruchomPoWalidacji = async () => {
@@ -9115,7 +9138,7 @@ function uruchomTwitch(config) {
   });
 
   // Twitch wymaga walidacji tokena przy starcie i cyklicznie w trakcie działania.
-  validationInterval = setInterval(async () => {
+  const validationInterval = setInterval(async () => {
     try {
       await walidujTokenCzatu();
     } catch (err) {
@@ -9123,6 +9146,8 @@ function uruchomTwitch(config) {
       if (err.fatal) {
         joinTracker.disconnected();
         client.disconnect().catch(disconnectError => obslugaBleduAuth(disconnectError));
+      } else {
+        zaplanujPonownaWalidacjeOkresowa();
       }
     }
   }, 60 * 60 * 1000);

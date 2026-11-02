@@ -8,6 +8,7 @@ const {
   createTwitchJoinTracker,
   getTwitchCommandName,
   inspectTwitchChatToken,
+  isFatalTwitchChatValidationStatus,
   normalizeTwitchOAuthToken,
 } = require('../twitch/chat-runtime');
 
@@ -103,4 +104,12 @@ test('join tracker clears stale JOIN state after reconnect', () => {
   tracker.disconnected();
   assert.equal(tracker.isReady(), false);
   assert.deepEqual(tracker.joinedChannels(), []);
+});
+
+test('OAuth validation distinguishes invalid credentials from refreshable or transient failures', () => {
+  assert.equal(isFatalTwitchChatValidationStatus(400), true);
+  assert.equal(isFatalTwitchChatValidationStatus(401), true);
+  assert.equal(isFatalTwitchChatValidationStatus(401, { hasRefreshToken: true }), false);
+  assert.equal(isFatalTwitchChatValidationStatus(401, { hasRefreshToken: true, refreshDead: true }), true);
+  assert.equal(isFatalTwitchChatValidationStatus(503, { hasRefreshToken: true }), false);
 });

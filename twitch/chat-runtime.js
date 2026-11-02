@@ -19,6 +19,12 @@ function normalizeTwitchOAuthToken(token) {
   return String(token || '').trim().replace(/^oauth:/i, '');
 }
 
+function isFatalTwitchChatValidationStatus(status, { hasRefreshToken = false, refreshDead = false } = {}) {
+  if (status === 400) return true;
+  if (status === 401) return !hasRefreshToken || refreshDead;
+  return false;
+}
+
 function inspectTwitchChatToken(validation, {
   expectedLogin,
   expectedClientId,
@@ -87,5 +93,6 @@ module.exports = {
   createTwitchJoinTracker,
   getTwitchCommandName,
   inspectTwitchChatToken,
+  isFatalTwitchChatValidationStatus,
   normalizeTwitchOAuthToken,
 };
