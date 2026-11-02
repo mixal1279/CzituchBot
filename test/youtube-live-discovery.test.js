@@ -243,4 +243,31 @@ test('weryfikacja zbiorcza nie sprawdza ponownie ID obecnego już w źródle pod
   });
   assert.equal(found, null);
   assert.deepEqual(batches, [[VIDEO_ID], [OTHER_VIDEO_ID]]);
+
+test('nie oznacza kanału jako offline, gdy zapasowe search.list zawiedzie', async () => {
+  const html = assigned('ytInitialData', { contents: {} });
+  await assert.rejects(
+    () => discoverLiveVideoId(CHANNEL_ID, {
+      fetchImpl: async url => ({ ok: true, status: 200, url, text: async () => html }),
+      searchLive: async () => { throw new Error('quotaExceeded'); },
+      verifyVideo: async () => false,
+      throwIfAllSourcesFail: true,
+    }),
+    error => error.code === 'LIVE_DISCOVERY_SOURCES_FAILED' && /quotaExceeded/.test(error.message)
+  );
+});
+
+test('nie oznacza kanału jako offline, gdy fallback jest pominięty przez cooldown', async () => {
+  const html = assigned('ytInitialData', { contents: {} });
+  await assert.rejects(
+    () => discoverLiveVideoId(CHANNEL_ID, {
+      fetchImpl: async url => ({ ok: true, status: 200, url, text: async () => html }),
+      searchLive: async () => null,
+      verifyVideo: async () => false,
+      throwIfAllSourcesFail: true,
+    }),
+    error => error.code === 'LIVE_DISCOVERY_DEFERRED'
+  );
+});
+
 });
