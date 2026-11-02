@@ -6711,6 +6711,36 @@ const youtube = youtubeFactory({ version: 'v3', auth: oauth2Client });
 const YT_SEARCH_QUOTA_WINDOW_MS = 24 * 60 * 60 * 1000;
 const YT_SEARCH_QUOTA_MAX_CALLS = 80;
 const YT_SEARCH_QUOTA_STATE_FILE = path.join(__dirname, '.youtube-search-quota.json');
+// Gdy Google zgłosi wyczerpanie dziennego limitu, wstrzymujemy WSZYSTKIE
+// kolejne wywołania Data API na 6 h, zamiast ponawiać je osobno dla kanałów.
+const YT_API_QUOTA_COOLDOWN_MS = 6 * 60 * 60 * 1000;
+let YT_API_QUOTA_COOLDOWN_UNTIL = 0;
+function isYouTubeQuotaExceeded(error) {
+  const details = [
+    error?.message,
+    error?.code,
+    ...(Array.isArray(error?.errors) ? error.errors.map(item => item?.reason || item?.message) : []),
+    ...(Array.isArray(error?.response?.data?.error?.errors)
+      ? error.response.data.error.errors.map(item => item?.reason || item?.message)
+      : []),
+    error?.response?.data?.error?.message,
+  ].filter(Boolean).join(' ');
+  return /quotaExceeded|dailyLimitExceeded|quota exceeded/i.test(details);
+}
+function zablokujYouTubeApiPoQuota(error) {
+  if (!isYouTubeQuotaExceeded(error)) return false;
+  YT_API_QUOTA_COOLDOWN_UNTIL = Math.max(
+    YT_API_QUOTA_COOLDOWN_UNTIL,
+    Date.now() + YT_API_QUOTA_COOLDOWN_MS
+  );
+  console.warn('[YouTube quota] Wyczerpany limit Data API — wstrzymuję kolejne zapytania na 6 h.');
+  return true;
+}
+function utworzBladYouTubeQuotaCooldown() {
+  const error = new Error('YouTube Data API jest wstrzymane po quotaExceeded; ponowna próba po zakończeniu cooldownu.');
+  error.code = 'YT_API_QUOTA_COOLDOWN';
+  return error;
+}
 function loadYouTubeSearchQuotaCalls() {
   try {
     const parsed = JSON.parse(fs.readFileSync(YT_SEARCH_QUOTA_STATE_FILE, 'utf8'));
@@ -6730,6 +6760,7 @@ function persistYouTubeSearchQuotaCalls() {
   fs.renameSync(tempFile, YT_SEARCH_QUOTA_STATE_FILE);
 }
 function youtubeSearchList(params) {
+  if (YT_API_QUOTA_COOLDOWN_UNTIL > Date.now()) throw utworzBladYouTubeQuotaCooldown();
   const now = Date.now();
   YT_SEARCH_QUOTA_CALLS = YT_SEARCH_QUOTA_CALLS.filter(
     timestamp => Number.isFinite(timestamp) &&
@@ -6744,7 +6775,10 @@ function youtubeSearchList(params) {
   // Trwały zapis PRZED requestem: błąd API lub restart procesu nie zeruje licznika.
   YT_SEARCH_QUOTA_CALLS.push(now);
   persistYouTubeSearchQuotaCalls();
-  return youtube.search.list(params);
+  return youtube.search.list(params).catch(error => {
+    zablokujYouTubeApiPoQuota(error);
+    throw error;
+  });
 }
 
 // Cache negatywnej weryfikacji ogranicza ponowne sprawdzanie tego samego VOD
@@ -6960,7 +6994,10 @@ async function zalogujYouTube() {
 
 async function wyswietlKontoYoutube() {
   try {
-    const res   = await youtube.channels.list({ part: ['snippet'], mine: true });
+    const res   = await zGoogleRetry(
+      () => youtube.channels.list({ part: ['snippet'], mine: true }),
+      'pobieranie konta YouTube'
+    );
     const kanal = res.data.items?.[0];
     if (kanal) console.log(`[YT Auth] 🎥 Zalogowano jako: ${kanal.snippet.title} (${kanal.id})`);
   } catch (err) { console.error('[YT Auth] Nie udało się pobrać konta:', err.message); }
@@ -6971,12 +7008,14 @@ async function wyswietlKontoYoutube() {
 // związane z uprawnieniami — to chwilowa usterka po stronie API. Ponawiamy
 // raz po krótkiej przerwie zamiast od razu zgłaszać "brak streamu".
 async function zGoogleRetry(fn, opis = 'zapytanie YouTube', proby = 3) {
+  if (YT_API_QUOTA_COOLDOWN_UNTIL > Date.now()) throw utworzBladYouTubeQuotaCooldown();
   let ostatniBlad;
   for (let i = 1; i <= proby; i++) {
     try {
       return await fn();
     } catch (err) {
       ostatniBlad = err;
+      if (zablokujYouTubeApiPoQuota(err)) throw err;
       if (!err.message?.includes('cannot act on behalf')) throw err;
       if (i === proby) break; // wykorzystano wszystkie próby
       const opoznienie = 3000 * i; // 3s, 6s, 9s...
@@ -7106,27 +7145,7 @@ async function pobierzLiveChatId(nazwaKanalu) {
   // nie jest uznawany za prawdę bez potwierdzenia w oficjalnym YouTube Data API.
   // Kandydaci są weryfikowani zbiorczo; obcy film nie blokuje poprawnego wyniku.
   let verifiedVideo = null;
-  const videoId = await discoverLiveVideoId(channelId, {
-    // /live jest źródłem podstawowym; search.list jest ograniczany globalnie.
-    searchLive: async requestedChannelId => {
-      const now = Date.now();
-      const lastAttempt = YT_LIVE_API_FALLBACK_AT.get(requestedChannelId) || { at: 0 };
-      if (now - lastAttempt.at < YT_LIVE_API_FALLBACK_INTERVAL_MS) return null;
-      // Zapis próby przed requestem zapobiega retry co 45 s po błędzie.
-      YT_LIVE_API_FALLBACK_AT.set(requestedChannelId, { at: now });
-      const response = await zGoogleRetry(
-        () => youtubeSearchList({
-          part: ['snippet'], channelId: requestedChannelId,
-          eventType: 'live', type: ['video'], maxResults: 5,
-        }),
-        'zapasowe wyszukiwanie aktywnych transmisji LIVE'
-      );
-      return (response.data.items || [])
-        .filter(item => item?.id?.videoId)
-        .map(item => item.id.videoId);
-    },
-    throwIfAllSourcesFail: true,
-    verifyVideos: async candidateIds => {
+  const verifyVideoCandidates = async candidateIds => {
       const uniqueIds = [...new Set(candidateIds)].filter(Boolean);
       const uncachedIds = [];
       for (const candidateId of uniqueIds) {
@@ -7161,7 +7180,33 @@ async function pobierzLiveChatId(nazwaKanalu) {
         cacheYouTubeVideoVerification(channelId, candidateId, null, ttl);
       }
       return null;
+  };
+
+  const videoId = await discoverLiveVideoId(channelId, {
+    // /live jest źródłem podstawowym; search.list jest ograniczany globalnie.
+    searchLive: async requestedChannelId => {
+      if (YT_API_QUOTA_COOLDOWN_UNTIL > Date.now()) return null;
+      const now = Date.now();
+      const lastAttempt = YT_LIVE_API_FALLBACK_AT.get(requestedChannelId) || { at: 0 };
+      if (now - lastAttempt.at < YT_LIVE_API_FALLBACK_INTERVAL_MS) return null;
+      // Zapis próby przed requestem zapobiega retry co 45 s po błędzie.
+      YT_LIVE_API_FALLBACK_AT.set(requestedChannelId, { at: now });
+      const response = await zGoogleRetry(
+        () => youtubeSearchList({
+          part: ['snippet'], channelId: requestedChannelId,
+          eventType: 'live', type: ['video'], maxResults: 5,
+        }),
+        'zapasowe wyszukiwanie aktywnych transmisji LIVE'
+      );
+      return (response.data.items || [])
+        .filter(item => item?.id?.videoId)
+        .map(item => item.id.videoId);
     },
+    throwIfAllSourcesFail: true,
+    // Nowy moduł używa verifyVideos (batch), starszy verifyVideo (pojedynczy ID).
+    // Przekazujemy oba interfejsy, aby wdrożenie mieszanych wersji plików nie przerywało watchera.
+    verifyVideos: verifyVideoCandidates,
+    verifyVideo: async candidateId => (await verifyVideoCandidates([candidateId])) === candidateId,
   });
   if (!videoId || !verifiedVideo) {
     throw new Error(`Brak potwierdzonej transmisji LIVE na kanale "${nazwaWyswietlana}".`);
