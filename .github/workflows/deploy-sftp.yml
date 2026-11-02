@@ -54,7 +54,35 @@ jobs:
           ssh-keyscan -p "$SFTP_PORT" -H "$SFTP_HOST" >> "$HOME/.ssh/known_hosts"
           chmod 600 "$HOME/.ssh/known_hosts"
 
-      - name: Upload tracked project files over SFTP
+      - name: Prepare deployment package
+        run: |
+          set -euo pipefail
+          DEPLOY_DIR="$RUNNER_TEMP/czituchbot-deploy"
+          mkdir -p "$DEPLOY_DIR"
+
+          # Export only Git-tracked files; never mirror the runner's working tree.
+          git archive --format=tar HEAD | tar -xf - -C "$DEPLOY_DIR"
+
+          # Remove development-only directories from the deployment package.
+          rm -rf "$DEPLOY_DIR/.github" "$DEPLOY_DIR/test" "$DEPLOY_DIR/tests" \
+            "$DEPLOY_DIR/scripts" "$DEPLOY_DIR/docs" "$DEPLOY_DIR/node_modules"
+
+          # Keep local secrets and runtime state off the hosting account.
+          find "$DEPLOY_DIR" -type f \\
+            \( -name '.env' -o -name '.env.*' \\
+            -o -name '*firebase-adminsdk*.json' \\
+            -o -name 'service-account*.json' \\
+            -o -name 'credentials*.json' \\
+            -o -name 'ai_verified_memory.json' \\
+            -o -name 'tavily_cache.json' \\
+            -o -name 'tavily_cache.json.tmp-*' \) -delete
+
+          echo "Deployment package prepared:"
+          du -sh "$DEPLOY_DIR"
+          find "$DEPLOY_DIR" -type f | wc -l | xargs echo "Files to upload:"
+
+      - name: Upload deployment package over SFTP
+        timeout-minutes: 14
         env:
           SFTP_HOST: ${{ secrets.SFTP_HOST }}
           SFTP_PORT: ${{ secrets.SFTP_PORT }}
@@ -67,28 +95,22 @@ jobs:
           test -n "$SFTP_USERNAME"
           test -n "$SFTP_PASSWORD"
 
-          LFTP_PASSWORD="$SFTP_PASSWORD" lftp --env-password \
-            -u "$SFTP_USERNAME" \
-            "sftp://$SFTP_HOST:$SFTP_PORT" \
-            -e "
-              set net:timeout 20;
-              set net:max-retries 2;
-              mirror --reverse --verbose --parallel=2 \
-                --exclude-glob '.git/' \
-                --exclude-glob '.github/' \
-                --exclude-glob 'test/' \
-                --exclude-glob 'tests/' \
-                --exclude-glob 'scripts/' \
-                --exclude-glob 'docs/' \
-                --exclude-glob node_modules \
-                --exclude-glob .env \
-                --exclude-glob '.env.*' \
-                --exclude-glob '*firebase-adminsdk*.json' \
-                --exclude-glob 'service-account*.json' \
-                --exclude-glob 'credentials*.json' \
-                --exclude-glob ai_verified_memory.json \
-                --exclude-glob tavily_cache.json \
-                --exclude-glob 'tavily_cache.json.tmp-*' \
-                ./ .;
-              bye
-            "
+          DEPLOY_DIR="$RUNNER_TEMP/czituchbot-deploy"
+          echo "Starting SFTP upload from prepared package..."
+
+          timeout --signal=TERM --kill-after=30s 12m \
+            env LFTP_PASSWORD="$SFTP_PASSWORD" lftp --env-password \
+              -u "$SFTP_USERNAME" \
+              "sftp://$SFTP_HOST:$SFTP_PORT" \
+              -e "
+                set cmd:fail-exit yes;
+                set net:timeout 15;
+                set net:max-retries 1;
+                set net:reconnect-interval-base 2;
+                set sftp:auto-confirm yes;
+                mirror --reverse --verbose --parallel=2 \
+                  \"$DEPLOY_DIR/\" ./;
+                bye
+              "
+
+          echo "SFTP upload completed successfully."
