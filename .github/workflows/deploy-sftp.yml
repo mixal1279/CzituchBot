@@ -11,7 +11,7 @@ permissions:
 
 concurrency:
   group: czituchbot-production-deploy
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   deploy:
