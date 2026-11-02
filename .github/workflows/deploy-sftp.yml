@@ -85,6 +85,6 @@ jobs:
                 --exclude-glob ai_verified_memory.json \
                 --exclude-glob tavily_cache.json \
                 --exclude-glob 'tavily_cache.json.tmp-*' \
-                ./ /home/container;
+                ./ .;
               bye
             "
