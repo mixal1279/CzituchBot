@@ -40,6 +40,13 @@ function parseRetryAfterMs(value, now = Date.now()) {
   return Number.isFinite(timestamp) ? Math.max(0, timestamp - now) : null;
 }
 
+function parseRateLimitResetMs(value, now = Date.now()) {
+  if (value === null || value === undefined || value === '') return null;
+  const timestampSeconds = Number(value);
+  if (!Number.isFinite(timestampSeconds) || timestampSeconds < 0) return null;
+  return Math.max(0, Math.ceil(timestampSeconds * 1000 - now));
+}
+
 function validateTwitchEventSubReconnectUrl(reconnectUrl) {
   if (typeof reconnectUrl !== 'string' || !reconnectUrl) return null;
   try {
@@ -67,7 +74,8 @@ function createTwitchHelixRequester(fetchFn, {
       if (waitForCooldown > 0) await sleep(waitForCooldown);
       const response = await fetchFn(url, options, timeoutMs);
       if (response.status !== 429 || attempt >= maxRetries) return response;
-      const retryAfter = parseRetryAfterMs(response.headers?.get?.('retry-after'), now());
+      const retryAfter = parseRetryAfterMs(response.headers?.get?.('retry-after'), now())
+        ?? parseRateLimitResetMs(response.headers?.get?.('ratelimit-reset'), now());
       const fallbackDelay = Math.min(1000 * (2 ** attempt), maxRetryDelayMs);
       const delay = Math.min(retryAfter ?? fallbackDelay, maxRetryDelayMs);
       cooldownUntil = Math.max(cooldownUntil, now() + delay);
@@ -77,4 +85,4 @@ function createTwitchHelixRequester(fetchFn, {
   };
 }
 
-module.exports = { createTwitchUserIdCache, parseRetryAfterMs, validateTwitchEventSubReconnectUrl, createTwitchHelixRequester };
+module.exports = { createTwitchUserIdCache, parseRetryAfterMs, parseRateLimitResetMs, validateTwitchEventSubReconnectUrl, createTwitchHelixRequester };
