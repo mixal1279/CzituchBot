@@ -1,10 +1,10 @@
 name: Deploy CzituchBot to Pterodactyl
 
+# A merge into main creates a push event. Unmerged pull requests never deploy.
 on:
   push:
     branches:
       - main
-  workflow_dispatch:
 
 permissions:
   contents: read
@@ -17,10 +17,12 @@ jobs:
   deploy:
     name: Test and upload over SFTP
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
-      - name: Checkout repository
+      - name: Checkout merged main
         uses: actions/checkout@v6
+        with:
+          ref: main
 
       - name: Set up Node.js
         uses: actions/setup-node@v7
@@ -34,15 +36,55 @@ jobs:
       - name: Run tests
         run: npm test
 
-      - name: Upload project files to Pterodactyl
-        uses: appleboy/scp-action@v1
-        with:
-          host: ${{ secrets.SFTP_HOST }}
-          username: ${{ secrets.SFTP_USERNAME }}
-          password: ${{ secrets.SFTP_PASSWORD }}
-          port: ${{ secrets.SFTP_PORT }}
-          source: "./"
-          target: "/home/container"
-          overwrite: true
-          rm: false
-          exclude: ".git/**,.github/**,node_modules/**,.env,.env.*,*firebase-adminsdk*.json,service-account*.json,credentials*.json"
+      - name: Install SFTP client
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes lftp
+
+      - name: Add SFTP server host key
+        env:
+          SFTP_HOST: ${{ secrets.SFTP_HOST }}
+          SFTP_PORT: ${{ secrets.SFTP_PORT }}
+        run: |
+          set -euo pipefail
+          test -n "$SFTP_HOST"
+          test -n "$SFTP_PORT"
+          mkdir -p "$HOME/.ssh"
+          chmod 700 "$HOME/.ssh"
+          ssh-keyscan -p "$SFTP_PORT" -H "$SFTP_HOST" >> "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+
+      - name: Upload tracked project files over SFTP
+        env:
+          SFTP_HOST: ${{ secrets.SFTP_HOST }}
+          SFTP_PORT: ${{ secrets.SFTP_PORT }}
+          SFTP_USERNAME: ${{ secrets.SFTP_USERNAME }}
+          SFTP_PASSWORD: ${{ secrets.SFTP_PASSWORD }}
+        run: |
+          set -euo pipefail
+          test -n "$SFTP_HOST"
+          test -n "$SFTP_PORT"
+          test -n "$SFTP_USERNAME"
+          test -n "$SFTP_PASSWORD"
+
+          LFTP_PASSWORD="$SFTP_PASSWORD" lftp \
+            -u "$SFTP_USERNAME" \
+            "sftp://$SFTP_HOST:$SFTP_PORT" \
+            -e "
+              set net:timeout 20;
+              set net:max-retries 2;
+              mirror --reverse --verbose --parallel=2 \
+                --exclude-glob .git \
+                --exclude-glob .github \
+                --exclude-glob node_modules \
+                --exclude-glob .env \
+                --exclude-glob '.env.*' \
+                --exclude-glob '*firebase-adminsdk*.json' \
+                --exclude-glob 'service-account*.json' \
+                --exclude-glob 'credentials*.json' \
+                --exclude-glob ai_verified_memory.json \
+                --exclude-glob tavily_cache.json \
+                --exclude-glob 'tavily_cache.json.tmp-*' \
+                ./ /home/container;
+              bye
+            "
