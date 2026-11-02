@@ -208,12 +208,14 @@ async function discoverLiveVideoId(channelId, options) {
   // Źródło zapasowe: oficjalne search.list(eventType=live).
   let fallbackError = null;
   let fallbackSkipped = false;
+  let fallbackCompleted = false;
   if (typeof opts.searchLive === 'function') {
     try {
       const apiCandidates = await opts.searchLive(channelId);
       if (apiCandidates === null) {
         fallbackSkipped = true;
       } else {
+        fallbackCompleted = true;
         const apiMatch = await verifyCandidates(apiCandidates);
         if (apiMatch) return apiMatch;
       }
@@ -241,7 +243,7 @@ async function discoverLiveVideoId(channelId, options) {
       error.code = 'LIVE_DISCOVERY_DEFERRED';
       throw error;
     }
-    if (pageError) throw pageError;
+    if (pageError && !fallbackCompleted) throw pageError;
   }
   return null;
 }
