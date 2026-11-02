@@ -68,13 +68,13 @@ jobs:
             "$DEPLOY_DIR/scripts" "$DEPLOY_DIR/docs" "$DEPLOY_DIR/node_modules"
 
           # Keep local secrets and runtime state off the hosting account.
-          find "$DEPLOY_DIR" -type f \\
-            \( -name '.env' -o -name '.env.*' \\
-            -o -name '*firebase-adminsdk*.json' \\
-            -o -name 'service-account*.json' \\
-            -o -name 'credentials*.json' \\
-            -o -name 'ai_verified_memory.json' \\
-            -o -name 'tavily_cache.json' \\
+          find "$DEPLOY_DIR" -type f \
+            \( -name '.env' -o -name '.env.*' \
+            -o -name '*firebase-adminsdk*.json' \
+            -o -name 'service-account*.json' \
+            -o -name 'credentials*.json' \
+            -o -name 'ai_verified_memory.json' \
+            -o -name 'tavily_cache.json' \
             -o -name 'tavily_cache.json.tmp-*' \) -delete
 
           echo "Deployment package prepared:"
