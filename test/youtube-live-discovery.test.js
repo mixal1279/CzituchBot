@@ -281,4 +281,3 @@ test('nie oznacza kanału jako offline, gdy fallback jest pominięty przez coold
   );
 });
 
-});
