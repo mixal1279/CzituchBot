@@ -6724,7 +6724,9 @@ function persistYouTubeSearchQuotaCalls() {
 function youtubeSearchList(params) {
   const now = Date.now();
   YT_SEARCH_QUOTA_CALLS = YT_SEARCH_QUOTA_CALLS.filter(
-    timestamp => now - timestamp < YT_SEARCH_QUOTA_WINDOW_MS
+    timestamp => Number.isFinite(timestamp) &&
+      timestamp <= now &&
+      now - timestamp < YT_SEARCH_QUOTA_WINDOW_MS
   );
   if (YT_SEARCH_QUOTA_CALLS.length >= YT_SEARCH_QUOTA_MAX_CALLS) {
     const error = new Error('Osiągnięto lokalny limit 80 wywołań YouTube search.list w ruchomym oknie 24 h.');
