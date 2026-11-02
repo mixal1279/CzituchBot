@@ -74,8 +74,8 @@ jobs:
               set net:timeout 20;
               set net:max-retries 2;
               mirror --reverse --verbose --parallel=2 \
-                --exclude-glob .git \
-                --exclude-glob .github \
+                --exclude-glob '.git/' \
+                --exclude-glob '.github/' \
                 --exclude-glob node_modules \
                 --exclude-glob .env \
                 --exclude-glob '.env.*' \
