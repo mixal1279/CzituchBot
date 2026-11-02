@@ -243,6 +243,7 @@ test('weryfikacja zbiorcza nie sprawdza ponownie ID obecnego już w źródle pod
   });
   assert.equal(found, null);
   assert.deepEqual(batches, [[VIDEO_ID], [OTHER_VIDEO_ID]]);
+});
 
 test('nie oznacza kanału jako offline, gdy zapasowe search.list zawiedzie', async () => {
   const html = assigned('ytInitialData', { contents: {} });
