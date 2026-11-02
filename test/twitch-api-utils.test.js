@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
-  createTwitchUserIdCache, parseRetryAfterMs,
+  createTwitchUserIdCache, parseRetryAfterMs, parseRateLimitResetMs,
   validateTwitchEventSubReconnectUrl, createTwitchHelixRequester,
 } = require('../twitch/api-utils');
 
@@ -34,6 +34,11 @@ test('Retry-After accepts seconds and HTTP dates', () => {
   assert.equal(parseRetryAfterMs('2', 0), 2000);
   assert.equal(parseRetryAfterMs(new Date(5000).toUTCString(), 0), 5000);
   assert.equal(parseRetryAfterMs('invalid', 0), null);
+});
+
+test('Twitch Ratelimit-Reset epoch seconds are converted to a bounded wait', () => {
+  assert.equal(parseRateLimitResetMs('5', 1000), 4000);
+  assert.equal(parseRateLimitResetMs('invalid', 1000), null);
 });
 
 test('EventSub reconnect URL preserves Twitch session path/query and rejects untrusted origins', () => {
