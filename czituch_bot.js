@@ -8382,7 +8382,7 @@ async function obslugaTwitch(nick, message, wyslijFn, config = TWITCH_CONFIG_BIL
         await zapiszCacheBulek(bulkaDzienneCache);
       }
 
-      return await wyslijFn(`🍞 @${dailyBulkaCommand.targetDisplay} dziś jesteś jak ${bulka.nazwa}!`);
+      return await wyslijFn(`🍞 @${dailyBulkaCommand.targetDisplay} dziś jesteś jak ${bulka.nazwa} — ${bulka.opis || 'wypiek godny piekarni BillyBulki'}!`);
     }
 
     if (msgLower === '!komendy') {
