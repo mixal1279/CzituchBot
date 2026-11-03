@@ -1,33 +1,33 @@
 'use strict';
 
-// Kanoniczne encje z jawnymi aliasami PL/EN. Jedna grupa = jedna nazwa własna,
-// rozpoznawana jako całość (a nie jako luźne tokeny z wielkiej litery).
-// Dopisując nową grupę, podawaj wyłącznie nazwy potwierdzone w źródłach gry;
-// nie zgaduj tłumaczeń. Nazwa nieobecna w tej tabeli nadal podlega pełnej,
+// Kanoniczne encje z jawnymi aliasami PL/EN. Jedna grupa = jedna nazwa wlasna,
+// rozpoznawana jako calosc (a nie jako luzne tokeny z wielkiej litery).
+// Dopisujac nowa grupe, podawaj wylacznie nazwy potwierdzone w zrodlach gry;
+// nie zgaduj tlumaczen. Nazwa nieobecna w tej tabeli nadal podlega pelnej,
 // twardej kontroli w dowodzie.
 const ENTITY_ALIAS_GROUPS = Object.freeze([
-  // GTA V: polski tytuł misji „Prolog” odpowiada angielskiemu „Prologue”.
+  // GTA V: polski tytul misji „Prolog” odpowiada angielskiemu „Prologue”.
   { canonical: 'prologue', names: ['Prologue', 'Prolog'] },
   // Skyrim: Dovahkiin is the in-world name for the Dragonborn; preserve both
   // the common spelling and the canonical dragon-language form found in sources.
   { canonical: 'dragonborn', names: ['Dragonborn', 'Dovahkiin', 'Laat Dovahkiin'] },
   // The Witcher 3: these Polish names identify the Feline Armor/gear item,
   // not a separate School of the Cat faction entity.
-  // Minecraft: End City (miasto) i End Ship (statek) są odrębnymi encjami.
-  // Nie łączymy ich aliasów — walidator ma wykrywać zamianę miasta na statek i odwrotnie.
+  // Minecraft: End City (miasto) i End Ship (statek) sa odrebnymi encjami.
+  // Nie laczymy ich aliasow — walidator ma wykrywac zamiane miasta na statek i odwrotnie.
   { canonical: 'end city', names: ['End City', 'End Cities', 'Miasto Endu', 'Miasta Endu', 'Miasto Kresu', 'Miasta Kresu'] },
   { canonical: 'end ship', names: ['End Ship', 'End Ships', 'Statek Endu', 'Statki Endu', 'Statek Kresu', 'Statki Kresu'] },
   // Zweryfikowane odpowiedniki nazw z lokalizacji gier. Trzymajmy tu tylko
-  // encje, dla których mapowanie PL/EN jest jednoznaczne; nie dopisujemy
-  // nazw opisowych ani tłumaczeń zgadywanych na podstawie samego kontekstu.
+  // encje, dla ktorych mapowanie PL/EN jest jednoznaczne; nie dopisujemy
+  // nazw opisowych ani tlumaczen zgadywanych na podstawie samego kontekstu.
   { canonical: 'wild hunt', names: ['Wild Hunt', 'Dziki Gon'] },
-  // Zweryfikowane tytuły zadań Wiedźmina 3 w lokalizacji PL/EN.
+  // Zweryfikowane tytuly zadan Wiedzmina 3 w lokalizacji PL/EN.
   { canonical: 'family matters', names: ['Family Matters', 'Sprawy rodzinne'] },
   { canonical: 'hunting a witch', names: ['Hunting a Witch', 'Polowanie na czarownicę', 'Polowanie na czarownice'] },
   { canonical: 'wandering in the dark', names: ['Wandering in the Dark', 'Wędrowanie w ciemności'] },
   { canonical: 'ladies of the wood', names: ['Ladies of the Wood', 'Damy lasu'] },
   { canonical: 'bloody baron', names: ['Bloody Baron', 'Krwawy Baron', 'Baron Krwawy'] },
-  // Zweryfikowane nazwy przedmiotów i lokacji z Wiedźmina 3 (PL/EN).
+  // Zweryfikowane nazwy przedmiotow i lokacji z Wiedzmina 3 (PL/EN).
   { canonical: 'feline armor', names: ['Feline Armor', 'Feline Gear', 'Feline Gear Set', 'Cat School Gear', 'Zbroja Szkoły Kota', 'Zbroja wiedźmińskiego cechu kota', 'Rynsztunek Szkoły Kota', 'Rynsztunek Kociej Szkoły'] },
   { canonical: 'temple isle', names: ['Temple Isle', 'Wyspa Świątynna'] },
   { canonical: 'eye of nehaleni', names: ['Eye of Nehaleni', 'Oko Nehaleni'] },
@@ -43,19 +43,19 @@ const ENTITY_ALIAS_GROUPS = Object.freeze([
   { canonical: 'eternal fire', names: ['Eternal Fire', 'Wieczny Ogień', 'Wiecznego Ognia', 'Wiecznym Ogniem', 'Wiecznemu Ogniowi'] },
 ]);
 
-const DIACRITIC_CLASSES = { a: 'aą', c: 'cć', e: 'eę', l: 'lł', n: 'nń', o: 'oó', s: 'sś', z: 'zźż' };
+const DIACRITIC_CLASSES = { a: 'a\u0105', c: 'c\u0107', e: 'e\u0119', l: 'l\u0142', n: 'n\u0144', o: 'o\u00f3', s: 's\u015b', z: 'z\u017a\u017c' };
 
-// Token nazwy -> wzorzec odporny na brak polskich znaków (tekst po normalizacji)
-// i na polską odmianę (zamknięta lista końcówek, tylko dla tokenów >= 4 znaków,
-// żeby „Miecz” nie łapał np. „Mieczyk”).
-const ENDINGS = 'iego|iemu|iej|ich|imi|ych|ymi|ego|emu|owi|ami|ach|iem|ie|[oó]w|om|em|ym|im|ej|[aą]|[eę]|[oó]|u|y|i';
+// Token nazwy -> wzorzec odporny na brak polskich znakow (tekst po normalizacji)
+// i na polska odmiane (zamknieta lista koncowek, tylko dla tokenow >= 4 znakow,
+// zeby „Miecz” nie lapal np. „Mieczyk”).
+const ENDINGS = 'iego|iemu|iej|ich|imi|ych|ymi|ego|emu|owi|ami|ach|iem|ie|[o\u00f3]w|om|em|ym|im|ej|[a\u0105]|[e\u0119]|[o\u00f3]|u|y|i';
 
 function escapeRegex(value) {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function stripDiacritics(value) {
-  return String(value || '').toLocaleLowerCase('pl-PL').replace(/ł/g, 'l')
+  return String(value || '').toLocaleLowerCase('pl-PL').replace(/\u0142/g, 'l')
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 }
 
@@ -69,10 +69,20 @@ function tokenPattern(token) {
   if (!base) return null;
   if (base.length < 4) return [...base].map(letterClass).join('');
   const last = base[base.length - 1];
-  // Rzeczownik na samogłoskę zmienia końcówkę (Twierdza -> Twierdzę, Zeta -> Zety),
-  // więc odcinamy ostatnią literę i wymagamy jednej z końcówek z listy.
+  // Rzeczownik na samogloske zmienia koncowke (Twierdza -> Twierdze, Zeta -> Zety),
+  // wiec odcinamy ostatnia litere i wymagamy jednej z koncowek z listy.
   if ('aeoyi'.includes(last)) {
     const stem = [...base.slice(0, -1)].map(letterClass).join('');
+    // Rzeczowniki zenskie na „-ja” (zbroja, szyja, aleja, armia, historia…) w dopelniaczu/
+    // celowniku/miejscowniku l.poj. traca spolgloske „j” przed miekka koncowka „i”
+    // (zbroja -> zbroi, nigdy „zbroji”) — regularna koncowka „i” dociealaby tylko „a” i
+    // zostawilaby „j”, dajac bledna forme. Pozostale koncowki („zbroja”, „zbroje”…)
+    // zachowuja „j” normalnie i ida zwykla sciezka.
+    if (last === 'a' && base[base.length - 2] === 'j') {
+      const stemBezJ = [...base.slice(0, -2)].map(letterClass).join('');
+      const endingsBezI = ENDINGS.split('|').filter(ending => ending !== 'i').join('|');
+      return `(?:${stem}(?:${endingsBezI})|${stemBezJ}i)`;
+    }
     return `${stem}(?:${ENDINGS})`;
   }
   return `${[...base].map(letterClass).join('')}(?:${ENDINGS})?`;
