@@ -510,7 +510,7 @@ function handleCommand({ message, nick, login, streamId }, options = {}) {
     if (isBillyTarget || isBillySender) {
       const dateKey = new Date().toISOString().slice(0, 10);
       const result = getBillyBulkaForDay(dateKey, options);
-      return '🥖 @BillyBulka otrzymuje ' + result.variant.name + '! ' + result.variant.description
+      return '🥖 @BillyBulka dziś jesteś jak ' + result.variant.name + ' — ' + result.variant.description
         + (result.variant.rarity === 'tajna' ? ' ✨ TAJNY WYPIEK!' : '');
     }
   }
