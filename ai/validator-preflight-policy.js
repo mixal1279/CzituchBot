@@ -8,10 +8,10 @@
 function isTransientTransportFailure(result, verdict) {
   const status = result?.http != null && Number.isInteger(Number(result.http))
     ? Number(result.http)
-    : Number(String(verdict).match(/\\bHTTP\\s+(\\d{3})\\b/i)?.[1] || 0);
+    : Number(String(verdict).match(/\bHTTP\s+(\d{3})\b/i)?.[1] || 0);
 
   if (status === 408 || status === 425 || status === 429 || (status >= 500 && status <= 599)) return true;
-  if (/^TIMEOUT >\\d+ ms$/i.test(verdict)) return true;
+  if (/^TIMEOUT >\d+ ms$/i.test(verdict)) return true;
   if (/^ZA WOLNY dla produkcji/i.test(verdict)) return true;
   return false;
 }
@@ -23,7 +23,7 @@ function isBlockingPreflightFailure(result) {
   if (isTransientTransportFailure(result, verdict)) return false;
 
   // An empty successful OpenRouter response is degraded optional capacity.
-  if (result.provider === 'OpenRouter' && /^PUSTY content \\(finish=null\\)$/.test(verdict)) return false;
+  if (result.provider === 'OpenRouter' && /^PUSTY content \(finish=null\)$/.test(verdict)) return false;
 
   return true;
 }
