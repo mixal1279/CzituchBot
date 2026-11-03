@@ -13,6 +13,7 @@ test('!sex generuje piekarnicze dopasowanie dla wskazanych osób', () => {
 
   assert.match(response, /^@Viewer i @NickInnejOsoby/);
   assert.match(response, /temperaturę 97%!/);
+  assert.match(response, /chrupiąca kajzerka z ciepłym masełkiem/);
   assert.match(response, /Piekielna chemia/);
   assert.match(response, /🥖🔥$/);
 });
