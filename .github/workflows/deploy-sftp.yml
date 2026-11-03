@@ -63,9 +63,21 @@ jobs:
           # Export only Git-tracked files; never mirror the runner's working tree.
           git archive --format=tar HEAD | tar -xf - -C "$DEPLOY_DIR"
 
-          # Remove development-only directories from the deployment package.
-          rm -rf "$DEPLOY_DIR/.github" "$DEPLOY_DIR/test" "$DEPLOY_DIR/tests" \
-            "$DEPLOY_DIR/scripts" "$DEPLOY_DIR/docs" "$DEPLOY_DIR/node_modules"
+          # Remove development-only directories at every depth, not just at repository root.
+          find "$DEPLOY_DIR" -type d \
+            \( -name '.git' -o -name '.github' -o -name 'test' -o -name 'tests' \
+               -o -name '__tests__' -o -name 'coverage' -o -name '.nyc_output' \
+               -o -name 'scripts' -o -name 'docs' -o -name 'node_modules' \) \
+            -prune -exec rm -rf {} +
+
+          # Fail the deployment if any Git/test/development directory survived packaging.
+          if find "$DEPLOY_DIR" -type d \
+            \( -name '.git' -o -name '.github' -o -name 'test' -o -name 'tests' \
+               -o -name '__tests__' -o -name 'coverage' -o -name '.nyc_output' \
+               -o -name 'node_modules' \) -print -quit | grep -q .; then
+            echo "ERROR: development/test directory found in deployment package."
+            exit 1
+          fi
 
           # Keep local secrets and runtime state off the hosting account.
           find "$DEPLOY_DIR" -type f \
@@ -108,9 +120,49 @@ jobs:
                 set net:max-retries 1;
                 set net:reconnect-interval-base 2;
                 set sftp:auto-confirm yes;
+                # Remove stale development directories left by previous deployments.
+                # Do not use mirror --delete: runtime data and server-side files must be preserved.
+                set cmd:fail-exit no;
+                rm -r .github;
+                rm -r .git;
+                rm -r test;
+                rm -r tests;
+                rm -r __tests__;
+                rm -r coverage;
+                rm -r .nyc_output;
+                rm -r scripts;
+                rm -r docs;
+                set cmd:fail-exit yes;
                 lcd $DEPLOY_DIR;
                 mirror --reverse --verbose --parallel=2 ./ ./;
                 bye
               "
 
           echo "SFTP upload completed successfully."
+
+      - name: Restart Pterodactyl server
+        env:
+          PTERODACTYL_PANEL_URL: ${{ secrets.PTERODACTYL_PANEL_URL }}
+          PTERODACTYL_CLIENT_API_KEY: ${{ secrets.PTERODACTYL_CLIENT_API_KEY }}
+          PTERODACTYL_SERVER_ID: ${{ secrets.PTERODACTYL_SERVER_ID }}
+        run: |
+          set -euo pipefail
+          test -n "$PTERODACTYL_PANEL_URL"
+          test -n "$PTERODACTYL_CLIENT_API_KEY"
+          test -n "$PTERODACTYL_SERVER_ID"
+
+          PANEL_URL="${PTERODACTYL_PANEL_URL%/}"
+          HTTP_STATUS="$(curl --silent --show-error --output /dev/null --write-out "%{http_code}" \
+            --request POST \
+            --url "$PANEL_URL/api/client/servers/$PTERODACTYL_SERVER_ID/power" \
+            --header "Authorization: Bearer $PTERODACTYL_CLIENT_API_KEY" \
+            --header "Accept: Application/vnd.pterodactyl.v1+json" \
+            --header "Content-Type: application/json" \
+            --data '{"signal":"restart"}')"
+
+          if [ "$HTTP_STATUS" != "204" ]; then
+            echo "Pterodactyl restart request failed (HTTP $HTTP_STATUS)."
+            exit 1
+          fi
+
+          echo "Pterodactyl accepted the restart request (HTTP 204)."
