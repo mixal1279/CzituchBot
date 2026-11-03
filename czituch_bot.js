@@ -8274,7 +8274,7 @@ async function obslugaTwitch(nick, message, wyslijFn, config = TWITCH_CONFIG_BIL
   const historiaKlucz = `twitch:${kanalNorm || 'brak-kanalu'}:${login}`;
 
   // Komenda !sex — piekarniczy miernik dopasowania.
-  if (kanal === 'billybulka' && /^!sex(?:\\s|$)/i.test(message.trim())) {
+  if (kanal === 'billybulka' && /^!sex(?:\s|$)/i.test(message.trim())) {
     ostatnieUzycie[cooldownKey] = teraz;
     const response = BILLY_SEX.buildSexResponse({ message, nick });
     return await wyslijFn(response);
