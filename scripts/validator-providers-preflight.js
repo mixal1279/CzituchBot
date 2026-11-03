@@ -180,11 +180,58 @@ function parseJsonLoose(text) {
   return null;
 }
 
+async function countGeminiInputTokens(probe) {
+  const timeoutMs = Math.max(1000, Number(process.env.PREFLIGHT_COUNT_TOKENS_TIMEOUT_MS) || 5000);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const started = Date.now();
+  try {
+    const countUrl = probe.url.replace(':generateContent', ':countTokens');
+    const { generationConfig, ...countBody } = probe.body;
+    const response = await fetch(countUrl, {
+      method: 'POST',
+      headers: probe.headers,
+      body: JSON.stringify(countBody),
+      signal: controller.signal,
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const message = String(data?.error?.message || data?.message || '').replace(/\s+/g, ' ').slice(0, 120);
+      return { tokens: null, ms: Date.now() - started, error: `HTTP ${response.status}${message ? ': ' + message : ''}` };
+    }
+    return {
+      tokens: Number.isFinite(data?.totalTokens) ? data.totalTokens : null,
+      ms: Date.now() - started,
+      error: null,
+    };
+  } catch (error) {
+    return {
+      tokens: null,
+      ms: Date.now() - started,
+      error: error?.name === 'AbortError' ? `timeout >${timeoutMs} ms` : String(error?.message || error).slice(0, 120),
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function run(probe) {
+  const result = {
+    provider: probe.provider, model: probe.model, variant: probe.variant,
+    ms: 0, inputTokens: null, inputTokenCountMs: null, inputTokenCountError: null,
+    promptTokens: null, completionTokens: null, totalTokens: null,
+    http: null, finish: null, claims: null, claimEn: null, verdict: '',
+  };
+  if (probe.provider === 'Gemini') {
+    const counted = await countGeminiInputTokens(probe);
+    result.inputTokens = counted.tokens;
+    result.inputTokenCountMs = counted.ms;
+    result.inputTokenCountError = counted.error;
+  }
+
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), PROBE_TIMEOUT_MS);
   const started = Date.now();
-  const result = { provider: probe.provider, model: probe.model, variant: probe.variant, ms: 0, http: null, finish: null, completionTokens: null, claims: null, claimEn: null, verdict: '' };
   try {
     const res = await fetch(probe.url, { method: 'POST', headers: probe.headers, body: JSON.stringify(probe.body), signal: controller.signal });
     const data = await res.json().catch(() => ({}));
@@ -196,9 +243,15 @@ async function run(probe) {
     result.finish = isGemini
       ? (candidate.finishReason || data?.promptFeedback?.blockReason || null)
       : (choice.finish_reason || null);
+    result.promptTokens = isGemini
+      ? (data?.usageMetadata?.promptTokenCount ?? null)
+      : (data?.usage?.prompt_tokens ?? null);
     result.completionTokens = isGemini
       ? (data?.usageMetadata?.candidatesTokenCount ?? null)
       : (data?.usage?.completion_tokens ?? null);
+    result.totalTokens = isGemini
+      ? (data?.usageMetadata?.totalTokenCount ?? null)
+      : (data?.usage?.total_tokens ?? null);
     if (!res.ok) {
       const msg = String(data?.error?.message || data?.message || '').replace(/\s+/g, ' ').slice(0, 140);
       result.verdict = `BŁĄD HTTP ${res.status}${msg ? ': ' + msg : ''}`;
@@ -244,22 +297,34 @@ async function run(probe) {
   for (const probe of probes) {
     const r = await run(probe);
     results.push(r);
-    const extra = [r.http != null ? `HTTP ${r.http}` : null, r.completionTokens != null ? `${r.completionTokens} tok` : null, r.claims != null ? `claimów ${r.claims}, claim_en ${r.claimEn}` : null].filter(Boolean).join(', ');
+    const inputTokens = r.promptTokens ?? r.inputTokens;
+    const extra = [
+      r.http != null ? `HTTP ${r.http}` : null,
+      inputTokens != null ? `wejście ${inputTokens} tok` : null,
+      r.completionTokens != null ? `wyjście ${r.completionTokens} tok` : null,
+      r.totalTokens != null ? `łącznie ${r.totalTokens} tok` : null,
+      r.inputTokenCountError ? `countTokens: ${r.inputTokenCountError}` : null,
+      r.claims != null ? `claimów ${r.claims}, claim_en ${r.claimEn}` : null,
+    ].filter(Boolean).join(', ');
     console.log(`[preflight] ${r.provider} (${r.model}) ${r.variant}: ${r.verdict} · ${r.ms} ms${extra ? ' · ' + extra : ''}`);
     if (r.verdict !== 'OK') console.log(`::warning title=Preflight walidatora::${r.provider} ${r.variant}: ${r.verdict}`);
   }
 
   if (process.env.GITHUB_STEP_SUMMARY && results.length) {
-    const lines = ['## Preflight walidatorów', '', `Limity produkcyjne: Gemini ${PROD_TIMEOUT_BY_PROVIDER.Gemini} ms, xKiro ${PROD_TIMEOUT_BY_PROVIDER.xKiro} ms, OpenRouter ${PROD_TIMEOUT_BY_PROVIDER.OpenRouter} ms, Groq ${PROD_TIMEOUT_BY_PROVIDER.Groq} ms (tu czekamy do ${PROBE_TIMEOUT_MS} ms).`, '', '| provider | model | wariant | wynik | czas | limit prod. | tokeny | claimy / claim_en |', '|---|---|---|---|---|---:|---:|---|'];
-    for (const r of results) lines.push(`| ${r.provider} | ${r.model} | ${r.variant} | ${r.verdict} | ${r.ms} ms | ${r.productionTimeoutMs ?? PROD_TIMEOUT_BY_PROVIDER[r.provider] ?? 3000} ms | ${r.completionTokens ?? '–'} | ${r.claims != null ? `${r.claims} / ${r.claimEn}` : '–'} |`);
+    const lines = ['## Preflight walidatorów', '', `Limity produkcyjne: Gemini ${PROD_TIMEOUT_BY_PROVIDER.Gemini} ms, xKiro ${PROD_TIMEOUT_BY_PROVIDER.xKiro} ms, OpenRouter ${PROD_TIMEOUT_BY_PROVIDER.OpenRouter} ms, Groq ${PROD_TIMEOUT_BY_PROVIDER.Groq} ms (generowanie czeka do ${PROBE_TIMEOUT_MS} ms; countTokens Gemini do ${Math.max(1000, Number(process.env.PREFLIGHT_COUNT_TOKENS_TIMEOUT_MS) || 5000)} ms).`, '', '| provider | model | wariant | wynik | czas gen. | wejście tok. | wyjście tok. | łącznie tok. | claimy / claim_en |', '|---|---|---|---|---:|---:|---:|---:|---|'];
+    for (const r of results) {
+      const inputTokens = r.promptTokens ?? r.inputTokens;
+      lines.push(`| ${r.provider} | ${r.model} | ${r.variant} | ${r.verdict} | ${r.ms} ms | ${inputTokens ?? '–'}${r.inputTokenCountMs != null ? ` (${r.inputTokenCountMs} ms count)` : ''} | ${r.completionTokens ?? '–'} | ${r.totalTokens ?? '–'} | ${r.claims != null ? `${r.claims} / ${r.claimEn}` : '–'} |`);
+      if (r.inputTokenCountError) lines.push(`  - ${r.provider} countTokens: ${r.inputTokenCountError}`);
+    }
     try { fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, lines.join('\n') + '\n'); } catch (_) { /* podsumowanie jest opcjonalne */ }
   }
 
   const bad = results.filter(r => r.verdict !== 'OK');
   const blockingFailures = bad.filter(isBlockingPreflightFailure);
-  const degradedOptionalProviders = bad.filter(r => !isBlockingPreflightFailure(r));
-  for (const r of degradedOptionalProviders) {
-    console.log(`::warning title=Opcjonalny walidator zdegradowany::${r.provider} pozostaje skonfigurowany, ale nie mieści się w limicie produkcyjnym; benchmark będzie kontynuowany bez zakładania jego dostępności.`);
+  const degradedProviders = bad.filter(r => !isBlockingPreflightFailure(r));
+  for (const r of degradedProviders) {
+    console.log(`::warning title=Provider zdegradowany::${r.provider} ma przejściowy problem z dostępnością lub czasem odpowiedzi; benchmark diagnostyczny będzie kontynuowany, ale wynik jakości może zostać oznaczony jako nieważny.`);
   }
   const missingRequiredProviders = [];
   if (!GEMINI_KEY) missingRequiredProviders.push('Gemini (GEMINI_API_KEY — primary validator)');
