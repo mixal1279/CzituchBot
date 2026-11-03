@@ -8371,6 +8371,13 @@ async function obslugaTwitch(nick, message, wyslijFn, config = TWITCH_CONFIG_BIL
       const dzisiaj = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
       const cacheKey = `twitch:${kanalNorm || 'brak-kanalu'}:${dailyBulkaCommand.targetLogin}_${dzisiaj}`;
 
+      if (dailyBulkaCommand.targetLogin === 'billybulka') {
+        const result = BILLY_BAKERY.getBillyBulkaForDay(dzisiaj);
+        const wariant = result.variant;
+        const tajnyOpis = wariant.rarity === 'tajna' ? ' ✨ TAJNY WYPIEK!' : '';
+        return await wyslijFn(`🍞 @${dailyBulkaCommand.targetDisplay} dziś jesteś jak ${wariant.name} — ${wariant.description}${tajnyOpis}`);
+      }
+
       let bulka = bulkaDzienneCache[cacheKey];
       if (!bulka) {
         // Czyścimy wpisy sprzed dzisiaj, żeby plik nie rósł w nieskończoność.
@@ -8382,7 +8389,7 @@ async function obslugaTwitch(nick, message, wyslijFn, config = TWITCH_CONFIG_BIL
         await zapiszCacheBulek(bulkaDzienneCache);
       }
 
-      return await wyslijFn(`🍞 @${dailyBulkaCommand.targetDisplay} dziś jesteś jak ${bulka.nazwa} — ${bulka.opis || 'wypiek godny piekarni BillyBulki'}!`);
+      return await wyslijFn(`🍞 @${dailyBulkaCommand.targetDisplay} dziś jesteś jak ${bulka.nazwa}!`);
     }
 
     if (msgLower === '!komendy') {
