@@ -8375,7 +8375,7 @@ async function obslugaTwitch(nick, message, wyslijFn, config = TWITCH_CONFIG_BIL
         const result = BILLY_BAKERY.getBillyBulkaForDay(dzisiaj);
         const wariant = result.variant;
         const tajnyOpis = wariant.rarity === 'tajna' ? ' ✨ TAJNY WYPIEK!' : '';
-        return await wyslijFn(`🍞 @${dailyBulkaCommand.targetDisplay} dziś jesteś jak ${wariant.name} — ${wariant.description}${tajnyOpis}`);
+        return await wyslijFn(`🍞 @${dailyBulkaCommand.targetDisplay} dziś jesteś jak ${wariant.name}!${tajnyOpis}`);
       }
 
       let bulka = bulkaDzienneCache[cacheKey];
