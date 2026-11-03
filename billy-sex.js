@@ -21,7 +21,7 @@ function buildSexResponse({ message, nick, rng = Math.random }) {
   const percentage = Math.floor(roll * 101);
   const comment = KOMENTARZE_DOPASOWANIA.find(({ max }) => percentage <= max).tekst;
 
-  return `@${nick} i @${target} – Wasza piekielna miłość ma dziś temperaturę ${percentage}%! ${comment} 🥖🔥`;
+  return `@${nick} i @${target} – Wasza piekielna miłość ma dziś temperaturę ${percentage}%! Jesteście jak chrupiąca kajzerka z ciepłym masełkiem! ${comment} 🥖🔥`;
 }
 
 module.exports = { KOMENTARZE_DOPASOWANIA, buildSexResponse };
