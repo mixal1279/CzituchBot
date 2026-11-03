@@ -72,6 +72,7 @@ const fs = require('fs');
 const path = require('path');
 const BILLY_BAKERY = require('./billy-bakery');
 const BILLY_CM = require('./billy-cm');
+const BILLY_SEX = require('./billy-sex');
 const { createFirestoreState, encryptSecret, encryptionKeyFromEnv } = require('./storage/firestore-state');
 const AI_POLICY = require('./ai/policy');
 const AI_VALIDATOR = require('./ai/validator');
@@ -8271,6 +8272,13 @@ async function obslugaTwitch(nick, message, wyslijFn, config = TWITCH_CONFIG_BIL
 
   const kanalNorm = kanal ? kanal.toLowerCase() : '';
   const historiaKlucz = `twitch:${kanalNorm || 'brak-kanalu'}:${login}`;
+
+  // Komenda !sex — piekarniczy miernik dopasowania.
+  if (kanal === 'billybulka' && /^!sex(?:\\s|$)/i.test(message.trim())) {
+    ostatnieUzycie[cooldownKey] = teraz;
+    const response = BILLY_SEX.buildSexResponse({ message, nick });
+    return await wyslijFn(response);
+  }
 
   // Komendy specyficzne dla Billy
   if (kanal === 'billybulka') {
