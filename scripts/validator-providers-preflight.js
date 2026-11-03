@@ -196,7 +196,7 @@ async function countGeminiInputTokens(probe) {
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
-      const message = String(data?.error?.message || data?.message || '').replace(/\\s+/g, ' ').slice(0, 120);
+      const message = String(data?.error?.message || data?.message || '').replace(/\s+/g, ' ').slice(0, 120);
       return { tokens: null, ms: Date.now() - started, error: `HTTP ${response.status}${message ? ': ' + message : ''}` };
     }
     return {
