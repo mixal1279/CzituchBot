@@ -6,7 +6,7 @@
 // Authentication, configuration, malformed-output and other deterministic
 // failures remain blocking so CI still exposes actionable setup regressions.
 function isTransientTransportFailure(result, verdict) {
-  const status = Number.isInteger(Number(result?.http))
+  const status = result?.http != null && Number.isInteger(Number(result.http))
     ? Number(result.http)
     : Number(String(verdict).match(/\\bHTTP\\s+(\\d{3})\\b/i)?.[1] || 0);
 
