@@ -10,9 +10,9 @@ const KOMENTARZE_DOPASOWANIA = [
 ];
 
 function buildSexResponse({ message, nick, rng = Math.random }) {
-  const parts = String(message || '').trim().split(/\\s+/);
+  const parts = String(message || '').trim().split(/\s+/);
   if (!/^!sex$/i.test(parts[0] || '')) return null;
-  if (parts.length > 2 || (parts.length === 2 && !/^@?[\\p{L}\\p{N}_-]+$/u.test(parts[1]))) {
+  if (parts.length > 2 || (parts.length === 2 && !/^@?[\p{L}\p{N}_-]+$/u.test(parts[1]))) {
     return 'Użycie: !sex lub !sex @nick';
   }
 
