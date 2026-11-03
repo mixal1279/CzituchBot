@@ -1,5 +1,7 @@
 'use strict';
 
+const { boundedText } = require('./inputSafety');
+
 /**
  * AI Core v25
  *
@@ -125,8 +127,8 @@ function normalizeSource(source = {}, index = 0) {
   // Gemini grounding snippets are model-output spans tied to a URL, not page text.
   // webRetrieval deliberately marks them with content: ''; preserve that sentinel
   // instead of promoting the snippet into evidence during core normalization.
-  const metadataOnlyGemini = /^gemini/i.test(String(source.provider || '')) && source.content === '';
-  const content = String(metadataOnlyGemini ? '' : (source.content || source.raw_content || source.snippet || '')).replace(/\s+/g, ' ').trim();
+  const metadataOnlyGemini = /^gemini/i.test(boundedText(source.provider || '', 64)) && source.content === '';
+  const content = boundedText(metadataOnlyGemini ? '' : (source.content || source.raw_content || source.snippet || ''), 12000).replace(/\s+/g, ' ').trim();
   const title = String(source.title || '').replace(/\s+/g, ' ').trim();
   return {
     ...source,

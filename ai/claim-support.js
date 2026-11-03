@@ -1,5 +1,7 @@
 'use strict';
 
+const { boundedText } = require('./inputSafety');
+
 // First-class per-claim citation-support audit. This is deliberately separate
 // from answer completeness and factual gold scoring: it measures whether each
 // claim is supported by its own cited span and records why it was not.
@@ -22,9 +24,9 @@ function normalizeText(value) {
 }
 
 function detectOverclaimTypes(claim, evidence, options = {}) {
-  const c = normalizeText(claim);
-  const e = normalizeText(evidence);
-  const context = normalizeText(options.context || '');
+  const c = normalizeText(boundedText(claim, 2000));
+  const e = normalizeText(boundedText(evidence, 12000));
+  const context = normalizeText(boundedText(options.context || '', 4000));
   const types = [];
   if (!c || !e) return types;
 

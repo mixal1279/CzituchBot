@@ -1,5 +1,7 @@
 'use strict';
 
+const { boundedText } = require('./inputSafety');
+
 const SOURCE_POLICIES = {
   lore: { preferred: ['official', 'gamelore', 'specialized_wiki', 'reputable_guide'], fallback: ['ign', 'gamespot', 'pcgamer', 'eurogamer', 'fandom'] },
   gameplay: { preferred: ['official', 'gamefaqs', 'specialized_wiki'], fallback: ['ign', 'gamespot', 'pcgamer', 'fandom'] },
@@ -42,7 +44,7 @@ function dodajUnikalneQuery(lista, query) {
 }
 
 function buildRetrievalQueries(question, routing = {}, options = {}) {
-  const original = String(question || '').replace(/\s+/g, ' ').trim();
+  const original = boundedText(question, 500).replace(/\s+/g, ' ').trim();
   if (!original || routing?.needs_web === false) return [];
 
   const queries = [];
@@ -126,7 +128,7 @@ const RESPONSE_PROFILES = {
 };
 
 function detectResponseProfile(question, routing) {
-  const p = String(question || '').toLocaleLowerCase('pl-PL');
+  const p = boundedText(question, 500).toLocaleLowerCase('pl-PL');
   if (routing?.is_gameplay) return 'gameplay';
   if (routing?.is_lore) return /(?<![\p{L}\p{N}_])(?:timeline|chronolog\p{L}*|kolejno[śs][ćc]\p{L}*|oś czasu|os czasu)(?![\p{L}\p{N}_])/iu.test(p) ? 'timeline' : 'lore';
   // Rdzenie ze słowem odmienionym (porównaj, różni się, różnica) — `\b` po rdzeniu nigdy nie pasował.
@@ -184,7 +186,7 @@ function responseContract(profile) {
 // głównie wtedy, gdy pytanie zależy od poprzedniej wymiany („a on?”, „co z nią?”). Bez kontekstu
 // i z rozpoznaną grą/encją pytanie jest już samodzielne.
 function czyPotrzebujeRewrite(pytanie, { hasContext = false, hasEntity = false } = {}) {
-  const q = String(pytanie || '').trim();
+  const q = boundedText(pytanie, 500).trim();
   if (!q) return false;
   const words = q.split(/\s+/).length;
   if (hasContext) {

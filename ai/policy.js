@@ -1,5 +1,7 @@
 'use strict';
 
+const { boundedText } = require('./inputSafety');
+
 const { NIE_CZAS_GRY } = require('./patterns');
 
 function normalizujZapytanieTavily(q) {
@@ -33,7 +35,7 @@ function zakresTavilyDlaPytania(pytanie, domyslny = null) {
 }
 
 function okreslKategorieAI(pytanie, czyPytanieOReceptureMC = () => false) {
-  const p = String(pytanie || '');
+  const p = boundedText(pytanie, 500);
   const graSygnal = /(?<![\p{L}\p{N}_])(?:minecraft\p{L}*|wied[źz]min\p{L}*|cyberpunk(?:\s+2077)?|gta(?:\s+[iv1-6]+)?|fortnite\p{L}*|elden\s+ring|baldur['’]?s\s+gate|witcher\p{L}*|assassin['’]?s\s+creed|red\s+dead|fallout\p{L}*|skyrim\p{L}*|starfield\p{L}*|dark\s+souls|game|gra|gry|grze|grę|grą|gier|tytuł\s+gry)(?![\p{L}\p{N}_])/iu.test(p);
   if (czyPytanieOReceptureMC(p)) return 'minecraft_recipe';
   if (/(?<![\p{L}\p{N}_])(?:pogod(?:a|y|ę|ą|zie|o)|temperatur\p{L}*|deszcz\p{L}*|wiatr(?:u|em|y|ów)?|słonecz(?:nie|ny|na|ne)|slonecz(?:nie|ny|na|ne)|forecast)(?![\p{L}\p{N}_])/iu.test(p)) return 'weather';
@@ -56,8 +58,8 @@ function okreslKategorieAI(pytanie, czyPytanieOReceptureMC = () => false) {
   // Pytania z wyraźnym sygnałem gry wymagają źródeł — nie traktujemy ich jak small talk.
   if (sygnalZdrowegoRozsadku && !graSygnal) return 'conversation';
 
-  if (/(?<![\p{L}\p{N}_])(?:dzisiaj|dzis|dziś|wczoraj|najnowsz\p{L}*|wiadomo[śs]\p{L}*|news|aktualn\p{L}*)(?![\p{L}\p{N}_])/iu.test(pytanie)) return 'web_fact';
-  if (graSygnal || /(?<![\p{L}\p{N}_])(?:jak|gdzie|co\s+to|co\s+(?:się|stało|robi|oznacza|znaczy)|z\s+czego|kiedy|od\s+kiedy|ile|kto|kim|czym|czy|jaki|jaka|jakie|premier\p{L}*|data|cena|koszt|informacj\p{L}*|aktualizacj\p{L}*|dlaczego|czemu|r[óo]żni\p{L}*|działa|dziala|bezpiecz\p{L}*|powstał\p{L}*|został\p{L}*|rozwija\p{L}*|opracow\p{L}*|stworzył\p{L}*|firma|technolog\p{L}*|model\p{L}*|histori\p{L}*|pierwsz\p{L}*|prototyp\p{L}*|http|https|dns|ram|cpu|gpu|api|oauth|javascript|node\.?js|python|groq|gemini|openrouter|discord|crafting)(?![\p{L}\p{N}_])/iu.test(pytanie)) return 'web_fact';
+  if (/(?<![\p{L}\p{N}_])(?:dzisiaj|dzis|dziś|wczoraj|najnowsz\p{L}*|wiadomo[śs]\p{L}*|news|aktualn\p{L}*)(?![\p{L}\p{N}_])/iu.test(p)) return 'web_fact';
+  if (graSygnal || /(?<![\p{L}\p{N}_])(?:jak|gdzie|co\s+to|co\s+(?:się|stało|robi|oznacza|znaczy)|z\s+czego|kiedy|od\s+kiedy|ile|kto|kim|czym|czy|jaki|jaka|jakie|premier\p{L}*|data|cena|koszt|informacj\p{L}*|aktualizacj\p{L}*|dlaczego|czemu|r[óo]żni\p{L}*|działa|dziala|bezpiecz\p{L}*|powstał\p{L}*|został\p{L}*|rozwija\p{L}*|opracow\p{L}*|stworzył\p{L}*|firma|technolog\p{L}*|model\p{L}*|histori\p{L}*|pierwsz\p{L}*|prototyp\p{L}*|http|https|dns|ram|cpu|gpu|api|oauth|javascript|node\.?js|python|groq|gemini|openrouter|discord|crafting)(?![\p{L}\p{N}_])/iu.test(p)) return 'web_fact';
   return 'conversation';
 }
 

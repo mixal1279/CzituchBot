@@ -1,7 +1,9 @@
 'use strict';
 
+const { boundedText } = require('./inputSafety');
+
 function normalizeEvidenceText(value) {
-  return String(value || '')
+  return boundedText(value, 12000)
     .toLocaleLowerCase('pl-PL')
     .replace(/ł/g, 'l')
     .normalize('NFD')

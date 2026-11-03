@@ -1,4 +1,6 @@
 'use strict';
+
+const { boundedText } = require('./inputSafety');
 // CI regression: causal evidence contract.
 
 const { assessEvidence } = require('./core');
@@ -840,7 +842,7 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
     && evidenceEvaluations[index]?.ok === true
     && !hardOverclaimIndexes.has(index)
     && claim.source_ids.length > 0
-    && !/[.!?].+\S/u.test(claim.claim)
+    && !/[.!?].+\S/u.test(boundedText(claim.claim, 2000))
     && isAtomicPartialClaimText(claim.claim)
   );
   const partialBody = verifiedPartialClaims.slice(0, 5)
