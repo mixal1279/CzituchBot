@@ -116,10 +116,10 @@ const KNOWN_ENTITY_ALIAS_PATTERNS = [
   { canonical: "alduin's wall", pattern: /\b(?:alduin['\u2019]?s|alduins)\s+wall\b/iu },
   { canonical: 'dragonrend', pattern: /\bdragonrend\b/iu },
   // Minecraft: „End”, „Endu” i „Endzie” oznaczaja te sama kraine.
-  { canonical: 'the end', pattern: /\b(?:the\s+end|end(?:u|em|zie|a)|kraw[ee]dz(?:i|ia|ie|iach|iom|mi)?)\b/iu },
+  { canonical: 'the end', pattern: /\b(?:the\s+end|end(?:u|em|zie|a)|kraw[eę]dz(?:i|ia|ie|iach|iom|mi)?)\b/iu },
   // Minecraft: polska nazwa Ender Pearl to „perla Kresu” (Kres = End); bez aliasu „Kresu” bylo
   // wymagana nazwa wlasna, ktorej nie ma w angielskim tlumaczeniu.
-  { canonical: 'ender pearl', pattern: /\b(?:ender\s+pearls?|per[ll](?:a|y|e|a|e|ie|o)?\s+kresu)\b/iu },
+  { canonical: 'ender pearl', pattern: /\b(?:ender\s+pearls?|per[lł](?:a|ę|e|y|i)?\s+kresu)\b/iu },
   { canonical: 'spellbreaker', pattern: /\b(?:spellbreaker|zaklinacz\s+spellbreaker|lamacz(?:a|owi|em|u)?\s+zakl(?:e|e)c)\b/iu },
   { canonical: 'extended relaxation center', pattern: /\b(?:extended\s+relaxation\s+center|centrum\s+(?:przedluzonego|rozszerzonego)\s+relaksu)\b/iu },
   { canonical: 'aperture laboratories', pattern: /\b(?:aperture\s+laboratories|laboratori(?:a|ach|ami|ow|ow)\s+aperture)\b/iu },
@@ -305,7 +305,7 @@ function wyodrebnijLiczbyIDaty(value) {
   // Only convert a numeral when it follows a title-like run of capitalized words.
   // This keeps GTA V / Final Fantasy X / Baldur's Gate III while avoiding
   // arbitrary Roman-looking tokens in prose or acronyms such as MC, CD, MM, MIX.
-  const titleNumeralRe = /\b(?:[A-ZACEFLNOSZZ][\p{L}\d'\u2019.-]*\s+){1,5}(II|III|IV|V|VI|VII|VIII|IX|X|XI|XII|XIII|XIV|XV|XVI)\b/gu;
+  const titleNumeralRe = /\b(?:[A-ZĄĆĘŁŃÓŚŹŻ][\p{L}\d'\u2019.-]*\s+){1,5}(II|III|IV|V|VI|VII|VIII|IX|X|XI|XII|XIII|XIV|XV|XVI)\b/gu;
   for (const match of raw.matchAll(titleNumeralRe)) romanMatches.push(match[1]);
   for (const r of romanMatches) {
     const n = rzymskieNaArabskie(r);
@@ -323,19 +323,19 @@ const UNIT_ALIASES = new Map([
   ['h','hour'], ['hr','hour'], ['hrs','hour'], ['hour','hour'], ['hours','hour'], ['godzina','hour'], ['godziny','hour'], ['godzin','hour'], ['godz','hour'],
   ['min','minute'], ['mins','minute'], ['minute','minute'], ['minutes','minute'], ['minuta','minute'], ['minuty','minute'], ['minut','minute'],
   ['s','second'], ['sec','second'], ['second','second'], ['seconds','second'], ['sekunda','second'], ['sekundy','second'], ['sekund','second'],
-  ['day','day'], ['days','day'], ['dzien','day'], ['dni','day'], ['dnia','day'],
+  ['day','day'], ['days','day'], ['dzien','day'], ['dzień','day'], ['dni','day'], ['dnia','day'],
   ['year','year'], ['years','year'], ['rok','year'], ['lata','year'], ['lat','year'],
-  ['km','km'], ['kilometer','km'], ['kilometers','km'], ['kilometr','km'], ['kilometry','km'], ['kilometrow','km'],
-  ['m','m'], ['meter','m'], ['meters','m'], ['metr','m'], ['metry','m'], ['metrow','m'],
+  ['km','km'], ['kilometer','km'], ['kilometers','km'], ['kilometr','km'], ['kilometry','km'], ['kilometrow','km'], ['kilometrów','km'],
+  ['m','m'], ['meter','m'], ['meters','m'], ['metr','m'], ['metry','m'], ['metrow','m'], ['metrów','m'],
   ['kg','kg'], ['kilogram','kg'], ['kilograms','kg'], ['kilogramow','kg'],
   ['gb','gb'], ['mb','mb'], ['tb','tb'], ['hz','hz'], ['fps','fps'],
   // Pozostale przypadki: „po 5 minutach”, „przez godzine”, „w 10 sekund”, „w 3 dniach”, „od 2 lat”.
   ['minute','minute'], ['minucie','minute'], ['minutach','minute'], ['minutami','minute'], ['minutom','minute'],
-  ['godzine','hour'], ['godzinie','hour'], ['godzinach','hour'], ['godzinami','hour'], ['godzinom','hour'],
+  ['godzine','hour'], ['godzinę','hour'], ['godzinie','hour'], ['godzinach','hour'], ['godzinami','hour'], ['godzinom','hour'],
   ['sekunde','second'], ['sekundzie','second'], ['sekundach','second'], ['sekundami','second'], ['sekundom','second'],
   ['dniach','day'], ['dniami','day'],
   // Celowo bez „roku”, „latach” i „dniu”: „z 2013 roku”, „w latach 2010”, „w dniu 5 maja” to daty, nie wartosci z jednostka.
-  ['°c','celsius'], ['°f','fahrenheit'], ['zl','pln'], ['pln','pln'], ['usd','usd'], ['eur','eur'], ['%','percent'],
+  ['°c','celsius'], ['°f','fahrenheit'], ['zl','pln'], ['zł','pln'], ['pln','pln'], ['usd','usd'], ['eur','eur'], ['%','percent'],
 ]);
 function wyodrebnijJednostkoweWartosci(value) {
   const text = String(value || '').toLocaleLowerCase('pl-PL').replace(/,/g, '.')
@@ -441,7 +441,7 @@ function wyodrebnijNazwyWlasne(value, options = {}) {
     }
   }
   const sentenceRe = /(^|[.!?]\s*)([^.!?]*)(?=[.!?]|$)/gu;
-  const capitalizedRe = /(?<![\p{L}\p{N}_])[A-ZACEFLNOSZZ][\p{L}\d'\u2019.-]*/gu;
+  const capitalizedRe = /(?<![\p{L}\p{N}_])[A-ZĄĆĘŁŃÓŚŹŻ][\p{L}\d'\u2019.-]*/gu;
   const sentenceMatches = [...raw.matchAll(sentenceRe)];
   const capitalizedInMiddle = new Set();
   for (const sentenceMatch of sentenceMatches) {
@@ -524,16 +524,18 @@ function tekstDoWykrywaniaNegacji(value) {
   let cleaned = String(value || '');
   cleaned = cleaned.replace(/\b(?:if|when)\s+not\s+[^,.!?;:]*?\s*[,;:]/giu, ' ');
   cleaned = cleaned.replace(/\bunless\s+[^,.!?;:]*?\s*[,;:]/giu, ' ');
-  cleaned = cleaned.replace(/\b(?:jesli|jesli|jezeli|jezeli|gdy|kiedy)\s+nie\s+[^,.!?;:]*?\s*(?:[,;:]|\sto\s)/giu, ' ');
-  cleaned = cleaned.replace(/\bchyba\s*ze\s+[^,.!?;:]*?\s*[,;:]/giu, ' ');
-  cleaned = cleaned.replace(/\bchyba\s*ze\s+[^,.!?;:]*?\s*[,;:]/giu, ' ');
+  cleaned = cleaned.replace(/\b(?:jesli|jeśli|jezeli|jeżeli|gdy|kiedy)\s+nie\s+[^,.!?;:]*?\s*(?:[,;:]|\sto\s)/giu, ' ');
+  cleaned = cleaned.replace(/\bchyba\s*(?:ze|że)\s+[^,.!?;:]*?\s*[,;:]/giu, ' ');
   // Dodatkowa, wspolrzedna klauzula sposobu/celu typu „..., and track down a
   // way to regain his agency without succumbing fully to his vampiric urges”
   // zawiera „without”, ale nie neguje glownego orzeczenia zdania („escape”) —
   // opisuje rownolegly, dodatkowy cel. Dotyczy to tylko fraz wprowadzonych
   // przez „and ... without ...” (nie samego poczatku zdania), wiec zwykle
   // „X did not do Y” nadal jest wykrywane jako negacja glownego twierdzenia.
-  cleaned = cleaned.replace(/\band\s+[^,.!?;:]*?\bwithout\s+[^,.!?;:]*/giu, ' ');
+  cleaned = cleaned.replace(/\band\s+[^,.!?;:]*?\bwithout\s+[^,.!?;:]*/giu, (match) => {
+    const beforeWithout = match.replace(/^\band\s+/iu, '').replace(/\bwithout\b[\s\S]*$/iu, '');
+    return NEGATION_RE.test(beforeWithout) ? match : ' ';
+  });
 
   let text = normalizujClaim(cleaned);
 
@@ -580,7 +582,7 @@ function zbudujWyroczniaNazw(blocks, extraNames = []) {
 
   const oracle = new Set();
   const sentenceRe = /(^|[.!?]\s*)([^.!?]*)(?=[.!?]|$)/gu;
-  const capitalizedRe = /(?<![\p{L}\p{N}_])[A-ZACEFLNOSZZ][\p{L}\d'\u2019.-]*/gu;
+  const capitalizedRe = /(?<![\p{L}\p{N}_])[A-ZĄĆĘŁŃÓŚŹŻ][\p{L}\d'\u2019.-]*/gu;
   for (const block of rows) {
     const raw = String(block?.content || '');
     for (const sentenceMatch of raw.matchAll(sentenceRe)) {
@@ -756,7 +758,7 @@ function sprawdzTwardeKonflikty(evidence, claim, options = {}) {
     const zerowyKwantyfikator = !claimNegated && evidenceNegated
       && !wyodrebnijMarkery(e, NEGATION_STRICT_RE)
       && wyodrebnijMarkery(c, REDUCTION_RE);
-    if (!zerowyKwantyfikator) return { ok: false, reason: 'claim i dowod maja inna negacje' };
+    if (!zerowyKwantyfikator) return { ok: false, reason: 'claim i dowód mają inną negację' };
   }
   if (options.checkNegationOnly) return { ok: true };
 
@@ -765,7 +767,7 @@ function sprawdzTwardeKonflikty(evidence, claim, options = {}) {
   // (patrz TYTULY_GIER); zwalniamy go, chyba ze dowod wspomina inna czesc tej samej serii.
   const cBezTytulow = usunTytulyGierZLiczb(c, e);
   const claimNumbers = wyodrebnijLiczbyIDaty(cBezTytulow);
-  if (claimNumbers.some(n => !evidenceNumbers.includes(n))) return { ok: false, reason: 'claim zawiera liczbe/date nieobecna w dowodzie' };
+  if (claimNumbers.some(n => !evidenceNumbers.includes(n))) return { ok: false, reason: 'claim zawiera liczbę/datę nieobecną w dowodzie' };
 
   const evidenceQuantities = wyodrebnijJednostkoweWartosci(e);
   const claimQuantities = wyodrebnijJednostkoweWartosci(c);
@@ -799,7 +801,7 @@ function sprawdzSprzecznosciSemantyczne(evidence, claim) {
   const evidenceAssertsStability = positiveStabilityRe.test(normalizedEvidence) && !evidenceLacksStability;
   const claimAssertsStability = positiveStabilityRe.test(normalizedClaim) && !claimLacksStability;
   if (evidenceLacksStability && claimAssertsStability) {
-    return { ok: false, reason: 'claim twierdzi stabilnosc, a dowod wskazuje brak stabilnosci' };
+    return { ok: false, reason: 'claim twierdzi stabilność, a dowód wskazuje brak stabilności' };
   }
   if (evidenceAssertsStability && claimLacksStability) {
     return { ok: false, reason: 'claim twierdzi brak stabilnosci, a dowod wskazuje stabilnosc' };
@@ -846,9 +848,9 @@ function dopasowanieSemantyczne(evidence, claim, options = {}) {
     // Powod musi to mowic wprost — nazwa braku nazwy wlasnej
     // sugerowala problem z trescia odpowiedzi, a problem lezy w kontrakcie.
     if (!options.claimEn && wygladaNaAngielski(evidence)) {
-      return { ok: false, reason: 'brak tlumaczenia claimu (claim_en) dla angielskiego dowodu — nazw wlasnych nie da sie rozstrzygnac', ignoredSentenceInitialNames };
+      return { ok: false, reason: 'brak tłumaczenia claimu (claim_en) dla angielskiego dowodu — nazw własnych nie da się rozstrzygnąć', ignoredSentenceInitialNames };
     }
-    return { ok: false, reason: 'dowod nie zawiera wszystkich istotnych nazw wlasnych claimu', ignoredSentenceInitialNames };
+    return { ok: false, reason: 'dowód nie zawiera wszystkich istotnych nazw własnych claimu', ignoredSentenceInitialNames };
   }
   if (sharedConcepts.length >= 2) return { ok: true, mode: 'multiple_cross_language_concepts', sharedConcepts, overlap, ignoredSentenceInitialNames };
   if (sharedConcepts.length >= 1 && entities.length >= 1) return { ok: true, mode: 'concept_and_entity', sharedConcepts, overlap, ignoredSentenceInitialNames };
@@ -890,7 +892,7 @@ function zgodnoscStrukturalna(evidence, claim, options = {}) {
   // condition too; do not let negation cleanup erase the logical qualifier.
   const conditionalRe = /\b(?:unless|provided that|only if|only when|if and only if|as long as|pod warunkiem|tylko jesli|tylko gdy|tylko kiedy)\b/u;
   if (conditionalRe.test(normalizujClaim(e)) && !conditionalRe.test(normalizujClaim(c))) {
-    return { ok: false, reason: 'dowod jest warunkowy, a claim przedstawia skutek jako bezwarunkowy' };
+    return { ok: false, reason: 'dowód jest warunkowy, a claim przedstawia skutek jako bezwarunkowy' };
   }
 
   const hard = sprawdzTwardeKonflikty(e, c, options);
@@ -901,7 +903,7 @@ function zgodnoscStrukturalna(evidence, claim, options = {}) {
   const evidenceNumbers = wyodrebnijLiczbyIDaty(e);
   const claimNumbers = wyodrebnijLiczbyIDaty(usunTytulyGierZLiczb(c, e));
   if (claimNumbers.length && claimNumbers.some(n => !evidenceNumbers.includes(n))) {
-    return { ok: false, reason: 'claim zawiera liczbe/date nieobecna w dowodzie' };
+    return { ok: false, reason: 'claim zawiera liczbę/datę nieobecną w dowodzie' };
   }
   const evidenceQuantities = wyodrebnijJednostkoweWartosci(e);
   const claimQuantities = wyodrebnijJednostkoweWartosci(c);
@@ -912,7 +914,7 @@ function zgodnoscStrukturalna(evidence, claim, options = {}) {
   const claimCausal = wyodrebnijMarkery(c, CAUSAL_RE);
   const evidenceCausal = wyodrebnijMarkery(e, CAUSAL_EVIDENCE_RE);
   if (claimCausal && !evidenceCausal && !options.allowDistributedEvidence) {
-    return { ok: false, reason: 'claim dodaje relacje przyczynowa nieobecna w dowodzie' };
+    return { ok: false, reason: 'claim dodaje relację przyczynową nieobecną w dowodzie' };
   }
 
   const semantic = dopasowanieSemantyczne(e, c, options);
@@ -1040,7 +1042,7 @@ function sprawdzPokrycieClaimamiOdpowiedzi(answer, claims) {
     // zaden claim nie opisuje metadanych.
     // Usuwamy WYLACZNIE sam nawias ze zrodlem (razem z zamykajacym nawiasem), a nie
     // ogon zdania — inaczej tresc po „(Zrodlo: …)” uciekalaby spod kontroli pokrycia.
-    const withoutSource = sentence.replace(/\s*[([{]\s*(?:zrod(?:a|la|lo|em|ami)?|source(?:s)?)\s*:[^)\]}]*[)\]}]/giu, '').trim();
+    const withoutSource = sentence.replace(/\s*[([{]\s*(?:źród(?:a|ła|ło|em|ami)?|source(?:s)?)\s*:[^)\]}]*[)\]}]/giu, '').trim();
     // Zdanie bez liter i cyfr po usunieciu zrodla (np. sama kropka) nie jest twierdzeniem.
     if (!/[\p{L}\p{N}]/u.test(withoutSource)) return [];
     const base = withoutSource;
@@ -1209,14 +1211,16 @@ const PL_FUNCTION_WORDS = /(?<![\p{L}])(?:jest|sie|sie|nie|ze|ze|przez|oraz|ktor
 // (wyjatki typu „Iowa” sa nazwami wlasnymi, wiec je pomijamy).
 const PL_VERB_ENDINGS = /(?:^|[^\p{Lu}])[\p{Ll}]{3,}(?:wa|uje)(?![\p{L}])/u;
 
-function wygladaNaAngielski(text) {
+function wyglądaNaAngielski(text) {
   const t = String(text || '');
-  if (/[acelnoszzACELNOSZZ]/.test(t)) return false;
-  if (PL_FUNCTION_WORDS.test(t)) return false;
-  if (PL_VERB_ENDINGS.test(t)) return false;
+  const normalized = normalizujClaim(t);
+  if (/[ąęłńóśźżĄĘŁŃÓŚŹŻ]/.test(t)) return false;
+  if (PL_FUNCTION_WORDS.test(normalized)) return false;
+  if (PL_VERB_ENDINGS.test(normalized)) return false;
   // Krotki claim typu „Malenia defeated Radahn.” nie ma slow funkcyjnych, ale tez nie ma polskich.
   return (t.match(EN_FUNCTION_WORDS) || []).length >= 1 || t.trim().split(/\s+/).length >= 3;
 }
+const wygladaNaAngielski = wyglądaNaAngielski;
 
 function zbiorRowny(a, b) {
   const sa = new Set(a); const sb = new Set(b);
@@ -1286,7 +1290,7 @@ function cytatRozszerzaNazwePoImieniu(quote, nameVariants) {
   for (let i = 0; i < tokens.length - 1; i++) {
     if (/[.!?,;:)]$/u.test(tokens[i])) continue;
     if (!nameVariants.has(normalizujClaim(tokens[i].replace(/['\u2019]s$/iu, '')))) continue;
-    if (/^[A-ZACEFLNOSZZ]/u.test(tokens[i + 1])) return true;
+    if (/^[A-ZĄĆĘŁŃÓŚŹŻ]/u.test(tokens[i + 1])) return true;
   }
   return false;
 }
@@ -1316,14 +1320,13 @@ function czyTlumaczenieOdwracaRelacjeThuUmIPochlaniania(claimPl, claimEn) {
 function czyTlumaczenieOdwracaRelacjeKorupcjiWheatleya(claimPl, claimEn) {
   const pl = normalizujClaim(claimPl);
   const en = normalizujClaim(claimEn);
-  const plCorrupt = /\bskorumpow\w*|\bkorumpuj\w*/u.exec(pl);
-  const plControl = /\bkontrol\w*|\bwladz\w*/u.exec(pl);
-  const enCorrupt = /\bcorrupt\w*/u.exec(en);
-  const enControl = /\bcontrol\w*/u.exec(en);
-  return Boolean(
-    plCorrupt && plControl && plCorrupt.index < plControl.index
-    && enControl && enCorrupt && enControl.index < enCorrupt.index
-  );
+  if (!/\bwheatley\b/u.test(pl) || !/\bwheatley\b/u.test(en)) return false;
+  const plCorrupt = /\b(?:skorumpow\w*|korumpuj\w*)/u.exec(pl);
+  const plControl = /\b(?:kontrol\w*|wladz\w*)/u.exec(pl);
+  if (!plCorrupt || !plControl || plCorrupt.index >= plControl.index) return false;
+  // „takes control, which corrupts him” odwraca kierunek; końcowe
+  // „takes control, corrupted by power” jest tylko zmianą szyku.
+  return /\bcontrol\w*[^.!?]{0,100}\b(?:which|that|and|because|since|as)\s+(?:he\s+|it\s+|this\s+|that\s+)?corrupt(?:s|ed|ing)\b/u.test(en);
 }
 
 function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
@@ -1343,8 +1346,8 @@ function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
     // zamiast ja zastepowac ogolnym komunikatem.
     const konfliktCytatu = sprawdzSprzecznosciSemantyczne(pl, en);
     const powodNiezgodnosci = konfliktCytatu.ok
-      ? 'claim_en kopiuje cytat, ale nie odpowiada tresci claimu'
-      : 'claim_en kopiuje cytat, ale nie odpowiada tresci claimu: ' + konfliktCytatu.reason;
+      ? 'claim_en kopiuje cytat, ale nie odpowiada treści claimu'
+      : 'claim_en kopiuje cytat, ale nie odpowiada treści claimu: ' + konfliktCytatu.reason;
     // Wycinamy aliasowane encje z obu stron i porownujemy RESZTE tresci.
     // Bez tego kopiowanie cytatu czynilo weryfikacje tautologiczna: claim_en
     // jest wtedy cytatem, wiec „dowod zgodny z claim_en” niczego nie dowodzi,
@@ -1372,6 +1375,11 @@ function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
     const directSameLanguageEvidence = wygladaNaAngielski(pl)
       && normalizedClaim.length > 0
       && quoteNorm.includes(normalizedClaim);
+    const claimNamesForCopy = wyodrebnijNazwyWlasne(pl, options);
+    const sharedNameAnchor = claimNamesForCopy.some(name => czyNazwaWlasnaWystepuje(name, quoteNorm));
+    const copiedQuoteHasIndependentSignal = sharedNameAnchor
+      || (wyodrebnijLiczbyIDaty(pl).length > 0 && wyodrebnijLiczbyIDaty(en).length > 0)
+      || (wyodrebnijJednostkoweWartosci(pl).length > 0 && wyodrebnijJednostkoweWartosci(en).length > 0);
     // Brak wspolnego pojecia jest sygnalem sprzecznosci tylko wtedy, gdy
     // slownik pojec w ogole COS rozpoznal po ktorejs ze stron (np. claim o
     // ucieczce vs cytat o narodzinach — patrz test ponizej). Gdy slownik nie
@@ -1384,6 +1392,9 @@ function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
     // przyczynowe, sprzecznosci strukturalne), ktore i tak wykonuja sie nizej.
     if (sharedConcepts.length === 0 && !directSameLanguageEvidence
       && (polishConcepts.size > 0 || englishConcepts.size > 0)) {
+      return { ok: false, reason: powodNiezgodnosci };
+    }
+    if (sharedConcepts.length === 0 && !directSameLanguageEvidence && !copiedQuoteHasIndependentSignal) {
       return { ok: false, reason: powodNiezgodnosci };
     }
     // When claim_en is a verbatim quotation, require semantic concept parity
@@ -1456,10 +1467,10 @@ function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
   // Zmiane zdarzenia (np. „przejal kontrole” → „destroyed”) wykrywaja ogolne pary
   // przeciwstawnych pojec w sprawdzSprzecznosciSemantyczne; tu nie ma wyjatkow dla konkretnych fraz.
   if (czyTlumaczenieOdwracaRelacjeThuUmIPochlaniania(pl, en)) {
-    return { ok: false, reason: "tlumaczenie claimu odwraca relacje miedzy pochlanianiem dusz a wiedza o Thu'um" };
+    return { ok: false, reason: "tłumaczenie claimu odwraca relację między pochłanianiem dusz a wiedzą o Thu'um" };
   }
   if (czyTlumaczenieOdwracaRelacjeKorupcjiWheatleya(pl, en)) {
-    return { ok: false, reason: 'tlumaczenie claimu odwraca relacje miedzy skorumpowaniem Wheatleya a przejeciem kontroli' };
+    return { ok: false, reason: 'tłumaczenie claimu odwraca relację między skorumpowaniem Wheatleya a przejęciem kontroli' };
   }
   const semanticConflict = sprawdzSprzecznosciSemantyczne(pl, en);
   if (!semanticConflict.ok) return { ok: false, reason: 'tlumaczenie claimu zmienia zdarzenie lub relacje' };
@@ -1483,7 +1494,7 @@ function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
     && /\bjoin(?:s|ed|ing)? (?:the|your) party\b/iu.test(normalizujClaim(en));
   if (plCausal !== enCausal && !equivalentCompulsion && !equivalentEnable && !equivalentOfferOutcome
     && !(polishReasonClause && englishReasonClause)) {
-    return { ok: false, reason: 'tlumaczenie claimu zmienia relacje przyczynowa' };
+    return { ok: false, reason: 'tłumaczenie claimu zmienia relację przyczynową' };
   }
   if (wyodrebnijMarkery(pl, REDUCTION_RE) !== wyodrebnijMarkery(en, REDUCTION_RE)) {
     return { ok: false, reason: 'tlumaczenie claimu zmienia kierunek redukcji lub ochrony' };
@@ -1509,12 +1520,12 @@ function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
     const quotePrefix = evidenceQuote ? findQuotePrefix(evidenceContext, evidenceQuote) : null;
     if (missingClaimNames.length) {
       if (quotePrefix === null) {
-        return { ok: false, reason: 'tlumaczenie claimu gubi nazwy wlasne: ' + missingClaimNames.slice(0, 3).join(', ') };
+        return { ok: false, reason: 'tłumaczenie claimu gubi nazwy własne: ' + missingClaimNames.slice(0, 3).join(', ') };
       }
       const sameSentencePrefix = quotePrefix.split(/\bsentenceboundarytoken\b/u).at(-1) || '';
       const normalizedPrefix = ' ' + sameSentencePrefix + ' ';
       if (!missingClaimNames.every(name => normalizedPrefix.includes(' ' + normalizujClaim(name) + ' '))) {
-        return { ok: false, reason: 'tlumaczenie claimu gubi nazwy wlasne: ' + missingClaimNames.slice(0, 3).join(', ') };
+        return { ok: false, reason: 'tłumaczenie claimu gubi nazwy własne: ' + missingClaimNames.slice(0, 3).join(', ') };
       }
     }
   }
@@ -1582,10 +1593,10 @@ function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
       && anaphoricEn
       && missingFromTranslation.every(name => normalizedPrefix.includes(' ' + normalizujClaim(name) + ' '));
     if (!missingEntitiesBound) {
-      return { ok: false, reason: 'tlumaczenie claimu gubi nazwy wlasne: ' + missingFromTranslation.slice(0, 3).join(', ') };
+      return { ok: false, reason: 'tłumaczenie claimu gubi nazwy własne: ' + missingFromTranslation.slice(0, 3).join(', ') };
     }
   }
   return { ok: true };
 }
 
-module.exports = { KNOWN_ENTITY_ALIAS_PATTERNS, pojeciaCrossLanguage, CAUSAL_RE, CAUSAL_EVIDENCE_RE, wygladaNaAngielski, spojnoscTlumaczeniaClaimu, czyTlumaczenieOdwracaRelacjeKorupcjiWheatleya, czyOgraniczenieDowodowe, normalizujClaim, tokenyClaim, liczbyDoPorownania, czyRelacjaPrzyczynowaPokrywaClaim, wyodrebnijLiczbyIDaty, wyodrebnijJednostkoweWartosci, wyodrebnijNazwyWlasne, zbudujWyroczniaNazw, zgodnoscStrukturalna, sprawdzTwardeKonflikty, sprawdzSprzecznosciSemantyczne, dopasowanieSemantyczne, sprawdzPokrycieClaimamiOdpowiedzi, czyDowodSemantyczniePokrywaClaim, tokenyPokrywajaSie, czyNazwaWlasnaWystepuje, usunEtykietyDowodow };
+module.exports = { KNOWN_ENTITY_ALIAS_PATTERNS, pojeciaCrossLanguage, CAUSAL_RE, CAUSAL_EVIDENCE_RE, wyglądaNaAngielski, wygladaNaAngielski, spojnoscTlumaczeniaClaimu, czyTlumaczenieOdwracaRelacjeKorupcjiWheatleya, czyOgraniczenieDowodowe, normalizujClaim, tokenyClaim, liczbyDoPorownania, czyRelacjaPrzyczynowaPokrywaClaim, wyodrebnijLiczbyIDaty, wyodrebnijJednostkoweWartosci, wyodrebnijNazwyWlasne, zbudujWyroczniaNazw, zgodnoscStrukturalna, sprawdzTwardeKonflikty, sprawdzSprzecznosciSemantyczne, dopasowanieSemantyczne, sprawdzPokrycieClaimamiOdpowiedzi, czyDowodSemantyczniePokrywaClaim, tokenyPokrywajaSie, czyNazwaWlasnaWystepuje, usunEtykietyDowodow };

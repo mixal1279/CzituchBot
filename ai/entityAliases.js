@@ -23,13 +23,13 @@ const ENTITY_ALIAS_GROUPS = Object.freeze([
   { canonical: 'wild hunt', names: ['Wild Hunt', 'Dziki Gon'] },
   // Zweryfikowane tytuly zadan Wiedzmina 3 w lokalizacji PL/EN.
   { canonical: 'family matters', names: ['Family Matters', 'Sprawy rodzinne'] },
-  { canonical: 'hunting a witch', names: ['Hunting a Witch', 'Polowanie na czarownice', 'Polowanie na czarownice'] },
-  { canonical: 'wandering in the dark', names: ['Wandering in the Dark', 'Wedrowanie w ciemnosci'] },
+  { canonical: 'hunting a witch', names: ['Hunting a Witch', 'Polowanie na czarownicę', 'Polowanie na czarownice'] },
+  { canonical: 'wandering in the dark', names: ['Wandering in the Dark', 'Wędrowanie w ciemności'] },
   { canonical: 'ladies of the wood', names: ['Ladies of the Wood', 'Damy lasu'] },
   { canonical: 'bloody baron', names: ['Bloody Baron', 'Krwawy Baron', 'Baron Krwawy'] },
   // Zweryfikowane nazwy przedmiotow i lokacji z Wiedzmina 3 (PL/EN).
-  { canonical: 'feline armor', names: ['Feline Armor', 'Feline Gear', 'Feline Gear Set', 'Cat School Gear', 'Zbroja Szkoly Kota', 'Zbroja wiedzminskiego cechu kota', 'Rynsztunek Szkoly Kota', 'Rynsztunek Kociej Szkoly'] },
-  { canonical: 'temple isle', names: ['Temple Isle', 'Wyspa Swiatynna'] },
+  { canonical: 'feline armor', names: ['Feline Armor', 'Feline Gear', 'Feline Gear Set', 'Cat School Gear', 'Zbroja Szkoły Kota', 'Zbroja wiedźmińskiego cechu kota', 'Rynsztunek Szkoły Kota', 'Rynsztunek Kociej Szkoły'] },
+  { canonical: 'temple isle', names: ['Temple Isle', 'Wyspa Świątynna'] },
   { canonical: 'eye of nehaleni', names: ['Eye of Nehaleni', 'Oko Nehaleni'] },
   // Keep the Skyrim item separate from Dragonrend; only the English item name is unambiguous.
   { canonical: 'dragonbane', names: ['Dragonbane'] },
@@ -40,7 +40,7 @@ const ENTITY_ALIAS_GROUPS = Object.freeze([
   { canonical: 'dragonrend', names: ['Dragonrend'] },
   { canonical: 'cathedral of dragon communion', names: ['Cathedral of Dragon Communion', 'Katedra Smoczej Komunii', 'Katedra Komunii Smoka'] },
   { canonical: 'greatsword', names: ['Greatsword', 'Wielki Miecz'] },
-  { canonical: 'eternal fire', names: ['Eternal Fire', 'Wieczny Ogien', 'Wiecznego Ognia', 'Wiecznym Ogniem', 'Wiecznemu Ogniowi'] },
+  { canonical: 'eternal fire', names: ['Eternal Fire', 'Wieczny Ogień', 'Wiecznego Ognia', 'Wiecznym Ogniem', 'Wiecznemu Ogniowi'] },
 ]);
 
 const DIACRITIC_CLASSES = { a: 'a\u0105', c: 'c\u0107', e: 'e\u0119', l: 'l\u0142', n: 'n\u0144', o: 'o\u00f3', s: 's\u015b', z: 'z\u017a\u017c' };

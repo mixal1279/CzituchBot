@@ -4,7 +4,17 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { spojnoscTlumaczeniaClaimu, pojeciaCrossLanguage, czyTlumaczenieOdwracaRelacjeKorupcjiWheatleya, zbudujWyroczniaNazw, KNOWN_ENTITY_ALIAS_PATTERNS } = require('../ai/claimValidation');
+const {
+  spojnoscTlumaczeniaClaimu,
+  pojeciaCrossLanguage,
+  czyTlumaczenieOdwracaRelacjeKorupcjiWheatleya,
+  zbudujWyroczniaNazw,
+  KNOWN_ENTITY_ALIAS_PATTERNS,
+  wyglądaNaAngielski,
+  wyodrebnijJednostkoweWartosci,
+  zgodnoscStrukturalna,
+  wyodrebnijNazwyWlasne,
+} = require('../ai/claimValidation');
 const { normalizujWynikWalidatora } = require('../ai/validator');
 const { detectOverclaimTypes } = require('../ai/claim-support');
 
@@ -23,8 +33,42 @@ function wynikModelu(claim, quote, claimEn) {
 }
 
 function dane(tresc) {
-  return '[SOURCE 1]\nTYTU\u0141: Test\nTRE\u015a\u0106: <<<UNTRUSTED_SOURCE_CONTENT>>>\n' + tresc + '\n<<<END_UNTRUSTED_SOURCE_CONTENT>>>';
+  return '[SOURCE 1]\nTYTUŁ: Test\nTREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>\n' + tresc + '\n<<<END_UNTRUSTED_SOURCE_CONTENT>>>';
 }
+
+test('wyglądaNaAngielski odróżnia krótki angielski tekst od polskiego tekstu bez diakrytyki', () => {
+  assert.equal(wyglądaNaAngielski('The fight lasts five minutes.'), true);
+  assert.equal(wyglądaNaAngielski('Walka trwa pięć minut.'), false);
+  assert.equal(wyglądaNaAngielski('Walka trwa piec minut.'), false);
+});
+
+test('jednostki zachowują polskie znaki w surowym tekście', () => {
+  assert.deepEqual(wyodrebnijJednostkoweWartosci('Koszt wynosi 50 zł, a wydarzenie trwa 1 dzień i 2 godzinę.'), [
+    '50:pln', '1:day', '2:hour',
+  ]);
+});
+
+test('jeśli i jeżeli nie zamieniają negacji warunku w negację głównego twierdzenia', () => {
+  for (const marker of ['Jeśli', 'Jeżeli']) {
+    const evidence = `${marker} nie wybrano A, to B występuje.`;
+    assert.equal(zgodnoscStrukturalna(evidence, 'B występuje.').ok, true);
+    assert.equal(zgodnoscStrukturalna('B występuje.', `${marker} nie wybrano A, to B występuje.`).ok, false);
+  }
+  assert.equal(zgodnoscStrukturalna('Jeśli wybrano A, to B występuje.', 'B występuje.').ok, true);
+  assert.equal(zgodnoscStrukturalna('A występuje, ale B nie występuje.', 'A występuje, ale B nie występuje.').ok, true);
+});
+
+test('polskie wielkie litery Ł i Ś pozostają rozpoznawalne jako nazwy własne', () => {
+  assert.deepEqual(wyodrebnijNazwyWlasne('Łowca odwiedza Świątynię.', { nameOracle: new Set(['łowca', 'świątynię']) }), [
+    'łowca', 'swiatynie',
+  ]);
+});
+
+test('and ... without ... nie usuwa negacji głównego twierdzenia', () => {
+  const evidence = 'Astarion escapes and does not die without help.';
+  assert.equal(zgodnoscStrukturalna(evidence, evidence).ok, true);
+  assert.equal(zgodnoscStrukturalna(evidence, 'Astarion escapes and dies without help.').ok, false);
+});
 
 // --- quantity-285 / comparison-337: claim_en kopiuje cytat, ale pojecia spoza
 // slownika narracyjnego (czas trwania, szerokosc w pikselach) nie daja zadnego
