@@ -72,6 +72,7 @@ const fs = require('fs');
 const path = require('path');
 const BILLY_BAKERY = require('./billy-bakery');
 const BILLY_CM = require('./billy-cm');
+const BILLY_SEX = require('./billy-sex');
 const { createFirestoreState, encryptSecret, encryptionKeyFromEnv } = require('./storage/firestore-state');
 const AI_POLICY = require('./ai/policy');
 const AI_VALIDATOR = require('./ai/validator');
@@ -8272,19 +8273,15 @@ async function obslugaTwitch(nick, message, wyslijFn, config = TWITCH_CONFIG_BIL
   const kanalNorm = kanal ? kanal.toLowerCase() : '';
   const historiaKlucz = `twitch:${kanalNorm || 'brak-kanalu'}:${login}`;
 
+  // Komenda !sex — piekarniczy miernik dopasowania.
+  if (kanal === 'billybulka' && /^!sex(?:\s|$)/i.test(message.trim())) {
+    ostatnieUzycie[cooldownKey] = teraz;
+    const response = BILLY_SEX.buildSexResponse({ message, nick });
+    return await wyslijFn(response);
+  }
+
   // Komendy specyficzne dla Billy
   if (kanal === 'billybulka') {
-    const bakeryResponse = BILLY_BAKERY.handleCommand({
-      message,
-      nick,
-      login: tags?.username || nick,
-      streamId: streamStart.twitch.billybulka || null,
-    });
-    if (bakeryResponse) {
-      ostatnieUzycie[cooldownKey] = teraz;
-      return await wyslijFn(bakeryResponse);
-    }
-
     // !cm: stała liczba 1–30 dla użytkownika przez cały stream BillyBulki.
     // Używamy czasu startu zwróconego przez Twitch API/EventSub, żeby restart
     // procesu nie tworzył nowej puli w trakcie tego samego streamu.
@@ -8374,6 +8371,13 @@ async function obslugaTwitch(nick, message, wyslijFn, config = TWITCH_CONFIG_BIL
       const dzisiaj = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
       const cacheKey = `twitch:${kanalNorm || 'brak-kanalu'}:${dailyBulkaCommand.targetLogin}_${dzisiaj}`;
 
+      if (dailyBulkaCommand.targetLogin === 'billybulka') {
+        const result = BILLY_BAKERY.getBillyBulkaForDay(dzisiaj);
+        const wariant = result.variant;
+        const tajnyOpis = wariant.rarity === 'tajna' ? ' ✨ TAJNY WYPIEK!' : '';
+        return await wyslijFn(`🍞 @${dailyBulkaCommand.targetDisplay} dziś jesteś jak ${wariant.name}!${tajnyOpis}`);
+      }
+
       let bulka = bulkaDzienneCache[cacheKey];
       if (!bulka) {
         // Czyścimy wpisy sprzed dzisiaj, żeby plik nie rósł w nieskończoność.
@@ -8390,7 +8394,7 @@ async function obslugaTwitch(nick, message, wyslijFn, config = TWITCH_CONFIG_BIL
 
     if (msgLower === '!komendy') {
       ostatnieUzycie[cooldownKey] = teraz;
-      return await wyslijFn(`Dostępne komendy: !watchtime, !followage, !dc, !tiktok, !ig, !yt, !lurk, !ai, !cm [@nick], !horoskop, !bułka, !zakwas, !wyzwanie, !piekarz, !swiezy, !smak, !okruszek, !przypalony`);
+      return await wyslijFn(`Dostępne komendy: !watchtime, !followage, !dc, !tiktok, !ig, !yt, !lurk, !ai, !cm [@nick], !horoskop, !bułka`);
     }
     if (msgLower === '!yt') {
       ostatnieUzycie[cooldownKey] = teraz;
@@ -9490,7 +9494,6 @@ const startBot = async () => {
 
   // Przenieś cache i stan przed uruchomieniem platform, aby pierwsze wiadomości nie użyły pustych map.
   await ensurePersistentCachesReady();
-  await BILLY_BAKERY.initialize(FIRESTORE_STATE);
 
   // ---- Uruchom platformy równolegle ----
   // Kick: obsługa kanałów EdzziLive i ArbuzikLive została wyłączona.

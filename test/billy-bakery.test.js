@@ -69,9 +69,9 @@ test('kajzerka BillyBulki jest stała w ciągu dnia i może się zmienić nastę
 
 test('komenda bułka ma specjalną pulę tylko dla BillyBulki', () => {
   const own = bakery.handleCommand({ message: '!bułka', nick: 'BillyBulka', login: 'billybulka' }, { cache: {}, persist: false, rng: () => 0 });
-  assert.match(own, /@BillyBulka otrzymuje/);
+  assert.match(own, /@BillyBulka dziś jesteś jak Kajzerka klasyczna!/);
   const targeted = bakery.handleCommand({ message: '!bułka @BillyBulka', nick: 'viewer', login: 'viewer' }, { cache: {}, persist: false, rng: () => 0 });
-  assert.match(targeted, /@BillyBulka otrzymuje/);
+  assert.match(targeted, /@BillyBulka dziś jesteś jak Kajzerka klasyczna!/);
   assert.equal(bakery.handleCommand({ message: '!bułka', nick: 'viewer', login: 'viewer' }), null);
 });
 
