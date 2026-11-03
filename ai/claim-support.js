@@ -3,6 +3,7 @@
 // First-class per-claim citation-support audit. This is deliberately separate
 // from answer completeness and factual gold scoring: it measures whether each
 // claim is supported by its own cited span and records why it was not.
+const { CAUSAL_RE, CAUSAL_EVIDENCE_RE } = require('./claimValidation');
 const HARD_OVERCLAIM_TYPES = new Set([
   'correlation_to_causation',
   'hedge_to_absolute',
@@ -15,7 +16,7 @@ function normalizeText(value) {
     .toLocaleLowerCase('pl-PL')
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
-    .replace(/ł/g, 'l')
+    .replace(/\u0142/g, 'l')
     .replace(/[^\p{L}\p{N}%+.\s-]/gu, ' ')
     .replace(/\s+/g, ' ')
     .trim();
@@ -28,10 +29,14 @@ function detectOverclaimTypes(claim, evidence, options = {}) {
   const types = [];
   if (!c || !e) return types;
 
-  const causalClaim = /\b(?:because|therefore|caused? by|caus\w*|leads? to|resulted? in|as a result|dzieki temu|z powodu|poniewaz|dlatego|spowod\w*|doprowadz\w*|umozliw\w*)\b/u.test(c);
-  const causalEvidencePattern = /\b(?:because|therefore|caused? by|caus\w*|leads? to|resulted? in|as a result|due to|dzieki temu|z powodu|poniewaz|dlatego|spowod\w*|doprowadz\w*|umozliw\w*|w wyniku|w ten sposob|przez co|co umozliw\w*|putting him in control|put him in control|giving (?:him|her|them|it) control|will see (?:him|her|them|the player|the character) (?:officially )?(?:join|become)|force(?:s|d|ing)? (?:the )?[\p{L}\p{N}]+(?: [\p{L}\p{N}]+){0,1} to [\p{L}\p{N}]+|allow(?:ed|s)?|enabl\w*|in exchange(?: for)?|in return(?: for)?|w zamian(?: za)?|w rewan[zż]u)\b/u;
-  const causalEvidence = causalEvidencePattern.test(e)
-    || (options.allowContextForCausality === true && causalEvidencePattern.test(context));
+  // Reuse claimValidation.js's shared causal-marker lists instead of a second,
+  // independently maintained copy: a local copy previously drifted from the
+  // main validator's CAUSAL_RE (missing markers such as 'corrupt'), which let
+  // this overclaim check reject causal claims the main evidence check had
+  // already accepted as supported.
+  const causalClaim = CAUSAL_RE.test(c);
+  const causalEvidence = CAUSAL_EVIDENCE_RE.test(e)
+    || (options.allowContextForCausality === true && CAUSAL_EVIDENCE_RE.test(context));
   if (causalClaim && !causalEvidence) types.push('correlation_to_causation');
 
   const sourceHedged = /\b(?:may|might|could|possibly|potentially|suggests?|appears? to|limited evidence|small study|moze|mozliwe|mozna(?:\s+byc)?|da\s+sie|bywa|prawdopodobnie|sugeruje|wstepne dane|niewielkim badaniu)\b/u.test(e);
@@ -108,7 +113,7 @@ function buildClaimSupportAudit({ claims = [], evidenceEvaluations = [], evidenc
       verdict = 'unsupported';
     } else if (evaluation.ok === true) {
       verdict = evaluation.mode === 'exact_quote' ? 'entailed' : 'partial';
-    } else if (/negacj|sprzeczn|konflikt liczbow|warto[sś][cć] liczbow|relacj[eę] przyczynow[aą]/iu.test(reason)) {
+    } else if (/negacj|sprzeczn|konflikt liczbow|warto[s\u015b][c\u0107] liczbow|relacj[e\u0119] przyczynow[a\u0105]/iu.test(reason)) {
       verdict = 'contradicted';
     } else {
       verdict = 'unsupported';
@@ -140,8 +145,8 @@ function buildClaimSupportAudit({ claims = [], evidenceEvaluations = [], evidenc
       verdict,
       claimSourceVerdict,
       reason: hardOverclaims.length
-        ? 'claim zawiera możliwe nadmierne wnioskowanie: ' + hardOverclaims.join(', ')
-        : reason || (verdict === 'entailed' ? 'cytat bezpośrednio wspiera claim' : 'brak wystarczającego wsparcia w przypisanym cytacie'),
+        ? 'claim zawiera mozliwe nadmierne wnioskowanie: ' + hardOverclaims.join(', ')
+        : reason || (verdict === 'entailed' ? 'cytat bezposrednio wspiera claim' : 'brak wystarczajacego wsparcia w przypisanym cytacie'),
       overclaimTypes,
       warnings,
     };
