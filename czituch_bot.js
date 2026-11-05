@@ -6178,7 +6178,7 @@ const CIASTKA = [
 ];
 
 // Kanały YouTube obsługiwane przez komendy kanałowe.
-const ARBUZIK_KANALY = ['arbuzik_minecraft'];
+const ARBUZIK_KANALY = ['arbuzikkshorts', 'arbuzikinnegry'];
 const EDZZI_KANALY   = ['edzzi_minecraft', 'edzzi'];
 const BILLYBULKA_KANALY = ['billybulka'];
 
@@ -6193,6 +6193,11 @@ async function obslugaWiadomosci(nick, message, platforma, wyslijFn, kanal = nul
   const msgLower    = message.toLowerCase().trim();
   const teraz       = Date.now();
   const kanalNorm   = kanal ? kanal.toLowerCase() : '';
+
+  // Na obu kanałach Arbuzika jedyną aktywną komendą jest !arbuz.
+  if (platforma === 'youtube' && ARBUZIK_KANALY.includes(kanalNorm) && msgLower !== '!arbuz') {
+    return;
+  }
   // Stan użytkownika jest izolowany między platformami i kanałami.
   const historiaKlucz = `${platforma}:${kanalNorm || 'brak-kanalu'}:${nick.toLowerCase()}`;
   const cooldownKey = historiaKlucz;
