@@ -717,6 +717,7 @@ const KONFIGURACJA = {
   kickBroadcasterId2: 91048662,
   kickChatroomId2:   89555075,
   kickTokenFile:    './kick_token.json',
+  billyTokenFile:   './billy_token.json',
   billyCmLegacyCacheFile: './billy_cm_stream_cache.json',
   cytatyFile:       './cytaty.json',
 
@@ -7592,6 +7593,120 @@ async function wyslijAlertPolishSteamDB(tresc) {
 // Jak tylko się pojawi – wraca do normalnej pracy bez restartu bota.
 let kickOdzyskiwaniePollTimer = null;
 
+let billyAccessToken  = null;
+let billyRefreshToken = null;
+let billyTokenDead    = false;
+let billyRefreshPromise = null;
+let billyWygasaO = 0;
+
+function getBillyToken() {
+  // Zwracaj czysty token broadcastera; jest używany przez Create Stream Marker.
+  const token = billyAccessToken || process.env.TWITCH_OAUTH_TOKEN_BROADCASTER_BILLY || null;
+  return token ? token.replace(/^oauth:/i, '') : null;
+}
+
+async function zapiszTokenBilly(data) {
+  const expiresInMs = (data.expires_in ?? 3600) * 1000;
+  billyWygasaO = Date.now() + expiresInMs;
+  billyAccessToken = data.access_token;
+  if (data.refresh_token) billyRefreshToken = data.refresh_token;
+  const doZapisu = { ...data, wygasa_o: billyWygasaO };
+  try {
+    await FIRESTORE_STATE.writeToken('twitch_billy', doZapisu);
+    const verified = await FIRESTORE_STATE.readToken('twitch_billy');
+    if (JSON.stringify(verified) !== JSON.stringify(doZapisu)) throw new Error('Weryfikacja tokenu Billy nie powiodła się.');
+    try { await fs.promises.unlink(KONFIGURACJA.billyTokenFile); } catch (err) { if (err.code !== 'ENOENT') console.warn('[Billy Auth] Nie usunięto starego pliku tokenu:', err.message); }
+    console.log('[Billy Auth] ✅ Zaszyfrowany token zapisany do Firestore');
+  } catch (err) {
+    const fallbackSaved = await zapiszLokalnaKopieTokenu(KONFIGURACJA.billyTokenFile, doZapisu, '[Billy Auth]');
+    console.error('[Billy Auth] ⚠️ Nie udało się utrwalić tokenu w Firestore' + (fallbackSaved ? '; zachowano lokalną kopię' : '; brak trwałej kopii awaryjnej') + ':', err.message);
+  }
+}
+
+async function wczytajTokenBilly() {
+  let data = null;
+  try {
+    data = await FIRESTORE_STATE.migrateTokenFile('twitch_billy', KONFIGURACJA.billyTokenFile);
+  } catch (err) {
+    console.warn('[Billy Auth] Migracja tokenu nieudana; próbuję użyć pliku bez usuwania go:', err.message);
+    try { data = FIRESTORE_STATE.parseTokenFile(await fs.promises.readFile(KONFIGURACJA.billyTokenFile, 'utf8')); }
+    catch (readError) { if (readError.code !== 'ENOENT') console.error('[Billy Auth] Błąd wczytywania:', readError.message); }
+  }
+  if (!data) return false;
+  billyAccessToken = data.access_token;
+  billyRefreshToken = data.refresh_token;
+  billyWygasaO = typeof data.wygasa_o === 'number' ? data.wygasa_o : 0;
+  console.log('[Billy Auth] ✅ Wczytano token');
+  return true;
+}
+
+// Liczy realny czas do odświeżenia na podstawie wygasa_o, zamiast sztywnych 55 min od restartu.
+function zaplanujOdswiezenieBilly() {
+  if (!billyRefreshToken) return;
+  const zapasBezpieczenstwa = 5 * 60 * 1000;
+  const pozostaloMs = billyWygasaO ? billyWygasaO - Date.now() - zapasBezpieczenstwa : 0;
+  if (pozostaloMs <= 0) {
+    console.log('[Billy Auth] Token wygasł/wygasa niedługo lub czas nieznany – odświeżam od razu.');
+    odswiezTokenBilly().catch(() => {});
+  } else {
+    console.log(`[Billy Auth] Zaplanowano odświeżenie za ${Math.round(pozostaloMs / 60000)} min`);
+    setTimeout(odswiezTokenBilly, pozostaloMs);
+  }
+}
+
+async function odswiezTokenBilly() {
+  if (billyRefreshPromise) return billyRefreshPromise;
+  if (billyTokenDead) { console.error('[Billy Auth] ⛔ Token trwale martwy – potrzebny ręczny re-login.'); return; }
+  if (!billyRefreshToken) { console.log('[Billy Auth] Brak refresh tokena – nie mogę odświeżyć.'); return; }
+
+  billyRefreshPromise = (async () => {
+    try {
+      console.log('[Billy Auth] Odświeżam token...');
+      const res = await fetchZTimeout('https://id.twitch.tv/oauth2/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          grant_type:    'refresh_token',
+          client_id:     KONFIGURACJA.twitchClientId,
+          client_secret: KONFIGURACJA.twitchClientSecret,
+          refresh_token: billyRefreshToken,
+        }),
+      }, 10000);
+      if (!res.ok) {
+        const txt = await res.text().catch(() => '');
+        const err = new Error(`HTTP ${res.status} – ${txt}`);
+        err.status = res.status;
+        throw err;
+      }
+      const data = await res.json();
+      billyAccessToken = data.access_token;
+      if (data.refresh_token) billyRefreshToken = data.refresh_token;
+      await zapiszTokenBilly(data);
+      billyTokenDead = false;
+      const refreshTime = ((data.expires_in ?? 3600) - 60) * 1000;
+      console.log(`[Billy Auth] ✅ Token odświeżony! Następne za ${Math.round(refreshTime / 60000)} min`);
+      setTimeout(odswiezTokenBilly, Math.max(refreshTime, 10000));
+    } catch (err) {
+      const trwaleMartwy = err.status === 400 || err.status === 401;
+      if (trwaleMartwy) {
+        billyTokenDead = true;
+        console.error('[Billy Auth] ❌ Refresh token odrzucony. Zatrzymuję auto-refresh.');
+        wyslijAlertPolishSteamDB(
+          '🔴 **CzituchBot – Billy token martwy.** Refresh token odrzucony. '
+          + 'Wygeneruj nowy token broadcastera ze scope `user:write:broadcast` '
+          + 'i zapisz do `billy_token.json` lub `TWITCH_OAUTH_TOKEN_BROADCASTER_BILLY`.'
+        );
+      } else {
+        console.error('[Billy Auth] ❌ Błąd odświeżania (chwilowy?):', err.message);
+        setTimeout(odswiezTokenBilly, 30000);
+      }
+    } finally {
+      billyRefreshPromise = null;
+    }
+  })();
+  return billyRefreshPromise;
+}
+
 function rozpocznijOdzyskiwanieKickPrzezWorker() {
   if (kickOdzyskiwaniePollTimer) return; // już pollujemy, nie duplikuj
 
@@ -8022,7 +8137,10 @@ async function utworzMarker(nick, opis, config = TWITCH_CONFIG_BILLYBULKA) {
   try {
     // Create Stream Marker requires a broadcaster user access token with
     // user:write:broadcast; a bot chat token/App Access Token is not sufficient.
-    const token = String(config.tokenBroadcaster || '').replace(/^oauth:/i, '');
+    const tokenSurowy = config.botNick === TWITCH_CONFIG_BILLYBULKA.botNick
+      ? getBillyToken()
+      : config.tokenBroadcaster;
+    const token = String(tokenSurowy || '').replace(/^oauth:/i, '');
     if (!token) throw new Error('Brak tokena broadcastera ze scope user:write:broadcast');
     const opis_fin = opis || `Czas momentu – @${nick}`;
 
@@ -8413,11 +8531,23 @@ function walidujEventSubReconnectUrl(reconnectUrl) {
   if (typeof reconnectUrl !== 'string' || !reconnectUrl) return null;
   try {
     const parsed = new URL(reconnectUrl);
-    if (parsed.protocol !== 'wss:' || parsed.hostname !== 'eventsub.wss.twitch.tv' ||
-        parsed.username || parsed.password || (parsed.port && parsed.port !== '443') || parsed.hash) return null;
-    // Twitch wymaga użycia reconnect_url dokładnie w otrzymanej postaci.
-    return reconnectUrl;
-  } catch (_) { return null; }
+    if (
+      parsed.protocol !== 'wss:' ||
+      parsed.hostname !== 'eventsub.wss.twitch.tv' ||
+      parsed.username ||
+      parsed.password ||
+      (parsed.port && parsed.port !== '443') ||
+      parsed.hash
+    ) return null;
+
+    // Host pozostaje stałą, zaufaną wartością. Zachowujemy ścieżkę i query
+    // Twitcha, ale dopuszczamy wyłącznie znane ścieżki reconnectu.
+    const sciezka = parsed.pathname === '/' ? '' : parsed.pathname === '/ws' ? '/ws' : null;
+    if (sciezka === null) return null;
+    return `${sciezka}${parsed.search}`;
+  } catch (_) {
+    return null;
+  }
 }
 
 function podepnijHandleryEventSub(ws, twitchClient, config, userIdsPromise = null) {
@@ -8483,7 +8613,7 @@ function podepnijHandleryEventSub(ws, twitchClient, config, userIdsPromise = nul
       if (stan.reconnectFrom) { console.warn('[EventSub] ⚠️ Migracja sesji już trwa; ignoruję duplikat reconnect.'); return; }
       console.log('[EventSub] 🔄 Łączę z reconnect_url przekazanym przez Twitcha...');
       stan.reconnectFrom = ws;
-      const nowyWs = new WebSocket(bezpiecznyReconnectUrl);
+      const nowyWs = new WebSocket(`wss://eventsub.wss.twitch.tv${bezpiecznyReconnectUrl}`);
       stan.ws = nowyWs;
       podepnijHandleryEventSub(nowyWs, twitchClient, config);
     }
@@ -8581,7 +8711,10 @@ function uruchomEventSub(twitchClient, config) {
   const loginy = [...new Set((config.obserwowaneKanaly || [])
     .map(login => String(login).replace(/^#/, '').trim().toLowerCase()).filter(Boolean))];
   // Lookup ID odbywa się równolegle z handshake WebSocket, przed welcome.
-  const userIdsPromise = Promise.all(loginy.map(async login => ({ login, userId: await pobierzUserId(login, config) })));
+  const userIdsPromise = Promise.all(loginy.map(async login => ({ login, userId: await pobierzUserId(login, config) }))).catch(err => {
+    console.error('[EventSub] ❌ Nie udało się przygotować ID kanałów przed welcome:', err.message);
+    return loginy.map(login => ({ login, userId: null }));
+  });
   if (stan.retryTimer) { clearTimeout(stan.retryTimer); stan.retryTimer = null; }
   console.log(`[EventSub] Łączę z wss://eventsub.wss.twitch.tv/ws (bot: ${config.botNick})...`);
   const ws = new WebSocket('wss://eventsub.wss.twitch.tv/ws');
@@ -9067,6 +9200,14 @@ const startBot = async () => {
   } catch (youtubeError) {
     console.error('[YouTube] ❌ Nie udało się przygotować YouTube; pomijam watchery, ale uruchamiam pozostałe platformy. Szczegóły błędu OAuth/API pominięto ze względów bezpieczeństwa.');
   }
+
+  // ---- Billy broadcaster token – auto-refresh dla Create Stream Marker ----
+  const maszTokenBilly = await wczytajTokenBilly();
+  if (!maszTokenBilly && process.env.TWITCH_OAUTH_TOKEN_BROADCASTER_BILLY) {
+    billyAccessToken = process.env.TWITCH_OAUTH_TOKEN_BROADCASTER_BILLY;
+    console.log('[Billy Auth] ℹ️ Używam tokena z env (brak refresh – auto-refresh nieaktywny)');
+  }
+  zaplanujOdswiezenieBilly();
 
   // ---- Twitch Chat token czituch_industries – auto-refresh ----
   const maszTokenEdlor = await wczytajTokenTwitchChat('edlor');
