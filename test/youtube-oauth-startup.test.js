@@ -48,3 +48,16 @@ test('YouTube auth failures do not prevent Twitch startup', () => {
   assert.doesNotMatch(startup, /uruchomEventSubBilly\(\)/);
   assert.match(startup, /if \(youtubeReady\) \{[\s\S]*youtubeWatcher\(/);
 });
+
+test('EventSub honors Twitch Retry-After and uses exponential fallback backoff', () => {
+  assert.match(source, /function odczytajRetryAfterMs\(naglowek/);
+  assert.match(source, /res\.headers\.get\('retry-after'\)/);
+  assert.match(source, /retryAfterMs/);
+  assert.match(source, /Math\.min\(opoznienieMs \* \(2 \*\* \(proba - 1\)\), 30000\)/);
+  assert.match(source, /maxProby = 2, opoznienieMs = 5000/);
+});
+
+test('EventSub slow successful registration is a warning, not a failure', () => {
+  assert.match(source, /if \(udane !== wyniki\.length\) \{[\s\S]*?else if \(czasMs >= 10000\) \{[\s\S]*console\.warn/);
+  assert.doesNotMatch(source, /if \(czasMs >= 10000 \|\| udane !== wyniki\.length\)/);
+});
