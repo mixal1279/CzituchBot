@@ -698,8 +698,8 @@ const KONFIGURACJA = {
 
   // ---- YouTube ----
   youtubeTargetKanal: 'Edzzi_Minecraft',
-  youtubeTargetKanal2: 'Arbuzik_Minecraft',
-  youtubeTargetKanal4: 'ArbuzikkYT',
+  youtubeTargetKanal2: 'ArbuzikkShorts',
+  youtubeTargetKanal4: 'ArbuzikInneGry',
   youtubeTargetKanal5: 'Angie28',
   youtubeTargetKanal6: 'Edzzi',
   pollInterval:       80000,
@@ -7356,14 +7356,13 @@ let angieAutoMsgInterval = null;
 const YT_KANAL_ID = {
   'Edzzi_Minecraft':   'UCANPTDOw4sbMwVhITet1Qbw',
   'Edzzi':             'UCs8_gHgAnCR6ygeddwZdFVQ',
-  'Arbuzik_Minecraft': 'UCAjQ3Z824UPJeTLNzOG6jkQ',
   'Angie28':           'UCRm1ZPlkBz94QfNJlKHTvBA',
 };
 
-// ArbuzikkYT nie ma wpisanego Channel ID; stały uchwyt usuwa konieczność
-// ponawiania kosztownego search.list przy kolejnych kontrolach LIVE.
+// Kanały Arbuzika są rozwiązywane po uchwytach, bez wyszukiwania po nazwie.
 const YT_KANAL_HANDLE = {
-  'ArbuzikkYT': '@arbuzikinnegry',
+  'ArbuzikkShorts': '@ArbuzikkShorts',
+  'ArbuzikInneGry': '@ArbuzikInneGry',
 };
 const YT_CHANNEL_ID_CACHE = new Map(Object.entries(YT_KANAL_ID));
 // search.list ma osobny limit 100 zapytań/dobę; wszystkie wywołania bota
