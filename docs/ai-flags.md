@@ -68,7 +68,7 @@ Live benchmark porównuje kompletność planu odpowiedzi oraz ręcznie przygotow
 
 ## Pozostałe integracje
 
-Plik `.env.example` w katalogu głównym zawiera listę zmiennych konfiguracyjnych dla integracji YouTube, Twitch, Kick, ITAD, Notion, Trello i pozostałych modułów. Zmienne niezwiązane z AI można pominąć, jeśli odpowiednia funkcja nie jest używana.
+Plik `.env.example` w katalogu głównym zawiera listę zmiennych konfiguracyjnych dla integracji YouTube, Twitch, Kick, ITAD, Notion i pozostałych modułów. Zmienne niezwiązane z AI można pominąć, jeśli odpowiednia funkcja nie jest używana.
 
 ## Benchmarki i testy
 
