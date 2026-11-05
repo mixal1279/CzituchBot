@@ -717,7 +717,6 @@ const KONFIGURACJA = {
   kickBroadcasterId2: 91048662,
   kickChatroomId2:   89555075,
   kickTokenFile:    './kick_token.json',
-  billyTokenFile:   './billy_token.json',
   billyCmLegacyCacheFile: './billy_cm_stream_cache.json',
   cytatyFile:       './cytaty.json',
 
@@ -7908,8 +7907,7 @@ const TWITCH_CONFIG_BILLYBULKA = {
   clientId:     process.env.TWITCH_CLIENT_ID,
   clientSecret: process.env.TWITCH_CLIENT_SECRET,
   obserwowaneKanaly: ['billybulka'],
-  // Token BROADCASTERA (Bułki), nie bota – wymagany przez Twitch dla subskrypcji
-  // channel.channel_points_custom_reward_redemption.add (scope: channel:read:redemptions)
+  // Token BROADCASTERA (Bułki), wymagany do tworzenia markerów (scope: user:write:broadcast).
   tokenBroadcaster: process.env.TWITCH_OAUTH_TOKEN_BROADCASTER_BILLY,
 };
 
