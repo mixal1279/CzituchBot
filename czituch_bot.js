@@ -8442,6 +8442,17 @@ async function pobierzAktualneVodTwitch(kanal, config = TWITCH_CONFIG_BILLYBULKA
   }
 }
 
+function odczytajRetryAfterMs(naglowek, teraz = Date.now()) {
+  if (typeof naglowek !== 'string' || !naglowek.trim()) return null;
+  const sekundy = Number(naglowek.trim());
+  const opoznienie = Number.isFinite(sekundy) && sekundy >= 0
+    ? sekundy * 1000
+    : Date.parse(naglowek) - teraz;
+  if (!Number.isFinite(opoznienie) || opoznienie < 0) return null;
+  // Ograniczamy skrajne wartości nagłówka, aby timer nie przekroczył 15 minut.
+  return Math.min(Math.max(opoznienie, 1000), 15 * 60 * 1000);
+}
+
 async function subskrybujStreamOnline(userId, login, config = TWITCH_CONFIG_BILLYBULKA) {
   const tokenSurowy = getTwitchChatToken(config.botKey) || config.token;
   const userToken = String(tokenSurowy || '').replace(/^oauth:/i, '');
@@ -8466,6 +8477,7 @@ async function subskrybujStreamOnline(userId, login, config = TWITCH_CONFIG_BILL
   try {
     const odpowiedzi = await Promise.all([wyslijSubskrypcje('stream.online'), wyslijSubskrypcje('stream.offline')]);
     let sukces = true;
+    let retryAfterMs = null;
     for (let i = 0; i < odpowiedzi.length; i++) {
       const res = odpowiedzi[i], typ = i === 0 ? 'stream.online' : 'stream.offline';
       if (res.ok || res.status === 409) {
@@ -8477,10 +8489,15 @@ async function subskrybujStreamOnline(userId, login, config = TWITCH_CONFIG_BILL
       console.error(`[EventSub] ❌ ${typ} @${login}: HTTP ${res.status}, czas=${Date.now()-start} ms, odpowiedź=${body.slice(0,1200)}`);
       if (res.status === 401) console.error('[EventSub] ⚠️ User Access Token jest nieważny lub nie należy do tej aplikacji (Client-ID).');
       else if (res.status === 403) console.error('[EventSub] ⚠️ Twitch odmówił utworzenia subskrypcji; sprawdź uprawnienia.');
-      else if (res.status === 429) console.error(`[EventSub] ⚠️ Rate limit Twitch API. Retry-After=${res.headers.get('retry-after') || 'brak'}.`);
+      else if (res.status === 429) {
+        const naglowek = res.headers.get('retry-after');
+        const odczytane = odczytajRetryAfterMs(naglowek);
+        if (odczytane !== null) retryAfterMs = Math.max(retryAfterMs || 0, odczytane);
+        console.error(`[EventSub] ⚠️ Rate limit Twitch API. Retry-After=${naglowek || 'brak'}.`);
+      }
     }
     console.log(`[EventSub] Próba rejestracji @${login} zakończona w ${Date.now()-start} ms.`);
-    return sukces;
+    return { ok: sukces, retryAfterMs };
   } catch (err) {
     console.error(`[EventSub] ❌ Błąd fetch subskrypcji @${login}:`,err.message);
     return false;
@@ -8514,13 +8531,18 @@ function utworzWatchdogEventSub(tag, naTimeout) {
 // krótkiej chwili. Ograniczona liczba prób chroni przed nieskończonym dobijaniem się, jeśli
 // problem jest trwały (np. zły token) — wtedy i tak w końcu przyjdzie 4003 i normalny
 // mechanizm reconnect zadziała jako backstop.
-async function subskrybujZRetry(funkcjaSubskrypcji, opis, maxProby = 2, opoznienieMs = 1000) {
+async function subskrybujZRetry(funkcjaSubskrypcji, opis, maxProby = 2, opoznienieMs = 5000) {
   for (let proba = 1; proba <= maxProby; proba++) {
-    const ok = await funkcjaSubskrypcji();
+    const wynik = await funkcjaSubskrypcji();
+    const ok = typeof wynik === 'object' && wynik !== null ? wynik.ok === true : wynik === true;
     if (ok) return true;
     if (proba < maxProby) {
-      console.warn(`[EventSub] ⚠️ Subskrypcja (${opis}) nieudana, próba ${proba}/${maxProby} — ponawiam za ${opoznienieMs / 1000}s...`);
-      await new Promise(r => setTimeout(r, opoznienieMs));
+      const retryAfterMs = typeof wynik === 'object' && wynik !== null ? wynik.retryAfterMs : null;
+      const opoznienie = Number.isFinite(retryAfterMs) && retryAfterMs > 0
+        ? retryAfterMs
+        : Math.min(opoznienieMs * (2 ** (proba - 1)), 30000);
+      console.warn(`[EventSub] ⚠️ Subskrypcja (${opis}) nieudana, próba ${proba}/${maxProby} — ponawiam za ${Math.ceil(opoznienie / 1000)}s...`);
+      await new Promise(r => setTimeout(r, opoznienie));
     }
   }
   console.error(`[EventSub] ❌ Subskrypcja (${opis}) nieudana po ${maxProby} próbach — czekam na pełny reconnect.`);
@@ -8600,8 +8622,10 @@ function podepnijHandleryEventSub(ws, twitchClient, config, userIdsPromise = nul
       const czasMs = Date.now() - startSubskrypcji;
       const udane = wyniki.filter(wynik => wynik.ok).length;
       console.log(`[EventSub] Rejestracja subskrypcji zakończona: ${udane}/${wyniki.length} kanałów w ${czasMs} ms.`);
-      if (czasMs >= 10000 || udane !== wyniki.length) {
-        console.error('[EventSub] ❌ Co najmniej jedna subskrypcja nie została potwierdzona w limicie czasu. Sprawdź błędy HTTP powyżej.');
+      if (udane !== wyniki.length) {
+        console.error('[EventSub] ❌ Co najmniej jedna subskrypcja nie została potwierdzona. Sprawdź błędy HTTP powyżej.');
+      } else if (czasMs >= 10000) {
+        console.warn('[EventSub] ⚠️ Wszystkie subskrypcje się udały, ale rejestracja trwała co najmniej 10 sekund.');
       }
     }
 
