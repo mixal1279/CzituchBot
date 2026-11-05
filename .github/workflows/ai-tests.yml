@@ -8,7 +8,6 @@ on:
       - 'test/**'
       - 'package.json'
       - 'czituch_bot.js'
-      - 'trello.js'
       - '.github/workflows/ai-tests.yml'
   pull_request:
     paths:
@@ -57,7 +56,6 @@ jobs:
           node --check ai/tavily.js
           node --check ai/webRetrieval.js
           node --check czituch_bot.js
-          node --check trello.js
 
       - name: Prepare changed-files artifact
         shell: bash

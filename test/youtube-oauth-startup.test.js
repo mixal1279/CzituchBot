@@ -35,7 +35,7 @@ test('unreadable Firestore token store cannot trigger a new OAuth flow', () => {
   assert.match(loader, /throw new Error\('\[YT Auth\]/);
 });
 
-test('YouTube auth failures do not prevent other platform startup', () => {
+test('YouTube auth failures do not prevent Twitch startup', () => {
   const start = source.lastIndexOf('const startBot = async');
   const end = source.indexOf('\nif (require.main === module)', start);
   assert.ok(start >= 0 && end > start, 'startBot should exist');
@@ -44,6 +44,7 @@ test('YouTube auth failures do not prevent other platform startup', () => {
   assert.match(startup, /let youtubeReady = false/);
   assert.match(startup, /catch \(youtubeError\)/);
   assert.match(startup, /uruchomTwitch\(TWITCH_CONFIG_BILLYBULKA\)/);
-  assert.match(startup, /uruchomEventSubBilly\(\)/);
+  assert.match(source, /uruchomEventSub\(client, config\)/);
+  assert.doesNotMatch(startup, /uruchomEventSubBilly\(\)/);
   assert.match(startup, /if \(youtubeReady\) \{[\s\S]*youtubeWatcher\(/);
 });

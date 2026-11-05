@@ -5,7 +5,7 @@
  * === WERSJA: v24.1 — AI security/code-review hardening
  * === WERSJA: v23 — moduły ai/policy, ai/validator i ai/tavily; rygorystyczny validator JSON + claim-by-claim — Fix: revocation subskrypcji redemption (Billy) nie
  *     resubskrybowywał — WS żył (keepalive), więc watchdog/close nigdy się nie odpalały
- *     i nagrody za punkty kanału przestawały tworzyć karty Trello do końca streama.
+ *     i obsługa zdarzeń kanału przestawała działać do końca streama.
  * === WERSJA: 2026-09-30 — Twitch !ai dla billybulka.
  * Poprzednia zmiana (2026-09-18) — Twitch: wysyłka wiadomości przez Helix Send Chat
  *     Message API (App Access Token, wymagane do odznaki "Chat Bot") zamiast
@@ -737,39 +737,6 @@ const KONFIGURACJA = {
 // =============================================
 const NOTION_TOKEN   = process.env.NOTION_TOKEN;
 const NOTION_DB_ID   = '335633476c00809a879cf0e1d41fca52';
-
-// ---- Trello (Tablica Buły) – auto-karty z nagród punktów kanału ----
-const { utworzKarteTrello } = require('./trello.js');
-const TWITCH_REWARD_ID_ZADANIE = process.env.TWITCH_REWARD_ID_ZADANIE;
-const TWITCH_REWARD_ID_ZADANIE_KROTKIE = process.env.TWITCH_REWARD_ID_ZADANIE_KROTKIE;
-const TWITCH_REWARD_ID_ZADANIE_DLUGIE  = process.env.TWITCH_REWARD_ID_ZADANIE_DLUGIE;
-const TRELLO_LIST_ID_ZADANIE_KROTKIE   = process.env.TRELLO_LIST_ID_ZADANIE_KROTKIE;
-const TRELLO_LIST_ID_ZADANIE_DLUGIE    = process.env.TRELLO_LIST_ID_ZADANIE_DLUGIE;
-
-// Włącz/wyłącz zapisywanie nagród (redemption) jako kart na Trello – sterowane komendą !trello on/off.
-// Stan trzymany w Firestore, żeby przetrwał restart bota.
-let trelloZapisWlaczony = true;
-
-async function wczytajUstawieniaTrello() {
-  try {
-    const doc = await db.collection('config').doc('trello_ustawienia').get();
-    if (doc.exists && typeof doc.data().wlaczone === 'boolean') {
-      trelloZapisWlaczony = doc.data().wlaczone;
-    }
-    console.log(`[Trello] ℹ️ Zapisywanie nagród na tablicę: ${trelloZapisWlaczony ? 'WŁĄCZONE' : 'WYŁĄCZONE'}`);
-  } catch (err) {
-    console.error('[Trello] ❌ Błąd wczytywania ustawień zapisu:', err.message);
-  }
-}
-
-async function ustawTrelloWlaczone(wartosc) {
-  trelloZapisWlaczony = wartosc;
-  try {
-    await db.collection('config').doc('trello_ustawienia').set({ wlaczone: wartosc }, { merge: true });
-  } catch (err) {
-    console.error('[Trello] ❌ Błąd zapisu ustawień:', err.message);
-  }
-}
 
 let streamStart = {
   twitch:  {}, // { [kanalLowercase]: timestampMs } — osobny czas startu dla kanału Twitcha,
@@ -7633,12 +7600,7 @@ let billyRefreshPromise = null;
 let billyWygasaO = 0;
 
 function getBillyToken() {
-  // Strip prefiksu 'oauth:' PRZY ŹRÓDLE, żeby każdy wywołujący (np. subskrybujRedemption)
-  // automatycznie dostawał czysty token. Bez tego, jeśli env
-  // TWITCH_OAUTH_TOKEN_BROADCASTER_BILLY miał prefiks 'oauth:' (typowe przy tokenach
-  // skopiowanych z narzędzi do generowania tokenów czatu), header leciał jako
-  // 'Bearer oauth:xxx' i Twitch cicho zwracał 401 — subskrypcje redemption nigdy
-  // się nie rejestrowały, a komunikat błędu nie mówił wprost o przyczynie.
+  // Zwracaj czysty token broadcastera; jest używany przez Create Stream Marker.
   const token = billyAccessToken || process.env.TWITCH_OAUTH_TOKEN_BROADCASTER_BILLY || null;
   return token ? token.replace(/^oauth:/i, '') : null;
 }
@@ -7731,7 +7693,7 @@ async function odswiezTokenBilly() {
         console.error('[Billy Auth] ❌ Refresh token odrzucony. Zatrzymuję auto-refresh.');
         wyslijAlertPolishSteamDB(
           '🔴 **CzituchBot – Billy token martwy.** Refresh token odrzucony. '
-          + 'Wygeneruj nowy token broadcastera (scope: `channel:read:redemptions`) '
+          + 'Wygeneruj nowy token broadcastera ze scope `user:write:broadcast` '
           + 'i zapisz do `billy_token.json` lub `TWITCH_OAUTH_TOKEN_BROADCASTER_BILLY`.'
         );
       } else {
@@ -7891,7 +7853,7 @@ async function wyszukajKategorieKick(zapytanie) {
 // zawsze modyfikuje kanał WŁAŚCICIELA tokenu (kickAccessToken), nie dowolny kanał.
 // Jeśli token należy do bota (CzituchAI), a nie do Edzziego/Arbuzika, ten request
 // zwróci błąd/nic nie zmieni na ich kanałach – trzeba by zalogować bota osobnym
-// tokenem broadcastera per kanał (analogicznie do tego, co zrobiliśmy dla Trello).
+// tokenem broadcastera per kanał (analogicznie do innych integracji kanałowych).
 async function ustawKanalKick(zmiany) {
   const res = await kickApi('/public/v1/channels', {
     method: 'PATCH',
@@ -8060,8 +8022,7 @@ const TWITCH_CONFIG_BILLYBULKA = {
   clientId:     process.env.TWITCH_CLIENT_ID,
   clientSecret: process.env.TWITCH_CLIENT_SECRET,
   obserwowaneKanaly: ['billybulka'],
-  // Token BROADCASTERA (Bułki), nie bota – wymagany przez Twitch dla subskrypcji
-  // channel.channel_points_custom_reward_redemption.add (scope: channel:read:redemptions)
+  // Token BROADCASTERA (Bułki), wymagany do tworzenia markerów (scope: user:write:broadcast).
   tokenBroadcaster: process.env.TWITCH_OAUTH_TOKEN_BROADCASTER_BILLY,
 };
 
@@ -8176,7 +8137,10 @@ async function utworzMarker(nick, opis, config = TWITCH_CONFIG_BILLYBULKA) {
   try {
     // Create Stream Marker requires a broadcaster user access token with
     // user:write:broadcast; a bot chat token/App Access Token is not sufficient.
-    const token = String(config.tokenBroadcaster || '').replace(/^oauth:/i, '');
+    const tokenSurowy = config.botNick === TWITCH_CONFIG_BILLYBULKA.botNick
+      ? getBillyToken()
+      : config.tokenBroadcaster;
+    const token = String(tokenSurowy || '').replace(/^oauth:/i, '');
     if (!token) throw new Error('Brak tokena broadcastera ze scope user:write:broadcast');
     const opis_fin = opis || `Czas momentu – @${nick}`;
 
@@ -8400,18 +8364,6 @@ async function obslugaTwitch(nick, message, wyslijFn, config = TWITCH_CONFIG_BIL
       ostatnieUzycie[cooldownKey] = teraz;
       return await wyslijFn(`Wbijaj na mój Bułkowy YouTube!: https://youtube.com/@billybulkaszoty`);
     }
-    if (msgLower === '!trello on' || msgLower === '!trello off') {
-      if (!isMod) {
-        ostatnieUzycie[cooldownKey] = teraz;
-        return await wyslijFn(`@${nick} ta komenda jest tylko dla moderatorów/streamera.`);
-      }
-      ostatnieUzycie[cooldownKey] = teraz;
-      const wlacz = msgLower === '!trello on';
-      await ustawTrelloWlaczone(wlacz);
-      return await wyslijFn(wlacz
-        ? `✅ Zapisywanie zadań na Trello WŁĄCZONE.`
-        : `⏸️ Zapisywanie zadań na Trello WYŁĄCZONE.`);
-    }
   }
 
   // !lurk tylko dla billybulka
@@ -8427,7 +8379,7 @@ async function obslugaTwitch(nick, message, wyslijFn, config = TWITCH_CONFIG_BIL
 const eventSubState = {};
 function getEventSubState(botNick) {
   if (!eventSubState[botNick]) {
-    eventSubState[botNick] = { ws: null, sessionId: null, reconnecting: false };
+    eventSubState[botNick] = { ws: null, sessionId: null, reconnectFrom: null, retryTimer: null };
   }
   return eventSubState[botNick];
 }
@@ -8491,121 +8443,46 @@ async function pobierzAktualneVodTwitch(kanal, config = TWITCH_CONFIG_BILLYBULKA
 }
 
 async function subskrybujStreamOnline(userId, login, config = TWITCH_CONFIG_BILLYBULKA) {
-  // EventSub przez WebSocket wymaga user access tokena (nie app tokena)
-  // Token musi należeć do bota lub mieć scope: channel:read:stream_key
-  // UWAGA: config.token to statyczna wartość z .env z momentu startu — trzeba brać
-  // żywy, odświeżany token (ten sam bug co w pobierzTwitchAppToken).
-  const userToken = (getTwitchChatToken(config.botKey) || config.token).replace(/^oauth:/i, '');
-  const wyslijSubskrypcje = (typ) => fetchZTimeout('https://api.twitch.tv/helix/eventsub/subscriptions', {
+  const tokenSurowy = getTwitchChatToken(config.botKey) || config.token;
+  const userToken = String(tokenSurowy || '').replace(/^oauth:/i, '');
+  if (!userId || !userToken || !config.clientId) {
+    console.error(`[EventSub] ❌ Brak danych do subskrypcji @${login}: userId=${Boolean(userId)}, userToken=${Boolean(userToken)}, clientId=${Boolean(config.clientId)}.`);
+    return false;
+  }
+  const sessionId = getEventSubState(config.botNick).sessionId;
+  if (!sessionId) {
+    console.error(`[EventSub] ❌ Brak session_id podczas rejestracji subskrypcji @${login}.`);
+    return false;
+  }
+  const wyslijSubskrypcje = typ => fetchZTimeout('https://api.twitch.tv/helix/eventsub/subscriptions', {
     method: 'POST',
-    headers: {
-      'Client-ID':     config.clientId,
-      'Authorization': `Bearer ${userToken}`,
-      'Content-Type':  'application/json',
-    },
+    headers: { 'Client-ID': config.clientId, 'Authorization': `Bearer ${userToken}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      type:      typ,
-      version:   '1',
-      condition: { broadcaster_user_id: userId },
-      transport: { method: 'websocket', session_id: getEventSubState(config.botNick).sessionId },
+      type: typ, version: '1', condition: { broadcaster_user_id: userId },
+      transport: { method: 'websocket', session_id: sessionId },
     }),
   }, 3000);
-
+  const start = Date.now();
   try {
-    // Obie subskrypcje RÓWNOLEGLE, nie sekwencyjnie — sekwencyjnie, nawet z timeoutem
-    // 6s każda, dwie z rzędu mogły same w sobie przekroczyć 10-sekundowe okno Twitcha
-    // na zasubskrybowanie czegokolwiek, zanim Twitch zamknie połączenie kodem 4003.
-    const [resOnline, resOffline] = await Promise.all([
-      wyslijSubskrypcje('stream.online'),
-      wyslijSubskrypcje('stream.offline'),
-    ]);
-
+    const odpowiedzi = await Promise.all([wyslijSubskrypcje('stream.online'), wyslijSubskrypcje('stream.offline')]);
     let sukces = true;
-
-    if (resOnline.ok || resOnline.status === 409) {
-      console.log(resOnline.ok
-        ? `[EventSub] ✅ Subskrypcja stream.online dla @${login}`
-        : `[EventSub] ℹ️ Subskrypcja stream.online dla @${login} już istnieje (409) — traktuję jako aktywną.`);
-    } else {
-      sukces = false;
-      const errBody = await resOnline.json().catch(() => ({}));
-      console.error(`[EventSub] ❌ HTTP ${resOnline.status} (stream.online) dla @${login}:`, JSON.stringify(errBody));
-      if (resOnline.status === 401) {
-        console.error('[EventSub] ⚠️  Token nieważny lub brak uprawnień. Upewnij się, że token bota ma odpowiednie scope.');
+    for (let i = 0; i < odpowiedzi.length; i++) {
+      const res = odpowiedzi[i], typ = i === 0 ? 'stream.online' : 'stream.offline';
+      if (res.ok || res.status === 409) {
+        console.log(res.ok ? `[EventSub] ✅ ${typ} @${login} (HTTP ${res.status})` : `[EventSub] ℹ️ ${typ} @${login} już istnieje (HTTP 409).`);
+        continue;
       }
-    }
-
-    if (resOffline.ok || resOffline.status === 409) {
-      console.log(resOffline.ok
-        ? `[EventSub] ✅ Subskrypcja stream.offline dla @${login}`
-        : `[EventSub] ℹ️ Subskrypcja stream.offline dla @${login} już istnieje (409) — traktuję jako aktywną.`);
-    } else {
       sukces = false;
-      const errBody = await resOffline.json().catch(() => ({}));
-      console.error(`[EventSub] ❌ HTTP ${resOffline.status} (stream.offline) dla @${login}:`, JSON.stringify(errBody));
+      const body = await res.text().catch(() => '');
+      console.error(`[EventSub] ❌ ${typ} @${login}: HTTP ${res.status}, czas=${Date.now()-start} ms, odpowiedź=${body.slice(0,1200)}`);
+      if (res.status === 401) console.error('[EventSub] ⚠️ User Access Token jest nieważny lub nie należy do tej aplikacji (Client-ID).');
+      else if (res.status === 403) console.error('[EventSub] ⚠️ Twitch odmówił utworzenia subskrypcji; sprawdź uprawnienia.');
+      else if (res.status === 429) console.error(`[EventSub] ⚠️ Rate limit Twitch API. Retry-After=${res.headers.get('retry-after') || 'brak'}.`);
     }
-
+    console.log(`[EventSub] Próba rejestracji @${login} zakończona w ${Date.now()-start} ms.`);
     return sukces;
   } catch (err) {
-    console.error(`[EventSub] ❌ Błąd fetch subskrypcji:`, err.message);
-    return false;
-  }
-}
-
-async function subskrybujRedemption(userId, login, config, rewardId, label) {
-  if (!rewardId) {
-    console.log(`[EventSub] ⏭️ Brak TWITCH_REWARD_ID_ZADANIE_${label.toUpperCase()} – pomijam subskrypcję ${label} dla @${login}`);
-    return true; // brak konfiguracji nie jest błędem wymagającym retry
-  }
-  const token = getBillyToken();
-  if (!token) {
-    console.log(`[EventSub] ⏭️ Brak tokena broadcastera – pomijam subskrypcję ${label} dla @${login}`);
-    return false;
-  }
-
-  const wykonajFetch = async (tkn) => fetchZTimeout('https://api.twitch.tv/helix/eventsub/subscriptions', {
-    method: 'POST',
-    headers: {
-      'Client-ID':     config.clientId,
-      'Authorization': `Bearer ${tkn}`,
-      'Content-Type':  'application/json',
-    },
-    body: JSON.stringify({
-      type:      'channel.channel_points_custom_reward_redemption.add',
-      version:   '1',
-      condition: { broadcaster_user_id: userId, reward_id: rewardId },
-      transport: { method: 'websocket', session_id: getEventSubState('billy_redemption').sessionId },
-    }),
-  }, 3000);
-
-  try {
-    let res = await wykonajFetch(token);
-    if (res.status === 401) {
-      console.warn(`[EventSub] ⚠️ 401 przy subskrypcji ${label} – odświeżam token...`);
-      await odswiezTokenBilly();
-      const nowyToken = getBillyToken();
-      if (!nowyToken) throw new Error('Token nadal nieważny');
-      res = await wykonajFetch(nowyToken);
-    }
-
-    if (res.ok) {
-      console.log(`[EventSub] ✅ Subskrypcja redemption (${label}) dla @${login}`);
-      return true;
-    }
-    if (res.status === 409) {
-      // Subskrypcja z tym warunkiem już istnieje (np. poprzednia sesja nie zdążyła
-      // wygasnąć przed reconnectem) — to nie błąd, tylko potwierdzenie że już działa.
-      console.log(`[EventSub] ℹ️ Subskrypcja redemption (${label}) dla @${login} już istnieje (409) — traktuję jako aktywną.`);
-      return true;
-    }
-    const errBody = await res.json().catch(() => ({}));
-    console.error(`[EventSub] ❌ HTTP ${res.status} (redemption ${label}) dla @${login}:`, JSON.stringify(errBody));
-    if (res.status === 401) {
-      console.error('[EventSub] ⚠️  Token broadcastera (Billy) nieważny lub bez scope channel:read:redemptions.');
-    }
-    return false;
-  } catch (err) {
-    console.error(`[EventSub] ❌ Błąd fetch subskrypcji redemption ${label}:`, err.message);
+    console.error(`[EventSub] ❌ Błąd fetch subskrypcji @${login}:`,err.message);
     return false;
   }
 }
@@ -8637,7 +8514,7 @@ function utworzWatchdogEventSub(tag, naTimeout) {
 // krótkiej chwili. Ograniczona liczba prób chroni przed nieskończonym dobijaniem się, jeśli
 // problem jest trwały (np. zły token) — wtedy i tak w końcu przyjdzie 4003 i normalny
 // mechanizm reconnect zadziała jako backstop.
-async function subskrybujZRetry(funkcjaSubskrypcji, opis, maxProby = 2, opoznienieMs = 5000) {
+async function subskrybujZRetry(funkcjaSubskrypcji, opis, maxProby = 2, opoznienieMs = 1000) {
   for (let proba = 1; proba <= maxProby; proba++) {
     const ok = await funkcjaSubskrypcji();
     if (ok) return true;
@@ -8654,23 +8531,26 @@ function walidujEventSubReconnectUrl(reconnectUrl) {
   if (typeof reconnectUrl !== 'string' || !reconnectUrl) return null;
   try {
     const parsed = new URL(reconnectUrl);
-    const DOZWOLONY_HOST = 'eventsub.wss.twitch.tv';
-    const DOZWOLONY_ORIGIN = 'wss://eventsub.wss.twitch.tv';
+    if (
+      parsed.protocol !== 'wss:' ||
+      parsed.hostname !== 'eventsub.wss.twitch.tv' ||
+      parsed.username ||
+      parsed.password ||
+      (parsed.port && parsed.port !== '443') ||
+      parsed.hash
+    ) return null;
 
-    if (parsed.protocol !== 'wss:') return null;
-    if (parsed.hostname !== DOZWOLONY_HOST) return null;
-    if (parsed.username || parsed.password) return null;
-    if (parsed.port && parsed.port !== '443') return null;
-
-    // Rekonstruujemy URL na bazie stałego, zaufanego originu, aby nie używać
-    // bezpośrednio nieufnego stringa jako celu połączenia.
-    return new URL(`${parsed.pathname}${parsed.search}`, DOZWOLONY_ORIGIN).toString();
+    // Host pozostaje stałą, zaufaną wartością. Zachowujemy ścieżkę i query
+    // Twitcha, ale dopuszczamy wyłącznie znane ścieżki reconnectu.
+    const sciezka = parsed.pathname === '/' ? '' : parsed.pathname === '/ws' ? '/ws' : null;
+    if (sciezka === null) return null;
+    return { pathname: sciezka || '/', search: parsed.search };
   } catch (_) {
     return null;
   }
 }
 
-function podepnijHandleryEventSub(ws, twitchClient, config) {
+function podepnijHandleryEventSub(ws, twitchClient, config, userIdsPromise = null) {
   const WATCHDOG_DOMYSLNY_MS = 15000; // zanim przyjdzie welcome z prawdziwym keepalive_timeout_seconds
   let watchdogTimeoutMs = WATCHDOG_DOMYSLNY_MS;
   const watchdog = utworzWatchdogEventSub('[EventSub]', () => {
@@ -8685,46 +8565,63 @@ function podepnijHandleryEventSub(ws, twitchClient, config) {
     const type = msg.metadata?.message_type;
 
     if (type === 'session_welcome') {
-      getEventSubState(config.botNick).sessionId = msg.payload.session.id;
-      console.log('[EventSub] ✅ Połączono, session_id:', getEventSubState(config.botNick).sessionId);
-      // Twitch mówi nam realny odstęp keepalive — dopasowujemy watchdog zamiast trzymać
-      // się na sztywno domyślnej wartości.
-      const zadeklarowanyTimeout = msg.payload.session?.keepalive_timeout_seconds;
-      if (zadeklarowanyTimeout) {
-        watchdogTimeoutMs = (zadeklarowanyTimeout + 5) * 1000; // margines na jitter sieci
-        watchdog.reset(watchdogTimeoutMs);
+      const stan = getEventSubState(config.botNick);
+      stan.sessionId = msg.payload.session.id;
+      console.log('[EventSub] ✅ Połączono, session_id:', stan.sessionId);
+      const timeout = msg.payload.session?.keepalive_timeout_seconds;
+      if (timeout) { watchdogTimeoutMs = (timeout + 5) * 1000; watchdog.reset(watchdogTimeoutMs); }
+
+      // Przy migracji Twitch przenosi subskrypcje automatycznie.
+      if (stan.reconnectFrom && stan.reconnectFrom !== ws) {
+        const poprzedniWs = stan.reconnectFrom;
+        stan.reconnectFrom = null;
+        console.log('[EventSub] ✅ Sesja przeniesiona przez reconnect_url; zachowuję subskrypcje.');
+        if (poprzedniWs.readyState !== WebSocket.CLOSED) {
+          try { poprzedniWs.close(1000, 'EventSub session migrated'); } catch (_) {}
+        }
+        return;
       }
-      // Subskrybuj wszystkie kanały po uzyskaniu session_id
-      // Uwaga: tmi.js mutuje tablicę obserwowaneKanaly dodając '#' do loginów,
-      // więc czyścimy login PRZED porównaniami i dalszym użyciem.
-      // Redemption (token Billy'ego) NIE jest tu subskrybowane – Twitch nie pozwala
-      // mieszać subskrypcji utworzonych różnymi tokenami na jednej sesji WS
-      // (patrz uruchomEventSubBilly / osobna sesja niżej).
-      for (const rawLogin of config.obserwowaneKanaly) {
-        const login  = rawLogin.replace(/^#/, '');
-        await subskrybujZRetry(async () => {
-          const userId = await pobierzUserId(login, config);
-          if (!userId) return false;
-          return subskrybujStreamOnline(userId, login, config);
-        }, `stream.online/offline @${login}`);
+
+      const loginy = [...new Set((config.obserwowaneKanaly || [])
+        .map(login => String(login).replace(/^#/, '').trim().toLowerCase()).filter(Boolean))];
+      if (!loginy.length) { console.error('[EventSub] ❌ Brak kanałów do subskrypcji.'); return; }
+
+      const startSubskrypcji = Date.now();
+      const pobraneId = userIdsPromise
+        ? await userIdsPromise
+        : await Promise.all(loginy.map(async login => ({ login, userId: await pobierzUserId(login, config) })));
+      const wyniki = await Promise.all(pobraneId.map(async ({ login, userId }) => {
+        if (!userId) return { login, ok: false };
+        const ok = await subskrybujZRetry(
+          () => subskrybujStreamOnline(userId, login, config), `stream.online/offline @${login}`, 2, 1000
+        );
+        return { login, ok };
+      }));
+      const czasMs = Date.now() - startSubskrypcji;
+      const udane = wyniki.filter(wynik => wynik.ok).length;
+      console.log(`[EventSub] Rejestracja subskrypcji zakończona: ${udane}/${wyniki.length} kanałów w ${czasMs} ms.`);
+      if (czasMs >= 10000 || udane !== wyniki.length) {
+        console.error('[EventSub] ❌ Co najmniej jedna subskrypcja nie została potwierdzona w limicie czasu. Sprawdź błędy HTTP powyżej.');
       }
     }
 
     if (type === 'session_reconnect') {
-      // Twitch prosi o przeniesienie na nowy URL – nie zamykamy starego do czasu nowego welcome
-      const reconnectUrl = msg.payload.session.reconnect_url;
+      const reconnectUrl = msg.payload.session?.reconnect_url;
       const bezpiecznyReconnectUrl = walidujEventSubReconnectUrl(reconnectUrl);
-      if (!bezpiecznyReconnectUrl) {
-        console.warn('[EventSub] ⚠️ Odrzucono nieprawidłowy reconnect_url:', reconnectUrl);
-        return;
-      }
-      console.log('[EventSub] 🔄 Reconnect URL otrzymany (zaakceptowany), przełączam...');
-      getEventSubState(config.botNick).reconnecting = true;
-      // Hardened SSRF fix: endpoint połączenia jest stały i zaufany.
-      // reconnect_url traktujemy wyłącznie jako sygnał/proof od Twitcha, nie jako URL docelowy.
-      const nowyWs = new WebSocket('wss://eventsub.wss.twitch.tv/ws');
+      if (!bezpiecznyReconnectUrl) { console.warn('[EventSub] ⚠️ Odrzucono nieprawidłowy reconnect_url Twitcha.'); return; }
+      const stan = getEventSubState(config.botNick);
+      if (stan.reconnectFrom) { console.warn('[EventSub] ⚠️ Migracja sesji już trwa; ignoruję duplikat reconnect.'); return; }
+      console.log('[EventSub] 🔄 Łączę z reconnect_url przekazanym przez Twitcha...');
+      stan.reconnectFrom = ws;
+      // URL budujemy od stałego originu; z komunikatu Twitcha przenosimy wyłącznie
+      // zwalidowaną ścieżkę i query zawierające bilet migracyjny.
+      const adresReconnect = new URL('wss://eventsub.wss.twitch.tv/');
+      adresReconnect.pathname = bezpiecznyReconnectUrl.pathname;
+      adresReconnect.search = bezpiecznyReconnectUrl.search;
+      // codeql[js/request-forgery] Host jest stały i nie pochodzi z danych wiadomości.
+      const nowyWs = new WebSocket(adresReconnect);
+      stan.ws = nowyWs;
       podepnijHandleryEventSub(nowyWs, twitchClient, config);
-      getEventSubState(config.botNick).ws = nowyWs;
     }
 
     if (type === 'notification') {
@@ -8786,205 +8683,49 @@ function podepnijHandleryEventSub(ws, twitchClient, config) {
 
   ws.on('close', (code, reason) => {
     watchdog.zatrzymaj();
-    if (getEventSubState(config.botNick).reconnecting) {
-      // Stary socket zamknięty po reconnect – OK
-      getEventSubState(config.botNick).reconnecting = false;
-      console.log('[EventSub] ℹ️ Stare połączenie zamknięte po reconnect (normalne).');
+    const stan = getEventSubState(config.botNick);
+    if (stan.ws !== ws) {
+      console.log('[EventSub] ℹ️ Poprzedni socket zamknięty po migracji.');
       return;
     }
-    console.warn(`[EventSub] ⚠️ Połączenie zamknięte (kod: ${code}) – rekonektuję za 30s...`);
-    setTimeout(() => uruchomEventSub(twitchClient, config), 30000);
+    if (stan.reconnectFrom && stan.reconnectFrom.readyState === WebSocket.OPEN) {
+      stan.ws = stan.reconnectFrom;
+      stan.reconnectFrom = null;
+      console.warn('[EventSub] ⚠️ Nowy socket migracji zamknięty; pozostaję przy poprzednim połączeniu.');
+      return;
+    }
+    stan.ws = null;
+    stan.sessionId = null;
+    stan.reconnectFrom = null;
+    if (stan.retryTimer) clearTimeout(stan.retryTimer);
+    console.warn(`[EventSub] ⚠️ Połączenie zamknięte (kod: ${code}) – ponawiam za 10s...`);
+    stan.retryTimer = setTimeout(() => {
+      stan.retryTimer = null;
+      uruchomEventSub(twitchClient, config);
+    }, 10000);
+    stan.retryTimer.unref?.();
   });
-
-  ws.on('error', (err) => {
-    console.error('[EventSub] ❌ Błąd WebSocket:', err.message);
-  });
+  ws.on('error', err => console.error('[EventSub] ❌ Błąd WebSocket:', err.message));
 }
 
 function uruchomEventSub(twitchClient, config) {
-  // Fix: 'connected' na tmi.js potrafi odpalić się wielokrotnie (auto-reconnect czatu),
-  // a bez tej strażniczki każde odpalenie tworzyło NOWE połączenie EventSub obok starego —
-  // oba walczyły o ten sam getEventSubState(...).sessionId, nadpisując go sobie nawzajem,
-  // przez co subskrypcje szły z nieaktualnym session_id i nigdy nie zdążały się zarejestrować
-  // w 10s -> Twitch zamykał kodem 4003 -> reconnect -> znowu duplikat -> pętla w nieskończoność.
   const stan = getEventSubState(config.botNick);
-  if (stan.ws && stan.ws.readyState !== WebSocket.CLOSED) {
-    console.log(`[EventSub] ℹ️ Zamykam poprzednie połączenie (bot: ${config.botNick}) przed otwarciem nowego...`);
-    stan.reconnecting = true; // żeby stary handler 'close' nie odpalił WŁASNEGO reconnectu
-    stan.ws.close();
+  if (stan.ws && [WebSocket.CONNECTING, WebSocket.OPEN].includes(stan.ws.readyState)) {
+    console.log(`[EventSub] ℹ️ Połączenie już działa lub się zestawia (bot: ${config.botNick}); pomijam duplikat.`);
+    return;
   }
+  const loginy = [...new Set((config.obserwowaneKanaly || [])
+    .map(login => String(login).replace(/^#/, '').trim().toLowerCase()).filter(Boolean))];
+  // Lookup ID odbywa się równolegle z handshake WebSocket, przed welcome.
+  const userIdsPromise = Promise.all(loginy.map(async login => ({ login, userId: await pobierzUserId(login, config) }))).catch(err => {
+    console.error('[EventSub] ❌ Nie udało się przygotować ID kanałów przed welcome:', err.message);
+    return loginy.map(login => ({ login, userId: null }));
+  });
+  if (stan.retryTimer) { clearTimeout(stan.retryTimer); stan.retryTimer = null; }
   console.log(`[EventSub] Łączę z wss://eventsub.wss.twitch.tv/ws (bot: ${config.botNick})...`);
   const ws = new WebSocket('wss://eventsub.wss.twitch.tv/ws');
   stan.ws = ws;
-  podepnijHandleryEventSub(ws, twitchClient, config);
-}
-
-// =============================================
-//  EVENTSUB – osobna sesja dla tokena Billy'ego (redemption)
-// =============================================
-// Twitch nie pozwala mieć na jednej sesji WS subskrypcji utworzonych różnymi
-// tokenami/użytkownikami ("websocket transport cannot have subscriptions
-// created by different users"). Główna sesja jest już "zajęta" tokenem bota
-// (stream.online/offline), więc redemption (token broadcastera Billy'ego)
-// musi jechać po osobnym połączeniu WS.
-function podepnijHandleryEventSubBilly(ws) {
-  const WATCHDOG_DOMYSLNY_MS = 15000;
-  let watchdogTimeoutMs = WATCHDOG_DOMYSLNY_MS;
-  const watchdog = utworzWatchdogEventSub('[EventSub-Billy]', () => {
-    try { ws.terminate ? ws.terminate() : ws.close(); } catch (_) {}
-  });
-  watchdog.reset(watchdogTimeoutMs);
-
-  ws.on('message', async (raw) => {
-    watchdog.reset(watchdogTimeoutMs);
-    let msg;
-    try { msg = JSON.parse(raw); } catch { return; }
-    const type = msg.metadata?.message_type;
-
-    if (type === 'session_welcome') {
-      getEventSubState('billy_redemption').sessionId = msg.payload.session.id;
-      console.log('[EventSub-Billy] ✅ Połączono, session_id:', getEventSubState('billy_redemption').sessionId);
-      const zadeklarowanyTimeout = msg.payload.session?.keepalive_timeout_seconds;
-      if (zadeklarowanyTimeout) {
-        watchdogTimeoutMs = (zadeklarowanyTimeout + 5) * 1000;
-        watchdog.reset(watchdogTimeoutMs);
-      }
-      const userId = await pobierzUserId('billybulka', TWITCH_CONFIG_BILLYBULKA);
-      if (userId) {
-        await Promise.all([
-          subskrybujZRetry(
-            () => subskrybujRedemption(userId, 'billybulka', TWITCH_CONFIG_BILLYBULKA, TWITCH_REWARD_ID_ZADANIE_KROTKIE, 'krótkie'),
-            'redemption krótkie @billybulka'
-          ),
-          subskrybujZRetry(
-            () => subskrybujRedemption(userId, 'billybulka', TWITCH_CONFIG_BILLYBULKA, TWITCH_REWARD_ID_ZADANIE_DLUGIE, 'długie'),
-            'redemption długie @billybulka'
-          ),
-        ]);
-      }
-    }
-
-    if (type === 'session_reconnect') {
-      const reconnectUrl = msg.payload.session.reconnect_url;
-      let bezpiecznyReconnectUrl;
-      try {
-        const parsed = new URL(reconnectUrl);
-        const dozwolonyHost = 'eventsub.wss.twitch.tv';
-        const czyDozwolony = parsed.protocol === 'wss:' &&
-          parsed.hostname === dozwolonyHost &&
-          parsed.pathname.startsWith('/ws');
-        if (!czyDozwolony) {
-          console.warn('[EventSub-Billy] ⚠️ Odrzucono nieprawidłowy reconnect_url:', reconnectUrl);
-          return;
-        }
-        const bezpiecznyUrl = new URL(`wss://${dozwolonyHost}`);
-        bezpiecznyUrl.pathname = parsed.pathname;
-        bezpiecznyUrl.search = parsed.search;
-        bezpiecznyReconnectUrl = bezpiecznyUrl.toString();
-      } catch (_) {
-        console.warn('[EventSub-Billy] ⚠️ Odrzucono nieparsowalny reconnect_url:', reconnectUrl);
-        return;
-      }
-      console.log('[EventSub-Billy] 🔄 Reconnect URL otrzymany, przełączam...');
-      getEventSubState('billy_redemption').reconnecting = true;
-      const nowyWs = new WebSocket(bezpiecznyReconnectUrl);
-      podepnijHandleryEventSubBilly(nowyWs);
-      getEventSubState('billy_redemption').ws = nowyWs;
-    }
-
-    if (type === 'notification') {
-      const subscriptionType = msg.payload.subscription?.type;
-
-      if (subscriptionType === 'channel.channel_points_custom_reward_redemption.add') {
-        const event     = msg.payload.event;
-        const rewardId  = event?.reward?.id;
-        const nickWidza = event?.user_name;
-        const wpisWidza = event?.user_input || '';
-
-        let listaId = null;
-        let typZadania = '';
-        if (rewardId === TWITCH_REWARD_ID_ZADANIE_KROTKIE) {
-          listaId = TRELLO_LIST_ID_ZADANIE_KROTKIE;
-          typZadania = 'krótkoterminowe';
-        } else if (rewardId === TWITCH_REWARD_ID_ZADANIE_DLUGIE) {
-          listaId = TRELLO_LIST_ID_ZADANIE_DLUGIE;
-          typZadania = 'długoterminowe';
-        }
-
-        if (!listaId) {
-          console.log(`[EventSub-Billy] 🎁 ${nickWidza} odebrał nieznaną nagrodę (${rewardId}) – pomijam Trello`);
-        } else if (!trelloZapisWlaczony) {
-          console.log(`[EventSub-Billy] 🎁 ${nickWidza} odebrał nagrodę "${typZadania}", ale zapisywanie na Trello jest WYŁĄCZONE (!trello off) – pomijam`);
-        } else {
-          console.log(`[EventSub-Billy] 🎁 ${nickWidza} odebrał nagrodę "${typZadania}" – tworzę kartę Trello`);
-          const tytul = `${nickWidza} – ${wpisWidza || '(widz nie wpisał treści zadania)'}`;
-          utworzKarteTrello(tytul, '', listaId).catch(err =>
-            console.error('[EventSub-Billy] ❌ Błąd tworzenia karty Trello:', err.message)
-          );        }
-      }
-    }
-
-    if (type === 'session_keepalive') {
-      // Serwer żyje – nic nie robimy
-    }
-
-    if (type === 'revocation') {
-      // Fix: Twitch potrafi odwołać pojedynczą subskrypcję (np. authorization_revoked,
-      // version_removed) BEZ zamykania samego WebSocketa — keepalive dalej chodzi, watchdog
-      // nic nie widzi, 'close' się nie odpala, a redemption milczy do końca streama mimo że
-      // czat i reszta bota działają normalnie. Zamiast tylko logować, resubskrybujemy od razu.
-      const sub = msg.payload.subscription;
-      const rewardId = sub?.condition?.reward_id;
-      console.warn('[EventSub-Billy] ⚠️ Subskrypcja odwołana (reason: %s): %s', sub?.status ?? 'unknown', JSON.stringify(sub));
-
-      const userId = await pobierzUserId('billybulka', TWITCH_CONFIG_BILLYBULKA);
-      if (userId) {
-        if (!rewardId || rewardId === TWITCH_REWARD_ID_ZADANIE_KROTKIE) {
-          subskrybujZRetry(
-            () => subskrybujRedemption(userId, 'billybulka', TWITCH_CONFIG_BILLYBULKA, TWITCH_REWARD_ID_ZADANIE_KROTKIE, 'krótkie'),
-            'redemption krótkie @billybulka (po revocation)'
-          );
-        }
-        if (!rewardId || rewardId === TWITCH_REWARD_ID_ZADANIE_DLUGIE) {
-          subskrybujZRetry(
-            () => subskrybujRedemption(userId, 'billybulka', TWITCH_CONFIG_BILLYBULKA, TWITCH_REWARD_ID_ZADANIE_DLUGIE, 'długie'),
-            'redemption długie @billybulka (po revocation)'
-          );
-        }
-      }
-    }
-  });
-
-  ws.on('close', (code, reason) => {
-    watchdog.zatrzymaj();
-    if (getEventSubState('billy_redemption').reconnecting) {
-      getEventSubState('billy_redemption').reconnecting = false;
-      console.log('[EventSub-Billy] ℹ️ Stare połączenie zamknięte po reconnect (normalne).');
-      return;
-    }
-    console.warn(`[EventSub-Billy] ⚠️ Połączenie zamknięte (kod: ${code}) – rekonektuję za 30s...`);
-    setTimeout(uruchomEventSubBilly, 30000);
-  });
-
-  ws.on('error', (err) => {
-    console.error('[EventSub-Billy] ❌ Błąd WebSocket:', err.message);
-  });
-}
-
-function uruchomEventSubBilly() {
-  // Ten sam guard co w uruchomEventSub (fix 2026-08-25) — bez niego dwa równoległe
-  // wywołania (np. close handler startujący reconnect zanim stary socket faktycznie
-  // się zamknie) tworzyły dwa połączenia WS naraz, każde subskrybujące redemption osobno.
-  const stan = getEventSubState('billy_redemption');
-  if (stan.ws && stan.ws.readyState !== WebSocket.CLOSED) {
-    console.log('[EventSub-Billy] ℹ️ Zamykam poprzednie połączenie przed otwarciem nowego...');
-    stan.reconnecting = true;
-    stan.ws.close();
-  }
-  console.log('[EventSub-Billy] Łączę z wss://eventsub.wss.twitch.tv/ws (token broadcastera Billy)...');
-  const ws = new WebSocket('wss://eventsub.wss.twitch.tv/ws');
-  stan.ws = ws;
-  podepnijHandleryEventSubBilly(ws);
+  podepnijHandleryEventSub(ws, twitchClient, config, userIdsPromise);
 }
 
 async function czyKanalJestLive(login, config = TWITCH_CONFIG_BILLYBULKA) {
@@ -9466,11 +9207,11 @@ const startBot = async () => {
     console.error('[YouTube] ❌ Nie udało się przygotować YouTube; pomijam watchery, ale uruchamiam pozostałe platformy. Szczegóły błędu OAuth/API pominięto ze względów bezpieczeństwa.');
   }
 
-  // ---- Billy broadcaster token – autoryzacja / auto-refresh ----
+  // ---- Billy broadcaster token – auto-refresh dla Create Stream Marker ----
   const maszTokenBilly = await wczytajTokenBilly();
   if (!maszTokenBilly && process.env.TWITCH_OAUTH_TOKEN_BROADCASTER_BILLY) {
     billyAccessToken = process.env.TWITCH_OAUTH_TOKEN_BROADCASTER_BILLY;
-    console.log('[Billy Auth] ℹ️  Używam tokena z env (brak refresh – auto-refresh nieaktywny)');
+    console.log('[Billy Auth] ℹ️ Używam tokena z env (brak refresh – auto-refresh nieaktywny)');
   }
   zaplanujOdswiezenieBilly();
 
@@ -9486,9 +9227,6 @@ const startBot = async () => {
   // ---- Skróć linki Angie28 ----
   await inicjalizujLinkiAngie();
 
-  // ---- Trello – wczytaj czy zapisywanie nagród jest włączone ----
-  await wczytajUstawieniaTrello();
-
   // ---- Ekonomia – odtwórz wypłaty lokat oczekujące po ewentualnym restarcie ----
   await odtworzLokatyPoStarcie();
 
@@ -9498,7 +9236,6 @@ const startBot = async () => {
   // ---- Uruchom platformy równolegle ----
   // Kick: obsługa kanałów EdzziLive i ArbuzikLive została wyłączona.
   uruchomTwitch(TWITCH_CONFIG_BILLYBULKA);
-  uruchomEventSubBilly();
   // Rozsunięte o 1s każdy — dodatkowe zabezpieczenie przed równoczesnymi
   // zapytaniami OAuth tuż po starcie (patrz komentarz przy getAccessToken wyżej).
   if (youtubeReady) {
