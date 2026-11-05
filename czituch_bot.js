@@ -8544,7 +8544,7 @@ function walidujEventSubReconnectUrl(reconnectUrl) {
     // Twitcha, ale dopuszczamy wyłącznie znane ścieżki reconnectu.
     const sciezka = parsed.pathname === '/' ? '' : parsed.pathname === '/ws' ? '/ws' : null;
     if (sciezka === null) return null;
-    return `${sciezka}${parsed.search}`;
+    return { pathname: sciezka || '/', search: parsed.search };
   } catch (_) {
     return null;
   }
@@ -8613,10 +8613,13 @@ function podepnijHandleryEventSub(ws, twitchClient, config, userIdsPromise = nul
       if (stan.reconnectFrom) { console.warn('[EventSub] ⚠️ Migracja sesji już trwa; ignoruję duplikat reconnect.'); return; }
       console.log('[EventSub] 🔄 Łączę z reconnect_url przekazanym przez Twitcha...');
       stan.reconnectFrom = ws;
-      // Host, protokół i ścieżka są walidowane wyżej; dynamiczny query string to bilet migracyjny
-      // otrzymany od Twitcha przez istniejące, uwierzytelnione połączenie WSS.
-      // codeql[js/request-forgery] Odbiorca jest stały, a query nie może zmienić hosta ani ścieżki.
-      const nowyWs = new WebSocket(`wss://eventsub.wss.twitch.tv${bezpiecznyReconnectUrl}`);
+      // URL budujemy od stałego originu; z komunikatu Twitcha przenosimy wyłącznie
+      // zwalidowaną ścieżkę i query zawierające bilet migracyjny.
+      const adresReconnect = new URL('wss://eventsub.wss.twitch.tv/');
+      adresReconnect.pathname = bezpiecznyReconnectUrl.pathname;
+      adresReconnect.search = bezpiecznyReconnectUrl.search;
+      // codeql[js/request-forgery] Host jest stały i nie pochodzi z danych wiadomości.
+      const nowyWs = new WebSocket(adresReconnect);
       stan.ws = nowyWs;
       podepnijHandleryEventSub(nowyWs, twitchClient, config);
     }
