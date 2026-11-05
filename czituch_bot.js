@@ -8613,6 +8613,9 @@ function podepnijHandleryEventSub(ws, twitchClient, config, userIdsPromise = nul
       if (stan.reconnectFrom) { console.warn('[EventSub] ⚠️ Migracja sesji już trwa; ignoruję duplikat reconnect.'); return; }
       console.log('[EventSub] 🔄 Łączę z reconnect_url przekazanym przez Twitcha...');
       stan.reconnectFrom = ws;
+      // Host, protokół i ścieżka są walidowane wyżej; dynamiczny query string to bilet migracyjny
+      // otrzymany od Twitcha przez istniejące, uwierzytelnione połączenie WSS.
+      // codeql[js/request-forgery] Odbiorca jest stały, a query nie może zmienić hosta ani ścieżki.
       const nowyWs = new WebSocket(`wss://eventsub.wss.twitch.tv${bezpiecznyReconnectUrl}`);
       stan.ws = nowyWs;
       podepnijHandleryEventSub(nowyWs, twitchClient, config);
