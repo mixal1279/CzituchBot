@@ -436,10 +436,7 @@
               "50 do 50 tys. lat"
             ]
           ],
-          "mustNot": [
-            "dokładnie 50 000 lat",
-            "dokładnie 50 lat"
-          ],
+          "mustNot": [],
           "independentGold": true,
           "independentGoldSources": [
             "https://theportalwiki.com/wiki/Relaxation_Chamber",
