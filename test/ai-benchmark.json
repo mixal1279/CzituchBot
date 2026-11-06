@@ -185,8 +185,8 @@
     {
       "id": "why-007",
       "category": "why",
-      "game": "Mass Effect 2",
-      "question": "Dlaczego Shepard rekrutuje sojuszników przed misją samobójczą?",
+      "game": "Portal 2",
+      "question": "Dlaczego GLaDOS poddaje Chell testom w Portal 2?",
       "routing": {
         "intent": "web_fact",
         "is_lore": true,
