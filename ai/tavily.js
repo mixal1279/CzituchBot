@@ -507,6 +507,9 @@ function hostnamePasujeDoDomenyTavily(url, domains) {
 function czyWymagaSecondaryRetrieval(results, sourceQuestion = '', timeRange = null) {
   const lista = Array.isArray(results) ? results : [];
   if (lista.length === 0) return true;
+  // Tavily Search `content` is a short search excerpt. It may guide retrieval,
+  // but only raw_content from page extraction is eligible as factual evidence.
+  if (!lista.some(r => String(r?.raw_content || '').trim().length >= 200)) return true;
   if (lista.length >= 2) {
     const hosts = new Set(lista.map(r => { try { return new URL(r?.url).hostname.toLowerCase().replace(/^www\./, ''); } catch (_) { return ''; } }).filter(Boolean));
     const providers = new Set(lista.map(r => String(r?.provider || 'tavily')).filter(Boolean));
@@ -990,10 +993,11 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
             // fragmenty i validator miał mniej dowodów.
             const secondaryResults = (secondary.sources || []).filter(source => source?.url && source?.content);
             const secondaryRebased = secondaryResults.length
-              ? formatSources(secondaryResults, primaryResults.length)
+              ? formatSources(secondaryResults, primaryEvidenceResults.length)
               : '';
-            const primaryPreview = primaryResults.map((r, index) => {
-              const content = String(r.raw_content || r.content || '').trim();
+            const primaryEvidenceResults = primaryResults.filter(r => String(r?.raw_content || '').trim().length >= 200);
+            const primaryPreview = primaryEvidenceResults.map((r, index) => {
+              const content = String(r.raw_content || '').trim();
               const materialRaw = content.substring(0, depth === 'advanced' ? 4200 : 1800)
                 .split('\n').map(line => line.trim()).filter(Boolean).join('\n');
               const material = sanityzujTrescZrodlaTavily(filtrujMaterialPoSlowachTavily(materialRaw, sourceQuestion));
@@ -1008,14 +1012,14 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
               ].join('\n');
             }).join('\n---\n');
             const conflictReport = zbudujRaportKonfliktowTavily(
-              wykryjKonfliktyZrodelTavily([...primaryResults, ...secondaryResults], sourceQuestion, domains),
+              wykryjKonfliktyZrodelTavily([...primaryEvidenceResults, ...secondaryResults], sourceQuestion, domains),
             );
             const mergedText = [conflictReport, primaryPreview, secondaryRebased].filter(Boolean).join('\n---\n');
             const canonical = {
               status: 'ok',
               text: mergedText,
               secondary: true,
-              sources: [...primaryResults, ...secondaryResults].map((source, index) => ({
+              sources: [...primaryEvidenceResults, ...secondaryResults].map((source, index) => ({
                 ...source,
                 sourceId: `SOURCE ${index + 1}`,
               })),
@@ -1028,9 +1032,10 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
         }
         if (!results.length) { onStatus({ status: 'empty', query: searchQuery }); return { status: 'empty', text: '' }; }
         const limit = depth === 'advanced' ? 8000 : (historical ? 6000 : 5000);
-        const sourceBlocks = primaryResults.map((r, index) => {
-          const content = String(r.content || '').trim();
+        const primaryEvidenceResults = primaryResults.filter(r => String(r?.raw_content || '').trim().length >= 200);
+        const sourceBlocks = primaryEvidenceResults.map((r, index) => {
           const raw = String(r.raw_content || '').trim();
+          const content = raw;
           // Pełna treść z etapu advanced ma pierwszeństwo przed krótkim snippetem.
           // Lekki filtr zachowuje dopasowane zdania oraz sąsiedni kontekst.
           const materialRaw = (raw || content).substring(0, depth === 'advanced' ? 4200 : 2200)
@@ -1051,8 +1056,12 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
           const extra = blocks.length ? 5 : 0;
           if (used + extra + block.length > limit) break;
           blocks.push(block);
-          includedSources.push(primaryResults[index]);
+          includedSources.push(primaryEvidenceResults[index]);
           used += extra + block.length;
+        }
+        if (!includedSources.length) {
+          onStatus({ status: 'empty', query: searchQuery, reason: 'snippet_only', sourceCount: 0 });
+          return { status: 'empty', text: '', sources: [], reason: 'snippet_only' };
         }
         // Only report conflicts among sources actually included in the prompt.
         // Otherwise the report can cite SOURCE IDs whose evidence blocks were cut by
