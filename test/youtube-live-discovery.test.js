@@ -128,6 +128,57 @@ test('zwraca null, gdy strona kanału nie pokazuje żadnych kandydatów', async 
   assert.equal(found, null);
 });
 
+
+
+test('nie łączy nieobiektowego ytInitialData z przypadkowym obiektem z dalszego HTML', () => {
+  const html = 'var ytInitialData = null; window.other = {"videoId":"' + VIDEO_ID + '"};';
+  assert.deepEqual(extractLiveVideoIds(html), []);
+});
+
+test('priorytetyzuje ID z redirectu /live przed innymi kandydatami strony', () => {
+  const html = assigned('ytInitialData', {
+    contents: { videoRenderer: liveRenderer(OTHER_VIDEO_ID) },
+  });
+  assert.equal(extractLiveVideoIds(html, 'https://www.youtube.com/watch?v=' + VIDEO_ID)[0], VIDEO_ID);
+});
+
+test('obsługuje alternatywne przypisanie window.ytInitialData', () => {
+  const html = 'window.ytInitialData = ' + JSON.stringify({
+    contents: { videoRenderer: liveRenderer(VIDEO_ID) },
+  }) + ';';
+  assert.equal(extractLiveVideoId(html), VIDEO_ID);
+});
+
+test('obsługuje window["ytInitialData"] i etykietę LIVE bez style', () => {
+  const renderer = {
+    videoId: VIDEO_ID,
+    badges: [{ metadataBadgeRenderer: { label: 'LIVE' } }],
+  };
+  const html = 'window["ytInitialData"] = ' + JSON.stringify({ contents: { videoRenderer: renderer } }) + ';';
+  assert.equal(extractLiveVideoId(html), VIDEO_ID);
+});
+
+test('obsługuje videoId w watchEndpoint renderera z jawnym sygnałem LIVE', () => {
+  const renderer = {
+    navigationEndpoint: { watchEndpoint: { videoId: VIDEO_ID } },
+    thumbnailOverlays: [{
+      thumbnailOverlayTimeStatusRenderer: { text: { simpleText: 'LIVE' } },
+    }],
+  };
+  const html = 'var ytInitialData = ' + JSON.stringify({ contents: { richItemRenderer: { content: { videoRenderer: renderer } } } }) + ';';
+  assert.equal(extractLiveVideoId(html), VIDEO_ID);
+});
+
+test('nie uznaje etykiety LIVE w tekście filmu bez sygnału LIVE za transmisję', () => {
+  const renderer = {
+    videoId: VIDEO_ID,
+    title: { simpleText: 'LIVE: mój zwykły film' },
+    badges: [{ metadataBadgeRenderer: { label: '4K' } }],
+  };
+  const html = 'var ytInitialData = ' + JSON.stringify({ contents: { videoRenderer: renderer } }) + ';';
+  assert.deepEqual(extractLiveVideoIds(html), []);
+});
+
 test('rzuca błąd dla nieprawidłowego Channel ID', async () => {
   await assert.rejects(() => discoverLiveVideoId('not-a-channel'), TypeError);
 });
