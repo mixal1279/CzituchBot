@@ -13,6 +13,7 @@ const GAME_ALIASES = [
   { name: 'Grand Theft Auto VI', type: 'game', aliases: ['gta vi', 'gta 6', 'grand theft auto vi', 'grand theft auto 6'] },
   { name: 'Elden Ring', type: 'game', aliases: ['elden ring'] },
   { name: 'Dark Souls', type: 'franchise', aliases: ['dark souls'] },
+  { name: 'Assassin’s Creed', type: 'franchise', aliases: ['assassin’s creed', "assassin's creed", 'assassins creed'] },
   { name: 'Baldur’s Gate 3', type: 'game', aliases: ['baldur’s gate 3', "baldur's gate 3", 'bg3'] },
   { name: 'Diablo IV', type: 'game', aliases: ['diablo iv', 'diablo 4', 'd4'] },
   { name: 'Diablo', type: 'franchise', aliases: ['diablo'] },
