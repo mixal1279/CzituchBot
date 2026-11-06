@@ -38,7 +38,7 @@ test('klasyfikator przekazuje pytanie jako dane i parsuje odpowiedź modelu', as
     },
   });
   assert.deepEqual(wynik, { topic_type: 'technology', question_type: 'comparison' });
-  assert.equal(request.payload.max_tokens, 120);
+  assert.equal(request.payload.max_tokens, 220);
   assert.equal(request.payload.temperature, 0);
   assert.equal(request.payload.response_format.type, 'json_object');
   assert.equal(request.payload.messages[1].content, 'Czym różni się OLED od QLED?');
