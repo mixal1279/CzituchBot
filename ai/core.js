@@ -86,14 +86,16 @@ function classifyAuthority(source = {}) {
     'minecraft.net','rockstargames.com','thewitcher.com','cdprojektred.com',
     'playstation.com','xbox.com','nintendo.com','naughtydog.com','larian.com',
     'baldursgate3.game','bandainamcoent.com','epicgames.com','ea.com',
-    'ubisoft.com','bethesda.net','starwars.com','openai.com','discord.com'
+    'ubisoft.com','bethesda.net','starwars.com','openai.com','discord.com',
+    'valvesoftware.com','steampowered.com'
   ];
   const specialized = [
-    'minecraft.wiki','gamelore.fandom.com',
+    'minecraft.wiki','gamelore.fandom.com','theportalwiki.com','bg3.wiki','combineoverwiki.net',
+    'skyrim.fandom.com','cyberpunk.fandom.com','witcher.fandom.com','witcher-games.fandom.com','eldenring.fandom.com',
     'steamdb.info','howlongtobeat.com','pcgamingwiki.com'
   ];
   const reference = ['wikipedia.org','imdb.com','mobygames.com'];
-  const guide = ['ign.com','gamespot.com','pcgamer.com','gamerant.com','polygon.com','gry-online.pl','eurogamer.net','eurogamer.pl'];
+  const guide = ['ign.com','gamespot.com','pcgamer.com','gamerant.com','polygon.com','gry-online.pl','eurogamer.net','eurogamer.pl','fandom.com'];
 
   const inList = list => list.some(d => host === d || host.endsWith('.' + d));
   if (inList(official)) return 'official';
@@ -343,23 +345,34 @@ function assessEvidence(results = [], question, routing = {}) {
   // strony. Mogą być trafne, ale nie są niezależnym potwierdzeniem.
   const independent = x => !czyStreszczenieModelu(x);
   const strongIndependent = strong.filter(independent);
-  const evidenceHosts = new Set([...strongIndependent, ...relevant.filter(independent)].map(x => x.host).filter(Boolean));
+  const relevantIndependent = relevant.filter(independent);
+  const evidenceHosts = new Set([...strongIndependent, ...relevantIndependent].map(x => x.host).filter(Boolean));
+  // Jeden mocny, tematycznie trafny materiał pierwotny może wystarczyć do odpowiedzi
+  // z obowiązkową walidacją. Nie udajemy wtedy niezależnego potwierdzenia z dwóch domen.
+  const singlePrimarySource = strongIndependent.some(source =>
+    source.authority === 'official'
+    && source.coreScore >= 0.62
+    && (source.relevance >= 0.35 || source.titleRelevance >= 0.45)
+  );
 
   let status = 'weak';
-  if (strongIndependent.length >= 2 && evidenceHosts.size >= 2 && relevant.length >= 2) status = 'strong';
-  else if (strongIndependent.length >= 1 && relevant.length >= 1 && evidenceHosts.size >= 2) status = 'usable';
+  if (strongIndependent.length >= 2 && evidenceHosts.size >= 2 && relevantIndependent.length >= 2) status = 'strong';
+  else if (singlePrimarySource || (strongIndependent.length >= 1 && relevantIndependent.length >= 1 && evidenceHosts.size >= 2)) status = 'usable';
 
   return {
     status,
     sources: selected,
     sourceCount: selected.length,
-    independentHosts: hosts.size,
+    independentHosts: evidenceHosts.size,
+    uniqueHosts: hosts.size,
     relevantHosts: evidenceHosts.size,
     modelSummarySources: selected.filter(czyStreszczenieModelu).length,
     strongSources: strong.length,
     relevantSources: relevant.length,
+    relevantIndependentSources: relevantIndependent.length,
+    singlePrimarySource,
     coverageScore: Number(Math.min(1,
-      relevant.length / (routing.is_lore || routing.is_gameplay ? 3 : 2)
+      relevantIndependent.length / (routing.is_lore || routing.is_gameplay ? 3 : 2)
     ).toFixed(3)),
   };
 }

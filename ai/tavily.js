@@ -13,7 +13,7 @@ const { createGroqCompletion, awaitWithAbortTimeout } = require('./provider-runt
 // Jedna lista autorytetu domen (wcześniej dwie kopie w tym pliku rozjechały się:
 // np. eurogamer tylko w jednej, docs.npmjs.com tylko w drugiej).
 const DOMENY_OFICJALNE = ['minecraft.net', 'rockstargames.com', 'thewitcher.com', 'playstation.com', 'naughtydog.com', 'bandainamcoent.com', 'larian.com', 'baldursgate3.game', 'nvidia.com', 'openai.com', 'anthropic.com', 'microsoft.com', 'apple.com', 'discord.com', 'twitch.tv', 'kick.com'];
-const DOMENY_WYSPECJALIZOWANE = ['minecraft.wiki', 'fandom.com', 'steamdb.info', 'developer.mozilla.org', 'docs.npmjs.com'];
+const DOMENY_WYSPECJALIZOWANE = ['minecraft.wiki', 'gamelore.fandom.com', 'theportalwiki.com', 'bg3.wiki', 'combineoverwiki.net', 'skyrim.fandom.com', 'cyberpunk.fandom.com', 'witcher.fandom.com', 'witcher-games.fandom.com', 'eldenring.fandom.com', 'steamdb.info', 'developer.mozilla.org', 'docs.npmjs.com'];
 const DOMENY_PRZEWODNIKI = ['ign.com', 'gamespot.com', 'pcgamer.com', 'gamerant.com', 'polygon.com', 'fandom.com', 'eurogamer.net', 'eurogamer.pl', 'gry-online.pl'];
 
 const TAVILY_CACHE_TTL_MS = 10 * 60 * 1000; // domyślne / pytania o świeże wiadomości
@@ -746,7 +746,7 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
       const guide = DOMENY_PRZEWODNIKI
         .some(d => host === d || host.endsWith(`.${d}`));
       if (official) return 'oficjalne';
-      if (specialized || requested) return 'wyspecjalizowane';
+      if (specialized) return 'wyspecjalizowane';
       if (guide) return 'guide/referencyjne';
       return 'zewnętrzne-niezweryfikowane';
     } catch (_) { return 'nieznane'; }
@@ -887,11 +887,13 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
             // przy kolejnych zapytaniach planu (słaby dowód). Wcześniej prawie każde pytanie
             // bez zakresu czasu szło jako `advanced`.
             search_depth: depth,
-            max_results: depth === 'advanced' ? 10 : 7,
+            max_results: depth === 'advanced' ? 3 : 7,
             // Official Search API supports chunks_per_source for basic, fast and advanced.
             chunks_per_source: 3,
             include_answer: false,
-            include_raw_content: false,
+            // Pełny Markdown pobieramy tylko w droższym, celowanym etapie advanced.
+            // Ograniczenie do 3 wyników chroni kredyty i budżet promptu.
+            include_raw_content: depth === 'advanced' ? 'markdown' : false,
             ...(domains && { include_domains: domains }),
             ...(validTimeRange && { time_range: validTimeRange }),
           }),
@@ -996,8 +998,8 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
               ? formatSources(secondaryResults, primaryResults.length)
               : '';
             const primaryPreview = primaryResults.map((r, index) => {
-              const content = String(r.content || r.raw_content || '').trim();
-              const materialRaw = content.substring(0, 1800)
+              const content = String(r.raw_content || r.content || '').trim();
+              const materialRaw = content.substring(0, depth === 'advanced' ? 4200 : 1800)
                 .split('\n').map(line => line.trim()).filter(Boolean).join('\n');
               const material = sanityzujTrescZrodlaTavily(filtrujMaterialPoSlowachTavily(materialRaw, sourceQuestion));
               const host = (() => { try { return new URL(r.url).hostname; } catch (_) { return '(nieznany host)'; } })();
@@ -1030,13 +1032,13 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
           }
         }
         if (!results.length) { onStatus({ status: 'empty', query: searchQuery }); return { status: 'empty', text: '' }; }
-        const limit = historical ? 6000 : 5000;
+        const limit = depth === 'advanced' ? 8000 : (historical ? 6000 : 5000);
         const sourceBlocks = primaryResults.map((r, index) => {
           const content = String(r.content || '').trim();
           const raw = String(r.raw_content || '').trim();
-          // content = fragmenty dobrane pod zapytanie; raw tylko awaryjnie.
-          // Lekki filtr usuwa zdania niezwiązane z pytaniem, ale nigdy nie usuwa całego źródła.
-          const materialRaw = (content || raw).substring(0, 2200)
+          // Pełna treść z etapu advanced ma pierwszeństwo przed krótkim snippetem.
+          // Lekki filtr zachowuje dopasowane zdania oraz sąsiedni kontekst.
+          const materialRaw = (raw || content).substring(0, depth === 'advanced' ? 4200 : 2200)
             .split('\n')
             .map(line => line.trim())
             .filter(Boolean)

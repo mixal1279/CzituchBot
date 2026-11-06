@@ -16,7 +16,8 @@ test('curated benchmark contains unique questions and balanced categories with i
   assert.equal(validation.total, 54);
   assert.equal(validation.uniqueQuestions, 54);
   assert.ok(validation.independentGoldCases >= 15);
-  assert.ok(validation.goldCategories.length >= 5);
+  assert.equal(validation.goldCategories.length, 9);
+  assert.equal(Object.keys(validation.goldByCategory).length, 9);
   assert.ok(Object.values(validation.categories).every(count => count >= 4));
 });
 
@@ -38,6 +39,28 @@ test('benchmark validation rejects duplicate prompts, missing categories and uns
   delete gold.expected.factual.independentGoldSources;
   const sourceValidation = validateBenchmarkDataset(missingGoldSource);
   assert.ok(sourceValidation.errors.some(error => error.includes('gold bez źródła HTTPS')));
+});
+
+test('10-case live sample covers all nine categories and rotates independent gold categories', () => {
+  const benchmark = JSON.parse(fs.readFileSync(path.join(__dirname, 'ai-benchmark.json'), 'utf8'));
+  const first = stratifiedCases(benchmark.cases, 10, 0);
+  const second = stratifiedCases(benchmark.cases, 10, 1);
+  assert.equal(first.length, 10);
+  assert.equal(new Set(first.map(item => item.category)).size, 9);
+  assert.equal(first.filter(item => item.expected?.factual?.independentGold === true).length, 4);
+  assert.equal(second.length, 10);
+  assert.equal(new Set(second.map(item => item.category)).size, 9);
+  const firstGold = new Set(first.filter(item => item.expected?.factual?.independentGold).map(item => item.category));
+  const secondGold = new Set(second.filter(item => item.expected?.factual?.independentGold).map(item => item.category));
+  assert.notDeepEqual([...firstGold].sort(), [...secondGold].sort());
+});
+
+test('gold dataset validation requires factual references in every benchmark category', () => {
+  const benchmark = JSON.parse(fs.readFileSync(path.join(__dirname, 'ai-benchmark.json'), 'utf8'));
+  for (const item of benchmark.cases.filter(row => row.category === 'when')) delete item.expected.factual;
+  const validation = validateBenchmarkDataset(benchmark);
+  assert.equal(validation.valid, false);
+  assert.ok(validation.errors.some(error => error.includes('gold cases muszą pokrywać wszystkie wymagane kategorie')));
 });
 
 test('benchmark question normalization handles Polish diacritics and punctuation', () => {
@@ -73,6 +96,8 @@ test('new independent gold facts accept grounded Polish alternatives', () => {
     ['outcome-394', 'Jackie Welles ginie po nieudanym napadzie na Konpeki Plaza.'],
     ['relationship-451', 'Geralt i Ciri mają relację ojciec i córka.'],
     ['relationship-452', 'V i Johnny dzielą jedno ciało przez działanie Relic.'],
+    ['when-115', 'Chell budzi się w Aperture Science po około 50 000 latach uśpienia.'],
+    ['quantity-285', 'Portal 2: główna historia trwa około 9 godzin.'],
   ];
   for (const [id, answer] of samples) {
     const item = benchmark.cases.find(entry => entry.id === id);
@@ -83,7 +108,11 @@ test('new independent gold facts accept grounded Polish alternatives', () => {
 
 test('gold facts require normalized whole phrases, not accidental substrings', () => {
   const facts = { independentGold: true, mustInclude: [['Wheatley', 'przejął kontrolę']], mustNot: ['GLaDOS nie została wyłączona'] };
-  assert.equal(scoreGoldenFacts('Wheatley przejął kontrolę nad GLaDOS.', facts).passed, true);
+  const exact = scoreGoldenFacts('Wheatley przejął kontrolę nad GLaDOS.', facts);
+  assert.equal(exact.passed, true);
+  assert.equal(exact.requiredFacts, 2);
+  assert.equal(exact.passedFacts, 2);
+  assert.equal(exact.factAccuracy, 1);
   const falsePositive = scoreGoldenFacts('Wheatley przejął kontrolowanie; ślad kontrolowania pozostał.', facts);
   assert.equal(falsePositive.passed, false);
   assert.deepEqual(falsePositive.missing, [['Wheatley', 'przejął kontrolę']]);

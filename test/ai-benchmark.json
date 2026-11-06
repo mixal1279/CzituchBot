@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "name": "AI Core v27 Curated Benchmark",
+  "name": "AI Core v28 Evidence-backed Gold Benchmark",
   "description": "Zestaw unikalnych pytań do testów produkcyjnego pipeline'u AI. Każdy przypadek ma odrębne pytanie; gold facts są oznaczone wyłącznie tam, gdzie istnieje niezależny zestaw faktów i źródło referencyjne. Pozostałe przypadki mierzą routing i kompletność, nie niezależną factual accuracy.",
   "cases": [
     {
@@ -383,7 +383,33 @@
           "when",
           "entity_context"
         ],
-        "must_plan": true
+        "must_plan": true,
+        "factual": {
+          "mustInclude": [
+            [
+              "Chell"
+            ],
+            [
+              "Aperture Science"
+            ]
+          ],
+          "mustIncludeAny": [
+            [
+              "po około 50 000 latach",
+              "po 50 000 latach",
+              "po 50000 latach",
+              "po 50 tysiącach lat",
+              "po 50 tys. latach",
+              "po wielu tysiącach lat"
+            ]
+          ],
+          "mustNot": [],
+          "independentGold": true,
+          "independentGoldSources": [
+            "https://theportalwiki.com/wiki/Relaxation_Chamber",
+            "https://theportalwiki.com/wiki/Portal_2"
+          ]
+        }
       }
     },
     {
@@ -827,7 +853,31 @@
           "quantity",
           "entity_context"
         ],
-        "must_plan": true
+        "must_plan": true,
+        "factual": {
+          "mustInclude": [
+            [
+              "Portal 2"
+            ]
+          ],
+          "mustIncludeAny": [
+            [
+              "9 godzin",
+              "9h"
+            ],
+            [
+              "główna historia",
+              "główna fabuła",
+              "main story"
+            ]
+          ],
+          "mustNot": [],
+          "independentGold": true,
+          "independentGoldSources": [
+            "https://isthereanydeal.com/game/portal-2/history/",
+            "https://isthereanydeal.com/game/portal-2/info/"
+          ]
+        }
       }
     },
     {

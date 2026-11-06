@@ -10,6 +10,7 @@ const {
   scoreSource,
   diversifySources,
   decideEvidencePolicy,
+  classifyAuthority,
 } = require('../ai/core');
 
 test('core retrieval plan preserves entity and creates intent-specific coverage', () => {
@@ -57,6 +58,28 @@ test('core evidence assessment detects weak single-source evidence', () => {
   );
   assert.equal(evidence.status,'weak');
   assert.equal(evidence.independentHosts,1);
+});
+
+test('authority classification does not treat every Fandom wiki as a primary specialist source', () => {
+  assert.equal(classifyAuthority({ url:'https://gamelore.fandom.com/wiki/Hornet' }), 'specialized');
+  assert.equal(classifyAuthority({ url:'https://randomgame.fandom.com/wiki/Character' }), 'guide');
+  assert.equal(classifyAuthority({ url:'https://theportalwiki.com/wiki/Wheatley' }), 'specialized');
+});
+
+test('one strong official source is usable but is not reported as independent multi-source confirmation', () => {
+  const evidence = assessEvidence(
+    [{
+      url:'https://www.valvesoftware.com/en/',
+      title:'Portal 2 Wheatley takes control of GLaDOS',
+      content:'Portal 2: Wheatley takes control of GLaDOS after the core transfer in Aperture Science.',
+    }],
+    'Why did Wheatley take control of GLaDOS in Portal 2?',
+    { is_lore:true, game:'Portal 2', entity:'Wheatley' },
+  );
+  assert.equal(evidence.status, 'usable');
+  assert.equal(evidence.singlePrimarySource, true);
+  assert.equal(evidence.independentHosts, 1);
+  assert.equal(evidence.uniqueHosts, 1);
 });
 
 test('core policy never disables validation for factual retrieval', () => {

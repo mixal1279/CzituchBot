@@ -47,26 +47,41 @@ function validateBenchmarkDataset(data) {
   for (const category of REQUIRED_BENCHMARK_CATEGORIES) {
     if (!categories.has(category)) errors.push('brak wymaganej kategorii: ' + category);
   }
+
   const gold = all.filter(item => item.expected?.factual?.independentGold === true);
+  const goldByCategory = Object.fromEntries([...new Set(gold.map(item => item.category))].sort().map(category => [
+    category, gold.filter(item => item.category === category).length,
+  ]));
   const goldCategories = new Set(gold.map(item => item.category));
   if (gold.length < Math.ceil(all.length * 0.15)) errors.push('za mało niezależnych gold cases');
-  if (goldCategories.size < 5) errors.push('gold cases muszą pokrywać co najmniej 5 kategorii');
+  if (goldCategories.size !== REQUIRED_BENCHMARK_CATEGORIES.size) {
+    errors.push('gold cases muszą pokrywać wszystkie wymagane kategorie');
+  }
+
+  const poprawneGrupy = groups => Array.isArray(groups) && groups.length > 0
+    && groups.every(group => Array.isArray(group) && group.length > 0
+      && group.every(value => typeof value === 'string' && value.trim().length > 0));
   for (const item of gold) {
     const facts = item.expected.factual;
-    if (!Array.isArray(facts.mustInclude) && !Array.isArray(facts.mustIncludeAny)) errors.push('gold bez wymaganych faktów: ' + item.id);
-    if (!Array.isArray(facts.independentGoldSources) || !facts.independentGoldSources.some(url => typeof url === 'string' && url.startsWith('https://'))) errors.push('gold bez źródła HTTPS: ' + item.id);
+    if (!poprawneGrupy(facts.mustInclude) && !poprawneGrupy(facts.mustIncludeAny)) errors.push('gold bez wymaganych faktów: ' + item.id);
+    if (facts.mustInclude !== undefined && !Array.isArray(facts.mustInclude)) errors.push('nieprawidłowe mustInclude: ' + item.id);
+    if (facts.mustIncludeAny !== undefined && !Array.isArray(facts.mustIncludeAny)) errors.push('nieprawidłowe mustIncludeAny: ' + item.id);
+    if (!Array.isArray(facts.mustNot) || facts.mustNot.some(value => typeof value !== 'string' || !value.trim())) errors.push('nieprawidłowe mustNot: ' + item.id);
+    const sources = facts.independentGoldSources;
+    const validSources = Array.isArray(sources) && sources.length > 0 && sources.every(value => {
+      try {
+        const url = new URL(value);
+        return url.protocol === 'https:' && Boolean(url.hostname) && !url.username && !url.password;
+      } catch (_) { return false; }
+    });
+    if (!validSources) errors.push('gold bez poprawnych źródeł HTTPS: ' + item.id);
   }
   return {
-    valid: errors.length === 0,
-    errors,
-    total: all.length,
-    uniqueQuestions: questions.size,
-    categories: Object.fromEntries(categories),
-    independentGoldCases: gold.length,
-    goldCategories: [...goldCategories].sort(),
+    valid: errors.length === 0, errors, total: all.length,
+    uniqueQuestions: questions.size, categories: Object.fromEntries(categories),
+    independentGoldCases: gold.length, goldCategories: [...goldCategories].sort(), goldByCategory,
   };
 }
-
 const benchmark = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'test', 'ai-benchmark.json'), 'utf8'));
 const benchmarkValidation = validateBenchmarkDataset(benchmark);
 if (!benchmarkValidation.valid) throw new Error('Niepoprawny benchmark AI: ' + benchmarkValidation.errors.join('; '));
@@ -80,7 +95,9 @@ function resolveDelayMs(value, defaultMs = 8000) {
 }
 const delayMs = resolveDelayMs(process.env.AI_BENCHMARK_DELAY_MS);
 function stratifiedCases(all, requested, seed = 0) {
-  if (requested >= all.length) return [...all];
+  const limit = Math.max(0, Math.floor(Number(requested)) || 0);
+  if (limit >= all.length) return [...all];
+  if (limit === 0) return [];
   const offset = Math.max(0, Math.floor(Number(seed)) || 0);
   const groups = new Map();
   for (const item of all) {
@@ -88,25 +105,22 @@ function stratifiedCases(all, requested, seed = 0) {
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(item);
   }
-  // Rotate each category deterministically so non-gold questions still vary by seed.
   if (offset) for (const bucket of groups.values()) {
     if (bucket.length > 1) bucket.push(...bucket.splice(0, offset % bucket.length));
   }
 
   const selected = [];
   const selectedIds = new Set();
-  const goldCases = all.filter(item => item.expected?.factual?.independentGold === true);
-  // A single gold example in a small live run is too weak to tell whether factual
-  // accuracy improved. Reserve roughly one third of the sample for independent
-  // gold facts, taking different categories before taking a second item from
-  // the same category. Remaining slots stay category-stratified.
-  const targetGoldCount = Math.min(goldCases.length, Math.max(1, Math.ceil(requested / 3)));
+  const selectedCategories = new Set();
   const goldByCategory = new Map();
-  for (const item of goldCases) {
+  for (const item of all.filter(row => row.expected?.factual?.independentGold === true)) {
     const key = item.category || 'uncategorized';
     if (!goldByCategory.has(key)) goldByCategory.set(key, []);
     goldByCategory.get(key).push(item);
   }
+  // Przy 10 pytaniach rezerwujemy 4 miejsca na gold facts i rotujemy ich kategorie.
+  const totalGold = [...goldByCategory.values()].reduce((sum, bucket) => sum + bucket.length, 0);
+  const targetGoldCount = Math.min(totalGold, Math.max(1, Math.ceil(limit / 3)));
   const goldCategories = [...goldByCategory.keys()];
   if (offset && goldCategories.length > 1) {
     const shift = offset % goldCategories.length;
@@ -117,15 +131,26 @@ function stratifiedCases(all, requested, seed = 0) {
     const candidates = goldByCategory.get(category) || [];
     if (!candidates.length) continue;
     const item = candidates[offset % candidates.length];
-    if (!selectedIds.has(item.id)) {
-      selected.push(item);
-      selectedIds.add(item.id);
-    }
+    if (selectedIds.has(item.id)) continue;
+    selected.push(item);
+    selectedIds.add(item.id);
+    selectedCategories.add(category);
+  }
+
+  // Najpierw zapewnij obecność każdej kategorii, dopiero potem dobieraj drugi przypadek.
+  for (const [category, bucket] of groups) {
+    if (selected.length >= limit) break;
+    if (selectedCategories.has(category)) continue;
+    const candidate = bucket.find(item => !selectedIds.has(item.id));
+    if (!candidate) continue;
+    selected.push(candidate);
+    selectedIds.add(candidate.id);
+    selectedCategories.add(category);
   }
 
   const keys = [...groups.keys()];
   let cursor = 0;
-  while (selected.length < requested && keys.length) {
+  while (selected.length < limit && keys.length) {
     const key = keys[cursor % keys.length];
     const bucket = groups.get(key);
     while (bucket.length && selectedIds.has(bucket[0].id)) bucket.shift();
@@ -601,6 +626,9 @@ async function run() {
         missing: evaluation.missing,
         factualScore: factual.score,
         factualPassed: factual.passed,
+        factualRequiredFacts: factual.requiredFacts,
+        factualPassedFacts: factual.passedFacts,
+        factualFactAccuracy: factual.factAccuracy,
         factualMissing: factual.missing,
         factualForbidden: factual.forbidden,
         finalStatus: summary?.finalStatus || null,
@@ -628,6 +656,9 @@ async function run() {
         missing: [],
         factualScore: item.expected?.factual?.independentGold ? 0 : null,
         factualPassed: item.expected?.factual?.independentGold ? false : null,
+        factualRequiredFacts: item.expected?.factual?.independentGold ? ((item.expected.factual.mustInclude || []).length + (item.expected.factual.mustIncludeAny || []).length + (item.expected.factual.mustNot || []).length) : 0,
+        factualPassedFacts: 0,
+        factualFactAccuracy: item.expected?.factual?.independentGold ? 0 : null,
         factualMissing: [],
         factualForbidden: [],
         finalStatus: summary?.finalStatus || 'error',
@@ -662,6 +693,23 @@ async function run() {
   const factualCases = results.filter(x => x.factualPassed !== null);
   const factualPassed = factualCases.filter(x => x.factualPassed).length;
   const factualAverage = factualCases.length ? factualCases.reduce((sum, x) => sum + x.factualScore, 0) / factualCases.length : null;
+  const factualRequiredFacts = factualCases.reduce((sum, x) => sum + (Number(x.factualRequiredFacts) || 0), 0);
+  const factualPassedFacts = factualCases.reduce((sum, x) => sum + (Number(x.factualPassedFacts) || 0), 0);
+  const factualFactAccuracy = factualRequiredFacts ? factualPassedFacts / factualRequiredFacts : null;
+  const factualByCategory = Object.fromEntries([...new Set(factualCases.map(x => x.category))].sort().map(category => {
+    const rows = factualCases.filter(x => x.category === category);
+    const requiredFacts = rows.reduce((sum, x) => sum + (Number(x.factualRequiredFacts) || 0), 0);
+    const passedFacts = rows.reduce((sum, x) => sum + (Number(x.factualPassedFacts) || 0), 0);
+    const passedCases = rows.filter(x => x.factualPassed === true).length;
+    return [category, {
+      goldCases: rows.length, passedCases,
+      caseAccuracy: rows.length ? Number((passedCases / rows.length).toFixed(4)) : null,
+      requiredFacts, passedFacts,
+      factAccuracy: requiredFacts ? Number((passedFacts / requiredFacts).toFixed(4)) : null,
+    }];
+  }));
+  const selectedGoldCategories = [...new Set(factualCases.map(x => x.category))].sort();
+  const sampledCategories = [...new Set(results.map(x => x.category))].sort();
   const diagnostic = buildBenchmarkDiagnostics(results, benchmark.cases, cases);
   const providerOutage = Boolean(diagnostic.providerOutage);
   const claimSupport = summarizeClaimSupportAudits(results.map(result => result.claimSupport).filter(Boolean));
@@ -684,7 +732,14 @@ async function run() {
       uniqueQuestions: benchmarkValidation.uniqueQuestions,
       independentGoldCases: benchmarkValidation.independentGoldCases,
       goldCategories: benchmarkValidation.goldCategories,
+      goldByCategory: benchmarkValidation.goldByCategory,
       categoryCounts: benchmarkValidation.categories,
+    },
+    sampleQuality: {
+      sampledCategories, sampledCategoryCount: sampledCategories.length,
+      requiredCategoryCount: REQUIRED_BENCHMARK_CATEGORIES.size,
+      selectedGoldCategories, selectedGoldCategoryCount: selectedGoldCategories.length,
+      selectedGoldCases: factualCases.length,
     },
     answeredAccuracy: Number((answered / results.length).toFixed(4)),
     completenessAccuracy: Number((complete / results.length).toFixed(4)),
@@ -697,6 +752,10 @@ async function run() {
     discardedJudgeAcceptedFactualPassedCount: discardedJudgeAccepted.filter(result => result.discardedFactualPassed === true).length,
     factualGoldCases: factualCases.length,
     factualAccuracy: factualCases.length ? Number((factualPassed / factualCases.length).toFixed(4)) : null,
+    factualFactAccuracy: factualFactAccuracy === null ? null : Number(factualFactAccuracy.toFixed(4)),
+    factualRequiredFacts,
+    factualPassedFacts,
+    factualByCategory,
     factualAverageScore: factualAverage === null ? null : Number(factualAverage.toFixed(4)),
     claimSupportPassRate: claimSupport.claimSupportPassRate,
     claimSupportUsableRate: claimSupport.claimSupportUsableRate,
@@ -704,7 +763,7 @@ async function run() {
     validatorMetrics: agregujMetrykiWalidatorow(validatorMetricsRaw),
     validatorMetricsRaw,
     durationMs: Date.now() - started,
-    note: 'Ten testuje produkcyjny pipeline, kompletność odpowiedzi i osobny audyt wsparcia claim-cytat. Nie jest niezależnym pomiarem factual accuracy; do tego potrzebny jest ręcznie zweryfikowany gold answer/fact set.',
+    note: 'FactualAccuracy to odsetek zaliczonych przypadków gold; factualFactAccuracy to odsetek zaliczonych wymagań faktograficznych. Gold facts są ręcznie kuratorowane i nie dowodzą automatycznie, że źródło cytowane przez bota rzeczywiście wspiera każdy claim. Wynik nie jest absolutnym pomiarem prawdziwości.',
     categories: [...new Set(results.map(x => x.category))].sort(),
     diagnostics: diagnostic,
     failures: results.filter(x => !x.answered || x.judgeStatus !== 'accepted' || x.factualPassed === false).slice(0, 100),
@@ -731,7 +790,7 @@ async function run() {
       const gateReasons = [];
       if (answered !== results.length) gateReasons.push(`nieudzielone odpowiedzi ${answered}/${results.length}`);
       if (complete !== results.length) gateReasons.push(`niekompletne odpowiedzi ${complete}/${results.length}`);
-      if (!factualOk) gateReasons.push(`gold facts niezaliczone lub brak gold case (${factualPassed}/${factualCases.length})`);
+      if (!factualOk) gateReasons.push(`gold facts niezaliczone lub brak gold case (${factualPassed}/${factualCases.length}; fakty ${factualPassedFacts}/${factualRequiredFacts})`);
       console.error(`[LIVE BENCHMARK] PRZYCZYNY NIEPOWODZENIA: ${gateReasons.join('; ')}`);
       console.error('[LIVE BENCHMARK] Szczegóły per przypadek:');
       for (const line of formatBenchmarkFailureDiagnostics(results)) console.error(line);
