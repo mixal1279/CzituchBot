@@ -819,6 +819,7 @@ test('Tavily conflict report only references evidence blocks retained by the cha
     title: `Portal 2 release date source ${index + 1}`,
     url: `https://source${index + 1}.example/portal-2`,
     content: (`Portal 2 was released in ${year}. Portal 2 release details are described here. `).repeat(30),
+    raw_content: (`Portal 2 was released in ${year}. Portal 2 release details are described here. `).repeat(30),
   }));
   const search = createTavilySearch({
     apiKey: 'test-tavily-key',
