@@ -2,7 +2,19 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { oznaczUzycieHistorii, ograniczHistorieRozmow } = require('../ai/history');
+const { oznaczUzycieHistorii, ograniczHistorieRozmow, zbudujKluczHistorii } = require('../ai/history');
+
+test('conversation keys use stable platform identities and isolate channels', () => {
+  const youtubeA = zbudujKluczHistorii('youtube', 'edzzi', 'UC123');
+  const youtubeB = zbudujKluczHistorii('youtube', 'edzzi', 'UC456');
+  const twitch = zbudujKluczHistorii('twitch', 'edzzi', 'UC123');
+  const otherChannel = zbudujKluczHistorii('youtube', 'angie28', 'UC123');
+  assert.equal(youtubeA, 'youtube:edzzi:uc123');
+  assert.notEqual(youtubeA, youtubeB);
+  assert.notEqual(youtubeA, twitch);
+  assert.notEqual(youtubeA, otherChannel);
+  assert.equal(zbudujKluczHistorii('youtube', 'edzzi', ''), 'youtube:edzzi:unknown');
+});
 
 test('conversation usage is tracked by the complete platform-channel-user key', () => {
   const usage = {};
