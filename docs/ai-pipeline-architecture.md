@@ -52,3 +52,11 @@ Public retrieval caches and provider quota/cooldown state are process-wide by de
 ## Change rule
 
 When changing a guard, add both a positive and a negative regression case. Prefer a narrow rule tied to the specific failure mode over globally lowering thresholds. If a heuristic cannot reliably distinguish a fact from a purpose clause, rhetorical negation, or a shared proper noun, it must not silently turn that ambiguity into a supported factual claim.
+
+## Dynamiczne rozpoznawanie gry i awaria klasyfikatora
+
+Dla pytań lore z jawnym kontekstem „w grze X” pipeline najpierw wyodrębnia tytuł bez użycia LLM. Tytuł jest następnie wyszukiwany w IGDB i przechodzi lokalne dopasowanie do oryginalnego pytania. Dotyczy to również nieznanych, jednowyrazowych nazw i nie wymaga rozszerzania statycznej whitelisty. Groq pozostaje fallbackiem dla pytań bez jednoznacznego prefiksu. Brak dopasowania IGDB nie jest traktowany jako dowód — retrieval zachowuje zwykły fallback GameLore.
+
+## Bezpieczeństwo URL w ekstrakcji stron
+
+Przed przekazaniem adresów źródeł do Tavily Extract pipeline odrzuca adresy inne niż HTTP(S), hosty lokalne i zarezerwowane, literały IP, URL-e z userinfo, niestandardowe porty, parametry z typowymi sekretami oraz wejścia dłuższe niż 2048 znaków. Walidacja ogranicza oczywiste wektory SSRF, ale nie zastępuje ochrony przed DNS rebindingiem ani walidacji przekierowań po stronie zewnętrznego ekstraktora.
