@@ -79,16 +79,20 @@ async function odczytajOgraniczonyJson(response, maxBytes = MAX_PROVIDER_RESPONS
     catch (_) { return {}; }
   }
 
-  // Fallback dla własnych transportów/test doubles. Produkcyjny fetch ma stream,
-  // więc limit jest egzekwowany przed zbuforowaniem całej odpowiedzi.
+  // Własne transporty mogą udostępniać json() i text() niezależnie.
+  // Preferuj json(), tak jak robił poprzedni kontrakt fetchJson; limit sprawdzamy
+  // po serializacji. Produkcyjny fetch używa wyżej ograniczonego streamu.
+  if (typeof response.json === 'function') {
+    const data = await response.json().catch(() => ({}));
+    if (Buffer.byteLength(JSON.stringify(data), 'utf8') > maxBytes) throw new Error('provider_response_too_large');
+    return data;
+  }
   if (typeof response.text === 'function') {
     const body = await response.text();
     if (Buffer.byteLength(body, 'utf8') > maxBytes) throw new Error('provider_response_too_large');
     try { return JSON.parse(body); } catch (_) { return {}; }
   }
-  const data = await response.json().catch(() => ({}));
-  if (Buffer.byteLength(JSON.stringify(data), 'utf8') > maxBytes) throw new Error('provider_response_too_large');
-  return data;
+  return {};
 }
 
 async function fetchJson(fetchFn, url, options, timeoutMs = 30000) {

@@ -38,6 +38,23 @@ test('Tavily extraction validates resolved addresses before sending URLs', async
   assert.equal(fetchCalls, 0);
 });
 
+
+test('bounded JSON reader preserves custom transports exposing both json() and text()', async () => {
+  const result = await searchExa({
+    apiKey: 'test-key',
+    query: 'custom transport',
+    fetchFn: async () => ({
+      ok: true,
+      status: 200,
+      headers: { get: () => null },
+      json: async () => ({ results: [{ title: 'A source', url: 'https://example.com/a', text: 'A sufficiently long source body that should survive the custom transport parser.' }] }),
+      text: async () => '',
+    }),
+  });
+  assert.equal(result.status, 'ok');
+  assert.equal(result.sources.length, 1);
+});
+
 test('provider response bodies are bounded and redirects are disabled', async () => {
   let requestOptions;
   const result = await searchExa({
