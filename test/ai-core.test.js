@@ -11,6 +11,7 @@ const {
   diversifySources,
   decideEvidencePolicy,
   classifyAuthority,
+  sourceMatchesRequestContext,
 } = require('../ai/core');
 
 test('core retrieval plan preserves entity and creates intent-specific coverage', () => {
@@ -32,6 +33,33 @@ test('core evidence ranking prefers authoritative relevant evidence', () => {
   ];
   const ranked = sources.map((s,i)=>scoreSource(s,'Dlaczego Wheatley przejął kontrolę nad GLaDOS w Portal 2?',{entity:'Portal 2'}));
   assert.match(diversifySources(ranked,{maxSources:2,minIndependent:2})[0].url,/minecraft\.wiki|gamefaqs\.gamespot\.com/);
+});
+
+test('character retrieval requires the requested game context to prevent cross-game evidence mixing', () => {
+  const routing = {
+    is_lore: true,
+    entity_type: 'character',
+    game: 'Minecraft',
+    resolved_entity: { type: 'character', name: 'Alex', game: 'Minecraft' },
+  };
+
+  assert.equal(sourceMatchesRequestContext({
+    title: 'Alex - Minecraft',
+    content: 'Alex is a player character in Minecraft.',
+    url: 'https://minecraft.wiki/w/Alex',
+  }, routing), true);
+
+  assert.equal(sourceMatchesRequestContext({
+    title: 'Alex - Other Game',
+    content: 'Alex is a character in Other Game.',
+    url: 'https://example.org/alex',
+  }, routing), false);
+
+  assert.equal(sourceMatchesRequestContext({
+    title: 'Minecraft',
+    content: 'Minecraft is a sandbox game.',
+    url: 'https://minecraft.wiki/',
+  }, routing), false, 'a game-only page is not enough for a character question');
 });
 
 test('Gemini grounding snippet is not promoted to webpage evidence by core normalization', () => {
