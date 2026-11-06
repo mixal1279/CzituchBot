@@ -1,6 +1,7 @@
 'use strict';
 
 const { czyWspomnianoGre, czyPytanieOFirmie, normalizujEncje } = require('./entities');
+const { czyPytanieObliczeniowe } = require('./calculator');
 
 function normalizujZapytanieTavily(q) {
   return String(q || '')
@@ -70,6 +71,7 @@ function okreslKategorieAI(pytanie, czyPytanieOReceptureMC = () => false) {
   const graSygnal = czyWspomnianoGre(p)
     || maToken(tokeny, 'game', 'gra', 'gry', 'grze', 'gre', 'gier', 'tytul')
     || maFraze(tokeny, 'tytul gry');
+  if (czyPytanieObliczeniowe(p)) return 'calculation';
   if (czyPytanieOReceptureMC(p)) return 'minecraft_recipe';
   if (czyPytanieOFirmie(p)) return 'web_fact';
   if (maToken(tokeny, 'pogoda', 'pogody', 'pogode', 'pogodzie', 'pogodo', 'temperatur*', 'deszcz*', 'wiatr*', 'slonecz*', 'forecast')) return 'weather';

@@ -49,6 +49,7 @@ function mockTavilyResponse() {
         title: `Portal 2 result ${i + 1}`,
         url: `https://same-domain.example/page-${i + 1}`,
         content: `Portal 2 result ${i + 1} contains enough lore information to be useful for retrieval.`,
+        raw_content: `Portal 2 result ${i + 1} contains enough lore information to be useful for retrieval. `.repeat(5),
         score: 0.95,
       })),
     }),
@@ -135,6 +136,7 @@ function mockDistinctTavilyResponse(count = 6) {
         title: `Distinct source ${i + 1}`,
         url: `https://source${i + 1}.example/article`,
         content: `Distinct source ${i + 1} contains grounded retrieval details about Portal 2 and its characters.`,
+        raw_content: `Distinct source ${i + 1} contains grounded retrieval details about Portal 2 and its characters. `.repeat(5),
         score: 0.95,
       })),
     }),
@@ -215,6 +217,7 @@ test('P0-B secondary retrieval keeps a one-to-one mapping between source blocks 
     apiKey: 'test-key',
     exaKey: 'exa-test-key',
     groq: { chat: { completions: { create: async () => { throw new Error('rewrite should be skipped'); } } } },
+    lookupFn: async () => [{ address: '93.184.216.34', family: 4 }],
     fetchZTimeout: async (url) => {
       let host = '';
       try {
@@ -229,8 +232,8 @@ test('P0-B secondary retrieval keeps a one-to-one mapping between source blocks 
           status: 200,
           json: async () => ({
             results: [
-              { title: 'Secondary source A', url: 'https://secondary-a.example/portal', highlights: ['Independent Portal 2 evidence from secondary provider A.'], score: 0.9 },
-              { title: 'Secondary source B', url: 'https://secondary-b.example/portal', highlights: ['Independent Portal 2 evidence from secondary provider B.'], score: 0.88 },
+              { title: 'Secondary source A', url: 'https://secondary-a.example/portal', text: 'Independent Portal 2 evidence from secondary provider A. '.repeat(5), highlights: ['Independent Portal 2 evidence from secondary provider A.'], score: 0.9 },
+              { title: 'Secondary source B', url: 'https://secondary-b.example/portal', text: 'Independent Portal 2 evidence from secondary provider B. '.repeat(5), highlights: ['Independent Portal 2 evidence from secondary provider B.'], score: 0.88 },
             ],
           }),
           text: async () => '',

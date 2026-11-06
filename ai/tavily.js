@@ -12,8 +12,8 @@ const { createGroqCompletion, awaitWithAbortTimeout } = require('./provider-runt
 
 // Jedna lista autorytetu domen (wcześniej dwie kopie w tym pliku rozjechały się:
 // np. eurogamer tylko w jednej, docs.npmjs.com tylko w drugiej).
-const DOMENY_OFICJALNE = ['minecraft.net', 'rockstargames.com', 'thewitcher.com', 'playstation.com', 'naughtydog.com', 'bandainamcoent.com', 'larian.com', 'baldursgate3.game', 'nvidia.com', 'openai.com', 'anthropic.com', 'microsoft.com', 'apple.com', 'discord.com', 'twitch.tv', 'kick.com'];
-const DOMENY_WYSPECJALIZOWANE = ['minecraft.wiki', 'fandom.com', 'steamdb.info', 'developer.mozilla.org', 'docs.npmjs.com'];
+const DOMENY_OFICJALNE = ['minecraft.net', 'rockstargames.com', 'thewitcher.com', 'playstation.com', 'naughtydog.com', 'bandainamcoent.com', 'larian.com', 'baldursgate3.game', 'nvidia.com', 'openai.com', 'anthropic.com', 'microsoft.com', 'apple.com', 'discord.com', 'twitch.tv', 'kick.com', 'valvesoftware.com', 'steampowered.com', 'bethesda.net', 'cdprojektred.com', 'nintendo.com', 'xbox.com', 'ubisoft.com', 'ea.com', 'epicgames.com'];
+const DOMENY_WYSPECJALIZOWANE = ['minecraft.wiki', 'gamelore.fandom.com', 'theportalwiki.com', 'bg3.wiki', 'combineoverwiki.net', 'skyrim.fandom.com', 'cyberpunk.fandom.com', 'witcher.fandom.com', 'witcher-games.fandom.com', 'eldenring.fandom.com', 'isthereanydeal.com', 'steamdb.info', 'developer.mozilla.org', 'docs.npmjs.com'];
 const DOMENY_PRZEWODNIKI = ['ign.com', 'gamespot.com', 'pcgamer.com', 'gamerant.com', 'polygon.com', 'fandom.com', 'eurogamer.net', 'eurogamer.pl', 'gry-online.pl'];
 
 const TAVILY_CACHE_TTL_MS = 10 * 60 * 1000; // domyślne / pytania o świeże wiadomości
@@ -22,7 +22,7 @@ const TAVILY_PERSIST_DEBOUNCE_MS = 5000;
 const TAVILY_CACHE_MAX_ENTRIES = 300;
 const TAVILY_CACHE_MAX_BYTES = 700 * 1024; // poniżej limitu 1 MiB pojedynczego dokumentu Firestore
 const TAVILY_REWRITE_MAX_ENTRIES = 500;
-const TAVILY_CACHE_VERSION = 4;
+const TAVILY_CACHE_VERSION = 5;
 const TAVILY_REWRITE_CACHE_VERSION = 1;
 const TAVILY_QUOTA_COOLDOWN_MS = Math.max(60_000, Number(process.env.TAVILY_QUOTA_COOLDOWN_MS) || 15 * 60 * 1000);
 const TAVILY_RATE_LIMIT_COOLDOWN_MS = Math.max(1_000, Number(process.env.TAVILY_RATE_LIMIT_COOLDOWN_MS) || 60_000);
@@ -322,6 +322,15 @@ function poziomAutorytetuTavily(url, requestedDomains = []) {
   return 0;
 }
 
+function normalizujEkstraktTavily(source) {
+  const { raw_content: rawContent, ...metadata } = source || {};
+  return {
+    ...metadata,
+    snippet: sanityzujTrescZrodlaTavily(String(source?.content || source?.snippet || '').trim()),
+    content: sanityzujTrescZrodlaTavily(String(rawContent || '').trim()),
+  };
+}
+
 function dataZrodlaTavily(result) {
   const raw = result?.published_date || result?.publishedDate || result?.date || result?.updated_date || result?.updatedDate;
   const time = raw ? Date.parse(raw) : NaN;
@@ -334,7 +343,7 @@ function wykryjKonfliktyZrodelTavily(results, sourceQuestion, requestedDomains =
   const questionKeywords = slowaKluczoweTavily(sourceQuestion).filter(k => k.length >= 5);
   const askedWhen = /(?<![\p{L}\p{N}_])(?:kiedy|którym\s+roku|w\s+którym|jaka\s+data|od\s+kiedy|data\s+premiery|rok\s+wydania|wyszed\p{L}*|wydan\p{L}*)(?![\p{L}\p{N}_])/iu.test(String(sourceQuestion || ''));
   const evidence = lista.map((r, index) => {
-    const text = String(r?.content || '').replace(/\s+/g, ' ').trim();
+    const text = String(r?.raw_content || r?.content || '').replace(/\s+/g, ' ').trim();
     // Porównujemy tylko zdania dotyczące pytania. Samo słowo „nie” albo inny rok w innym
     // kontekście (alfa 2009 vs wydanie 2011) nie jest sprzecznością źródeł.
     // Gdy temat pytania jest w tytule, cała strona jest o tym temacie (zdania mogą go nie powtarzać).
@@ -469,7 +478,6 @@ function rerankujWynikiTavily(results, sourceQuestion, requestedDomains = [], op
 function ocenaZrodlaLokalnie(url, requestedDomains = []) {
   try {
     const host = new URL(url).hostname.toLowerCase().replace(/^www\./, '');
-    const requested = hostnamePasujeDoDomenyTavily(url, requestedDomains);
     const official = DOMENY_OFICJALNE
       .some(d => host === d || host.endsWith('.' + d));
     const specialized = DOMENY_WYSPECJALIZOWANE
@@ -508,6 +516,9 @@ function hostnamePasujeDoDomenyTavily(url, domains) {
 function czyWymagaSecondaryRetrieval(results, sourceQuestion = '', timeRange = null) {
   const lista = Array.isArray(results) ? results : [];
   if (lista.length === 0) return true;
+  // Tavily Search `content` is a short search excerpt. It may guide retrieval,
+  // but only raw_content from page extraction is eligible as factual evidence.
+  if (!lista.some(r => String(r?.raw_content || '').trim().length > 0)) return true;
   if (lista.length >= 2) {
     const hosts = new Set(lista.map(r => { try { return new URL(r?.url).hostname.toLowerCase().replace(/^www\./, ''); } catch (_) { return ''; } }).filter(Boolean));
     const providers = new Set(lista.map(r => String(r?.provider || 'tavily')).filter(Boolean));
@@ -539,7 +550,21 @@ function czyZablokowanyHostTavily(url) {
   catch (_) { return true; }
 }
 
-function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logger = console, onStatus = () => {}, cacheFile = './tavily_cache.json', stateStore = null, geminiKey = process.env.GEMINI_API_KEY, exaKey = process.env.EXA_API_KEY }) {
+function czyPoprawnyWpisCacheTavily(value, now = Date.now()) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const canonical = value.wynik;
+  if (!canonical || typeof canonical !== 'object' || Array.isArray(canonical)) return false;
+  if (!['ok', 'empty'].includes(canonical.status) || typeof canonical.text !== 'string' || canonical.text.length > 12000) return false;
+  if (canonical.sources !== undefined && (!Array.isArray(canonical.sources)
+    || canonical.sources.some(source => !source || typeof source !== 'object' || typeof source.url !== 'string'))) return false;
+  const createdAt = Number(value.czas);
+  const ttl = Number(value.ttl) || TAVILY_CACHE_TTL_MS;
+  return Number.isFinite(createdAt) && createdAt > 0
+    && Number.isFinite(ttl) && ttl > 0
+    && now >= createdAt && now - createdAt < ttl;
+}
+
+function createTavilySearch({ apiKey, groq, fetchZTimeout, lookupFn, normalizeQuery, logger = console, onStatus = () => {}, cacheFile = './tavily_cache.json', stateStore = null, geminiKey = process.env.GEMINI_API_KEY, exaKey = process.env.EXA_API_KEY }) {
   const cache = new Map();
   const inFlight = new Map();
   let persistQueue = Promise.resolve();
@@ -588,8 +613,8 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
       if (entries && typeof entries === 'object' && !Array.isArray(entries)) {
         for (const [key, value] of Object.entries(entries)) {
           if (typeof key !== 'string' || key.length > 2048) continue;
-          if (!value || typeof value.wynik !== 'string' || value.wynik.length > 12000) continue;
-          if (value.czas && Date.now() - value.czas < (value.ttl || TAVILY_CACHE_TTL_MS)) cache.set(key, value);
+          if (!czyPoprawnyWpisCacheTavily(value)) continue;
+          cache.set(key, value);
         }
       }
       // Merge entries created in memory during a Firestore outage; newer timestamps win.
@@ -718,13 +743,9 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
   };
   const kluczRewrite = q => String(q || '').toLowerCase().replace(/\s+/g, ' ').trim();
 
-  const ocenaZrodla = (url, requestedDomains = []) => {
+  const ocenaZrodla = url => {
     try {
       const host = new URL(url).hostname.toLowerCase().replace(/^www\./, '');
-      const requested = Array.isArray(requestedDomains) && requestedDomains.some(d => {
-        const clean = String(d || '').toLowerCase().replace(/^www\./, '');
-        return clean && (host === clean || host.endsWith(`.${clean}`));
-      });
       const official = DOMENY_OFICJALNE
         .some(d => host === d || host.endsWith(`.${d}`));
       const specialized = DOMENY_WYSPECJALIZOWANE
@@ -732,7 +753,7 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
       const guide = DOMENY_PRZEWODNIKI
         .some(d => host === d || host.endsWith(`.${d}`));
       if (official) return 'oficjalne';
-      if (specialized || requested) return 'wyspecjalizowane';
+      if (specialized) return 'wyspecjalizowane';
       if (guide) return 'guide/referencyjne';
       return 'zewnętrzne-niezweryfikowane';
     } catch (_) { return 'nieznane'; }
@@ -842,6 +863,7 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
         exaKey,
         tavilyKey: null,
         fetchFn: fetchZTimeout,
+        lookupFn,
         startIndex: 0,
         domains,
         prefer: 'gemini',
@@ -873,11 +895,13 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
             // przy kolejnych zapytaniach planu (słaby dowód). Wcześniej prawie każde pytanie
             // bez zakresu czasu szło jako `advanced`.
             search_depth: depth,
-            max_results: depth === 'advanced' ? 10 : 7,
+            max_results: depth === 'advanced' ? 3 : 7,
             // Official Search API supports chunks_per_source for basic, fast and advanced.
             chunks_per_source: 3,
             include_answer: false,
-            include_raw_content: false,
+            // Pełny Markdown pobieramy tylko w droższym, celowanym etapie advanced.
+            // Ograniczenie do 3 wyników ogranicza payload i budżet promptu.
+            include_raw_content: depth === 'advanced' ? 'markdown' : false,
             ...(domains && { include_domains: domains }),
             ...(validTimeRange && { time_range: validTimeRange }),
           }),
@@ -957,7 +981,13 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
         if (odrzuconePoScore) logger.log(`[Tavily] 📉 Odrzucono ${odrzuconePoScore} wyników o niskim score (< ${TAVILY_MIN_SCORE})`);
         if (scoreFilter.lowConfidence) logger.log('[Tavily] ⚠️ Wszystkie wyniki poniżej progu jakości — brak materiału dowodowego');
         const primaryResults = results.slice(0, 4);
-        if (czyWymagaSecondaryRetrieval(results, sourceQuestion, time_range) && remainingBudgetMs() > 0) {
+        const maEkstraktStrony = results.some(result => String(result?.raw_content || '').trim().length > 0);
+        // Basic search zwraca snippety. Nie uruchamiaj od razu dodatkowych providerów:
+        // orchestrator może wykonać zaplanowane wyszukiwanie advanced w kolejnym slocie.
+        const shouldSecondary = maEkstraktStrony
+          ? czyWymagaSecondaryRetrieval(results, sourceQuestion, validTimeRange)
+          : depth === 'advanced';
+        if (shouldSecondary && remainingBudgetMs() > 0) {
           const secondaryTimeoutMs = timeoutFromRemaining(15000);
           const secondary = await searchSecondaryProviders({
             query: sourceQuestion || searchQuery,
@@ -965,6 +995,7 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
             exaKey,
             tavilyKey: apiKey,
             fetchFn: fetchZTimeout,
+        lookupFn,
             startIndex: primaryResults.length,
             domains,
             prefer: time_range ? 'gemini' : 'exa',
@@ -974,16 +1005,16 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
             const secondaryProviders = [...new Set((secondary.sources || []).map(s => s.provider).filter(Boolean))];
             logger.log(`[Retrieval] 🔎 Tavily weak — dołączono secondary providerów: ${secondaryProviders.join(', ') || 'unknown'} (źródeł: ${secondary.sources?.length || 0})`);
             onStatus({ status: 'secondary', query: searchQuery, providers: secondaryProviders, sourceCount: secondary.sources?.length || 0 });
-            // Secondary retrieval uzupełnia Tavily zamiast go zastępować. Wcześniej
-            // słaby Tavily był całkowicie wyrzucany, przez co traciliśmy użyteczne
-            // fragmenty i validator miał mniej dowodów.
-            const secondaryResults = (secondary.sources || []).filter(source => source?.url && source?.content);
+            // Secondary retrieval może uzupełnić tylko pełne ekstrakty stron; search snippets
+            // pozostają metadanymi i nie trafiają do walidatora jako dowody.
+            const primaryEvidenceResults = primaryResults.filter(r => String(r?.raw_content || '').trim().length > 0);
+            const secondaryResults = (secondary.sources || []).filter(source => source?.url && String(source?.content || '').trim().length > 0);
             const secondaryRebased = secondaryResults.length
-              ? formatSources(secondaryResults, primaryResults.length)
+              ? formatSources(secondaryResults, primaryEvidenceResults.length)
               : '';
-            const primaryPreview = primaryResults.map((r, index) => {
-              const content = String(r.content || r.raw_content || '').trim();
-              const materialRaw = content.substring(0, 1800)
+            const primaryPreview = primaryEvidenceResults.map((r, index) => {
+              const content = String(r.raw_content || '').trim();
+              const materialRaw = content.substring(0, depth === 'advanced' ? 4200 : 1800)
                 .split('\n').map(line => line.trim()).filter(Boolean).join('\n');
               const material = sanityzujTrescZrodlaTavily(filtrujMaterialPoSlowachTavily(materialRaw, sourceQuestion));
               const host = (() => { try { return new URL(r.url).hostname; } catch (_) { return '(nieznany host)'; } })();
@@ -996,12 +1027,15 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
                 `TREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>\n${material}\n<<<END_UNTRUSTED_SOURCE_CONTENT>>>`,
               ].join('\n');
             }).join('\n---\n');
-            const mergedText = [primaryPreview, secondaryRebased].filter(Boolean).join('\n---\n');
+            const conflictReport = zbudujRaportKonfliktowTavily(
+              wykryjKonfliktyZrodelTavily([...primaryEvidenceResults, ...secondaryResults], sourceQuestion, domains),
+            );
+            const mergedText = [conflictReport, primaryPreview, secondaryRebased].filter(Boolean).join('\n---\n');
             const canonical = {
               status: 'ok',
               text: mergedText,
               secondary: true,
-              sources: [...primaryResults, ...secondaryResults].map((source, index) => ({
+              sources: [...primaryEvidenceResults.map(normalizujEkstraktTavily), ...secondaryResults].map((source, index) => ({
                 ...source,
                 sourceId: `SOURCE ${index + 1}`,
               })),
@@ -1013,13 +1047,14 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
           }
         }
         if (!results.length) { onStatus({ status: 'empty', query: searchQuery }); return { status: 'empty', text: '' }; }
-        const limit = historical ? 6000 : 5000;
-        const sourceBlocks = primaryResults.map((r, index) => {
-          const content = String(r.content || '').trim();
+        const limit = depth === 'advanced' ? 8000 : (historical ? 6000 : 5000);
+        const primaryEvidenceResults = primaryResults.filter(r => String(r?.raw_content || '').trim().length > 0);
+        const sourceBlocks = primaryEvidenceResults.map((r, index) => {
           const raw = String(r.raw_content || '').trim();
-          // content = fragmenty dobrane pod zapytanie; raw tylko awaryjnie.
-          // Lekki filtr usuwa zdania niezwiązane z pytaniem, ale nigdy nie usuwa całego źródła.
-          const materialRaw = (content || raw).substring(0, 2200)
+          const content = raw;
+          // Pełna treść z etapu advanced ma pierwszeństwo przed krótkim snippetem.
+          // Lekki filtr zachowuje dopasowane zdania oraz sąsiedni kontekst.
+          const materialRaw = (raw || content).substring(0, depth === 'advanced' ? 4200 : 2200)
             .split('\n')
             .map(line => line.trim())
             .filter(Boolean)
@@ -1037,8 +1072,12 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
           const extra = blocks.length ? 5 : 0;
           if (used + extra + block.length > limit) break;
           blocks.push(block);
-          includedSources.push(primaryResults[index]);
+          includedSources.push(primaryEvidenceResults[index]);
           used += extra + block.length;
+        }
+        if (!includedSources.length) {
+          onStatus({ status: 'empty', query: searchQuery, reason: 'snippet_only', sourceCount: 0 });
+          return { status: 'empty', text: '', sources: [], reason: 'snippet_only' };
         }
         // Only report conflicts among sources actually included in the prompt.
         // Otherwise the report can cite SOURCE IDs whose evidence blocks were cut by
@@ -1060,7 +1099,7 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
         const canonical = {
           status: 'ok',
           text,
-          sources: includedSources.map((source, index) => ({ ...source, sourceId: `SOURCE ${index + 1}` })),
+          sources: includedSources.map((source, index) => ({ ...normalizujEkstraktTavily(source), sourceId: `SOURCE ${index + 1}` })),
         };
         logger.log(`[Tavily] ✅ Zwrócono ${results.length}/${all.length} wyników źródłowych (${text.length} znaków)`);
         cache.set(key, { wynik: canonical, czas: Date.now(), ttl: ttlDlaZakresu(validTimeRange) });
@@ -1094,6 +1133,7 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
         exaKey,
         tavilyKey: ['rate_limited', 'plan_limit_exceeded', 'payg_limit_exceeded'].includes(status) ? null : apiKey,
         fetchFn: fetchZTimeout,
+        lookupFn,
         startIndex: 0,
         domains,
         prefer: 'gemini',
@@ -1117,6 +1157,7 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
 
 module.exports = {
   createTavilySearch,
+  czyPoprawnyWpisCacheTavily,
   hostnamePasujeDoDomenyTavily,
   czyZablokowanyHostTavily,
   ttlDlaZakresu,

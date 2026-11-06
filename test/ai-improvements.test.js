@@ -197,7 +197,7 @@ test('Tavily: pierwsze zapytanie jest basic, głębsze advanced, a cache rozró�
     groq: null,
     fetchZTimeout: async (url, options) => {
       bodies.push(JSON.parse(options.body));
-      return { ok: true, status: 200, text: async () => '', json: async () => ({ results: [{ title: 'Wheatley', url: 'https://theportalwiki.com/wiki/Wheatley', content: 'Wheatley przejął kontrolę nad GLaDOS po transferze rdzenia w Portal 2.', score: 0.9 }] }) };
+      return { ok: true, status: 200, text: async () => '', json: async () => ({ results: [{ title: 'Wheatley', url: 'https://theportalwiki.com/wiki/Wheatley', content: 'Wheatley przejął kontrolę nad GLaDOS po transferze rdzenia w Portal 2.', raw_content: 'Wheatley przejął kontrolę nad GLaDOS po transferze rdzenia w Portal 2. '.repeat(4), score: 0.9 }] }) };
     },
     normalizeQuery: value => String(value || '').trim(),
     logger: { log() {}, warn() {}, error() {} },
@@ -223,6 +223,7 @@ test('Tavily query rewrite failure falls back to the original query and respects
         title: 'Portal 2 soundtrack',
         url: 'https://theportalwiki.com/wiki/Portal_2_soundtrack',
         content: 'Portal 2 soundtrack release information. '.repeat(40),
+        raw_content: 'Portal 2 soundtrack release information. '.repeat(40),
         score: 0.92,
       }] }) };
     },

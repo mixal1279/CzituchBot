@@ -16,7 +16,7 @@ permissions:
 concurrency:
   group: ai-live-benchmark-current
   # A newer commit must benchmark the current code, not wait behind a stale run.
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   live-benchmark:
@@ -59,6 +59,8 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+      - name: Run offline benchmark (no API calls)
+        run: npm run benchmark:offline
       - name: Preflight Tavily
         run: node scripts/tavily-preflight.js
       - name: Preflight Groq

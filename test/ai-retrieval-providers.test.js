@@ -169,6 +169,64 @@ test('secondary provider forwards its bounded timeout to wrapped transports', as
 
 
 
+test('Tavily source metadata keeps search snippets separate from extracted page evidence', async () => {
+  const pageText = 'Minecraft page text is extracted from the original source. '.repeat(8);
+  const search = createTavilySearch({
+    apiKey: 'test-tavily-key',
+    groq: null,
+    normalizeQuery: value => value,
+    fetchZTimeout: async () => new Response(JSON.stringify({
+      results: [{
+        title: 'Minecraft reference',
+        url: 'https://minecraft.wiki/reference',
+        content: 'Short search snippet only.',
+        raw_content: pageText,
+        score: 0.95,
+      }],
+    }), { status: 200, headers: { 'content-type': 'application/json' } }),
+    logger: { log() {}, warn() {}, error() {} },
+    cacheFile: '/tmp/czituch-tavily-page-content-test.json',
+    geminiKey: '',
+    exaKey: '',
+  });
+  const result = await search('Minecraft reference', { _skipRewrite: true, returnMeta: true });
+  assert.equal(result.status, 'ok');
+  assert.equal(result.sources[0].content, pageText.trim());
+  assert.equal(result.sources[0].snippet, 'Short search snippet only.');
+  assert.doesNotMatch(result.text, /Short search snippet only/);
+});
+
+test('Tavily basic search snippets are not returned as evidence or sent to secondary providers', async () => {
+  let calls = 0;
+  const search = createTavilySearch({
+    apiKey: 'test-tavily-key',
+    exaKey: 'test-exa-key',
+    groq: null,
+    normalizeQuery: value => value,
+    fetchZTimeout: async url => {
+      calls++;
+      assert.equal(new URL(String(url)).hostname, 'api.tavily.com');
+      return new Response(JSON.stringify({
+        results: [{
+          title: 'Snippet only',
+          url: 'https://example.com/snippet',
+          content: 'A short search excerpt without extracted page text.',
+          score: 0.99,
+        }],
+      }), { status: 200, headers: { 'content-type': 'application/json' } });
+    },
+    logger: { log() {}, warn() {}, error() {} },
+    cacheFile: '/tmp/czituch-tavily-snippet-only-test.json',
+    geminiKey: '',
+  });
+  const result = await search('fact question', { _skipRewrite: true, returnMeta: true });
+  assert.equal(result.status, 'empty');
+  assert.equal(result.text, '');
+  assert.equal(result.sources.length, 0);
+  assert.equal(result.reason, 'snippet_only');
+  assert.equal(calls, 1, 'basic snippets should not trigger a paid secondary provider call');
+});
+
 test('Tavily sends chunks_per_source for basic and advanced search depths', async () => {
   for (const [depth, shouldInclude] of [['basic', true], ['advanced', true]]) {
     let requestBody = null;
@@ -299,8 +357,8 @@ test('Tavily cache separates distinct source questions with the same keywords', 
       fetchCalls++;
       return new Response(JSON.stringify({
         results: [
-          { title: 'Portal 2 release date', url: 'https://source-one.example/portal-2', content: 'Portal 2 was released in 2011.', score: 0.95 },
-          { title: 'Portal 2 release details', url: 'https://source-two.example/portal-2', content: 'Portal 2 was released in 2011.', score: 0.90 },
+          { title: 'Portal 2 release date', url: 'https://source-one.example/portal-2', content: 'Portal 2 was released in 2011.', raw_content: 'Portal 2 was released in 2011. Full source page details are included.', score: 0.95 },
+          { title: 'Portal 2 release details', url: 'https://source-two.example/portal-2', content: 'Portal 2 was released in 2011.', raw_content: 'Portal 2 was released in 2011. Full source page details are included.', score: 0.90 },
         ],
       }), { status: 200, headers: { 'content-type': 'application/json' } });
     },
@@ -460,11 +518,12 @@ test('Tavily deduplicated wait respects each caller deadline without cancelling 
   assert.equal(firstResult.status, 'empty', 'timing out a deduplicated waiter must not cancel the shared request');
 });
 
-test('Exa parser consumes highlights without requiring full page content', async () => {
+test('Exa parser keeps highlights as snippets and uses extracted page text as evidence', async () => {
   const fakeFetch = async () => new Response(JSON.stringify({
     results: [{
       title: 'Source',
       url: 'https://example.com/exa',
+      text: 'Extracted page text containing relevant facts from the original page. '.repeat(5),
       highlights: ['Relevant highlight'],
       score: 0.7,
       publishedDate: '2026-10-01T00:00:00Z',
@@ -473,7 +532,9 @@ test('Exa parser consumes highlights without requiring full page content', async
   const result = await searchExa({ apiKey: 'test', query: 'q', fetchFn: fakeFetch });
   assert.equal(result.status, 'ok');
   assert.equal(result.sources[0].score, 0.7);
-  assert.match(result.text, /Relevant highlight/);
+  assert.match(result.text, /Extracted page text/);
+  assert.equal(result.sources[0].snippet, 'Relevant highlight');
+  assert.match(result.sources[0].content, /Extracted page text/);
 });
 
 test('secondary retrieval uses the first healthy provider and falls back to the second', async () => {
@@ -482,7 +543,7 @@ test('secondary retrieval uses the first healthy provider and falls back to the 
     calls++;
     if (url.includes('generativelanguage')) return new Response(JSON.stringify({ error: { message: 'quota' } }), { status: 429 });
     return new Response(JSON.stringify({
-      results: [{ title: 'Exa', url: 'https://example.com/exa', highlights: ['ok'] }],
+      results: [{ title: 'Exa', url: 'https://example.com/exa', text: 'Extracted page content for the Exa result. '.repeat(6), highlights: ['ok'] }],
     }), { status: 200 });
   };
   const result = await searchSecondaryProviders({
@@ -529,7 +590,7 @@ test('Gemini grounded metadata falls through to Exa when no page text was extrac
           groundingSupports: [{ groundingChunkIndices: [0], segment: { startIndex: 0, endIndex: 25, text: 'A model-generated answer.' } }],
         } }],
       }), { status: 200, headers: { 'content-type': 'application/json' } });
-      return new Response(JSON.stringify({ results: [{ title: 'Exa page', url: 'https://example.com/exa', highlights: ['Verbatim page highlight.'] }] }), { status: 200, headers: { 'content-type': 'application/json' } });
+      return new Response(JSON.stringify({ results: [{ title: 'Exa page', url: 'https://example.com/exa', text: 'Full extracted page text from Exa. '.repeat(6), highlights: ['Verbatim page highlight.'] }] }), { status: 200, headers: { 'content-type': 'application/json' } });
     };
     const result = await searchSecondaryProviders({ query: 'q', geminiKey: 'gemini', exaKey: 'exa', fetchFn: fakeFetch });
     assert.equal(result.status, 'ok');
@@ -555,10 +616,28 @@ test('Gemini text-only result is never promoted to source evidence', async () =>
   assert.equal(result.answer, 'Uncited answer');
 });
 
+test('Exa highlights without extracted page text are never promoted to evidence', async () => {
+  const fakeFetch = async () => new Response(JSON.stringify({
+    results: [{
+      title: 'Snippet only',
+      url: 'https://example.com/snippet',
+      highlights: ['A search highlight is not full page evidence.'],
+      score: 0.95,
+    }],
+  }), { status: 200, headers: { 'content-type': 'application/json' } });
+  const result = await searchExa({ apiKey: 'test', query: 'q', fetchFn: fakeFetch });
+  assert.equal(result.status, 'empty');
+  assert.equal(result.sources.length, 0);
+  assert.equal(result.text, '');
+});
+
 test('secondary retrieval is skipped for a strong single evergreen source', () => {
   assert.equal(czyWymagaSecondaryRetrieval([
-    { score: 0.82, url: 'https://minecraft.wiki/a' },
+    { score: 0.82, url: 'https://minecraft.wiki/a', raw_content: 'Extracted page text. '.repeat(20) },
   ], 'Minecraft wiki article', null), false);
+  assert.equal(czyWymagaSecondaryRetrieval([
+    { score: 0.99, url: 'https://minecraft.wiki/a', content: 'short search snippet' },
+  ], 'Minecraft wiki article', null), true, 'snippet-only results require deeper retrieval');
 });
 
 test('secondary retrieval is used for weak, fresh, or fact-heavy single-source results', () => {
@@ -588,6 +667,7 @@ test('Tavily conflict report only references evidence blocks retained by the cha
     title: `Portal 2 release date source ${index + 1}`,
     url: `https://source${index + 1}.example/portal-2`,
     content: (`Portal 2 was released in ${year}. Portal 2 release details are described here. `).repeat(30),
+    raw_content: (`Portal 2 was released in ${year}. Portal 2 release details are described here. `).repeat(30),
   }));
   const search = createTavilySearch({
     apiKey: 'test-tavily-key',
@@ -624,7 +704,7 @@ test('Tavily cache snapshot is size bounded and versioned', () => {
   ]);
   const snapshot = snapshotCacheTavily(cache, 500);
   assert.ok(Buffer.byteLength(snapshot, 'utf8') <= 500);
-  assert.equal(JSON.parse(snapshot).version, 4);
+  assert.equal(JSON.parse(snapshot).version, 5);
 });
 
 test('Tavily cache entry limit evicts oldest entries first', () => {
@@ -639,7 +719,7 @@ test('secondary retrieval uses the first healthy provider and falls back to the 
     calls++;
     if (url.includes('generativelanguage')) return new Response(JSON.stringify({ error: { message: 'quota' } }), { status: 429 });
     return new Response(JSON.stringify({
-      results: [{ title: 'Exa', url: 'https://example.com/exa', highlights: ['ok'] }],
+      results: [{ title: 'Exa', url: 'https://example.com/exa', text: 'Extracted Exa page content for timeout and fallback verification. '.repeat(5), highlights: ['ok'] }],
     }), { status: 200 });
   };
   const result = await searchSecondaryProviders({
@@ -686,7 +766,7 @@ test('Gemini grounded metadata falls through to Exa when no page text was extrac
           groundingSupports: [{ groundingChunkIndices: [0], segment: { startIndex: 0, endIndex: 25, text: 'A model-generated answer.' } }],
         } }],
       }), { status: 200, headers: { 'content-type': 'application/json' } });
-      return new Response(JSON.stringify({ results: [{ title: 'Exa page', url: 'https://example.com/exa', highlights: ['Verbatim page highlight.'] }] }), { status: 200, headers: { 'content-type': 'application/json' } });
+      return new Response(JSON.stringify({ results: [{ title: 'Exa page', url: 'https://example.com/exa', text: 'Extracted Exa page content for grounded evidence. '.repeat(5), highlights: ['Verbatim page highlight.'] }] }), { status: 200, headers: { 'content-type': 'application/json' } });
     };
     const result = await searchSecondaryProviders({ query: 'q', geminiKey: 'gemini', exaKey: 'exa', fetchFn: fakeFetch });
     assert.equal(result.status, 'ok');
@@ -714,7 +794,7 @@ test('Gemini text-only result is never promoted to source evidence', async () =>
 
 test('secondary retrieval is skipped for a strong single evergreen source', () => {
   assert.equal(czyWymagaSecondaryRetrieval([
-    { score: 0.82, url: 'https://minecraft.wiki/a' },
+    { score: 0.82, url: 'https://minecraft.wiki/a', raw_content: 'Extracted Minecraft wiki page content with enough context.' },
   ], 'Minecraft wiki article', null), false);
 });
 
@@ -745,6 +825,7 @@ test('Tavily conflict report only references evidence blocks retained by the cha
     title: `Portal 2 release date source ${index + 1}`,
     url: `https://source${index + 1}.example/portal-2`,
     content: (`Portal 2 was released in ${year}. Portal 2 release details are described here. `).repeat(30),
+    raw_content: (`Portal 2 was released in ${year}. Portal 2 release details are described here. `).repeat(30),
   }));
   const search = createTavilySearch({
     apiKey: 'test-tavily-key',
@@ -781,7 +862,7 @@ test('Tavily cache snapshot is size bounded and versioned', () => {
   ]);
   const snapshot = snapshotCacheTavily(cache, 500);
   assert.ok(Buffer.byteLength(snapshot, 'utf8') <= 500);
-  assert.equal(JSON.parse(snapshot).version, 4);
+  assert.equal(JSON.parse(snapshot).version, 5);
 });
 
 test('Tavily cache entry limit evicts oldest entries first', () => {
@@ -814,7 +895,7 @@ test('Tavily quota cooldown skips Tavily and continues with secondary providers'
     if (hostname === 'api.exa.ai') {
       exaCalls++;
       return new Response(JSON.stringify({
-        results: [{ title: 'Exa evidence', url: 'https://example.com/evidence', highlights: ['Grounded evidence.'] }],
+        results: [{ title: 'Exa evidence', url: 'https://example.com/evidence', text: 'Extracted source page evidence. '.repeat(6), highlights: ['Grounded evidence.'] }],
       }), { status: 200, headers: { 'content-type': 'application/json' } });
     }
     throw new Error('Unexpected URL: ' + url);
@@ -858,7 +939,7 @@ test('Tavily serves cached evidence before applying an active quota cooldown', a
       const query = JSON.parse(options.body).query;
       if (query === 'cached query') {
         return new Response(JSON.stringify({
-          results: [{ title: 'Cached evidence', url: 'https://example.com/cached', content: 'Cached evidence text.', score: 0.95 }],
+          results: [{ title: 'Cached evidence', url: 'https://example.com/cached', content: 'Cached evidence snippet.', raw_content: 'Cached evidence text with extracted page context. '.repeat(5), score: 0.95 }],
         }), { status: 200, headers: { 'content-type': 'application/json' } });
       }
       return new Response("This request exceeds your plan's set usage limit", { status: 432 });
@@ -878,4 +959,46 @@ test('Tavily serves cached evidence before applying an active quota cooldown', a
   assert.equal(cached.status, 'ok');
   assert.equal(cached.cached, true);
   assert.equal(tavilyCalls, 2, 'a cached query must not be sent to Tavily or secondary providers during cooldown');
+});
+
+
+test('Tavily page extraction rejects local, IP-literal and credential-bearing URLs', async () => {
+  const { extractTavilyPages, czyBezpiecznyPublicznyUrl } = require('../ai/webRetrieval');
+  assert.equal(czyBezpiecznyPublicznyUrl('https://example.com/article'), true);
+  assert.equal(czyBezpiecznyPublicznyUrl(42), false);
+  assert.equal(czyBezpiecznyPublicznyUrl('https://example.com/' + 'a'.repeat(2050)), false);
+  for (const url of [
+    'file:///etc/passwd',
+    'http://localhost/admin',
+    'http://127.0.0.1/admin',
+    'http://192.168.1.10/private',
+    'http://169.254.169.254/latest/meta-data',
+    'https://user:password@example.com/private',
+    'https://example.com/private?access_token=secret',
+    'https://example.com:8443/private',
+    'https://service.internal/data',
+  ]) {
+    assert.equal(czyBezpiecznyPublicznyUrl(url), false, url);
+  }
+
+  let requestBody = null;
+  const pages = await extractTavilyPages({
+    apiKey: 'test-tavily-key',
+    urls: [
+      'https://example.com/article',
+      'http://127.0.0.1/admin',
+      'https://localhost/private',
+      'https://user:password@example.com/private',
+    ],
+    lookupFn: async () => [{ address: '93.184.216.34', family: 4 }],
+    fetchFn: async (_url, options) => {
+      requestBody = JSON.parse(options.body);
+      return new Response(JSON.stringify({ results: [] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    },
+  });
+  assert.deepEqual(requestBody.urls, ['https://example.com/article']);
+  assert.equal(pages.size, 0);
 });

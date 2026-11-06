@@ -6,6 +6,9 @@ on:
     paths:
       - 'ai/**'
       - 'test/**'
+      - 'economy/**'
+      - 'lifecycle.js'
+      - 'youtube-oauth-callback.js'
       - 'package.json'
       - 'czituch_bot.js'
       - '.github/workflows/ai-tests.yml'
@@ -13,7 +16,11 @@ on:
     paths:
       - 'ai/**'
       - 'test/**'
+      - 'economy/**'
+      - 'lifecycle.js'
+      - 'youtube-oauth-callback.js'
       - 'package.json'
+      - 'czituch_bot.js'
       - '.github/workflows/ai-tests.yml'
 
 permissions:
@@ -56,6 +63,9 @@ jobs:
           node --check ai/tavily.js
           node --check ai/webRetrieval.js
           node --check czituch_bot.js
+
+      - name: Run offline AI benchmark (no API calls)
+        run: npm run benchmark:offline
 
       - name: Prepare changed-files artifact
         shell: bash

@@ -208,16 +208,40 @@ function findAlias(text, entries, options = {}) {
 }
 
 function scoreExternalGameCandidate(query, candidateName) {
-  const normalize = value => normalizujEncje(value);
+  const normalize = value => {
+    const tokens = normalizujEncje(value).split(' ').filter(Boolean);
+    const roman = { ii: '2', iii: '3', iv: '4', v: '5', vi: '6', vii: '7', viii: '8', ix: '9' };
+    if (tokens.length) tokens[tokens.length - 1] = roman[tokens[tokens.length - 1]] || tokens[tokens.length - 1];
+    return tokens.join(' ');
+  };
   const q = normalize(query);
   const n = normalize(candidateName);
   if (!q || !n) return 0;
   if (q === n) return 1;
-  const qt = q.split(' ').filter(Boolean);
-  const nt = n.split(' ').filter(Boolean);
-  const overlap = nt.length ? nt.filter(token => qt.includes(token)).length / nt.length : 0;
-  if (n.includes(q) || q.includes(n)) return Math.max(0.82, overlap);
-  return overlap;
+  const suffix = n.startsWith(q + ' ') ? n.slice(q.length + 1) : '';
+  const editionSuffixes = new Set([
+    'ultimate edition', 'game of the year edition', 'goty edition',
+    'definitive edition', 'complete edition', 'deluxe edition',
+    'collector edition', 'collectors edition', 'enhanced edition',
+    'gold edition', 'standard edition', 'digital deluxe edition',
+  ]);
+  // Wydania handlowe tej samej gry nie są sequelami ani spin-offami.
+  if (suffix && editionSuffixes.has(suffix)) return 0.9;
+
+  const qt = q.split(' ');
+  const nt = n.split(' ');
+  const shared = nt.filter(token => qt.includes(token)).length;
+  const queryCoverage = shared / qt.length;
+  const candidateCoverage = shared / nt.length;
+
+  // Sam prefiks nazwy franczyzy nie identyfikuje konkretnej części.
+  // Wcześniej „Portal” dostawał 0.82 dla „Portal 2”, co pozwalało IGDB
+  // wybrać sequel/remake/spin-off tylko na podstawie kolejności wyników.
+  // Wymagamy wysokiego pokrycia obu nazw; nadmiarowe człony obniżają wynik.
+  if (queryCoverage >= 0.8 && candidateCoverage >= 0.8) {
+    return Math.min(queryCoverage, candidateCoverage);
+  }
+  return Math.min(queryCoverage, candidateCoverage) * 0.65;
 }
 
 // Aliasy będące zwykłymi słowami są uznawane za grę tylko z kontekstem gamingowym.
@@ -305,6 +329,19 @@ function resolveGameEntity(text) {
   return null;
 }
 
+// Rozpoznaje wyłącznie tytuł jawnie wskazany przez użytkownika jako grę.
+// Pozwala ominąć klasyfikator LLM, ale nie próbuje zgadywać tytułu z luźnego tekstu.
+function wyodrebnijJawnyTytulGry(text) {
+  const value = String(text || '').trim();
+  if (!value || value.length > 500) return null;
+  const pattern = /(?:^|[^\p{L}\p{N}_])[wW](?:[eE])?\s+(?:[tT][eE][jJ]\s+)?[gG][rR][zZ][eE]\s+(?!(?:[kK][iI][mM]|[kK][tT][oO]|[cC][oO]|[jJ][aA][kK]|[cC][zZ][yY]|[dD][lL][aA][cC][zZ][eE][gG][oO]|[cC][zZ][eE][mM][uU]|[gG][dD][zZ][iI][eE]|[kK][iI][eE][dD][yY]|[jJ][eE][sS][tT]|[bB][yY][łl]|[bB][yY][lL][aA]|[bB][yY][łl][oO])\b)(?:"([^"\n]{1,120})"|“([^”\n]{1,120})”|([\p{L}\p{N}][\p{L}\p{N}'’:&-]*(?:\s+(?:(?:[oO][fF]|[tT][hH][eE]|[aA][nN][dD]|&)\s+)?[\p{Lu}\p{N}][\p{L}\p{N}'’:&-]*){0,4}))/u;
+  const prefixPattern = /^\s*(?!(?:kim|kto|co|jak|czy|dlaczego|czemu|gdzie|kiedy|opisz|wyjaśnij|who|what|why|how|when|where|is|does)\b)(?:"([^"\n]{1,120})"|“([^”\n]{1,120})”|([\p{L}\p{N}][\p{L}\p{N}'’:&-]*(?:\s+(?:(?:of|the|and|&)\s+)?[\p{Lu}\p{N}][\p{L}\p{N}'’:&-]*){0,4}))\s*:\s*(?:kim|kto|co|jak|czy|dlaczego|czemu|gdzie|kiedy|opisz|wyjaśnij|who|what|why|how|when|where|is|does)\b/u;
+  const match = value.match(pattern) || value.match(prefixPattern);
+  const title = (match?.[1] || match?.[2] || match?.[3] || '').replace(/\s+/g, ' ').replace(/[,:;.!?]+$/u, '').trim();
+  if (!title || title.length > 120 || title.split(' ').length > 5) return null;
+  return title;
+}
+
 function externalGameCandidateMatchesQuery(query, candidateName) {
   const directScore = scoreExternalGameCandidate(query, candidateName);
   if (directScore >= 0.72) return { ok: true, score: directScore, via: 'query_title_match' };
@@ -325,6 +362,7 @@ module.exports = {
   containsExactAlias,
   czyWspomnianoGre,
   scoreExternalGameCandidate,
+  wyodrebnijJawnyTytulGry,
   externalGameCandidateMatchesQuery,
   resolveGameEntity,
   resolveCompanyEntity,

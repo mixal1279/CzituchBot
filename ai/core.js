@@ -86,14 +86,16 @@ function classifyAuthority(source = {}) {
     'minecraft.net','rockstargames.com','thewitcher.com','cdprojektred.com',
     'playstation.com','xbox.com','nintendo.com','naughtydog.com','larian.com',
     'baldursgate3.game','bandainamcoent.com','epicgames.com','ea.com',
-    'ubisoft.com','bethesda.net','starwars.com','openai.com','discord.com'
+    'ubisoft.com','bethesda.net','starwars.com','openai.com','discord.com',
+    'valvesoftware.com','steampowered.com'
   ];
   const specialized = [
-    'minecraft.wiki','gamelore.fandom.com',
+    'minecraft.wiki','gamelore.fandom.com','theportalwiki.com','bg3.wiki','combineoverwiki.net',
+    'skyrim.fandom.com','cyberpunk.fandom.com','witcher.fandom.com','witcher-games.fandom.com','eldenring.fandom.com',
     'steamdb.info','howlongtobeat.com','pcgamingwiki.com'
   ];
-  const reference = ['wikipedia.org','imdb.com','mobygames.com'];
-  const guide = ['ign.com','gamespot.com','pcgamer.com','gamerant.com','polygon.com','gry-online.pl','eurogamer.net','eurogamer.pl'];
+  const reference = ['wikipedia.org','imdb.com','mobygames.com','isthereanydeal.com'];
+  const guide = ['ign.com','gamespot.com','pcgamer.com','gamerant.com','polygon.com','gry-online.pl','eurogamer.net','eurogamer.pl','fandom.com'];
 
   const inList = list => list.some(d => host === d || host.endsWith('.' + d));
   if (inList(official)) return 'official';
@@ -192,6 +194,33 @@ function scoreSource(source, query, options = {}) {
   return { ...s, coreScore: Number(score.toFixed(4)), relevance, titleRelevance, authorityScore: authority };
 }
 
+const ROMAN_SEQUEL_MARKERS = new Set(['ii', 'iii', 'iv', 'v', 'vi', 'vii', 'viii', 'ix']);
+const SEQUEL_PREFIX_MARKERS = new Set(['part', 'episode', 'chapter']);
+
+function czyZnacznikCzesci(token) {
+  const value = String(token || '').trim().toLowerCase();
+  if (ROMAN_SEQUEL_MARKERS.has(value)) return true;
+  if (!value || value.length > 2) return false;
+  const number = Number(value);
+  return Number.isInteger(number) && number >= 0 && number <= 99;
+}
+
+function czyZrodloDotyczyInnejCzesciGry(source, gameName, routing) {
+  const entityType = routing.resolved_entity?.type || routing.entity_type;
+  if (entityType !== 'game') return false;
+  const requested = normalize(gameName);
+  if (!requested) return false;
+  const requestedLastToken = requested.split(' ').pop();
+  if (czyZnacznikCzesci(requestedLastToken)) return false;
+
+  const title = normalize(source.title);
+  if (!title.startsWith(requested + ' ')) return false;
+  const suffix = title.slice(requested.length).trim().split(' ').filter(Boolean);
+  if (!suffix.length) return false;
+  const marker = SEQUEL_PREFIX_MARKERS.has(suffix[0]) ? suffix[1] : suffix[0];
+  return czyZnacznikCzesci(marker);
+}
+
 function sourceMatchesRequestContext(source = {}, routing = {}) {
   if (!routing?.is_lore && !routing?.is_gameplay) return true;
   const resolved = routing.resolved_entity || {};
@@ -209,12 +238,24 @@ function sourceMatchesRequestContext(source = {}, routing = {}) {
   // specific character. Require the character (or one of its aliases) itself.
   const characterScoped = resolved.type === 'character' || routing.entity_type === 'character';
   const characterName = resolved.name || (characterScoped ? routing.entity : '');
+  const gameName = resolved.game || routing.game;
+  if (gameName && czyZrodloDotyczyInnejCzesciGry(source, gameName, routing)) return false;
   if (characterScoped && characterName) {
     const characterAliases = aliasesFor(CHARACTER_ALIASES, characterName);
-    return characterAliases.some(alias => containsAlias(haystack, alias));
+    const matchesCharacter = characterAliases.some(alias => containsAlias(haystack, alias));
+    if (!matchesCharacter) return false;
+
+    // Sama nazwa postaci nie identyfikuje uniwersum (np. Alex, Chris, Jack).
+    // Gdy znany jest kontekst gry, źródło musi potwierdzać jednocześnie postać
+    // i grę; inaczej retrieval może połączyć materiały z różnych tytułów.
+    if (gameName) {
+      const gameAliases = aliasesFor(GAME_ALIASES, gameName);
+      return gameAliases.some(alias => containsAlias(haystack, alias));
+    }
+    return true;
   }
 
-  const gameName = resolved.game || routing.game;
+
   if (gameName) {
     const gameAliases = aliasesFor(GAME_ALIASES, gameName);
     return gameAliases.some(alias => containsAlias(haystack, alias));
@@ -334,6 +375,7 @@ function assessEvidence(results = [], question, routing = {}) {
   });
 
   const hosts = new Set(selected.map(x => x.host).filter(Boolean));
+  const independentHosts = new Set(selected.filter(x => !czyStreszczenieModelu(x)).map(x => x.host).filter(Boolean));
   const strong = selected.filter(x => x.coreScore >= 0.55);
   const relevant = selected.filter(x => x.relevance >= 0.35 || x.titleRelevance >= 0.45);
 
@@ -343,23 +385,34 @@ function assessEvidence(results = [], question, routing = {}) {
   // strony. Mogą być trafne, ale nie są niezależnym potwierdzeniem.
   const independent = x => !czyStreszczenieModelu(x);
   const strongIndependent = strong.filter(independent);
-  const evidenceHosts = new Set([...strongIndependent, ...relevant.filter(independent)].map(x => x.host).filter(Boolean));
+  const relevantIndependent = relevant.filter(independent);
+  const evidenceHosts = new Set([...strongIndependent, ...relevantIndependent].map(x => x.host).filter(Boolean));
+  // Jeden mocny, tematycznie trafny materiał pierwotny może wystarczyć do odpowiedzi
+  // z obowiązkową walidacją. Nie udajemy wtedy niezależnego potwierdzenia z dwóch domen.
+  const singlePrimarySource = strongIndependent.some(source =>
+    source.authority === 'official'
+    && source.coreScore >= 0.62
+    && (source.relevance >= 0.35 || source.titleRelevance >= 0.45)
+  );
 
   let status = 'weak';
-  if (strongIndependent.length >= 2 && evidenceHosts.size >= 2 && relevant.length >= 2) status = 'strong';
-  else if (strongIndependent.length >= 1 && relevant.length >= 1 && evidenceHosts.size >= 2) status = 'usable';
+  if (strongIndependent.length >= 2 && evidenceHosts.size >= 2 && relevantIndependent.length >= 2) status = 'strong';
+  else if (singlePrimarySource || (strongIndependent.length >= 1 && relevantIndependent.length >= 1 && evidenceHosts.size >= 2)) status = 'usable';
 
   return {
     status,
     sources: selected,
     sourceCount: selected.length,
-    independentHosts: hosts.size,
+    independentHosts: independentHosts.size,
+    uniqueHosts: hosts.size,
     relevantHosts: evidenceHosts.size,
     modelSummarySources: selected.filter(czyStreszczenieModelu).length,
     strongSources: strong.length,
     relevantSources: relevant.length,
+    relevantIndependentSources: relevantIndependent.length,
+    singlePrimarySource,
     coverageScore: Number(Math.min(1,
-      relevant.length / (routing.is_lore || routing.is_gameplay ? 3 : 2)
+      relevantIndependent.length / (routing.is_lore || routing.is_gameplay ? 3 : 2)
     ).toFixed(3)),
   };
 }

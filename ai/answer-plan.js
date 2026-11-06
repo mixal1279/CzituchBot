@@ -81,6 +81,9 @@ function buildAnswerPlan(question, routing = {}) {
     required: true,
     reason: slot === 'clause_coverage' ? 'multiple_question_clauses' : (matched.includes(slot) ? 'question_signal' : 'intent_contract'),
   }));
+  const loreEvidenceGuidance = routing.is_lore
+    ? 'W odpowiedzi o lore bezwzględnie rozdzielaj status epistemiczny informacji. Fakt kanoniczny przedstawiaj jako kanon tylko wtedy, gdy dostępny materiał wyraźnie potwierdza go jako oficjalną treść świata gry; GameLore i inne wiki społecznościowe traktuj jako źródła wtórne, a nie automatyczny dowód kanoniczności. Interpretację oznaczaj wprost jako interpretację. Teorię fanowską nazywaj teorią fanowską i nigdy nie przedstawiaj jej jako wydarzenia kanonicznego. Informację niepotwierdzoną oznacz jako niepotwierdzoną. Jeśli materiał nie zawiera odpowiedzi, powiedz, że brakuje danych. Jeśli źródła opisują sprzeczne wersje, wskaż rozbieżność i nie wybieraj arbitralnie; preferuj źródła oficjalne tylko wtedy, gdy ich status i treść są jednoznaczne. Nie wyprowadzaj kanonu z popularności teorii ani z samego faktu, że wiki zawiera daną informację.'
+    : '';
   const responseShapeGuidance = [
     slots.has('who')
       ? 'Dla pytań „kto/kim jest” zacznij od głównej tożsamości lub definiującego statusu postaci, który źródło wyraźnie podaje (np. wampirzy pomiot, nieumarły, bóstwo); następnie podaj istotną rolę lub relację (np. towarzysz lub antagonista). Rasa, klasa i profesja są dodatkowymi atrybutami — nie mogą zastąpić definiującej tożsamości. Nie dopisuj etykiety, której źródło nie potwierdza.'
@@ -106,7 +109,7 @@ function buildAnswerPlan(question, routing = {}) {
   ].filter(Boolean).join(' ');
 
   return {
-    version: 28,
+    version: 29,
     question: q,
     intent: routing.intent || 'conversation',
     entity: routing.entity || routing.resolved_entity?.name || null,
@@ -119,8 +122,8 @@ function buildAnswerPlan(question, routing = {}) {
     causalQuestion,
     quantityMayBeVariable,
     instruction: requirements.length
-      ? 'Odpowiedź musi pokryć: ' + requirements.map(r => r.id).join(', ') + '. Każde zdanie faktograficzne ma być atomowym claimem opartym na jednym zweryfikowanym fragmencie evidence. Dla pytania „dlaczego/czemu” oddziel fakt od przyczyny: podaj przyczynę tylko wtedy, gdy konkretny evidence quote wyraźnie łączy przyczynę ze skutkiem. Nie traktuj kolejności wydarzeń jako przyczynowości. Jeśli źródło jawnie podaje motyw lub cel działania (np. próbę upokorzenia), podaj ten motyw wprost i nie zastępuj go domniemaną przyczyną z sąsiednich zdań. Nie zamieniaj celu działania na przyczynę zdarzenia. Jeśli brak takiego dowodu, powiedz wprost, że źródła nie potwierdzają przyczyny.' + (responseShapeGuidance ? ' ' + responseShapeGuidance : '')
-      : 'Odpowiedz bezpośrednio i nie dodawaj niepotwierdzonych faktów.' + (responseShapeGuidance ? ' ' + responseShapeGuidance : ''),
+      ? 'Odpowiedź musi pokryć: ' + requirements.map(r => r.id).join(', ') + '. Każde zdanie faktograficzne ma być atomowym claimem opartym na jednym zweryfikowanym fragmencie evidence. Dla pytania „dlaczego/czemu” oddziel fakt od przyczyny: podaj przyczynę tylko wtedy, gdy konkretny evidence quote wyraźnie łączy przyczynę ze skutkiem. Nie traktuj kolejności wydarzeń jako przyczynowości. Jeśli źródło jawnie podaje motyw lub cel działania (np. próbę upokorzenia), podaj ten motyw wprost i nie zastępuj go domniemaną przyczyną z sąsiednich zdań. Nie zamieniaj celu działania na przyczynę zdarzenia. Jeśli brak takiego dowodu, powiedz wprost, że źródła nie potwierdzają przyczyny.' + (responseShapeGuidance ? ' ' + responseShapeGuidance : '') + (loreEvidenceGuidance ? ' ' + loreEvidenceGuidance : '')
+      : 'Odpowiedz bezpośrednio i nie dodawaj niepotwierdzonych faktów.' + (responseShapeGuidance ? ' ' + responseShapeGuidance : '') + (loreEvidenceGuidance ? ' ' + loreEvidenceGuidance : ''),
   };
 }
 

@@ -15,7 +15,7 @@ test('secondary provider receives the remaining timeout', async () => {
   let observedSignal = false;
   const fakeFetch = async (_url, options) => {
     observedSignal = Boolean(options?.signal);
-    return new Response(JSON.stringify({ results: [{ title: 'Exa', url: 'https://example.com/a', highlights: ['evidence'] }] }), { status: 200 });
+    return new Response(JSON.stringify({ results: [{ title: 'Exa', url: 'https://example.com/a', text: 'Extracted Exa page text containing factual evidence. '.repeat(5), highlights: ['evidence'] }] }), { status: 200 });
   };
   const result = await searchSecondaryProviders({ query: 'q', exaKey: 'x', fetchFn: fakeFetch, prefer: 'exa', timeoutMs: 1234 });
   assert.equal(result.status, 'ok');
@@ -47,8 +47,8 @@ test('two weak Tavily results from one host do not count as sufficient evidence'
 
 test('strong multi-host retrieval can finish without secondary provider', () => {
   assert.equal(czyWymagaSecondaryRetrieval([
-    { score: 0.9, url: 'https://minecraft.wiki/a' },
-    { score: 0.8, url: 'https://example.org/b' },
+    { score: 0.9, url: 'https://minecraft.wiki/a', raw_content: 'Minecraft wiki extracted page content. '.repeat(8) },
+    { score: 0.8, url: 'https://example.org/b', raw_content: 'Independent extracted source page content. '.repeat(8) },
   ], 'Minecraft receptura', null), false);
 });
 
