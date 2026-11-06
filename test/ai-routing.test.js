@@ -220,3 +220,12 @@ assert.equal(classifyTopicType('Co to jest firmware?', {}), 'general');
 
 // Długi, niezaufany input nie powinien trafiać do regexów bez limitu długości.
 assert.doesNotThrow(() => okreslKategorieAI('ile godzin zajmuje '.repeat(10000) + 'gra?'));
+
+// Powtórzone „czy” i alternatywa z „albo” muszą wykrywać wybór.
+for (const question of [
+  'Czy iść, czy zostać?',
+  'Czy iść czy zostać?',
+  'Czy kupić, albo zostać?',
+]) {
+  assert.equal(okreslKategorieAI(question), 'conversation', question);
+}
