@@ -118,23 +118,37 @@ function stratifiedCases(all, requested, seed = 0) {
     if (!goldByCategory.has(key)) goldByCategory.set(key, []);
     goldByCategory.get(key).push(item);
   }
-  // Przy 10 pytaniach rezerwujemy 4 miejsca na gold facts i rotujemy ich kategorie.
+  // Każde z 10 pytań live ma własne gold facts. Najpierw bierzemy po jednym
+  // przypadku z każdej kategorii, a następny slot rotujemy między kategoriami
+  // mającymi więcej niż jeden niezależny przypadek.
   const totalGold = [...goldByCategory.values()].reduce((sum, bucket) => sum + bucket.length, 0);
-  const targetGoldCount = Math.min(totalGold, Math.max(1, Math.ceil(limit / 3)));
+  const targetGoldCount = Math.min(totalGold, limit);
   const goldCategories = [...goldByCategory.keys()];
   if (offset && goldCategories.length > 1) {
     const shift = offset % goldCategories.length;
     goldCategories.push(...goldCategories.splice(0, shift));
   }
-  for (const category of goldCategories) {
-    if (selected.length >= targetGoldCount) break;
-    const candidates = goldByCategory.get(category) || [];
-    if (!candidates.length) continue;
-    const item = candidates[offset % candidates.length];
-    if (selectedIds.has(item.id)) continue;
-    selected.push(item);
-    selectedIds.add(item.id);
-    selectedCategories.add(category);
+  let goldRound = 0;
+  while (selected.length < targetGoldCount) {
+    let added = false;
+    for (const category of goldCategories) {
+      if (selected.length >= targetGoldCount) break;
+      const candidates = goldByCategory.get(category) || [];
+      if (!candidates.length) continue;
+      const startIndex = (offset + goldRound) % candidates.length;
+      let candidate = null;
+      for (let step = 0; step < candidates.length; step++) {
+        const item = candidates[(startIndex + step) % candidates.length];
+        if (!selectedIds.has(item.id)) { candidate = item; break; }
+      }
+      if (!candidate) continue;
+      selected.push(candidate);
+      selectedIds.add(candidate.id);
+      selectedCategories.add(category);
+      added = true;
+    }
+    if (!added) break;
+    goldRound++;
   }
 
   // Najpierw zapewnij obecność każdej kategorii, dopiero potem dobieraj drugi przypadek.

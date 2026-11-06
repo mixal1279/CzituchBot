@@ -47,13 +47,13 @@ test('10-case live sample covers all nine categories and rotates independent gol
   const second = stratifiedCases(benchmark.cases, 10, 1);
   assert.equal(first.length, 10);
   assert.equal(new Set(first.map(item => item.category)).size, 9);
-  assert.equal(first.filter(item => item.expected?.factual?.independentGold === true).length, 4);
+  assert.equal(first.filter(item => item.expected?.factual?.independentGold === true).length, 10);
   assert.equal(second.length, 10);
   assert.equal(new Set(second.map(item => item.category)).size, 9);
-  assert.equal(second.filter(item => item.expected?.factual?.independentGold === true).length, 4);
-  const firstGold = new Set(first.filter(item => item.expected?.factual?.independentGold).map(item => item.category));
-  const secondGold = new Set(second.filter(item => item.expected?.factual?.independentGold).map(item => item.category));
-  assert.notDeepEqual([...firstGold].sort(), [...secondGold].sort());
+  assert.equal(second.filter(item => item.expected?.factual?.independentGold === true).length, 10);
+  const firstGoldIds = first.filter(item => item.expected?.factual?.independentGold).map(item => item.id).sort();
+  const secondGoldIds = second.filter(item => item.expected?.factual?.independentGold).map(item => item.id).sort();
+  assert.notDeepEqual(firstGoldIds, secondGoldIds);
 });
 
 test('gold dataset validation requires factual references in every benchmark category', () => {
