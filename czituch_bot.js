@@ -115,7 +115,7 @@ const { przygotujHistorieDoModelu, opakujDaneReferencyjne } = AI_POLICY;
 const { classifyAIRequest } = require('./ai/router');
 const { czyWymagaKlasyfikacjiSemantycznej, klasyfikujSemantycznie } = require('./ai/semantic-classifier');
 const { planAIRequest, responseContract, RESPONSE_PROFILES, buildRetrievalQueries, czyPotrzebujeRewrite } = require('./ai/planner');
-const { resolveGameEntity, scoreExternalGameCandidate, externalGameCandidateMatchesQuery } = require('./ai/entities');
+const { resolveGameEntity, scoreExternalGameCandidate, extractExplicitGameTitle, externalGameCandidateMatchesQuery } = require('./ai/entities');
 const { extractExplicitUserMemories, mergeMemoryRecords, buildVerifiedMemoryContext, pruneExpiredMemories } = require('./ai/memory');
 const { parseMemoryCommand, forgetMemories, describeMemories } = require('./ai/memory_manager');
 const { decomposeQuestion, isMultiPartQuestion, buildAdvancedRetrievalPlan, buildSupplementalRetrievalQuery, selectRetrievalQueries, selectRetrievalDomains, selectGameSpecificRetrievalDomains, initialRetrievalQueryLimit } = require('./ai/retrieval');
@@ -1105,7 +1105,7 @@ async function wybierzDomenyDlaPytania(pytanie, domyslnieMinecraft = false, requ
         return domeny;
       }
     } catch (err) {
-      console.warn('[IGDB] Dynamiczne rozpoznanie gry niedostępne — zachowuję wyszukiwanie GameLore:', err.message);
+      console.warn('[IGDB] Dynamiczne rozpoznanie gry niedostępne — zachowuję wyszukiwanie GameLore:', sanitizujKomunikatBledu(err?.message));
     }
   }
 
@@ -1143,24 +1143,29 @@ async function pobierzTokenIGDB() {
 
 async function znajdzGreIGDB(pytanie, requestState = null) {
   try {
-    if (requestState?.zarezerwujModel && !requestState.zarezerwujModel('igdb-classifier')) return null;
-    const classifierController = new AbortController();
-    const rewrite = await awaitWithAbortTimeout(
-      createGroqCompletion(groq, {
-        model: AI_MODELS.queryRewrite,
-        max_tokens: 60,
-        reasoning_effort: 'low',
-        temperature: 0,
-        messages: [
-          { role: 'system', content: 'Jeśli w podanym tekście pojawia się tytuł gry wideo, odpowiedz TYLKO tym tytułem po angielsku (np. "Clair Obscur Expedition 33", "Minecraft", "Fortnite"). Jeśli nie ma tytułu gry, odpowiedz dokładnie: NONE.' },
-          { role: 'user', content: pytanie }
-        ]
-      }, { signal: classifierController.signal }),
-      Math.min(2200, typeof requestState?.remainingMs === 'function' ? requestState.remainingMs() : 2200),
-      classifierController,
-      'IGDB game classifier'
-    );
-    const nazwaGry = (rewrite.choices[0].message.content || '').trim();
+    // Jawny prefiks „w grze X” jest silniejszym sygnałem niż klasyfikator LLM.
+    // W takim przypadku pytanie trafia bezpośrednio do IGDB, także przy awarii Groq.
+    let nazwaGry = extractExplicitGameTitle(pytanie);
+    if (!nazwaGry) {
+      if (requestState?.zarezerwujModel && !requestState.zarezerwujModel('igdb-classifier')) return null;
+      const classifierController = new AbortController();
+      const rewrite = await awaitWithAbortTimeout(
+        createGroqCompletion(groq, {
+          model: AI_MODELS.queryRewrite,
+          max_tokens: 60,
+          reasoning_effort: 'low',
+          temperature: 0,
+          messages: [
+            { role: 'system', content: 'Jeśli w podanym tekście pojawia się tytuł gry wideo, odpowiedz TYLKO tym tytułem po angielsku (np. "Clair Obscur Expedition 33", "Minecraft", "Fortnite"). Jeśli nie ma tytułu gry, odpowiedz dokładnie: NONE.' },
+            { role: 'user', content: pytanie }
+          ]
+        }, { signal: classifierController.signal }),
+        Math.min(2200, typeof requestState?.remainingMs === 'function' ? requestState.remainingMs() : 2200),
+        classifierController,
+        'IGDB game classifier'
+      );
+      nazwaGry = (rewrite.choices[0].message.content || '').trim();
+    }
     if (!nazwaGry || nazwaGry.toUpperCase() === 'NONE') return null;
     // Model output is untrusted input to the Apicalypse query language.
     // Remove query delimiters and bound the search term so a title cannot
@@ -1201,7 +1206,7 @@ async function znajdzGreIGDB(pytanie, requestState = null) {
     const gra = najlepszy.gra;
     return { nazwa: gra.name, gatunki: (gra.genres || []).map(g => g.name).join(', '), confidence: Math.min(0.99, Math.min(najlepszy.score, grounded.score)), resolution: `igdb_verified:${grounded.via}` };
   } catch (err) {
-    console.error('[IGDB] Błąd:', err.message);
+    console.error('[IGDB] Błąd:', sanitizujKomunikatBledu(err?.message));
     return null;
   }
 }
