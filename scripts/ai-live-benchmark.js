@@ -48,7 +48,7 @@ function validateBenchmarkDataset(data) {
   for (const item of gold) {
     const facts = item.expected.factual;
     if (!Array.isArray(facts.mustInclude) && !Array.isArray(facts.mustIncludeAny)) errors.push('gold bez wymaganych faktów: ' + item.id);
-    if (!Array.isArray(facts.independentGoldSources) || !facts.independentGoldSources.some(url => /^https:\/\/\//i.test(String(url)))) errors.push('gold bez źródła HTTPS: ' + item.id);
+    if (!Array.isArray(facts.independentGoldSources) || !facts.independentGoldSources.some(url => typeof url === 'string' && url.startsWith('https://'))) errors.push('gold bez źródła HTTPS: ' + item.id);
   }
   return {
     valid: errors.length === 0,
