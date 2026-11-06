@@ -322,6 +322,15 @@ function poziomAutorytetuTavily(url, requestedDomains = []) {
   return 0;
 }
 
+function normalizujEkstraktTavily(source) {
+  const { raw_content: rawContent, ...metadata } = source || {};
+  return {
+    ...metadata,
+    snippet: String(source?.content || source?.snippet || '').trim(),
+    content: String(rawContent || '').trim(),
+  };
+}
+
 function dataZrodlaTavily(result) {
   const raw = result?.published_date || result?.publishedDate || result?.date || result?.updated_date || result?.updatedDate;
   const time = raw ? Date.parse(raw) : NaN;
@@ -1018,7 +1027,7 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
               status: 'ok',
               text: mergedText,
               secondary: true,
-              sources: [...primaryEvidenceResults, ...secondaryResults].map((source, index) => ({
+              sources: [...primaryEvidenceResults.map(normalizujEkstraktTavily), ...secondaryResults].map((source, index) => ({
                 ...source,
                 sourceId: `SOURCE ${index + 1}`,
               })),
@@ -1082,7 +1091,7 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
         const canonical = {
           status: 'ok',
           text,
-          sources: includedSources.map((source, index) => ({ ...source, sourceId: `SOURCE ${index + 1}` })),
+          sources: includedSources.map((source, index) => ({ ...normalizujEkstraktTavily(source), sourceId: `SOURCE ${index + 1}` })),
         };
         logger.log(`[Tavily] ✅ Zwrócono ${results.length}/${all.length} wyników źródłowych (${text.length} znaków)`);
         cache.set(key, { wynik: canonical, czas: Date.now(), ttl: ttlDlaZakresu(validTimeRange) });
