@@ -1010,7 +1010,10 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
                 `TREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>\n${material}\n<<<END_UNTRUSTED_SOURCE_CONTENT>>>`,
               ].join('\n');
             }).join('\n---\n');
-            const mergedText = [primaryPreview, secondaryRebased].filter(Boolean).join('\n---\n');
+            const conflictReport = zbudujRaportKonfliktowTavily(
+              wykryjKonfliktyZrodelTavily([...primaryResults, ...secondaryResults], sourceQuestion, domains),
+            );
+            const mergedText = [conflictReport, primaryPreview, secondaryRebased].filter(Boolean).join('\n---\n');
             const canonical = {
               status: 'ok',
               text: mergedText,
