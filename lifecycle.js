@@ -106,8 +106,8 @@ function utworzLifecycle({ logger = console, closeTimeoutMs = DEFAULT_CLOSE_TIME
       });
     };
 
-    proc.once('SIGTERM', () => zakonczProces(0, 'SIGTERM'));
-    proc.once('SIGINT', () => zakonczProces(0, 'SIGINT'));
+    proc.on('SIGTERM', () => zakonczProces(0, 'SIGTERM'));
+    proc.on('SIGINT', () => zakonczProces(0, 'SIGINT'));
     proc.on('unhandledRejection', error => {
       logger.error?.('[Proces] Nieobsłużone odrzucenie Promise:', error?.stack || error);
       zakonczProces(1, 'unhandledRejection');
