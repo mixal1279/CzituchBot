@@ -57,6 +57,26 @@ test('AI queue never exceeds concurrency limit when queued tasks are handed off'
   assert.equal(kolejka.stan().oczekujace, 0);
 });
 
+test('AI queue expires stale waiters and releases their queue capacity', async () => {
+  const kolejka = utworzKolejkeAI({ maxConcurrent: 1, maxQueued: 1, maxWaitMs: 25 });
+  const bramka = new Promise(resolve => { globalThis.__queueTestRelease = resolve; });
+  const aktywne = kolejka.wykonaj(async () => bramka);
+  await new Promise(resolve => setImmediate(resolve));
+
+  await assert.rejects(
+    kolejka.wykonaj(async () => 'nie powinno się uruchomić'),
+    error => error.code === 'AI_QUEUE_TIMEOUT',
+  );
+  assert.equal(kolejka.stan().aktywne, 1);
+  assert.equal(kolejka.stan().oczekujace, 0);
+
+  globalThis.__queueTestRelease();
+  delete globalThis.__queueTestRelease;
+  await aktywne;
+  assert.equal(await kolejka.wykonaj(async () => 'ok'), 'ok');
+  assert.equal(kolejka.stan().aktywne, 0);
+});
+
 test('AI queue releases its slot after task failure and after beforeStart failure', async () => {
   const kolejka = utworzKolejkeAI({ maxConcurrent: 1, maxQueued: 1 });
   await assert.rejects(kolejka.wykonaj(async () => { throw new Error('task failure'); }), /task failure/);
@@ -73,6 +93,7 @@ test('AI queue releases its slot after task failure and after beforeStart failur
 test('AI queue validates its limits and task input', async () => {
   assert.throws(() => utworzKolejkeAI({ maxConcurrent: 0 }), RangeError);
   assert.throws(() => utworzKolejkeAI({ maxQueued: -1 }), RangeError);
+  assert.throws(() => utworzKolejkeAI({ maxWaitMs: 0 }), RangeError);
   const kolejka = utworzKolejkeAI();
   await assert.rejects(kolejka.wykonaj(null), TypeError);
 });
