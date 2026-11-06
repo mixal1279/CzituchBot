@@ -194,16 +194,31 @@ function scoreSource(source, query, options = {}) {
   return { ...s, coreScore: Number(score.toFixed(4)), relevance, titleRelevance, authorityScore: authority };
 }
 
-const GAME_SEQUEL_SUFFIX_RE = /^(?:(?:part|episode|chapter)\s+)?(?:\d{1,2}|ii|iii|iv|v|vi|vii|viii|ix)\b/;
+const ROMAN_SEQUEL_MARKERS = new Set(['ii', 'iii', 'iv', 'v', 'vi', 'vii', 'viii', 'ix']);
+const SEQUEL_PREFIX_MARKERS = new Set(['part', 'episode', 'chapter']);
+
+function czyZnacznikCzesci(token) {
+  const value = String(token || '').trim().toLowerCase();
+  if (ROMAN_SEQUEL_MARKERS.has(value)) return true;
+  if (!value || value.length > 2) return false;
+  const number = Number(value);
+  return Number.isInteger(number) && number >= 0 && number <= 99;
+}
 
 function czyZrodloDotyczyInnejCzesciGry(source, gameName, routing) {
   const entityType = routing.resolved_entity?.type || routing.entity_type;
   if (entityType !== 'game') return false;
   const requested = normalize(gameName);
-  if (!requested || /(?:^|\s)(?:\d{1,2}|ii|iii|iv|v|vi|vii|viii|ix)(?:\s|$)/.test(requested)) return false;
+  if (!requested) return false;
+  const requestedLastToken = requested.split(' ').pop();
+  if (czyZnacznikCzesci(requestedLastToken)) return false;
+
   const title = normalize(source.title);
   if (!title.startsWith(requested + ' ')) return false;
-  return GAME_SEQUEL_SUFFIX_RE.test(title.slice(requested.length).trim());
+  const suffix = title.slice(requested.length).trim().split(' ').filter(Boolean);
+  if (!suffix.length) return false;
+  const marker = SEQUEL_PREFIX_MARKERS.has(suffix[0]) ? suffix[1] : suffix[0];
+  return czyZnacznikCzesci(marker);
 }
 
 function sourceMatchesRequestContext(source = {}, routing = {}) {
