@@ -20,12 +20,24 @@ test('curated benchmark contains unique questions and balanced categories with i
   assert.ok(Object.values(validation.categories).every(count => count >= 4));
 });
 
-test('benchmark validation rejects duplicate prompts, weak category coverage and unsupported gold facts', () => {
-  const benchmark = JSON.parse(fs.readFileSync(path.join(__dirname, 'ai-benchmark.json'), 'utf8'));
-  benchmark.cases[1].question = benchmark.cases[0].question;
-  const validation = validateBenchmarkDataset(benchmark);
-  assert.equal(validation.valid, false);
-  assert.ok(validation.errors.some(error => error.includes('powtórzone pytanie')));
+test('benchmark validation rejects duplicate prompts, missing categories and unsupported gold facts', () => {
+  const source = JSON.parse(fs.readFileSync(path.join(__dirname, 'ai-benchmark.json'), 'utf8'));
+  const duplicate = JSON.parse(JSON.stringify(source));
+  duplicate.cases[1].question = duplicate.cases[0].question;
+  const duplicateValidation = validateBenchmarkDataset(duplicate);
+  assert.equal(duplicateValidation.valid, false);
+  assert.ok(duplicateValidation.errors.some(error => error.includes('powtórzone pytanie')));
+
+  const missingCategory = JSON.parse(JSON.stringify(source));
+  missingCategory.cases = missingCategory.cases.filter(item => item.category !== 'relationship');
+  const categoryValidation = validateBenchmarkDataset(missingCategory);
+  assert.ok(categoryValidation.errors.some(error => error.includes('brak wymaganej kategorii')));
+
+  const missingGoldSource = JSON.parse(JSON.stringify(source));
+  const gold = missingGoldSource.cases.find(item => item.expected?.factual?.independentGold === true);
+  delete gold.expected.factual.independentGoldSources;
+  const sourceValidation = validateBenchmarkDataset(missingGoldSource);
+  assert.ok(sourceValidation.errors.some(error => error.includes('gold bez źródła HTTPS')));
 });
 
 test('benchmark question normalization handles Polish diacritics and punctuation', () => {
