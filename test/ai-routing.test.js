@@ -102,6 +102,7 @@ for (const question of [
   'Kim jest Lilith w Diablo IV?',
   'Jak pokonać bossa w Diablo 4?',
   'Historia serii Diablo',
+  'Kim jest Ezio w Assassin’s Creed?',
 ]) {
   const routing = classifyAIRequest(question, okreslKategorieAI);
   assert.equal(routing.needs_web, true, question);
