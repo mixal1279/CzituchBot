@@ -990,6 +990,7 @@ test('Tavily page extraction rejects local, IP-literal and credential-bearing UR
       'https://localhost/private',
       'https://user:password@example.com/private',
     ],
+    lookupFn: async () => [{ address: '93.184.216.34', family: 4 }],
     fetchFn: async (_url, options) => {
       requestBody = JSON.parse(options.body);
       return new Response(JSON.stringify({ results: [] }), {

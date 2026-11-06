@@ -1,7 +1,8 @@
 'use strict';
 
 const { AI_MODELS } = require('./modelConfig');
-const { isIP } = require('node:net');
+const { isIP, BlockList } = require('node:net');
+const { lookup: lookupDns } = require('node:dns/promises');
 const { sanitizeUntrustedText } = require('./untrustedText');
 
 function cleanText(value, max = 5000) {
@@ -50,15 +51,54 @@ function safeHost(url) {
   try { return new URL(url).hostname; } catch (_) { return '(nieznany host)'; }
 }
 
+const MAX_PROVIDER_RESPONSE_BYTES = 512 * 1024;
+
+async function odczytajOgraniczonyJson(response, maxBytes = MAX_PROVIDER_RESPONSE_BYTES) {
+  const declaredLength = Number(response.headers?.get?.('content-length'));
+  if (Number.isFinite(declaredLength) && declaredLength > maxBytes) throw new Error('provider_response_too_large');
+
+  if (response.body && typeof response.body.getReader === 'function') {
+    const reader = response.body.getReader();
+    const chunks = [];
+    let total = 0;
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        total += value?.byteLength || 0;
+        if (total > maxBytes) {
+          await reader.cancel().catch(() => {});
+          throw new Error('provider_response_too_large');
+        }
+        chunks.push(Buffer.from(value));
+      }
+    } finally {
+      reader.releaseLock?.();
+    }
+    try { return JSON.parse(Buffer.concat(chunks, total).toString('utf8')); }
+    catch (_) { return {}; }
+  }
+
+  // Fallback dla własnych transportów/test doubles. Produkcyjny fetch ma stream,
+  // więc limit jest egzekwowany przed zbuforowaniem całej odpowiedzi.
+  if (typeof response.text === 'function') {
+    const body = await response.text();
+    if (Buffer.byteLength(body, 'utf8') > maxBytes) throw new Error('provider_response_too_large');
+    try { return JSON.parse(body); } catch (_) { return {}; }
+  }
+  const data = await response.json().catch(() => ({}));
+  if (Buffer.byteLength(JSON.stringify(data), 'utf8') > maxBytes) throw new Error('provider_response_too_large');
+  return data;
+}
+
 async function fetchJson(fetchFn, url, options, timeoutMs = 30000) {
   const boundedTimeoutMs = normalizeTimeoutMs(timeoutMs, 30000, 30000);
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), boundedTimeoutMs);
   try {
-    // Forward the timeout to wrapped transports such as fetchZTimeout as well;
-    // otherwise their own default timer can override this shorter budget.
-    const response = await fetchFn(url, { ...options, signal: controller.signal }, boundedTimeoutMs);
-    const data = await response.json().catch(() => ({}));
+    // Stałe endpointy providerów nie powinny przekierowywać żądań na inne hosty.
+    const response = await fetchFn(url, { ...options, redirect: 'error', signal: controller.signal }, boundedTimeoutMs);
+    const data = await odczytajOgraniczonyJson(response);
     if (!response.ok) throw new Error(data?.error?.message || data?.error || `HTTP ${response.status}`);
     return data;
   } finally {
@@ -169,6 +209,64 @@ async function searchExa({ apiKey, query, fetchFn = fetch, startIndex = 0, domai
 // Opcjonalnie (AI_GEMINI_EXTRACT=1): Gemini służy tylko do znalezienia stron, a ich treść pobiera
 // Tavily Extract. Dzięki temu walidator porównuje cytat z prawdziwym tekstem strony, a nie z
 // parafrazą modelu. Odpowiedź API czytamy defensywnie (kształt nieweryfikowany na żywym API).
+const BLOKOWANE_ADRESY = new BlockList();
+for (const [address, prefix] of [
+  ['0.0.0.0', 8], ['10.0.0.0', 8], ['100.64.0.0', 10], ['127.0.0.0', 8],
+  ['169.254.0.0', 16], ['172.16.0.0', 12], ['192.0.0.0', 24], ['192.0.2.0', 24],
+  ['192.88.99.0', 24], ['192.168.0.0', 16], ['198.18.0.0', 15], ['198.51.100.0', 24],
+  ['203.0.113.0', 24], ['224.0.0.0', 4], ['240.0.0.0', 4],
+]) BLOKOWANE_ADRESY.addSubnet(address, prefix, 'ipv4');
+for (const [address, prefix] of [
+  ['::', 96], ['::1', 128], ['64:ff9b::', 96], ['64:ff9b:1::', 48],
+  ['100::', 64], ['2001::', 23], ['2001:db8::', 32], ['2002::', 16],
+  ['fc00::', 7], ['fe80::', 10], ['ff00::', 8],
+]) BLOKOWANE_ADRESY.addSubnet(address, prefix, 'ipv6');
+const GLOBALNY_ZAKRES_IPV6 = new BlockList();
+GLOBALNY_ZAKRES_IPV6.addSubnet('2000::', 3, 'ipv6');
+
+function ipv4ZAdresuMapowanegoIPv6(address) {
+  const value = String(address || '').toLowerCase().split('%')[0];
+  if (!value.startsWith('::ffff:')) return null;
+  const tail = value.slice(7);
+  if (isIP(tail) === 4) return tail;
+  const parts = tail.split(':');
+  if (parts.length !== 2 || parts.some(part => !/^[0-9a-f]{1,4}$/u.test(part))) return null;
+  const high = Number.parseInt(parts[0], 16);
+  const low = Number.parseInt(parts[1], 16);
+  return [high >> 8, high & 255, low >> 8, low & 255].join('.');
+}
+
+function czyPublicznyAdresIP(address) {
+  const normalized = String(address || '').split('%')[0];
+  const family = isIP(normalized);
+  if (family === 4) return !BLOKOWANE_ADRESY.check(normalized, 'ipv4');
+  if (family === 6) {
+    const mapped = ipv4ZAdresuMapowanegoIPv6(normalized);
+    if (mapped) return !BLOKOWANE_ADRESY.check(mapped, 'ipv4');
+    return GLOBALNY_ZAKRES_IPV6.check(normalized, 'ipv6') && !BLOKOWANE_ADRESY.check(normalized, 'ipv6');
+  }
+  return false;
+}
+
+async function czyHostMaPubliczneDNS(host, lookupFn = lookupDns, timeoutMs = 1500) {
+  let timer;
+  try {
+    const records = await Promise.race([
+      Promise.resolve().then(() => lookupFn(host, { all: true, verbatim: true })),
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error('dns_lookup_timeout')), timeoutMs);
+        timer.unref?.();
+      }),
+    ]);
+    const addresses = Array.isArray(records) ? records : (records ? [records] : []);
+    return addresses.length > 0 && addresses.every(record => czyPublicznyAdresIP(record?.address));
+  } catch (_) {
+    return false;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 function czyBezpiecznyPublicznyUrl(value) {
   if (typeof value !== 'string' || value.length > 2048) return false;
   let parsed;
@@ -188,11 +286,17 @@ function czyBezpiecznyPublicznyUrl(value) {
   return true;
 }
 
-async function extractTavilyPages({ apiKey, urls, fetchFn = fetch, timeoutMs = 12000 }) {
-  // URL-e pochodzą z wyników zewnętrznych providerów. Nie przekazuj do ekstraktora
-  // adresów lokalnych, IP-literal, URL-i z danymi logowania ani niestandardowych portów.
-  const wanted = [...new Set((urls || []).filter(czyBezpiecznyPublicznyUrl).map(u => String(u).trim()))].slice(0, 3);
-  if (!apiKey || !wanted.length) return new Map();
+async function extractTavilyPages({ apiKey, urls, fetchFn = fetch, lookupFn = lookupDns, timeoutMs = 12000 }) {
+  // Sprawdź składnię URL i wszystkie odpowiedzi DNS. W razie błędu lookup
+  // lub choć jednego adresu prywatnego odrzuć cały URL (fail closed).
+  const candidates = [...new Set((urls || []).filter(czyBezpiecznyPublicznyUrl).map(u => String(u).trim()))].slice(0, 3);
+  if (!apiKey || !candidates.length) return new Map();
+  const checked = await Promise.all(candidates.map(async url => {
+    const host = new URL(url).hostname;
+    return await czyHostMaPubliczneDNS(host, lookupFn) ? url : null;
+  }));
+  const wanted = checked.filter(Boolean);
+  if (!wanted.length) return new Map();
   try {
     const data = await fetchJson(fetchFn, 'https://api.tavily.com/extract', {
       method: 'POST',
@@ -203,7 +307,7 @@ async function extractTavilyPages({ apiKey, urls, fetchFn = fetch, timeoutMs = 1
     for (const item of Array.isArray(data?.results) ? data.results : []) {
       const url = String(item?.url || '').trim();
       const text = String(item?.raw_content || item?.content || '').trim();
-      if (url && text.length >= 80) out.set(url, text);
+      if (url && text.length >= 80) out.set(url, text.slice(0, 12000));
     }
     return out;
   } catch (_) {
@@ -256,4 +360,4 @@ async function searchSecondaryProviders({ query, geminiKey, exaKey, tavilyKey = 
   return { status: 'empty', text: '', sources: [], error: errors.join('; ') };
 }
 
-module.exports = { normalizeSource, formatSources, searchGeminiWeb, searchExa, searchSecondaryProviders, extractTavilyPages, czyBezpiecznyPublicznyUrl };
+module.exports = { normalizeSource, formatSources, searchGeminiWeb, searchExa, searchSecondaryProviders, extractTavilyPages, czyBezpiecznyPublicznyUrl, czyPublicznyAdresIP, czyHostMaPubliczneDNS };
