@@ -16,6 +16,7 @@ function oczekujNaKodOAuth({
   host = 'localhost',
   timeoutMs = 5 * 60 * 1000,
   onListen,
+  onServer,
 } = {}) {
   if (typeof state !== 'string' || state.length < 32) {
     return Promise.reject(new TypeError('Nieprawidłowy stan OAuth.'));
@@ -92,6 +93,7 @@ function oczekujNaKodOAuth({
     }
 
     server.on('error', error => zakoncz(error));
+    if (typeof onServer === 'function') onServer(server);
     server.listen(port, host, () => {
       if (typeof onListen === 'function') onListen(server.address());
     });
