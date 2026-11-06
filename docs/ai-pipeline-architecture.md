@@ -26,6 +26,29 @@ Keep these dimensions separate in tests and benchmark reports:
 
 Offline regression tests are the fast gate for deterministic behavior. The live benchmark is a separate, manually triggered integration check because it consumes provider/search quota and can fail for reasons unrelated to factual correctness. A passing offline suite is necessary but does not, by itself, establish live provider health or zero hallucination risk.
 
+
+## Conversation scope, concurrency, and diagnostics
+
+Conversation history and verified user memory use a stable scope key:
+
+`platform:channel:user-id`
+
+- Twitch uses the IRC `user-id` tag, falling back to the normalized login when the tag is absent.
+- YouTube uses `authorDetails.channelId`, falling back to the display name only when the API omits the stable ID.
+- Kick uses the sender ID when supplied by the event, falling back to the sender name.
+- Platform and channel components are normalized to lowercase. Platform user IDs retain their original case because provider IDs may be case-sensitive.
+- The in-memory conversation history is bounded to 500 scopes and evicted by least-recent use. The LRU timestamp must use the same complete scope key as the history map.
+
+The AI request queue is process-wide because it protects shared provider capacity: at most 3 active jobs and 20 queued jobs. A completed job transfers its slot directly to the next waiter; the active counter is not decremented during handoff. A full queue rejects the new request with `AI_QUEUE_FULL`.
+
+Provider diagnostics use an allowlist of safe error fields. Request headers, request bodies, credentials, raw generated payloads, and provider response bodies are not serialized into logs. Error messages are redacted before logging.
+
+## Platform coverage
+
+The current repository has AI chat entry points for Twitch, YouTube, and Kick. Discord references in this codebase are outbound alert/social integrations; the package does not include a Discord gateway client or an AI message-ingress handler. Discord AI chat must therefore be treated as an unimplemented platform, not as a tested ingress path.
+
+Public retrieval caches and provider quota/cooldown state are process-wide by design. They contain shared provider/public-data state, not per-user conversation history. Conversation history and verified memory must never use a nick-only key when a stable platform identity is available.
+
 ## Change rule
 
 When changing a guard, add both a positive and a negative regression case. Prefer a narrow rule tied to the specific failure mode over globally lowering thresholds. If a heuristic cannot reliably distinguish a fact from a purpose clause, rhetorical negation, or a shared proper noun, it must not silently turn that ambiguity into a supported factual claim.
