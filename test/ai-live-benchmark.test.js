@@ -38,7 +38,7 @@ test('benchmark validation rejects duplicate prompts, missing categories and uns
   const gold = missingGoldSource.cases.find(item => item.expected?.factual?.independentGold === true);
   delete gold.expected.factual.independentGoldSources;
   const sourceValidation = validateBenchmarkDataset(missingGoldSource);
-  assert.ok(sourceValidation.errors.some(error => error.includes('gold bez źródła HTTPS')));
+  assert.ok(sourceValidation.errors.some(error => error.includes('gold bez poprawnych źródeł HTTPS')));
 });
 
 test('10-case live sample covers all nine categories and rotates independent gold categories', () => {

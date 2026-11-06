@@ -469,7 +469,6 @@ function rerankujWynikiTavily(results, sourceQuestion, requestedDomains = [], op
 function ocenaZrodlaLokalnie(url, requestedDomains = []) {
   try {
     const host = new URL(url).hostname.toLowerCase().replace(/^www\./, '');
-    const requested = hostnamePasujeDoDomenyTavily(url, requestedDomains);
     const official = DOMENY_OFICJALNE
       .some(d => host === d || host.endsWith('.' + d));
     const specialized = DOMENY_WYSPECJALIZOWANE
