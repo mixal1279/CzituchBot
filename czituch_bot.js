@@ -113,6 +113,7 @@ const { czyPytanieOLore, czyMaKontekstGry, dodajGameLoreDomenę, wytnijAtrybucje
 const { czyPytanieOGameplay, dodajGameFAQsDomenę, wytnijAtrybucjeGameFAQs, GAMEFAQS_DOMAIN } = require('./ai/gameplay');
 const { przygotujHistorieDoModelu, opakujDaneReferencyjne } = AI_POLICY;
 const { classifyAIRequest } = require('./ai/router');
+const { obliczPytanie, formatujWynik } = require('./ai/calculator');
 const { czyWymagaKlasyfikacjiSemantycznej, klasyfikujSemantycznie } = require('./ai/semantic-classifier');
 const { planAIRequest, responseContract, RESPONSE_PROFILES, buildRetrievalQueries, czyPotrzebujeRewrite } = require('./ai/planner');
 const { resolveGameEntity, scoreExternalGameCandidate, wyodrebnijJawnyTytulGry, externalGameCandidateMatchesQuery } = require('./ai/entities');
@@ -2944,7 +2945,6 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
   }
   pytanie = questionInput.value;
   // Nie wykonuj odczytu Firestore dla wejścia odrzuconego przez walidator.
-  const verifiedMemoryPromise = loadMemory(verifiedMemoryUserId);
   const requestId = createRequestId(crypto.randomUUID?.bind(crypto));
   // Jeden kontekst kontroluje czas i wszystkie limity całego pipeline'u AI.
   // Nie utrzymujemy osobnych budżetów w generatorze, retrievalu i validatorze.
@@ -3084,6 +3084,21 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
   max_tokens = Math.max(Number(max_tokens) || 200, responseCfg.maxTokens);
   systemPrompt = `${systemPrompt}\n\n${responseContract(aiPlan.responseProfile)}\n\n[ANSWER PLAN]\n${answerPlan.instruction}\n\n[EVIDENCE-FIRST GENERATION]\nDla każdej informacji faktograficznej najpierw wybierz konkretny EVIDENCE CANDIDATE, a dopiero potem napisz zdanie. Jedno zdanie ma zawierać tylko jeden materialny claim albo bardzo ścisłe parafrazowanie jednego fragmentu dowodu. Nie łącz kilku wydarzeń w jeden claim, jeśli wymagają różnych dowodów. Nie wyciągaj przyczynowości z samej kolejności wydarzeń: użyj relacji przyczynowej tylko wtedy, gdy pojedynczy dowód wyraźnie ją stwierdza. ${answerPlan.causalQuestion ? 'To pytanie wymaga wyjaśnienia przyczyny: jeśli źródło jawnie opisuje skutek (np. „putting him in control” lub „giving him control”), nazwij tę relację wprost („co dało mu kontrolę”); samo „po”, „następnie” lub „w trakcie” nie wyjaśnia przyczyny. Jeśli źródło podaje tylko następstwo, nie wymyślaj przyczyny.' : ''} Zachowuj kategorię rzeczy podczas tłumaczenia: „cart/carriage/wagon” to „wóz/wózek”, a nie „kosz/basket”; jeśli nie znasz polskiego odpowiednika, użyj neutralnego opisu zamiast zmieniać rodzaj obiektu. Przy pytaniu „kim jest X?” podaj najbardziej konkretną, źródłowo potwierdzoną tożsamość/rolę i wyróżniającą cechę; nie kończ na ogólnym „towarzysz” lub „postać”, jeśli materiał podaje dokładniejszy opis. Nie wymyślaj cytatów, source_id, nazw własnych, dat, liczb ani szczegółów. Jeśli EVIDENCE CANDIDATES nie potwierdzają części pytania, pomiń tę część albo jasno powiedz, że brak wystarczających danych. Przed wysłaniem odpowiedzi sprawdź mentalnie każde zdanie: „który dokładnie candidate je potwierdza?”. Nigdy nie wypisuj etykiet technicznych „EVIDENCE CANDIDATE” ani numerów candidate w odpowiedzi dla użytkownika. Jeśli pytanie zaczyna się od „W grze <tytuł>:”, potraktuj tytuł jako kontekst retrieval, nie powtarzaj go w claimach bez dowodu z treści źródła.`;
   const kategoriaAI = routingAI.intent;
+  // Obliczenia wykonujemy lokalnie: nie uruchamiamy retrieval, pamięci ani LLM.
+  // Błędne wyrażenie kończy się odmową zamiast przekazania go do modelu.
+  if (kategoriaAI === 'calculation') {
+    const wynikObliczenia = obliczPytanie(pytanie);
+    if (!wynikObliczenia.ok) {
+      console.warn(`[AI][${requestId}] odrzucono wyrażenie arytmetyczne: ${wynikObliczenia.reason}`);
+      await wyslijFn(`@${nick} Nie mogę bezpiecznie obliczyć tego wyrażenia. Użyj liczb, operatorów +, -, *, / oraz nawiasów.`);
+      zalogujPodsumowanieAI('rejected');
+      return;
+    }
+    await wyslijFn(`@${nick} ${wynikObliczenia.expression} = ${formatujWynik(wynikObliczenia.value)}`);
+    zalogujPodsumowanieAI('accepted');
+    return;
+  }
+  const verifiedMemoryPromise = loadMemory(verifiedMemoryUserId);
   console.log(`[AI][${requestId}] routing=${JSON.stringify({ intent: routingAI.intent, entity: routingAI.entity, game: routingAI.game, entity_type: routingAI.entity_type, game_type: routingAI.game_type, needs_web: routingAI.needs_web, freshness: routingAI.freshness, source_type: routingAI.source_type, response_profile: aiPlan.responseProfile, topic_type: routingAI.topic_type, question_type: routingAI.question_type, semantic_classification: routingAI.semantic_classification || 'deterministic', confidence: routingAI.confidence })}`);
   console.log(`[AI] kategoria=${kategoriaAI} nick=${nick}`);
   const jestRecepturaMC = czyPytanieOReceptureMC(pytanie);
