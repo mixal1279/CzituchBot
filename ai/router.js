@@ -81,7 +81,7 @@ function classifyQuestionType(question, routing = {}) {
   if (/(?:porównaj|porownaj|czym się różni|czym sie rozni|czym różni się|czym rozni sie|różni\p{L}*|rozni\p{L}*|różnica|roznica|vs\\.?|versus|lepszy|lepsza|lepsze)/iu.test(p)) return 'comparison';
   if (/(?:ile kosztuje|jaka cena|cena|kosztuje|za ile|price|how much)/iu.test(p)) return 'price';
   if (/(?:czy warto|polecasz|opłaca się|oplaca sie|warto kupić|warto kupic|co sądzisz|co sadzisz|co myślisz|co myslisz|jak oceniasz|opinia)/iu.test(p)) return 'recommendation';
-  if (/(?:jak naprawić|jak naprawic|nie działa|nie dziala|nie uruchamia|błąd|blad|error|problem|crash|wysypuje się|wysypuje sie)/iu.test(p)) return 'troubleshooting';
+  if (/(?:jak naprawić|jak naprawic|nie działa|nie dziala|nie uruchamia|restart\p{L}*|uruchamia się ponownie|błąd|blad|error|problem|crash|wysypuje się|wysypuje sie)/iu.test(p)) return 'troubleshooting';
   if (/(?:jak zrobić|jak zrobic|jak skonfigurować|jak skonfigurowac|jak podłączyć|jak podlaczyc|jak użyć|jak uzyc|jak zdobyć|jak zdobyc|jak zainstalować|jak zainstalowac|how to)/iu.test(p)) return 'how_to';
   if (/(?:dzisiaj|dziś|dzis|teraz|aktualnie|obecnie|najnowsz|ostatni[eao]? wiadomości|news|co nowego)/iu.test(p) || routing.freshness === 'live' || routing.freshness === 'recent') return 'current_info';
   if (/(?:historia|history|kiedy powstał|kiedy powstal|kiedy założono|kiedy zalozono|pochodzenie|geneza)/iu.test(p)) return 'history';
