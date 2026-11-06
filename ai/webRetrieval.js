@@ -182,6 +182,7 @@ function isSafePublicHttpUrl(value) {
 
   const host = parsed.hostname.toLowerCase().replace(/\.$/, '').replace(/^\[|\]$/g, '');
   if (!host || isIP(host) !== 0 || !host.includes('.')) return false;
+  if ([...parsed.searchParams.keys()].some(key => /^(?:api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|token|password|passwd|authorization|auth|session|signature|sig|code)$/i.test(key))) return false;
   if (/(?:^|\.)(?:localhost|local|internal|lan|home|home\.arpa|test|invalid|example|onion)$/i.test(host)) return false;
   return true;
 }
