@@ -30,7 +30,8 @@ function czyMaKontekstGry(pytanie) {
   return GAME_CONTEXT_RE.test(p)
     || GAME_TITLE_RE.test(p)
     || GAME_TITLE_AFTER_PREPOSITION_RE.test(p)
-    || GAME_TITLE_NEAR_LORE_RE.test(p)
+    || GAME_TITLE_AFTER_LORE_RE.test(p)
+    || GAME_TITLE_BEFORE_LORE_RE.test(p)
     || Boolean(resolved && resolved.resolution !== 'deterministic_ambiguous');
 }
 
