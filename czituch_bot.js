@@ -9306,6 +9306,10 @@ const startBot = async () => {
 
   // Przenieś cache i stan przed uruchomieniem platform, aby pierwsze wiadomości nie użyły pustych map.
   await ensurePersistentCachesReady();
+  if (lifecycle.czyZamykanie()) {
+    console.warn('[Lifecycle] Przerwano start platform, ponieważ proces jest już zamykany.');
+    return;
+  }
 
   // ---- Uruchom platformy równolegle ----
   // Kick: obsługa kanałów EdzziLive i ArbuzikLive została wyłączona.
