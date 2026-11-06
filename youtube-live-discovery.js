@@ -9,8 +9,8 @@ function parseAssignedJson(html, variableName) {
   const escapedName = variableName === 'ytInitialData' ? 'ytInitialData' : 'ytInitialPlayerResponse';
   const patterns = [
     new RegExp('(?:\\b(?:var|let|const)\\s+)?(?:window\\s*\\.\\s*)?' + escapedName + '\\s*=\\s*', 'g'),
-    new RegExp('window\\s*\\[\\s*["\\']' + escapedName + '["\\']\\s*\\]\\s*=\\s*', 'g'),
-    new RegExp('["\\']' + escapedName + '["\\']\\s*:\\s*', 'g'),
+    new RegExp("window\\s*\\[\\s*['\\\"]" + escapedName + "['\\\"]\\s*\\]\\s*=\\s*", 'g'),
+    new RegExp("['\\\"]" + escapedName + "['\\\"]\\s*:\\s*", 'g'),
   ];
 
   for (const pattern of patterns) {
