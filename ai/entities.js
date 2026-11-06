@@ -307,7 +307,7 @@ function resolveGameEntity(text) {
 
 // Rozpoznaje wyłącznie tytuł jawnie wskazany przez użytkownika jako grę.
 // Pozwala ominąć klasyfikator LLM, ale nie próbuje zgadywać tytułu z luźnego tekstu.
-function extractExplicitGameTitle(text) {
+function wyodrebnijJawnyTytulGry(text) {
   const value = String(text || '').trim();
   if (!value || value.length > 500) return null;
   const pattern = /(?:^|[^\p{L}\p{N}_])[wW](?:[eE])?\s+(?:[tT][eE][jJ]\s+)?[gG][rR][zZ][eE]\s+(?!(?:[kK][iI][mM]|[kK][tT][oO]|[cC][oO]|[jJ][aA][kK]|[cC][zZ][yY]|[dD][lL][aA][cC][zZ][eE][gG][oO]|[cC][zZ][eE][mM][uU]|[gG][dD][zZ][iI][eE]|[kK][iI][eE][dD][yY]|[jJ][eE][sS][tT]|[bB][yY][łl]|[bB][yY][lL][aA]|[bB][yY][łl][oO])\b)(?:"([^"\n]{1,120})"|“([^”\n]{1,120})”|([\p{L}\p{N}][\p{L}\p{N}'’:&-]*(?:\s+(?:(?:[oO][fF]|[tT][hH][eE]|[aA][nN][dD]|&)\s+)?[\p{Lu}\p{N}][\p{L}\p{N}'’:&-]*){0,4}))/u;
@@ -337,7 +337,7 @@ module.exports = {
   containsExactAlias,
   czyWspomnianoGre,
   scoreExternalGameCandidate,
-  extractExplicitGameTitle,
+  wyodrebnijJawnyTytulGry,
   externalGameCandidateMatchesQuery,
   resolveGameEntity,
   resolveCompanyEntity,
