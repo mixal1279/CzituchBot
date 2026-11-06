@@ -81,7 +81,7 @@ function pobierzVideoIdZRenderera(obiekt) {
   return VIDEO_ID_RE.test(id || '') ? id : null;
 }
 
-function analizujRenderery(data, limit = MAX_VIDEO_CANDIDATES) {
+function analizujRenderery(data, limit = MAX_VIDEO_CANDIDATES, requireLiveBadge = true) {
   if (!data || typeof data !== 'object') {
     return { ids: [], liczbaObiektow: 0, rendereryVideo: 0, sygnalyLive: 0, limitPrzeszukiwania: false };
   }
@@ -100,10 +100,9 @@ function analizujRenderery(data, limit = MAX_VIDEO_CANDIDATES) {
     const videoId = pobierzVideoIdZRenderera(current);
     if (videoId) {
       rendereryVideo += 1;
-      if (hasLiveBadge(current)) {
-        sygnalyLive += 1;
-        ids.add(videoId);
-      }
+      const maLive = hasLiveBadge(current);
+      if (maLive) sygnalyLive += 1;
+      if (!requireLiveBadge || maLive) ids.add(videoId);
     }
 
     for (const value of Object.values(current)) {
@@ -121,7 +120,7 @@ function analizujRenderery(data, limit = MAX_VIDEO_CANDIDATES) {
 }
 
 function findVideoIds(data, limit = MAX_VIDEO_CANDIDATES, requireLiveBadge = false) {
-  return analizujRenderery(data, limit).ids;
+  return analizujRenderery(data, limit, requireLiveBadge).ids;
 }
 
 function findLiveVideoIds(data, limit = 20) {
