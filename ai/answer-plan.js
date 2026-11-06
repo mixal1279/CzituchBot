@@ -109,7 +109,7 @@ function buildAnswerPlan(question, routing = {}) {
   ].filter(Boolean).join(' ');
 
   return {
-    version: 28,
+    version: 29,
     question: q,
     intent: routing.intent || 'conversation',
     entity: routing.entity || routing.resolved_entity?.name || null,
