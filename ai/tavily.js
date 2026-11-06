@@ -980,7 +980,13 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
         if (odrzuconePoScore) logger.log(`[Tavily] 📉 Odrzucono ${odrzuconePoScore} wyników o niskim score (< ${TAVILY_MIN_SCORE})`);
         if (scoreFilter.lowConfidence) logger.log('[Tavily] ⚠️ Wszystkie wyniki poniżej progu jakości — brak materiału dowodowego');
         const primaryResults = results.slice(0, 4);
-        if (czyWymagaSecondaryRetrieval(results, sourceQuestion, time_range) && remainingBudgetMs() > 0) {
+        const maEkstraktStrony = results.some(result => String(result?.raw_content || '').trim().length > 0);
+        // Basic search zwraca snippety. Nie uruchamiaj od razu dodatkowych providerów:
+        // orchestrator może wykonać zaplanowane wyszukiwanie advanced w kolejnym slocie.
+        const shouldSecondary = maEkstraktStrony
+          ? czyWymagaSecondaryRetrieval(results, sourceQuestion, validTimeRange)
+          : depth === 'advanced';
+        if (shouldSecondary && remainingBudgetMs() > 0) {
           const secondaryTimeoutMs = timeoutFromRemaining(15000);
           const secondary = await searchSecondaryProviders({
             query: sourceQuestion || searchQuery,
