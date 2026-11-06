@@ -62,6 +62,7 @@ function ograniczHistorieRozmow(historie, ostatnieUzycie, limit = 500) {
     if (key === '__proto__' || key === 'prototype' || key === 'constructor') continue;
     Reflect.deleteProperty(historie, key);
     Reflect.deleteProperty(ostatnieUzycie, key);
+  }
   return usuniete;
 }
 
