@@ -141,7 +141,7 @@ async function searchExa({ apiKey, query, fetchFn = fetch, startIndex = 0, domai
           query: String(query).slice(0, 1200),
           type: 'auto',
           numResults: 6,
-          contents: { highlights: { maxCharacters: 1200 } },
+          contents: { text: { maxCharacters: 3000 }, highlights: { maxCharacters: 1000 } },
           ...(domains?.length ? { includeDomains: domains } : {}),
         }),
       },
@@ -153,7 +153,9 @@ async function searchExa({ apiKey, query, fetchFn = fetch, startIndex = 0, domai
       title: r.title,
       url: r.url,
       snippet: r.highlights?.join(' '),
-      content: r.highlights?.join(' ') || r.text,
+      // Highlights are search snippets, not page evidence. Only extracted page text
+      // may enter the claim validator as source content.
+      content: r.text || '',
       publishedAt: r.publishedDate,
       score: r.score,
     }, i)).filter(s => s.url && s.content);
