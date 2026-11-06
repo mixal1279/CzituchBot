@@ -959,12 +959,10 @@ console.log('AI regression tests: OK');
   const source = fs.readFileSync(path.join(__dirname, '..', 'czituch_bot.js'), 'utf8');
   const start = source.indexOf('async function zapytajAI(');
   assert.ok(start >= 0, 'zapytajAI musi istnieć');
-  const end = source.indexOf('\\nasync function ', start + 1);
-  const body = source.slice(start, end > start ? end : start + 30000);
+  const body = source.slice(start, start + 30000);
   assert.doesNotMatch(
     body,
-    /console\\.(?:error|warn)\\([^\\n]*err\\.message/,
+    /console\.(?:error|warn)\([^\n]*err\.message/,
     'komunikaty błędów w pipeline AI muszą przechodzić przez redakcję sekretów',
   );
 }
-
