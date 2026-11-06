@@ -150,6 +150,31 @@ test('GameLore is sent as a preferred Tavily domain and its source provenance su
   assert.equal(result.sources[0].sourceId, 'SOURCE 1');
 });
 
+test('a requested Fandom domain does not gain specialist authority merely because it was requested', async () => {
+  const search = createTavilySearch({
+    apiKey: 'test-tavily-key',
+    groq: null,
+    normalizeQuery: value => value,
+    fetchZTimeout: async () => new Response(JSON.stringify({
+      results: [{
+        title: 'A character in a game',
+        url: 'https://randomgame.fandom.com/wiki/Character',
+        content: 'Character is described in this community-maintained wiki.',
+        score: 0.99,
+      }],
+    }), { status: 200, headers: { 'content-type': 'application/json' } }),
+    logger: { log() {}, warn() {}, error() {} },
+    cacheFile: '/tmp/czituch-requested-domain-authority-test.json',
+    geminiKey: '',
+    exaKey: '',
+  });
+  const result = await search('Who is this character?', {
+    domains: ['randomgame.fandom.com'],
+    _skipRewrite: true,
+    returnMeta: true,
+  });
+  assert.match(result.text, /HEURYSTYCZNA_OCENA: guide\/referencyjne/);
+});
 test('advanced Tavily retrieval requests bounded Markdown and prefers full page evidence over snippets', async () => {
   let requestBody = null;
   const search = createTavilySearch({

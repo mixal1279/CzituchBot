@@ -50,6 +50,7 @@ test('10-case live sample covers all nine categories and rotates independent gol
   assert.equal(first.filter(item => item.expected?.factual?.independentGold === true).length, 4);
   assert.equal(second.length, 10);
   assert.equal(new Set(second.map(item => item.category)).size, 9);
+  assert.equal(second.filter(item => item.expected?.factual?.independentGold === true).length, 4);
   const firstGold = new Set(first.filter(item => item.expected?.factual?.independentGold).map(item => item.category));
   const secondGold = new Set(second.filter(item => item.expected?.factual?.independentGold).map(item => item.category));
   assert.notDeepEqual([...firstGold].sort(), [...secondGold].sort());
