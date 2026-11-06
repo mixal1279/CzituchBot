@@ -3094,7 +3094,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
     planAIRequest,
     buildRetrievalQueries,
   );
-  const answerPlan = buildAnswerPlan(pytanie, routingAI);
+  let answerPlan = buildAnswerPlan(pytanie, routingAI);
   // Pytania "dlaczego" potrzebują osobnego retrievalu przyczynowego. Zwykłe
   // zapytanie o fabułę często zwraca chronologię wydarzeń, ale nie zdanie
   // łączące przyczynę ze skutkiem, którego wymaga validator.
@@ -3179,10 +3179,26 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
   const verifiedMemoryContext = buildVerifiedMemoryContext(verifiedMemory);
   systemPrompt = `${systemPrompt}${verifiedMemoryContext ? `\n\n${verifiedMemoryContext}` : ''}`;
   if (domeny?.resolvedGame && !routingAI.game) {
-    routingAI.game = domeny.resolvedGame.nazwa;
-    routingAI.entity = routingAI.entity || domeny.resolvedGame.nazwa;
-    routingAI.entity_type = routingAI.entity_type || 'game';
-    routingAI.resolved_entity = routingAI.resolved_entity || { type: 'game', name: domeny.resolvedGame.nazwa, confidence: 0.90, resolution: 'igdb' };
+    const nazwaGry = String(domeny.resolvedGame.nazwa || '').trim().slice(0, 120);
+    const pewnoscGry = Number(domeny.resolvedGame.confidence);
+    if (nazwaGry) {
+      routingAI.game = nazwaGry;
+      routingAI.entity = routingAI.entity || nazwaGry;
+      routingAI.entity_type = routingAI.entity_type || 'game';
+      routingAI.resolved_entity = routingAI.resolved_entity || {
+        type: 'game',
+        name: nazwaGry,
+        game: nazwaGry,
+        confidence: Number.isFinite(pewnoscGry) ? Math.max(0, Math.min(1, pewnoscGry)) : 0.75,
+        resolution: domeny.resolvedGame.resolution || 'igdb',
+      };
+      // Plan powstał przed równoległym rozpoznaniem IGDB — aktualizujemy go,
+      // aby walidator i końcowy prompt używały tej samej gry co retrieval.
+      answerPlan.game = nazwaGry;
+      answerPlan.entity = answerPlan.entity || routingAI.entity;
+      answerPlan.instruction += ` Kontekst gry rozpoznany dynamicznie: ${nazwaGry}. Nie łącz go z innymi seriami bez bezpośredniego dowodu.`;
+      systemPrompt += `\n\n[RESOLVED GAME CONTEXT]\nGra rozpoznana przez IGDB: ${nazwaGry}. Używaj tego tytułu do ograniczenia źródeł i nie przenoś faktów z innych gier.\n[/RESOLVED GAME CONTEXT]`;
+    }
   }
 
   const metadaneRequestu = {
@@ -3317,8 +3333,12 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
     const intentSpecificRetrievalQueries = plannedRetrievalQueries.filter(query =>
       /(?:exact location landmark nearby map|story timeline quest order arrival|character identity background role companion lore|cause reason motivation (?:event core transfer|story conflict)|gameplay strategy mechanics guide walkthrough)/i.test(query)
     );
+    const dynamicGameLoreQueries = aiPlan.responseProfile === 'lore' && routingAI.game
+      ? [`${routingAI.game} lore canon story timeline character relationships`]
+      : [];
     const specializedRetrievalQueries = [
       ...intentSpecificRetrievalQueries,
+      ...dynamicGameLoreQueries,
       ...advancedRetrievalPlan
         .filter(item => aiPlan.responseProfile === 'lore'
           ? item?.reason === 'lore'
