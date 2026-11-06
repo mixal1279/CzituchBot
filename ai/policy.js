@@ -73,7 +73,7 @@ function okreslKategorieAI(pytanie, czyPytanieOReceptureMC = () => false) {
     || maFraze(tokeny, 'tytul gry');
   if (czyPytanieOReceptureMC(p)) return 'minecraft_recipe';
   if (czyPytanieOFirmie(p)) return 'web_fact';
-  if (maToken(tokeny, 'pogoda', 'pogod*', 'temperatur*', 'deszcz*', 'wiatr*', 'slonecz*', 'forecast')) return 'weather';
+  if (maToken(tokeny, 'pogoda', 'pogody', 'pogode', 'pogodzie', 'pogodo', 'temperatur*', 'deszcz*', 'wiatr*', 'slonecz*', 'forecast')) return 'weather';
   const jawnyCzasGry = maFraze(tokeny, 'czas przejscia') || maFraze(tokeny, 'czas ukonczenia')
     || maFraze(tokeny, 'przejscie gry') || maFraze(tokeny, 'ukonczenie gry')
     || maToken(tokeny, 'howlongtobeat', 'hltb')
@@ -99,8 +99,11 @@ function okreslKategorieAI(pytanie, czyPytanieOReceptureMC = () => false) {
     'dziala', 'bezpiecz', 'powstal', 'zostal', 'rozwija', 'opracow', 'stworzyl', 'firma', 'firmy',
     'marka', 'marki', 'producent', 'przedsiebiorstw', 'spolk', 'korporacj', 'technolog', 'model',
     'histori', 'pierwsz', 'prototyp', 'http', 'https', 'dns', 'ram', 'cpu', 'gpu', 'api', 'oauth',
-    'javascript', 'node.js', 'nodejs', 'python', 'groq', 'gemini', 'openrouter', 'discord', 'crafting'];
-  const faktograficzne = tokeny.some(token => frazy.some(wzorzec => token === wzorzec || token.startsWith(wzorzec)));
+    'javascript', 'nodejs', 'python', 'groq', 'gemini', 'openrouter', 'discord', 'crafting'];
+  const faktograficzne = frazy.some(wzorzec => wzorzec.includes(' ')
+    ? maFraze(tokeny, wzorzec)
+    : tokeny.some(token => token === wzorzec || token.startsWith(wzorzec)))
+    || maFraze(tokeny, 'node js');
   return graSygnal || faktograficzne ? 'web_fact' : 'conversation';
 }
 function czyOdpowiedzToOdmowa(tekst) {
