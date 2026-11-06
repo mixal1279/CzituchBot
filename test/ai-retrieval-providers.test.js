@@ -670,7 +670,7 @@ test('Tavily cache snapshot is size bounded and versioned', () => {
   ]);
   const snapshot = snapshotCacheTavily(cache, 500);
   assert.ok(Buffer.byteLength(snapshot, 'utf8') <= 500);
-  assert.equal(JSON.parse(snapshot).version, 4);
+  assert.equal(JSON.parse(snapshot).version, 5);
 });
 
 test('Tavily cache entry limit evicts oldest entries first', () => {
