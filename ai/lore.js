@@ -50,6 +50,8 @@ function czyPytanieOLore(pytanie, domeny = null) {
   );
   return czyMaKontekstGry(p) || gamingDomain
     || Boolean(resolved && resolved.resolution !== 'deterministic_ambiguous')
+    || Boolean(resolved && ['Ellie', 'Joel Miller'].includes(resolved.name)
+      && /(?<![\\p{L}\\p{N}_])(?:kim|kto)(?![\\p{L}\\p{N}_])/iu.test(p))
     || Boolean(resolved && LORE_CAUSAL_RE.test(p) && LORE_CAUSAL_CONTEXT_RE.test(p));
 }
 
