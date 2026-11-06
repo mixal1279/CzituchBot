@@ -56,7 +56,7 @@ const COMPANY_ALIASES = [
 
 // Krótkie lub wieloznaczne nazwy firm wymagają dodatkowego kontekstu biznesowego.
 const AMBIGUOUS_COMPANY_ALIASES = new Set(['apple', 'meta', 'valve', 'dell', 'msi']);
-const COMPANY_CONTEXT_RE = /(?:firma|firmy|firmę|marka|marki|producent|producenta|przedsiębiorstw|spółk\w*|korporac\w*|przychod\w*|obrot\w*|zysk\w*|wycen\w*|akcj\w*|giełd\w*|ceo|prezes\w*|założon\w*|powstał\w*|produkuje|wypuszcza|portfolio|produkty|sprzęt|fotele|procesor\w*|karty graficzne)/iu;
+const COMPANY_CONTEXT_RE = /(?:firm\p{L}*|mark\p{L}*|producent\p{L}*|przedsiębiorstw\p{L}*|spółk\p{L}*|korporac\p{L}*|przychod\p{L}*|obrot\p{L}*|zysk\p{L}*|wycen\p{L}*|akcj\p{L}*|giełd\p{L}*|ceo|prezes\p{L}*|założon\p{L}*|powstał\p{L}*|produkuje|wypuszcza|portfolio|produkty|sprzęt|fotele|procesor\p{L}*|karty graficzne)/iu;
 
 
 // Rozpoznaje jawny kontekst przedsiębiorstwa także wtedy, gdy nazwa nie jest
