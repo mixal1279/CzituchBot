@@ -1,6 +1,5 @@
 'use strict';
 
-const { NIE_CZAS_GRY } = require('./patterns');
 const { czyWspomnianoGre, czyPytanieOFirmie, normalizujEncje } = require('./entities');
 
 function normalizujZapytanieTavily(q) {
@@ -102,7 +101,7 @@ function okreslKategorieAI(pytanie, czyPytanieOReceptureMC = () => false) {
     'javascript', 'nodejs', 'python', 'groq', 'gemini', 'openrouter', 'discord', 'crafting'];
   const prefiksy = new Set(['informacj', 'aktualizacj', 'roznic', 'bezpiecz', 'powstal', 'zostal',
     'rozwija', 'opracow', 'stworzyl', 'przedsiebiorstw', 'spolk', 'korporacj', 'technolog',
-    'histori', 'pierwsz', 'prototyp', 'producent']);
+    'histori', 'pierwsz', 'prototyp', 'producent', 'model', 'premier']);
   const faktograficzne = frazy.some(wzorzec => wzorzec.includes(' ')
     ? maFraze(tokeny, wzorzec)
     : tokeny.some(token => prefiksy.has(wzorzec) ? token.startsWith(wzorzec) : token === wzorzec))
