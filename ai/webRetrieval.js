@@ -1,6 +1,7 @@
 'use strict';
 
 const { AI_MODELS } = require('./modelConfig');
+const { isIP } = require('node:net');
 const { sanitizeUntrustedText } = require('./untrustedText');
 
 function cleanText(value, max = 5000) {
@@ -168,8 +169,27 @@ async function searchExa({ apiKey, query, fetchFn = fetch, startIndex = 0, domai
 // Opcjonalnie (AI_GEMINI_EXTRACT=1): Gemini służy tylko do znalezienia stron, a ich treść pobiera
 // Tavily Extract. Dzięki temu walidator porównuje cytat z prawdziwym tekstem strony, a nie z
 // parafrazą modelu. Odpowiedź API czytamy defensywnie (kształt nieweryfikowany na żywym API).
+function isSafePublicHttpUrl(value) {
+  let parsed;
+  try {
+    parsed = new URL(String(value || '').trim());
+  } catch (_) {
+    return false;
+  }
+  if (!['http:', 'https:'].includes(parsed.protocol) || parsed.username || parsed.password) return false;
+  if (parsed.port && !((parsed.protocol === 'http:' && parsed.port === '80')
+    || (parsed.protocol === 'https:' && parsed.port === '443'))) return false;
+
+  const host = parsed.hostname.toLowerCase().replace(/\.$/, '').replace(/^\[|\]$/g, '');
+  if (!host || isIP(host) !== 0 || !host.includes('.')) return false;
+  if (/(?:^|\.)(?:localhost|local|internal|lan|home|home\.arpa|test|invalid|example|onion)$/i.test(host)) return false;
+  return true;
+}
+
 async function extractTavilyPages({ apiKey, urls, fetchFn = fetch, timeoutMs = 12000 }) {
-  const wanted = [...new Set((urls || []).filter(u => /^https?:\/\//i.test(String(u))))].slice(0, 3);
+  // URL-e pochodzą z wyników zewnętrznych providerów. Nie przekazuj do ekstraktora
+  // adresów lokalnych, IP-literal, URL-i z danymi logowania ani niestandardowych portów.
+  const wanted = [...new Set((urls || []).filter(isSafePublicHttpUrl).map(u => String(u).trim()))].slice(0, 3);
   if (!apiKey || !wanted.length) return new Map();
   try {
     const data = await fetchJson(fetchFn, 'https://api.tavily.com/extract', {
@@ -234,4 +254,4 @@ async function searchSecondaryProviders({ query, geminiKey, exaKey, tavilyKey = 
   return { status: 'empty', text: '', sources: [], error: errors.join('; ') };
 }
 
-module.exports = { normalizeSource, formatSources, searchGeminiWeb, searchExa, searchSecondaryProviders, extractTavilyPages };
+module.exports = { normalizeSource, formatSources, searchGeminiWeb, searchExa, searchSecondaryProviders, extractTavilyPages, isSafePublicHttpUrl };
