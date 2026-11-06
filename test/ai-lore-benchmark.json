@@ -119,9 +119,9 @@
       "game": null,
       "question": "Kim jest Alex?",
       "expected": {
-        "isLore": true,
-        "sourceType": "game_lore",
-        "maxConfidence": 0.68
+        "isLore": false,
+        "maxConfidence": 0.62,
+        "requiresClarification": true
       }
     },
     {
