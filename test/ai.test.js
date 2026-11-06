@@ -991,7 +991,7 @@ console.log('AI regression tests: OK');
     'błąd IGDB musi przejść przez redakcję sekretów');
 
   const domainsStart = source.indexOf('async function wybierzDomenyDlaPytania(');
-  const domainsEnd = source.indexOf('// =============================================\\n//  RAWG', domainsStart);
+    const domainsEnd = source.indexOf('RAWG – rozpoznawanie gier', domainsStart);
   assert.ok(domainsStart >= 0 && domainsEnd > domainsStart, 'wybór domen gry musi istnieć');
   const domainsBody = source.slice(domainsStart, domainsEnd);
   assert.ok(domainsBody.includes('sanitizujKomunikatBledu(err?.message)'),
