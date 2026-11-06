@@ -169,7 +169,7 @@ async function searchExa({ apiKey, query, fetchFn = fetch, startIndex = 0, domai
 // Opcjonalnie (AI_GEMINI_EXTRACT=1): Gemini służy tylko do znalezienia stron, a ich treść pobiera
 // Tavily Extract. Dzięki temu walidator porównuje cytat z prawdziwym tekstem strony, a nie z
 // parafrazą modelu. Odpowiedź API czytamy defensywnie (kształt nieweryfikowany na żywym API).
-function isSafePublicHttpUrl(value) {
+function czyBezpiecznyPublicznyUrl(value) {
   if (typeof value !== 'string' || value.length > 2048) return false;
   let parsed;
   try {
@@ -191,7 +191,7 @@ function isSafePublicHttpUrl(value) {
 async function extractTavilyPages({ apiKey, urls, fetchFn = fetch, timeoutMs = 12000 }) {
   // URL-e pochodzą z wyników zewnętrznych providerów. Nie przekazuj do ekstraktora
   // adresów lokalnych, IP-literal, URL-i z danymi logowania ani niestandardowych portów.
-  const wanted = [...new Set((urls || []).filter(isSafePublicHttpUrl).map(u => String(u).trim()))].slice(0, 3);
+  const wanted = [...new Set((urls || []).filter(czyBezpiecznyPublicznyUrl).map(u => String(u).trim()))].slice(0, 3);
   if (!apiKey || !wanted.length) return new Map();
   try {
     const data = await fetchJson(fetchFn, 'https://api.tavily.com/extract', {
@@ -256,4 +256,4 @@ async function searchSecondaryProviders({ query, geminiKey, exaKey, tavilyKey = 
   return { status: 'empty', text: '', sources: [], error: errors.join('; ') };
 }
 
-module.exports = { normalizeSource, formatSources, searchGeminiWeb, searchExa, searchSecondaryProviders, extractTavilyPages, isSafePublicHttpUrl };
+module.exports = { normalizeSource, formatSources, searchGeminiWeb, searchExa, searchSecondaryProviders, extractTavilyPages, czyBezpiecznyPublicznyUrl };
