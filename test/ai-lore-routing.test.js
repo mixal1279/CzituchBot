@@ -12,6 +12,7 @@ const {
   dodajGameLoreDomenę,
 } = require('../ai/lore');
 const { czyPoprawnyWpisCacheTavily } = require('../ai/tavily');
+const { buildAnswerPlan } = require('../ai/answer-plan');
 
 const benchmark = JSON.parse(fs.readFileSync(
   path.join(__dirname, 'ai-lore-benchmark.json'),
@@ -95,4 +96,16 @@ test('Tavily Firestore cache accepts the canonical object shape and rejects malf
 test('a named but unknown game title is recognized as game context without a title whitelist', () => {
   assert.equal(czyMaKontekstGry('Kim jest Neryth w grze Aetherfall?'), true);
   assert.equal(czyMaKontekstGry('Kim jest Alex?'), false);
+});
+
+test('lore answer plan separates canon, interpretation, fan theory, missing data and source conflicts', () => {
+  const plan = buildAnswerPlan(
+    'Czy teoria o G-Manie w Half-Life jest kanoniczna?',
+    { intent: 'web_fact', is_lore: true, game: 'Half-Life' },
+  );
+  assert.match(plan.instruction, /fakt kanoniczny/i);
+  assert.match(plan.instruction, /interpretacj/i);
+  assert.match(plan.instruction, /teorię fanowską/i);
+  assert.match(plan.instruction, /brakuje danych/i);
+  assert.match(plan.instruction, /sprzeczne wersje/i);
 });
