@@ -341,7 +341,9 @@ assert.match(require('fs').readFileSync(require('path').join(__dirname, '..', 'c
   assert.match(botSource, /OpenRouter validator SCHEMA_REJECT/);
   assert.match(botSource, /failed_generation/);
   assert.match(botSource, /abortLike/);
-  assert.match(botSource, /Object\.getOwnPropertyNames\(value\)/);
+  const diagnosticsSource = require('fs').readFileSync(require('path').join(__dirname, '..', 'ai', 'diagnostics.js'), 'utf8');
+  assert.match(diagnosticsSource, /Object\\.getOwnPropertyNames\\(value\\)/);
+  assert.match(diagnosticsSource, /SAFE_ERROR_FIELDS/);
   assert.match(botSource, /requestContract: \{/);
   assert.match(botSource, /async function walidujOdpowiedzXKiro\(/);
   assert.match(botSource, /response_format:\s*buildOpenRouterValidatorResponseFormat\(\)/);
