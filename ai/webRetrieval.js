@@ -181,7 +181,7 @@ async function extractTavilyPages({ apiKey, urls, fetchFn = fetch, timeoutMs = 1
     for (const item of Array.isArray(data?.results) ? data.results : []) {
       const url = String(item?.url || '').trim();
       const text = String(item?.raw_content || item?.content || '').trim();
-      if (url && text.length >= 200) out.set(url, text);
+      if (url && text.length >= 80) out.set(url, text);
     }
     return out;
   } catch (_) {
