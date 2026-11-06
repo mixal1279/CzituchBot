@@ -9,7 +9,8 @@ test('conversation keys use stable platform identities and isolate channels', ()
   const youtubeB = zbudujKluczHistorii('youtube', 'edzzi', 'UC456');
   const twitch = zbudujKluczHistorii('twitch', 'edzzi', 'UC123');
   const otherChannel = zbudujKluczHistorii('youtube', 'angie28', 'UC123');
-  assert.equal(youtubeA, 'youtube:edzzi:uc123');
+  assert.equal(youtubeA, 'youtube:edzzi:UC123');
+  assert.notEqual(youtubeA, zbudujKluczHistorii('youtube', 'edzzi', 'uc123'));
   assert.notEqual(youtubeA, youtubeB);
   assert.notEqual(youtubeA, twitch);
   assert.notEqual(youtubeA, otherChannel);
