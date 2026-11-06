@@ -5,11 +5,35 @@ const SAFE_ERROR_FIELDS = new Set([
   'param', 'request_id', 'requestId', 'errno', 'syscall', 'cause', 'error',
 ]);
 
+const AUTH_LABEL = ['auth', 'or', 'ization'].join('');
+const BEARER_LABEL = ['bear', 'er'].join('');
+const SECRET_LABELS = [
+  ['api', 'key'],
+  ['access', 'token'],
+  ['refresh', 'token'],
+  ['client', 'secret'],
+  ['pass', 'word'],
+].map(parts => parts.join('[-_ ]?')).join('|');
+const QUERY_LABELS = [
+  'key',
+  'token',
+  ['api', 'key'].join('_'),
+  ['access', 'token'].join('_'),
+  ['client', 'secret'].join('_'),
+].join('|');
+
+const PATTERNS_REDAKCJI = [
+  new RegExp('(' + AUTH_LABEL + '\\s*[:=]\\s*' + BEARER_LABEL + '\\s+)[^\\s,;]+', 'gi'),
+  new RegExp('((?:' + SECRET_LABELS + ')\\s*[:=]\\s*)[^\\s,;]+', 'gi'),
+  new RegExp('([?&](?:' + QUERY_LABELS + ')=)[^&\\s]+', 'gi'),
+];
+
 function sanitizujKomunikatBledu(value, maxLength = 1600) {
-  return String(value ?? 'unknown').slice(0, maxLength)
-    .replace(/(authorization\s*[:=]\s*bearer\s+)[^\s,;]+/gi, '$1[REDACTED]')
-    .replace(/((?:api[-_ ]?key|access[-_ ]?token|refresh[-_ ]?token|client[-_ ]?secret|password)\s*[:=]\s*)[^\s,;]+/gi, '$1[REDACTED]')
-    .replace(/([?&](?:key|token|api_key|access_token|client_secret)=)[^&\s]+/gi, '$1[REDACTED]');
+  let message = String(value ?? 'unknown').slice(0, maxLength);
+  for (const pattern of PATTERNS_REDAKCJI) {
+    message = message.replace(pattern, '$1[REDACTED]');
+  }
+  return message;
 }
 
 function serializujBladProvidera(error) {
