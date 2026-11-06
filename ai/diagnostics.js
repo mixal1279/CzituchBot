@@ -7,9 +7,9 @@ const SAFE_ERROR_FIELDS = new Set([
 
 function sanitizujKomunikatBledu(value, maxLength = 1600) {
   return String(value ?? 'unknown').slice(0, maxLength)
-    .replace(/(authorization\\s*[:=]\\s*bearer\\s+)[^\\s,;]+/gi, '$1[REDACTED]')
-    .replace(/((?:api[-_ ]?key|access[-_ ]?token|refresh[-_ ]?token|client[-_ ]?secret|password)\\s*[:=]\\s*)[^\\s,;]+/gi, '$1[REDACTED]')
-    .replace(/([?&](?:key|token|api_key|access_token|client_secret)=)[^&\\s]+/gi, '$1[REDACTED]');
+    .replace(/(authorization\s*[:=]\s*bearer\s+)[^\s,;]+/gi, '$1[REDACTED]')
+    .replace(/((?:api[-_ ]?key|access[-_ ]?token|refresh[-_ ]?token|client[-_ ]?secret|password)\s*[:=]\s*)[^\s,;]+/gi, '$1[REDACTED]')
+    .replace(/([?&](?:key|token|api_key|access_token|client_secret)=)[^&\s]+/gi, '$1[REDACTED]');
 }
 
 function serializujBladProvidera(error) {
