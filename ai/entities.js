@@ -58,6 +58,13 @@ const COMPANY_ALIASES = [
 const AMBIGUOUS_COMPANY_ALIASES = new Set(['apple', 'meta', 'valve', 'dell', 'msi']);
 const COMPANY_CONTEXT_RE = /(?:firma|firmy|firmę|marka|marki|producent|producenta|przedsiębiorstw|spółk\w*|korporac\w*|przychod\w*|obrot\w*|zysk\w*|wycen\w*|akcj\w*|giełd\w*|ceo|prezes\w*|założon\w*|powstał\w*|produkuje|wypuszcza|portfolio|produkty|sprzęt|fotele|procesor\w*|karty graficzne)/iu;
 
+
+// Rozpoznaje jawny kontekst przedsiębiorstwa także wtedy, gdy nazwa nie jest
+// jeszcze obecna w lokalnym słowniku aliasów.
+function czyPytanieOFirmie(text) {
+  return COMPANY_CONTEXT_RE.test(String(text || ''));
+}
+
 function resolveCompanyEntity(text) {
   const normalizedText = normalizujEncje(text);
   const match = findAlias(normalizedText, COMPANY_ALIASES);
@@ -321,5 +328,6 @@ module.exports = {
   externalGameCandidateMatchesQuery,
   resolveGameEntity,
   resolveCompanyEntity,
+  czyPytanieOFirmie,
   resolveEntity,
 };
