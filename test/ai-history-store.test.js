@@ -36,6 +36,18 @@ test('history eviction removes the least recently used conversation and its matc
   assert.equal(usage.user, 999);
 });
 
+test('Twitch AI passes its full platform-channel-user scope into persistent memory', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const source = fs.readFileSync(path.join(__dirname, '..', 'czituch_bot.js'), 'utf8');
+  const start = source.indexOf('async function obslugaTwitch(');
+  const end = source.indexOf('async function ', start + 1);
+  assert.ok(start >= 0 && end > start, 'Twitch handler should exist');
+  const handler = source.slice(start, end);
+  assert.match(handler, /const historiaKlucz = `twitch:\$\{kanalNorm \|\| 'brak-kanalu'\}:\$\{login\}`/);
+  assert.match(handler, /memoryUserId:\s*historiaKlucz/);
+});
+
 test('history eviction keeps all entries within the configured limit', () => {
   const histories = { a: [], b: [] };
   const usage = { a: 1, b: 2 };
