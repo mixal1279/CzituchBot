@@ -129,7 +129,7 @@ const { Firestore } = require('@google-cloud/firestore');
 const { ocenJakoscOdpowiedzi } = require('./ai/quality');
 const { usunEtykietyEvidenceCandidate, maEtykieteEvidenceCandidate, oczyscOdpowiedzPrzedWalidacja } = require('./ai/answer-sanitize');
 const { AI_MODELS } = require('./ai/modelConfig');
-const { parsujStrukturalnePodsumowanie, oznaczUzycieHistorii, ograniczHistorieRozmow } = require('./ai/history');
+const { parsujStrukturalnePodsumowanie, oznaczUzycieHistorii, ograniczHistorieRozmow, zbudujKluczHistorii } = require('./ai/history');
 const { createRequestId, sanitizeQuestion, planRequest, evaluateEvidence, shouldValidate, decideValidation, finalText: finalizeAIPipelineText } = require('./ai/pipeline');
 const { buildAnswerPlan } = require('./ai/answer-plan');
 const { judgeAnswer, partialAnswerPreservesCoreIntent } = require('./ai/answer-judge');
@@ -6258,7 +6258,7 @@ async function obslugaWiadomosci(nick, message, platforma, wyslijFn, kanal = nul
     return;
   }
   // Stan użytkownika jest izolowany między platformami i kanałami.
-  const historiaKlucz = `${platforma}:${kanalNorm || 'brak-kanalu'}:${nick.toLowerCase()}`;
+  const historiaKlucz = zbudujKluczHistorii(platforma, kanalNorm, nadawca?.userId || nick);
   const cooldownKey = historiaKlucz;
 
   const memoryCommand = parseMemoryCommand(message);
@@ -7288,6 +7288,7 @@ async function youtubeLoop(stan) {
           if (nick && message) {
             const nadawca = {
               isMod: item.authorDetails?.isChatModerator === true || item.authorDetails?.isChatOwner === true,
+              userId: item.authorDetails?.channelId || null,
             };
             await obslugaWiadomosci(nick, message, 'youtube', (tekst) => stan.wyslijFn(tekst, stan.liveChatId), stan.nazwaKanalu, nadawca);
             // Ekonomia dla Angie28 na YT
@@ -8022,6 +8023,7 @@ async function uruchomKick() {
       const badgesNadawcy = data.sender?.identity?.badges ?? [];
       const nadawca = {
         isMod: badgesNadawcy.some(b => b.type === 'moderator' || b.type === 'broadcaster'),
+        userId: data.sender?.id ?? data.sender?.user_id ?? null,
       };
 
       if (kanal === `chatrooms.${KONFIGURACJA.kickChatroomId}.v2`) {
@@ -8276,7 +8278,7 @@ async function obslugaTwitch(nick, message, wyslijFn, config = TWITCH_CONFIG_BIL
   }
 
   const kanalNorm = kanal ? kanal.toLowerCase() : '';
-  const historiaKlucz = `twitch:${kanalNorm || 'brak-kanalu'}:${login}`;
+  const historiaKlucz = zbudujKluczHistorii('twitch', kanalNorm, tags?.['user-id'] || login);
 
   // Komenda !sex — piekarniczy miernik dopasowania.
   if (kanal === 'billybulka' && /^!sex(?:\s|$)/i.test(message.trim())) {
