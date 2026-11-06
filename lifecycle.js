@@ -54,7 +54,7 @@ function utworzLifecycle({ logger = console, closeTimeoutMs = DEFAULT_CLOSE_TIME
   }
 
   function zarejestrujWebSocket(socket, nazwa = 'WebSocket') {
-    if (!socket || typeof socket.close !== 'function') return () => {};
+    if (!socket || typeof socket.close !== 'function' || socket.readyState === 3) return () => {};
     let zakonczono = false;
     const wyrejestruj = zarejestruj(nazwa, async () => {
       if (zakonczono) return;

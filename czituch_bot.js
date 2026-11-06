@@ -58,6 +58,7 @@ const lifecycle = utworzLifecycle({ logger: console, closeTimeoutMs: 4000 });
 // nie pozostawiał interwałów ani opóźnionych reconnectów.
 const zarejestrowaneTimery = new Map();
 function ustawTimeout(fn, opoznienie, ...argumenty) {
+  if (lifecycle.czyZamykanie()) return null;
   let wyrejestruj = null;
   let timer;
   timer = globalThis.setTimeout((...args) => {
@@ -73,6 +74,7 @@ function ustawTimeout(fn, opoznienie, ...argumenty) {
   return timer;
 }
 function ustawInterwal(fn, opoznienie, ...argumenty) {
+  if (lifecycle.czyZamykanie()) return null;
   const timer = globalThis.setInterval(fn, opoznienie, ...argumenty);
   const wyrejestruj = lifecycle.zarejestruj('interval', () => {
     globalThis.clearInterval(timer);

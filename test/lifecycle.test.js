@@ -86,3 +86,11 @@ test('SIGTERM wykonuje cleanup przed zakończeniem procesu', async () => {
   assert.deepEqual(wyjscia, [0]);
   assert.equal(proc.exitCode, 0);
 });
+
+test('nie rejestruje już zamkniętego WebSocketu', () => {
+  const lifecycle = utworzLifecycle({ logger: { info() {}, warn() {} } });
+  const socket = { readyState: 3, close() { throw new Error('nie powinien zamykać'); } };
+  const wyrejestruj = lifecycle.zarejestrujWebSocket(socket);
+  assert.equal(typeof wyrejestruj, 'function');
+  assert.equal(lifecycle.liczbaZasobow(), 0);
+});
