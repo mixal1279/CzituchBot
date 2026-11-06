@@ -22,6 +22,17 @@ const GAME_TITLE_RE = /\b(?:minecraft|portal(?:\s+2)?|red\s+dead(?:\s+redemption
 const GAME_TITLE_AFTER_PREPOSITION_RE = /(?<![\p{L}\p{N}_])(?:w|we|z|ze|do|dla|o|about|of|in|from)\s+(?:the\s+)?[\p{Lu}\p{N}][\p{L}\p{N}'’:&-]*(?:\s+(?:(?:of|the|and|&)\s+)?[\p{Lu}\p{N}][\p{L}\p{N}'’:&-]*){0,4}/u;
 const GAME_TITLE_NEAR_LORE_RE = /(?:(?:lore|fabuł[aeęy]|histori[aeęy]|chronologi[ae]|zakończeni[ae]|teori[ae]|świata|uniwersum)\s+(?:gry\s+)?(?:the\s+)?[\p{Lu}\p{N}][\p{L}\p{N}'’:&-]*(?:\s+(?:(?:of|the|and|&)\s+)?[\p{Lu}\p{N}][\p{L}\p{N}'’:&-]*){0,4}|(?:^|[^\p{L}\p{N}_])(?:the\s+)?[\p{Lu}\p{N}][\p{L}\p{N}'’:&-]*(?:\s+(?:(?:of|the|and|&)\s+)?[\p{Lu}\p{N}][\p{L}\p{N}'’:&-]*){0,4}\s+(?:lore|fabuł[aeęy]|histori[aeęy]|chronologi[ae]|uniwersum)(?![\p{L}\p{N}_])/u;
 
+function czyMaKontekstGry(pytanie) {
+  const p = String(pytanie || '').trim();
+  if (!p) return false;
+  const resolved = resolveGameEntity(p);
+  return GAME_CONTEXT_RE.test(p)
+    || GAME_TITLE_RE.test(p)
+    || GAME_TITLE_AFTER_PREPOSITION_RE.test(p)
+    || GAME_TITLE_NEAR_LORE_RE.test(p)
+    || Boolean(resolved && resolved.resolution !== 'deterministic_ambiguous');
+}
+
 function czyPytanieOLore(pytanie, domeny = null) {
   const p = String(pytanie || '').trim();
   if (!p) return false;
@@ -35,12 +46,7 @@ function czyPytanieOLore(pytanie, domeny = null) {
   const gamingDomain = Array.isArray(domeny) && domeny.some(d =>
     /(?:minecraft\.wiki|gamelore\.fandom\.com|fandom\.com|ign\.com|gamespot\.com|pcgamer\.com|eurogamer|rockstargames\.com|thewitcher\.com|bandainamco|playstation\.com|naughtydog\.com|baldursgate3\.game|larian\.com|fortnite\.gg)/i.test(String(d))
   );
-  const explicitGameContext = GAME_CONTEXT_RE.test(p)
-    || GAME_TITLE_RE.test(p)
-    || GAME_TITLE_AFTER_PREPOSITION_RE.test(p)
-    || GAME_TITLE_NEAR_LORE_RE.test(p);
-
-  return explicitGameContext || gamingDomain || Boolean(resolved);
+  return czyMaKontekstGry(p) || gamingDomain || Boolean(resolved);
 }
 
 function normalizujHost(wartosc) {
@@ -78,6 +84,7 @@ module.exports = {
   GAMELORE_DOMAIN,
   GAMELORE_NAME,
   czyPytanieOLore,
+  czyMaKontekstGry,
   dodajGameLoreDomenę,
   wytnijAtrybucjeGameLore,
 };
