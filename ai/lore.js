@@ -7,12 +7,12 @@ const GAMELORE_NAME = 'GameLore Wiki';
 // Intencja lore opisuje pytanie o treść świata gry, a nie samo wspomnienie tytułu.
 // Nie umieszczamy tu ogólnego „dlaczego”: pytania o wydajność, błędy i zakup gry
 // nie mogą trafiać do RAG fabularnego tylko dlatego, że zawierają nazwę gry.
-const LORE_INTENT_RE = /(?<![\p{L}\p{N}_])(?:lore|fabuł[aeęy]|histori(?:a|ę|ii|e)|kim\s+(?:[\p{L}]+\s+){0,2}(?:jest|był|była|byli)|kto\s+(?:[\p{L}]+\s+){0,2}(?:to|jest|był|była)|co\s+się\s+(?:stało|wydarzyło)|pochodzeni[ae]|backstory|kanon|canon|timeline|chronologi[ae]|zakończeni[ae]|teori[ae]|easter\s+egg|sekret(?:y|ach)?|symbolik[ai]|znaczeni[ae]|uniwersum|relacj[ae]\s+(?:między|z)|zwi[aą]zk(?:u|i|iem|ach)|konflikt(?:u|em|ach)?|motywacj[ae]|wpływ(?:u|em)?|wpłyn(?:ął|ęło|ęła|ęły)|wydarzeni(?:a|ach)\s+w\s+grze)(?![\p{L}\p{N}_])/iu;
+const LORE_INTENT_RE = /(?<![\p{L}\p{N}_])(?:lore|fabuł[aeęy]|histori(?:a|ę|ii|e)|kim\s+(?:[\p{L}]+\s+){0,2}(?:jest|był|była|byli)|czym\s+jest|kto\s+(?:[\p{L}]+\s+){0,2}(?:to|jest|był|była)|co\s+się\s+(?:stało|wydarzyło)|pochodzeni[ae]|backstory|kanon|canon|timeline|chronologi[ae]|zakończeni[ae]|teori[ae]|easter\s+egg|sekret(?:y|ach)?|symbolik[ai]|znaczeni[ae]|uniwersum|relacj[ae]\s+(?:między|z)|zwi[aą]zk(?:u|i|iem|ach)|konflikt(?:u|em|ach)?|motywacj[ae]|wpływ(?:u|em)?|wpłyn(?:ął|ęło|ęła|ęły)|wydarzeni(?:a|ach)\s+w\s+grze)(?![\p{L}\p{N}_])/iu;
 
 // „Dlaczego” kwalifikuje się jako lore dopiero wtedy, gdy pytanie dotyczy
 // motywacji lub zdarzenia fabularnego, a nie np. crasha czy wymagań sprzętowych.
 const LORE_CAUSAL_RE = /(?<![\p{L}\p{N}_])dlaczego(?![\p{L}\p{N}_])/iu;
-const LORE_CAUSAL_CONTEXT_RE = /(?<![\p{L}\p{N}_])(?:w\s+(?:fabule|historii|lore)|motywacj\p{L}*|powod\p{L}*|zdradził\p{L}*|zabił\p{L}*|uratował\p{L}*|opuścił\p{L}*|porzucił\p{L}*|przejął\p{L}*|wybrał\p{L}*|uwięził\p{L}*|zniszczył\p{L}*|upadł\p{L}*|powstał\p{L}*|zaatakował\p{L}*|pomógł\p{L}*|uciekł\p{L}*|poświęcił\p{L}*|zdecydował\p{L}*|betrayed|killed|saved|left|abandoned|chose|destroyed|created|motiv(?:ation|e)|plot)(?![\p{L}\p{N}_])/iu;
+const LORE_CAUSAL_CONTEXT_RE = /(?<![\p{L}\p{N}_])(?:w\s+(?:fabule|historii|lore)|motywacj\p{L}*|powod\p{L}*|zdradził\p{L}*|zabił\p{L}*|uratował\p{L}*|opuścił\p{L}*|opuszcza\p{L}*|porzucił\p{L}*|zdradza\p{L}*|zabija\p{L}*|ratuje\p{L}*|przejmuje\p{L}*|wybiera\p{L}*|ucieka\p{L}*|poświęca\p{L}*|przejął\p{L}*|wybrał\p{L}*|uwięził\p{L}*|zniszczył\p{L}*|upadł\p{L}*|powstał\p{L}*|zaatakował\p{L}*|pomógł\p{L}*|uciekł\p{L}*|poświęcił\p{L}*|zdecydował\p{L}*|betrayed|killed|saved|left|abandoned|chose|destroyed|created|motiv(?:ation|e)|plot)(?![\p{L}\p{N}_])/iu;
 
 // Kontekst gry może być jawny („w grze”, „uniwersum”) albo wynikać z tytułu,
 // którego nie ma w lokalnym słowniku. Wykrywamy tytuły zapisane nazwą własną,
@@ -29,7 +29,7 @@ function czyPytanieOLore(pytanie, domeny = null) {
   const resolved = resolveGameEntity(p);
   const loreIntent = LORE_INTENT_RE.test(p)
     || (LORE_CAUSAL_RE.test(p) && LORE_CAUSAL_CONTEXT_RE.test(p))
-    || (resolved && /(?<![\p{L}\p{N}_])(?:dlaczego|kim|kto|co|histori\p{L}*|lore|pochodzeni\p{L}*|kanon|timeline|zwi[aą]zk\p{L}*|relacj\p{L}*|konflikt\p{L}*|motywacj\p{L}*|wpływ\p{L}*|wpłyn\p{L}*)(?![\p{L}\p{N}_])/iu.test(p));
+    || (resolved && /(?<![\p{L}\p{N}_])(?:kim|kto|histori\p{L}*|lore|pochodzeni\p{L}*|kanon|timeline|zwi[aą]zk\p{L}*|relacj\p{L}*|konflikt\p{L}*|motywacj\p{L}*|wpływ\p{L}*|wpłyn\p{L}*)(?![\p{L}\p{N}_])/iu.test(p));
   if (!loreIntent) return false;
 
   const gamingDomain = Array.isArray(domeny) && domeny.some(d =>
