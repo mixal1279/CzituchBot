@@ -96,7 +96,7 @@ function utworzLifecycle({ logger = console, closeTimeoutMs = DEFAULT_CLOSE_TIME
       wymuszenie = setTimeout(() => {
         logger.error?.('[Lifecycle] Przekroczono limit zamykania; wymuszam zakończenie procesu.');
         exitFn(kod || 1);
-      }, Math.max(closeTimeoutMs * zasoby.size + 5000, 10000));
+      }, 15000);
       wymuszenie.unref?.();
       void zamknijWszystko(powod).finally(() => {
         if (wymuszenie) clearTimeout(wymuszenie);
