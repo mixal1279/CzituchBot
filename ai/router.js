@@ -5,7 +5,7 @@ const { NIE_CZAS_GRY } = require('./patterns');
 const WEB_CATEGORIES = new Set(['weather', 'hltb', 'youtube', 'web_fact']);
 const { czyPytanieOLore } = require('./lore');
 const { czyPytanieOGameplay } = require('./gameplay');
-const { resolveGameEntity } = require('./entities');
+const { resolveGameEntity, resolveCompanyEntity } = require('./entities');
 
 const SOURCE_TYPES = { weather: 'weather_api', hltb: 'hltb', youtube: 'youtube_api', minecraft_recipe: 'local_minecraft_data' };
 
@@ -17,11 +17,14 @@ function classifyAIRequest(pytanie, policyCategory, recipeDetector = () => false
   // "Ile trwa walka/misja/aktualizacja…" to nie czas przejścia gry (HowLongToBeat).
   const isHLTB = /(?<![\p{L}\p{N}_])(?:ile\s+(?:jest\s+)?(?:godzin|czasu)|ile\s+godzin\s+(?:ma|zajmuje)|ile\s+trwa|jak\s+d[łl]ugo(?:\s+trwa)?|czas(?:u)?\s+(?:gry|przejścia|przejscia|ukończenia|ukonczenia)|przejście\s+gry|przejscie\s+gry)(?![\p{L}\p{N}_])/iu.test(p)
     && !NIE_CZAS_GRY.test(p);
-  const resolved = resolveGameEntity(text);
-  const hasKnownGame = Boolean(resolved && (resolved.type === 'game' || resolved.type === 'franchise' || resolved.game));
-  // Opinia o rozpoznanej grze nadal może wymagać faktów (np. ceny, stanu gry,
-  // aktualnych problemów). Ogólne „co myślisz o tej grze?” pozostaje small talkiem.
-  const category = isHLTB ? 'hltb' : (isOpinion && !hasKnownGame ? 'conversation' : policyResult);
+  const resolvedCompany = resolveCompanyEntity(text);
+  const resolvedGame = resolveGameEntity(text);
+  const resolved = resolvedCompany || resolvedGame;
+  const hasKnownGame = Boolean(resolvedGame && (resolvedGame.type === 'game' || resolvedGame.type === 'franchise' || resolvedGame.game));
+  const hasKnownCompany = Boolean(resolvedCompany);
+  // Opinia o rozpoznanej grze lub firmie może wymagać faktów. Tylko pytanie bez
+  // rozpoznanej encji i bez sygnału faktograficznego pozostaje small talkiem.
+  const category = isHLTB ? 'hltb' : (isOpinion && !hasKnownGame && !hasKnownCompany ? 'conversation' : policyResult);
   const entity = resolved?.game || resolved?.name || detectEntity(p) || null;
   const freshness = detectFreshness(p);
   const isMinecraftRecipe = category === 'minecraft_recipe';
@@ -53,7 +56,8 @@ function classifyAIRequest(pytanie, policyCategory, recipeDetector = () => false
   // obok, żeby rozbieżność była widoczna w logu.
   return {
     intent: category, entity, entity_type: resolved?.type || (entity ? 'entity' : null),
-    game: resolved?.game || (resolved?.type === 'game' ? resolved.name : null), resolved_entity: resolved,
+    game: resolvedGame?.game || (resolvedGame?.type === 'game' ? resolvedGame.name : null), resolved_entity: resolved,
+    company: resolvedCompany?.name || null,
     game_type: resolved?.game_type || null,
     needs_web: needsWeb, needs_fresh_data: needsFreshData, freshness, source_type: sourceType,
     is_lore: lore, is_gameplay: gameplay, confidence,
