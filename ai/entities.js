@@ -14,6 +14,8 @@ const GAME_ALIASES = [
   { name: 'Elden Ring', type: 'game', aliases: ['elden ring'] },
   { name: 'Dark Souls', type: 'franchise', aliases: ['dark souls'] },
   { name: 'Baldur’s Gate 3', type: 'game', aliases: ['baldur’s gate 3', "baldur's gate 3", 'bg3'] },
+  { name: 'Diablo IV', type: 'game', aliases: ['diablo iv', 'diablo 4', 'd4'] },
+  { name: 'Diablo', type: 'franchise', aliases: ['diablo'] },
   { name: 'The Last of Us', type: 'franchise', aliases: ['the last of us', 'tlou'] },
   { name: 'God of War', type: 'franchise', aliases: ['god of war'] },
   { name: 'Dying Light: The Beast', type: 'game', aliases: ['dying light the beast', 'dying light: the beast'] },
@@ -177,6 +179,15 @@ function gameAliasesForText(normalizedText) {
   })).filter((entry) => entry.aliases.length);
 }
 
+// Wspólny sygnał gry dla routingu. Korzysta z tej samej tabeli aliasów co resolver,
+// więc dodanie gry w jednym miejscu automatycznie rozszerza klasyfikację pytań.
+function czyWspomnianoGre(text) {
+  const normalizedText = normalizujEncje(text);
+  return gameAliasesForText(normalizedText).some(entry =>
+    entry.aliases.some(alias => containsAlias(normalizedText, alias))
+  );
+}
+
 function followedByForeignSurname(rawText, alias, entry) {
   const tokens = String(rawText || '').match(/[\p{L}][\p{L}’']*/gu) || [];
   // Znane są tylko tokeny tej samej postaci (np. „Arthur Morgan”), bo „Miller”
@@ -254,6 +265,7 @@ module.exports = {
   normalizujEncje,
   containsAlias,
   containsExactAlias,
+  czyWspomnianoGre,
   scoreExternalGameCandidate,
   externalGameCandidateMatchesQuery,
   resolveGameEntity,
