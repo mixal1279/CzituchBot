@@ -15,7 +15,7 @@ test('secondary provider receives the remaining timeout', async () => {
   let observedSignal = false;
   const fakeFetch = async (_url, options) => {
     observedSignal = Boolean(options?.signal);
-    return new Response(JSON.stringify({ results: [{ title: 'Exa', url: 'https://example.com/a', highlights: ['evidence'] }] }), { status: 200 });
+    return new Response(JSON.stringify({ results: [{ title: 'Exa', url: 'https://example.com/a', text: 'Extracted Exa page text containing factual evidence. '.repeat(5), highlights: ['evidence'] }] }), { status: 200 });
   };
   const result = await searchSecondaryProviders({ query: 'q', exaKey: 'x', fetchFn: fakeFetch, prefer: 'exa', timeoutMs: 1234 });
   assert.equal(result.status, 'ok');
