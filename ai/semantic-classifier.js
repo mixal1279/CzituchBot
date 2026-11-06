@@ -1,5 +1,7 @@
 'use strict';
 
+const { awaitWithAbortTimeout } = require('./provider-runtime');
+
 const TYPY_PYTAN = new Set([
   'conversation', 'duration', 'forecast', 'channel_or_creator', 'how_to',
   'lore', 'comparison', 'price', 'recommendation', 'troubleshooting',
@@ -45,12 +47,13 @@ async function klasyfikujSemantycznie(pytanie, {
   const abort = () => kontroler.abort();
   if (sygnal?.aborted) return null;
   sygnal?.addEventListener('abort', abort, { once: true });
-  const timer = setTimeout(abort, Math.max(250, Math.min(Number(timeoutMs) || 1800, 2500)));
   try {
-    const response = await utworzCompletion(klient, {
+    const request = utworzCompletion(klient, {
       model,
       temperature: 0,
-      max_tokens: 120,
+      max_tokens: 220,
+      reasoning_effort: 'low',
+      include_reasoning: false,
       response_format: { type: 'json_object' },
       messages: [
         {
@@ -60,12 +63,17 @@ async function klasyfikujSemantycznie(pytanie, {
         { role: 'user', content: String(pytanie || '').slice(0, 500) },
       ],
     }, { signal: kontroler.signal });
+    const response = await awaitWithAbortTimeout(
+      request,
+      Math.max(250, Math.min(Number(timeoutMs) || 1800, 2500)),
+      kontroler,
+      'semantic classification',
+    );
     const content = response?.choices?.[0]?.message?.content;
     return parsujKlasyfikacje(content);
   } catch (_) {
     return null;
   } finally {
-    clearTimeout(timer);
     sygnal?.removeEventListener('abort', abort);
   }
 }
