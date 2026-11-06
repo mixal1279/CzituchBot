@@ -629,7 +629,7 @@ async function wczytajZweryfikowanaPamiecAI(userId) {
     }
     return records;
   } catch (err) {
-    console.warn('[AI Memory] Odczyt pamięci nieudany:', err.message);
+    console.warn('[AI Memory] Odczyt pamięci nieudany:', sanitizujKomunikatBledu(err?.message));
     return [];
   }
 }
@@ -651,7 +651,7 @@ async function zapiszZweryfikowanaPamiecAI(userId, incoming) {
     });
     console.log('[AI Memory] Zapisano', incoming.length, 'zweryfikowanych faktów.');
   } catch (err) {
-    console.warn('[AI Memory] Zapis pamięci nieudany:', err.message);
+    console.warn('[AI Memory] Zapis pamięci nieudany:', sanitizujKomunikatBledu(err?.message));
   }
 }
 
@@ -659,7 +659,7 @@ async function ustawZweryfikowanaPamiecAI(userId, records) {
   try {
     const ref = db.collection(COL_AI_MEMORY).doc(hashAIUserMemoryId(userId));
     await ref.set({ version: 1, records: pruneExpiredMemories(records || []), updatedAt: Date.now() }, { merge: true });
-  } catch (err) { console.warn('[AI Memory] Aktualizacja pamięci nieudana:', err.message); }
+  } catch (err) { console.warn('[AI Memory] Aktualizacja pamięci nieudana:', sanitizujKomunikatBledu(err?.message)); }
 }
 
 const readline   = require('readline');
@@ -3141,7 +3141,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
             );
             return (rewriteResult?.choices?.[0]?.message?.content || '').trim() || null;
           } catch (error) {
-            console.warn(`[Tavily] ⏱️ Rewrite pominięty (${error?.message || error}); używam oryginalnego pytania.`);
+            console.warn(`[Tavily] ⏱️ Rewrite pominięty (${sanitizujKomunikatBledu(error?.message || error)}); używam oryginalnego pytania.`);
             return null;
           }
         })() : Promise.resolve(null))
@@ -6213,7 +6213,7 @@ async function ensurePersistentCachesReady() {
   ]).catch(error => {
     persistentCachesReady = null;
     persistentCachesRetryAfter = Date.now() + 60_000;
-    console.error('[Firestore state] Nie udało się wczytać cache — ponowię próbę za 60 s; pomijam operacje wymagające pełnego stanu:', error.message);
+    console.error('[Firestore state] Nie udało się wczytać cache — ponowię próbę za 60 s; pomijam operacje wymagające pełnego stanu:', sanitizujKomunikatBledu(error?.message));
     return false;
   }).finally(() => wyczyscTimeout(timeout));
   return persistentCachesReady;
@@ -6609,7 +6609,7 @@ async function obslugaWiadomosci(nick, message, platforma, wyslijFn, kanal = nul
     try {
       await wykonajAIWHistorii(historiaRozmowy[historiaKlucz], () => wykonajWKolejceAI(() => zapytajAI(nick, pytanie, historiaRozmowy[historiaKlucz], prompt, wyslijFn, { temperature: 0.25, max_tokens: 150, aiProfile, tavilyOptions, memoryUserId: historiaKlucz })));
     } catch (err) {
-      console.error('[Groq] Błąd:', err.message);
+      console.error('[Groq] Błąd:', sanitizujKomunikatBledu(err?.message));
       if (['AI_QUEUE_FULL', 'AI_QUEUE_TIMEOUT'].includes(err.code)) await wyslijFn(`@${nick} AI jest teraz zajęte — spróbuj za chwilę.`);
     }
     return;
@@ -6719,7 +6719,7 @@ async function obslugaWiadomosci(nick, message, platforma, wyslijFn, kanal = nul
           memoryUserId: historiaKlucz,
         })));
       } catch (err) {
-        console.error('[Groq/Angie] Błąd:', err.message);
+        console.error('[Groq/Angie] Błąd:', sanitizujKomunikatBledu(err?.message));
         if (['AI_QUEUE_FULL', 'AI_QUEUE_TIMEOUT'].includes(err.code)) await wyslijFn(`@${nick} AI jest teraz zajęte — spróbuj za chwilę.`);
       }
     }
@@ -8349,7 +8349,7 @@ async function obslugaTwitch(nick, message, wyslijFn, config = TWITCH_CONFIG_BIL
           ))
         );
       } catch (err) {
-        console.error('[Groq/Billy] Błąd:', err.message);
+        console.error('[Groq/Billy] Błąd:', sanitizujKomunikatBledu(err?.message));
         if (['AI_QUEUE_FULL', 'AI_QUEUE_TIMEOUT'].includes(err.code)) {
           await wyslijFn(`@${nick} AI jest teraz zajęte — spróbuj za chwilę.`);
         }
