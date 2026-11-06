@@ -39,6 +39,7 @@ const { discoverLiveVideoId, isLiveVideoFromChannel } = require('./youtube-live-
 const { agregujMetrykiWalidatorow, zbudujKontekstMetrykiWalidatora, wybierzTimeoutWalidatora } = require('./ai/validator-telemetry');
 const { OAuth2Client } = require('google-auth-library');
 const { oczekujNaKodOAuth } = require('./youtube-oauth-callback');
+const { czyBezpiecznaKwotaEko } = require('./economy/validation');
 const Groq       = require('groq-sdk');
 const tmi        = require('tmi.js');
 const {
@@ -5217,10 +5218,6 @@ async function szukajNaWiki(domena, fraza) {
   } catch {
     return null;
   }
-}
-
-function czyBezpiecznaKwotaEko(kwota) {
-  return Number.isSafeInteger(kwota) && kwota > 0;
 }
 
 async function obslugaEkonomii(nick, message, wyslijFn, walutaNadpis = null) {
