@@ -71,7 +71,7 @@ function okreslKategorieAI(pytanie, czyPytanieOReceptureMC = () => false) {
     || maToken(tokeny, 'game', 'gra', 'gry', 'grze', 'gre', 'gier', 'tytul')
     || maFraze(tokeny, 'tytul gry');
   const jawneObliczenie = /(?:oblicz|policz|ile\s+to|ile\s+wynosi|wynik\s+(?:działania|dzialania))/iu.test(p);
-  const wyrazenieArytmetyczne = /(?<![\p{L}\p{N}_])\d+(?:[.,]\d+)?\s*[+*/×÷-]\s*\d+(?:[.,]\d+)?(?:\s*[+*/×÷-]\s*\d+(?:[.,]\d+)?)*(?![\p{L}\p{N}_)/u;
+  const wyrazenieArytmetyczne = /(?<![\p{L}\p{N}_])\d+(?:[.,]\d+)?\s*[+*/×÷-]\s*\d+(?:[.,]\d+)?(?:\s*[+*/×÷-]\s*\d+(?:[.,]\d+)?)*(?![\p{L}\p{N}_])/u;
   if (jawneObliczenie && wyrazenieArytmetyczne.test(p)) return 'calculation';
   if (czyPytanieOReceptureMC(p)) return 'minecraft_recipe';
   if (czyPytanieOFirmie(p)) return 'web_fact';
