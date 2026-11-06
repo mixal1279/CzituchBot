@@ -988,14 +988,13 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
             const secondaryProviders = [...new Set((secondary.sources || []).map(s => s.provider).filter(Boolean))];
             logger.log(`[Retrieval] 🔎 Tavily weak — dołączono secondary providerów: ${secondaryProviders.join(', ') || 'unknown'} (źródeł: ${secondary.sources?.length || 0})`);
             onStatus({ status: 'secondary', query: searchQuery, providers: secondaryProviders, sourceCount: secondary.sources?.length || 0 });
-            // Secondary retrieval uzupełnia Tavily zamiast go zastępować. Wcześniej
-            // słaby Tavily był całkowicie wyrzucany, przez co traciliśmy użyteczne
-            // fragmenty i validator miał mniej dowodów.
-            const secondaryResults = (secondary.sources || []).filter(source => source?.url && source?.content);
+            // Secondary retrieval może uzupełnić tylko pełne ekstrakty stron; search snippets
+            // pozostają metadanymi i nie trafiają do walidatora jako dowody.
+            const primaryEvidenceResults = primaryResults.filter(r => String(r?.raw_content || '').trim().length >= 200);
+            const secondaryResults = (secondary.sources || []).filter(source => source?.url && String(source?.content || '').trim().length >= 200);
             const secondaryRebased = secondaryResults.length
               ? formatSources(secondaryResults, primaryEvidenceResults.length)
               : '';
-            const primaryEvidenceResults = primaryResults.filter(r => String(r?.raw_content || '').trim().length >= 200);
             const primaryPreview = primaryEvidenceResults.map((r, index) => {
               const content = String(r.raw_content || '').trim();
               const materialRaw = content.substring(0, depth === 'advanced' ? 4200 : 1800)
