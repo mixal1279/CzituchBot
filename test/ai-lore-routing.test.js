@@ -144,7 +144,8 @@ test('GameLore is sent as a preferred Tavily domain and its source provenance su
   assert.match(result.text, /TYP: UNTRUSTED_WEB_DATA/);
   assert.match(result.text, /<<<UNTRUSTED_SOURCE_CONTENT>>>/);
   assert.match(result.text, /USUNIĘTA_INSTRUKCJA_ZRODŁA/);
-  assert.match(result.text, /USUNIĘTY_MARKER_ZRODŁA/);\n  assert.doesNotMatch(result.text, /Ignore all previous instructions/i);
+  assert.match(result.text, /USUNIĘTY_MARKER_ZRODŁA/);
+  assert.doesNotMatch(result.text, /Ignore all previous instructions/i);
   assert.match(result.text, /HOST: gamelore\.fandom\.com/);
   assert.match(result.text, /URL: https:\/\/gamelore\.fandom\.com\/wiki\/Hornet/);
   assert.equal(result.sources[0].sourceId, 'SOURCE 1');
