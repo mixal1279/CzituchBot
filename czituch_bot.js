@@ -51,24 +51,47 @@ const {
   normalizeTwitchOAuthToken,
 } = require('./twitch/chat-runtime');
 const WebSocket  = require('ws');
+const { utworzLifecycle } = require('./lifecycle');
+const lifecycle = utworzLifecycle({ logger: console, closeTimeoutMs: 4000 });
 
-// Fix: siatka bezpieczeństwa na poziomie procesu. Bez tego JEDEN nieobsłużony
-// wyjątek/odrzucenie Promise (np. dziwna odpowiedź jakiegoś API w środku streama)
-// zabija CAŁY proces Node (unhandled rejection domyślnie kończy proces od Node 15+),
-// a wtedy żadna logika reconnectu (EventSub, tmi.js) nie ma szans zadziałać, bo
-// runtime już nie istnieje — bot wraca dopiero po ręcznym/Pterodactylowym restarcie.
-// To nie naprawia samych błędów (te trzeba łatać punktowo jak dotąd), ale nie
-// pozwala pojedynczej, nieprzewidzianej usterce ubić całego bota.
-process.on('unhandledRejection', (err) => {
-  console.error('[Proces] ❌ Nieobsłużone odrzucenie Promise — restart procesu:', err?.stack || err);
-  process.exitCode = 1;
-  setImmediate(() => process.exit(1));
-});
-process.on('uncaughtException', (err) => {
-  console.error('[Proces] ❌ Nieobsłużony wyjątek — restart procesu:', err?.stack || err);
-  process.exitCode = 1;
-  setImmediate(() => process.exit(1));
-});
+// Wszystkie timery z głównego procesu są rejestrowane, aby restart Pterodactyla
+// nie pozostawiał interwałów ani opóźnionych reconnectów.
+const zarejestrowaneTimery = new Map();
+function ustawTimeout(fn, opoznienie, ...argumenty) {
+  let wyrejestruj = null;
+  let timer;
+  timer = globalThis.setTimeout((...args) => {
+    wyrejestruj?.();
+    zarejestrowaneTimery.delete(timer);
+    return fn(...args);
+  }, opoznienie, ...argumenty);
+  wyrejestruj = lifecycle.zarejestruj('timeout', () => {
+    globalThis.clearTimeout(timer);
+    zarejestrowaneTimery.delete(timer);
+  });
+  zarejestrowaneTimery.set(timer, wyrejestruj);
+  return timer;
+}
+function ustawInterwal(fn, opoznienie, ...argumenty) {
+  const timer = globalThis.setInterval(fn, opoznienie, ...argumenty);
+  const wyrejestruj = lifecycle.zarejestruj('interval', () => {
+    globalThis.clearInterval(timer);
+    zarejestrowaneTimery.delete(timer);
+  });
+  zarejestrowaneTimery.set(timer, wyrejestruj);
+  return timer;
+}
+function wyczyscTimeout(timer) {
+  globalThis.wyczyscTimeout(timer);
+  zarejestrowaneTimery.get(timer)?.();
+  zarejestrowaneTimery.delete(timer);
+}
+function wyczyscInterwal(timer) {
+  globalThis.wyczyscInterwal(timer);
+  zarejestrowaneTimery.get(timer)?.();
+  zarejestrowaneTimery.delete(timer);
+}
+
 
 const fs = require('fs');
 const path = require('path');
@@ -242,7 +265,7 @@ async function pobierzPolskieNazwyMC() {
   if (MC26_POLSKIE_NAZWY_PROMISE) return MC26_POLSKIE_NAZWY_PROMISE;
   MC26_POLSKIE_NAZWY_PROMISE = (async () => {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 5000);
+    const timer = ustawTimeout(() => controller.abort(), 5000);
     try {
       // Lokalizacja Minecraft 26.1.x: używamy aktualnego patcha tej samej
       // linii jako słownika nazw; receptury pozostają z lokalnego minecraft-data-26.1.
@@ -261,7 +284,7 @@ async function pobierzPolskieNazwyMC() {
       console.warn(`[Minecraft 26.1] Nie udało się pobrać polskiej lokalizacji nazw: ${err.message}`);
       return {};
     } finally {
-      clearTimeout(timer);
+      wyczyscTimeout(timer);
     }
   })();
   return MC26_POLSKIE_NAZWY_PROMISE;
@@ -481,6 +504,7 @@ const db = process.env.CZITUCHBOT_SKIP_STARTUP_IO === '1'
     });
 
 const FIRESTORE_STATE = createFirestoreState(db);
+if (db) lifecycle.zarejestruj('Firestore', () => db.terminate());
 // Restore provider cooldowns across restarts; writes are best-effort when Firestore is unavailable.
 void configureProviderQuotaPersistence(FIRESTORE_STATE.enabled ? {
   read: FIRESTORE_STATE.read,
@@ -771,11 +795,11 @@ async function fetchZTimeout(url, options = {}, timeoutMs = 15000) {
   const abortFromUpstream = () => controller.abort();
   if (upstreamSignal?.aborted) controller.abort();
   else upstreamSignal?.addEventListener('abort', abortFromUpstream, { once: true });
-  const timeout = setTimeout(() => controller.abort(), duration);
+  const timeout = ustawTimeout(() => controller.abort(), duration);
   try {
     return await fetch(url, { ...options, signal: controller.signal });
   } finally {
-    clearTimeout(timeout);
+    wyczyscTimeout(timeout);
     upstreamSignal?.removeEventListener('abort', abortFromUpstream);
   }
 }
@@ -1668,7 +1692,7 @@ async function walidujOdpowiedzGeminiModel(model, persona, pytanie, odpowiedz, d
     if (requestState && validatorTimeoutMs === null) {
       return { status: 'unavailable', ok: false, technicalError: true, transient: true, skipped: true, provider: 'gemini', model, unsupported_claims: [], reason: 'Gemini validator pominięty: zbyt mały pozostały budżet czasu' };
     }
-    const timer = setTimeout(() => controller.abort(), validatorTimeoutMs);
+    const timer = ustawTimeout(() => controller.abort(), validatorTimeoutMs);
     try {
       const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': KONFIGURACJA.geminiKey },
@@ -1789,7 +1813,7 @@ async function walidujOdpowiedzGeminiModel(model, persona, pytanie, odpowiedz, d
       }
       console.log(`[AI][${requestId}] ${model}: decyzja ok=${normalized.ok} supported=${normalized.supported} relevant=${normalized.relevant} complete=${normalized.complete} hallucination=${normalized.hallucination} unsupported=${normalized.unsupported_claims.length}`);
       return normalized;
-    } finally { clearTimeout(timer); }
+    } finally { wyczyscTimeout(timer); }
   } catch (err) {
     const message = String(err?.message || '');
     const abortLike = err?.name === 'AbortError' || /aborted|abort|cancelled|canceled/i.test(message);
@@ -3517,7 +3541,7 @@ Pytanie użytkownika: ${pytanie}`;
     const prompt = messages.user;
     const controller = new AbortController();
     const timeoutMs = timeoutDlaGeneracji();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    const timer = ustawTimeout(() => controller.abort(), timeoutMs);
     try {
       const response = await fetch(buildGeminiGenerateContentUrl(AI_MODELS.generatorGemini), {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': KONFIGURACJA.geminiKey },
@@ -3552,7 +3576,7 @@ Pytanie użytkownika: ${pytanie}`;
       const cooldownMs = geminiGenerationCooldownMsFromError(err);
       if (cooldownMs > 0) ustawGeminiGenerationCooldown(AI_MODELS.generatorGemini, cooldownMs);
       return wynikPusty('gemini', AI_MODELS.generatorGemini, err.message);
-    } finally { clearTimeout(timer); }
+    } finally { wyczyscTimeout(timer); }
   }
 
   async function zapytajGeminiLiteFallback(maxTok = 700, overrideSystemPrompt = systemPrompt, powod = 'Gemini 3.8 Flash') {
@@ -3563,7 +3587,7 @@ Pytanie użytkownika: ${pytanie}`;
     const prompt = messages.user;
     const controller = new AbortController();
     const timeoutMs = timeoutDlaGeneracji();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    const timer = ustawTimeout(() => controller.abort(), timeoutMs);
     try {
       const response = await fetch(buildGeminiGenerateContentUrl(AI_MODELS.generatorGeminiLite), {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': KONFIGURACJA.geminiKey },
@@ -3598,7 +3622,7 @@ Pytanie użytkownika: ${pytanie}`;
       const cooldownMs = geminiGenerationCooldownMsFromError(err);
       if (cooldownMs > 0) ustawGeminiGenerationCooldown(AI_MODELS.generatorGeminiLite, cooldownMs);
       return wynikPusty('gemini', AI_MODELS.generatorGeminiLite, err.message);
-    } finally { clearTimeout(timer); }
+    } finally { wyczyscTimeout(timer); }
   }
 
   async function zapytajOpenRouterFallback(maxTok = 700, overrideSystemPrompt = systemPrompt, powod = 'Gemini') {
@@ -3608,7 +3632,7 @@ Pytanie użytkownika: ${pytanie}`;
     const prompt = messages[messages.length - 1]?.content || pytanie;
     const controller = new AbortController();
     const timeoutMs = timeoutDlaGeneracji();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    const timer = ustawTimeout(() => controller.abort(), timeoutMs);
     try {
       const response = await fetch(`${KONFIGURACJA.openrouterBaseUrl}/chat/completions`, {
         method: 'POST',
@@ -3642,7 +3666,7 @@ Pytanie użytkownika: ${pytanie}`;
     } catch (err) {
       console.error(`[OpenRouter] Fallback nieudany (${powod}):`, err.message);
       return wynikPusty('openrouter', KONFIGURACJA.openrouterGeneratorModel, formatProviderError('openrouter', KONFIGURACJA.openrouterGeneratorModel, err));
-    } finally { clearTimeout(timer); }
+    } finally { wyczyscTimeout(timer); }
   }
 
   // xKiro jako dodatkowy fallback po Groq 20B (OpenAI-compatible gateway).
@@ -5127,9 +5151,9 @@ function ekoStartScheduler(wyslijFn) {
   function zaplanujZaMs(msDocel, fn) {
     if (msDocel > MAX_TIMEOUT) {
       // za długo na raz — czekaj maksymalny możliwy kawałek, potem przelicz resztę
-      setTimeout(() => zaplanujZaMs(msDocel - MAX_TIMEOUT, fn), MAX_TIMEOUT);
+      ustawTimeout(() => zaplanujZaMs(msDocel - MAX_TIMEOUT, fn), MAX_TIMEOUT);
     } else {
-      setTimeout(fn, Math.max(msDocel, 0));
+      ustawTimeout(fn, Math.max(msDocel, 0));
     }
   }
 
@@ -5144,7 +5168,7 @@ function ekoStartScheduler(wyslijFn) {
       console.log(`[Ekonomia] ✅ Scheduler podatkowy zaplanowany za ${Math.round(msDocel / 3600000)} h`);
     } else {
       // Minęła 23:00 ostatniego dnia – odpal za godzinę (edge case)
-      setTimeout(zaplanuj, 60 * 60 * 1000);
+      ustawTimeout(zaplanuj, 60 * 60 * 1000);
     }
   }
 
@@ -5154,7 +5178,7 @@ function ekoStartScheduler(wyslijFn) {
 // Lokaty są przechowywane w Firestore, dlatego po restarcie nie polegamy wyłącznie
 // na dawnym setTimeout. Rozliczenie jest atomowe; drugi timer niczego nie wypłaci ponownie.
 function zaplanujRozliczenieLokaty(nick, waluta, stmt, wyslijFn = null, opoznienieMs = 0) {
-  setTimeout(async () => {
+  ustawTimeout(async () => {
     try {
       const wynik = await stmt.rozliczLokateAtomowo(nick, Date.now(), EKO.lokataOdsetki, EKO.podatek);
       if (!wynik.ok) return;
@@ -5358,10 +5382,10 @@ async function obslugaEkonomii(nick, message, wyslijFn, walutaNadpis = null) {
       const wynikMute = await stmt.kupFakeMuteAtomowo({ nick, cena: EKO.fakeMuteCena, podatekStawka: EKO.podatek });
       if (!wynikMute.ok) return wyslijFn(`${await prefix()} @${nick} Potrzebujesz ${EKO.fakeMuteCena}${waluta.symbol}, masz ${wynikMute.saldo}${waluta.symbol}.`);
       await wyslijFn(`@${cel} dostanie mute za 3 sekundy... 🔇`);
-      setTimeout(() => wyslijFn(`3...`), 1500);
-      setTimeout(() => wyslijFn(`2...`), 2500);
-      setTimeout(() => wyslijFn(`1...`), 3500);
-      setTimeout(() => wyslijFn(`ty serio myślałeś że dam ci mute? śmieszny jesteś xD`), 4500);
+      ustawTimeout(() => wyslijFn(`3...`), 1500);
+      ustawTimeout(() => wyslijFn(`2...`), 2500);
+      ustawTimeout(() => wyslijFn(`1...`), 3500);
+      ustawTimeout(() => wyslijFn(`ty serio myślałeś że dam ci mute? śmieszny jesteś xD`), 4500);
       return;
     }
 
@@ -5489,7 +5513,7 @@ async function obslugaEkonomii(nick, message, wyslijFn, walutaNadpis = null) {
 
     // Nowe wyzwanie
     await stmt.ustawDuel(nick.toLowerCase(), cel, kwota, Date.now());
-    setTimeout(async () => {
+    ustawTimeout(async () => {
       const d = await stmt.getDuel(nick.toLowerCase(), nick.toLowerCase());
       if (d && d.od === nick.toLowerCase()) await stmt.usunDuel(nick.toLowerCase(), nick.toLowerCase());
     }, 60000);
@@ -5499,7 +5523,7 @@ async function obslugaEkonomii(nick, message, wyslijFn, walutaNadpis = null) {
 
 // Czyszczenie pamięci co godzinę – zapobiega wyciekowi przy długim działaniu bota
 if (process.env.CZITUCHBOT_SKIP_STARTUP_IO !== '1') {
-setInterval(() => {
+ustawInterwal(() => {
   const klucze = Object.keys(historiaRozmowy);
   if (klucze.length > 500) {
     console.log(`[Bot] 🧹 Czyszczę historię rozmów (${klucze.length} nicków)...`);
@@ -5547,7 +5571,7 @@ function usunMarkeryWewnetrzneAI(tekst) {
 }
 
 function czekaj(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
+  return new Promise(resolve => ustawTimeout(resolve, ms));
 }
 
 function zapytaj(pytanie) {
@@ -5615,7 +5639,7 @@ async function pobierzWszystkieTikToki(username) {
 const TIKTOK_OKNO_NADRABIANIA_MS = 48 * 60 * 60 * 1000; // 48h — ile wstecz bot nadrabia przy braku zapisanego stanu
 
 function uruchomSledzenieTikTok(username, wyslijFn, interwalMs = 15 * 60 * 1000) {
-  setInterval(async () => {
+  ustawInterwal(async () => {
     if (!(await ensurePersistentCachesReady())) return;
     const stan  = wczytajStanTikTok();
     const wpisy = await pobierzWszystkieTikToki(username);
@@ -6178,7 +6202,7 @@ async function ensurePersistentCachesReady() {
   persistentCachesReady = Promise.race([
     loadCaches,
     new Promise((_, reject) => {
-      timeout = setTimeout(() => reject(new Error('Przekroczono limit 10 s podczas wczytywania cache z Firestore.')), 10_000);
+      timeout = ustawTimeout(() => reject(new Error('Przekroczono limit 10 s podczas wczytywania cache z Firestore.')), 10_000);
       timeout.unref?.();
     }),
   ]).catch(error => {
@@ -6186,7 +6210,7 @@ async function ensurePersistentCachesReady() {
     persistentCachesRetryAfter = Date.now() + 60_000;
     console.error('[Firestore state] Nie udało się wczytać cache — ponowię próbę za 60 s; pomijam operacje wymagające pełnego stanu:', error.message);
     return false;
-  }).finally(() => clearTimeout(timeout));
+  }).finally(() => wyczyscTimeout(timeout));
   return persistentCachesReady;
 }
 
@@ -6384,13 +6408,13 @@ async function obslugaWiadomosci(nick, message, platforma, wyslijFn, kanal = nul
     ostatnieUzycie[cooldownKey] = teraz;
     const cel = message.split(' ')[1]?.replace(/^@/, '') || nick;
     await wyslijFn(`@${cel} dostanie mute za 3 sekundy... 🔇`);
-    await new Promise(r => setTimeout(r, 1500));
+    await new Promise(r => ustawTimeout(r, 1500));
     await wyslijFn(`3...`);
-    await new Promise(r => setTimeout(r, 1000));
+    await new Promise(r => ustawTimeout(r, 1000));
     await wyslijFn(`2...`);
-    await new Promise(r => setTimeout(r, 1000));
+    await new Promise(r => ustawTimeout(r, 1000));
     await wyslijFn(`1...`);
-    await new Promise(r => setTimeout(r, 1000));
+    await new Promise(r => ustawTimeout(r, 1000));
     await wyslijFn(`żartowałem XD nie mam uprawnień 💀`);
     return;
   }
@@ -6997,7 +7021,7 @@ async function zGoogleRetry(fn, opis = 'zapytanie YouTube', proby = 3) {
       if (i === proby) break; // wykorzystano wszystkie próby
       const opoznienie = 3000 * i; // 3s, 6s, 9s...
       console.warn(`[YouTube] ⚠️ Przejściowy błąd Google przy "${opis}" (próba ${i}/${proby}), ponawiam za ${opoznienie / 1000}s...`);
-      await new Promise(r => setTimeout(r, opoznienie));
+      await new Promise(r => ustawTimeout(r, opoznienie));
     }
   }
   throw ostatniBlad;
@@ -7231,7 +7255,7 @@ async function wyslijYoutube(tekst, chatId) {
         requestBody: { snippet: { liveChatId: id, type: 'textMessageEvent', textMessageDetails: { messageText: kawalek } } },
       });
       console.log(`[YouTube→Chat] ✅ ${kawalek.substring(0, 60)}`);
-      if (kawalki.length > 1) await new Promise(r => setTimeout(r, 1500)); // odstęp między wiadomościami
+      if (kawalki.length > 1) await new Promise(r => ustawTimeout(r, 1500)); // odstęp między wiadomościami
     } catch (err) { console.error('[YouTube→Chat] Błąd:', err.message); }
   }
 }
@@ -7395,7 +7419,7 @@ async function youtubeWatcher(nazwaKanalu, wyslijFn) {
 
       // Auto-wiadomość co 30 min dla Angie28
       if (nazwaKanalu === 'Angie28' && !angieAutoMsgInterval) {
-        angieAutoMsgInterval = setInterval(() => {
+        angieAutoMsgInterval = ustawInterwal(() => {
           const msg = `💬 Discord: ${angieLinki.discord} | 🎵 TikTok: ${angieLinki.tiktok} | 📸 Instagram: ${angieLinki.instagram}`;
           wyslijFn(msg, stan.liveChatId).catch(err => console.error('[Angie28/AutoMsg] Błąd:', err.message));
         }, 30 * 60 * 1000);
@@ -7436,7 +7460,7 @@ async function youtubeWatcher(nazwaKanalu, wyslijFn) {
 
     // Wyczyść interwał Angie28 po zakończeniu streamu
     if (nazwaKanalu === 'Angie28' && angieAutoMsgInterval) {
-      clearInterval(angieAutoMsgInterval);
+      wyczyscInterwal(angieAutoMsgInterval);
       angieAutoMsgInterval = null;
       console.log('[Angie28] Auto-wiadomość zatrzymana (stream zakończony)');
     }
@@ -7658,7 +7682,7 @@ function zaplanujOdswiezenieBilly() {
     odswiezTokenBilly().catch(() => {});
   } else {
     console.log(`[Billy Auth] Zaplanowano odświeżenie za ${Math.round(pozostaloMs / 60000)} min`);
-    setTimeout(odswiezTokenBilly, pozostaloMs);
+    ustawTimeout(odswiezTokenBilly, pozostaloMs);
   }
 }
 
@@ -7693,7 +7717,7 @@ async function odswiezTokenBilly() {
       billyTokenDead = false;
       const refreshTime = ((data.expires_in ?? 3600) - 60) * 1000;
       console.log(`[Billy Auth] ✅ Token odświeżony! Następne za ${Math.round(refreshTime / 60000)} min`);
-      setTimeout(odswiezTokenBilly, Math.max(refreshTime, 10000));
+      ustawTimeout(odswiezTokenBilly, Math.max(refreshTime, 10000));
     } catch (err) {
       const trwaleMartwy = err.status === 400 || err.status === 401;
       if (trwaleMartwy) {
@@ -7706,7 +7730,7 @@ async function odswiezTokenBilly() {
         );
       } else {
         console.error('[Billy Auth] ❌ Błąd odświeżania (chwilowy?):', err.message);
-        setTimeout(odswiezTokenBilly, 30000);
+        ustawTimeout(odswiezTokenBilly, 30000);
       }
     } finally {
       billyRefreshPromise = null;
@@ -7733,7 +7757,7 @@ function rozpocznijOdzyskiwanieKickPrzezWorker() {
     'Bot sam wyłapie token po zalogowaniu, w ciągu ~30s.'
   );
 
-  kickOdzyskiwaniePollTimer = setInterval(async () => {
+  kickOdzyskiwaniePollTimer = ustawInterwal(async () => {
     try {
       const res = await fetchZTimeout(`${KONFIGURACJA.kickWorkerUrl}/kick/token`, {
         headers: { 'Authorization': `Bearer ${KONFIGURACJA.kickWorkerSecret}` },
@@ -7747,7 +7771,7 @@ function rozpocznijOdzyskiwanieKickPrzezWorker() {
       await zapiszTokenKick({ access_token: token.access_token, refresh_token: token.refresh_token, expires_in: token.expires_in });
       kickTokenDead = false;
 
-      clearInterval(kickOdzyskiwaniePollTimer);
+      wyczyscInterwal(kickOdzyskiwaniePollTimer);
       kickOdzyskiwaniePollTimer = null;
 
       // Posprzątaj po sobie w KV, żeby ten sam token nie został odebrany dwa razy.
@@ -7760,7 +7784,7 @@ function rozpocznijOdzyskiwanieKickPrzezWorker() {
       wyslijAlertPolishSteamDB('🟢 **CzituchBot – Kick odzyskany.** Bot znów działa normalnie.');
 
       const refreshTime = ((token.expires_in ?? 3600) - 60) * 1000;
-      setTimeout(odswiezTokenKick, Math.max(refreshTime, 10000));
+      ustawTimeout(odswiezTokenKick, Math.max(refreshTime, 10000));
     } catch (err) {
       console.error('[Kick Auth] ⚠️ Błąd pollowania Workera:', err.message);
     }
@@ -7797,7 +7821,7 @@ async function odswiezTokenKick() {
       await zapiszTokenKick(data);
       kickTokenDead = false;
       const refreshTime = (data.expires_in - 60) * 1000;
-      console.log(`[Kick Auth] ✅ Token odświeżony! Następne za ${Math.round(refreshTime / 60000)} min`);      setTimeout(odswiezTokenKick, refreshTime);
+      console.log(`[Kick Auth] ✅ Token odświeżony! Następne za ${Math.round(refreshTime / 60000)} min`);      ustawTimeout(odswiezTokenKick, refreshTime);
     } catch (err) {
       // 400/401 z endpointu tokenowego = refresh token odrzucony (np. invalid_grant) –
       // to NIE jest chwilowy problem sieci, dobijanie się co 30s nic nie da.
@@ -7808,7 +7832,7 @@ async function odswiezTokenKick() {
         rozpocznijOdzyskiwanieKickPrzezWorker();
       } else {
         console.error('[Kick Auth] ❌ Błąd odświeżania (chwilowy?):', err.message);
-        setTimeout(odswiezTokenKick, 30000);
+        ustawTimeout(odswiezTokenKick, 30000);
       }
     } finally {
       kickRefreshPromise = null;
@@ -7898,7 +7922,7 @@ async function ustawRealnyStartKick(broadcasterId, kanalNazwa, proba = 1) {
     return;
   }
   if (proba < 4) {
-    setTimeout(() => ustawRealnyStartKick(broadcasterId, kanalNazwa, proba + 1), 15000);
+    ustawTimeout(() => ustawRealnyStartKick(broadcasterId, kanalNazwa, proba + 1), 15000);
   } else {
     console.warn(`[Kick] ⚠️ Nie udało się pobrać realnego czasu startu dla ${kanalNazwa} po ${proba} próbach – zostaje przybliżony (Date.now() z połączenia WS).`);
   }
@@ -7947,11 +7971,14 @@ async function pobierzPusherConfig() {
 }
 
 async function uruchomKick() {
+  if (lifecycle.czyZamykanie()) return;
   const config  = await pobierzPusherConfig();
+  if (lifecycle.czyZamykanie()) return;
   const key     = config?.key     || '32cbd69e4b950bf97679';
   const cluster = config?.cluster || 'us2';
   const WS_URL  = `wss://ws-${cluster}.pusher.com/app/${key}?protocol=7&client=js&version=7.6.0&flash=false`;
   const ws = new WebSocket(WS_URL);
+  lifecycle.zarejestrujWebSocket(ws, 'Kick Pusher');
 
   ws.on('open', async () => {
     // Ustaw tymczasowo Date.now() dla OBU kanałów (na wypadek gdyby zapytanie do API nie
@@ -8008,8 +8035,9 @@ async function uruchomKick() {
   });
 
   ws.on('close', () => {
+    if (lifecycle.czyZamykanie()) return;
     console.warn('[Kick] Połączenie zamknięte, restartuję za 5s...');
-    setTimeout(uruchomKick, 5000);
+    ustawTimeout(uruchomKick, 5000);
   });
 }
 
@@ -8521,14 +8549,14 @@ function utworzWatchdogEventSub(tag, naTimeout) {
   let timer = null;
   return {
     reset(timeoutMs) {
-      if (timer) clearTimeout(timer);
-      timer = setTimeout(() => {
+      if (timer) wyczyscTimeout(timer);
+      timer = ustawTimeout(() => {
         console.warn(`${tag} ⚠️ Brak jakiejkolwiek wiadomości (w tym keepalive) przez ${Math.round(timeoutMs / 1000)}s — połączenie prawdopodobnie martwe, wymuszam reconnect.`);
         naTimeout();
       }, timeoutMs);
     },
     zatrzymaj() {
-      if (timer) clearTimeout(timer);
+      if (timer) wyczyscTimeout(timer);
       timer = null;
     },
   };
@@ -8550,7 +8578,7 @@ async function subskrybujZRetry(funkcjaSubskrypcji, opis, maxProby = 2, opoznien
         ? retryAfterMs
         : Math.min(opoznienieMs * (2 ** (proba - 1)), 30000);
       console.warn(`[EventSub] ⚠️ Subskrypcja (${opis}) nieudana, próba ${proba}/${maxProby} — ponawiam za ${Math.ceil(opoznienie / 1000)}s...`);
-      await new Promise(r => setTimeout(r, opoznienie));
+      await new Promise(r => ustawTimeout(r, opoznienie));
     }
   }
   console.error(`[EventSub] ❌ Subskrypcja (${opis}) nieudana po ${maxProby} próbach — czekam na pełny reconnect.`);
@@ -8652,6 +8680,7 @@ function podepnijHandleryEventSub(ws, twitchClient, config, userIdsPromise = nul
       adresReconnect.search = bezpiecznyReconnectUrl.search;
       // codeql[js/request-forgery] Host jest stały i nie pochodzi z danych wiadomości.
       const nowyWs = new WebSocket(adresReconnect);
+      lifecycle.zarejestrujWebSocket(nowyWs, 'Twitch EventSub (migracja)');
       stan.ws = nowyWs;
       podepnijHandleryEventSub(nowyWs, twitchClient, config);
     }
@@ -8696,7 +8725,7 @@ function podepnijHandleryEventSub(ws, twitchClient, config, userIdsPromise = nul
 
           // Zatrzymaj interwał Billy
           if (config.kanal === 'billybulka' && billyDiscordInterval) {
-            clearInterval(billyDiscordInterval);
+            wyczyscInterwal(billyDiscordInterval);
             billyDiscordInterval = null;
             console.log('[EventSub] Interwał Billy zatrzymany');
           }
@@ -8715,6 +8744,11 @@ function podepnijHandleryEventSub(ws, twitchClient, config, userIdsPromise = nul
 
   ws.on('close', (code, reason) => {
     watchdog.zatrzymaj();
+    if (lifecycle.czyZamykanie()) {
+      const stan = getEventSubState(config.botNick);
+      if (stan.ws === ws) stan.ws = null;
+      return;
+    }
     const stan = getEventSubState(config.botNick);
     if (stan.ws !== ws) {
       console.log('[EventSub] ℹ️ Poprzedni socket zamknięty po migracji.');
@@ -8729,9 +8763,9 @@ function podepnijHandleryEventSub(ws, twitchClient, config, userIdsPromise = nul
     stan.ws = null;
     stan.sessionId = null;
     stan.reconnectFrom = null;
-    if (stan.retryTimer) clearTimeout(stan.retryTimer);
+    if (stan.retryTimer) wyczyscTimeout(stan.retryTimer);
     console.warn(`[EventSub] ⚠️ Połączenie zamknięte (kod: ${code}) – ponawiam za 10s...`);
-    stan.retryTimer = setTimeout(() => {
+    stan.retryTimer = ustawTimeout(() => {
       stan.retryTimer = null;
       uruchomEventSub(twitchClient, config);
     }, 10000);
@@ -8741,6 +8775,7 @@ function podepnijHandleryEventSub(ws, twitchClient, config, userIdsPromise = nul
 }
 
 function uruchomEventSub(twitchClient, config) {
+  if (lifecycle.czyZamykanie()) return;
   const stan = getEventSubState(config.botNick);
   if (stan.ws && [WebSocket.CONNECTING, WebSocket.OPEN].includes(stan.ws.readyState)) {
     console.log(`[EventSub] ℹ️ Połączenie już działa lub się zestawia (bot: ${config.botNick}); pomijam duplikat.`);
@@ -8753,9 +8788,10 @@ function uruchomEventSub(twitchClient, config) {
     console.error('[EventSub] ❌ Nie udało się przygotować ID kanałów przed welcome:', err.message);
     return loginy.map(login => ({ login, userId: null }));
   });
-  if (stan.retryTimer) { clearTimeout(stan.retryTimer); stan.retryTimer = null; }
+  if (stan.retryTimer) { wyczyscTimeout(stan.retryTimer); stan.retryTimer = null; }
   console.log(`[EventSub] Łączę z wss://eventsub.wss.twitch.tv/ws (bot: ${config.botNick})...`);
   const ws = new WebSocket('wss://eventsub.wss.twitch.tv/ws');
+  lifecycle.zarejestrujWebSocket(ws, 'Twitch EventSub');
   stan.ws = ws;
   podepnijHandleryEventSub(ws, twitchClient, config, userIdsPromise);
 }
@@ -8792,13 +8828,13 @@ function uruchomBillyDiscordInterval(clientLubTwitchClient, config = TWITCH_CONF
   let kolejneBledyApi = 0;
   const MAX_KOLEJNYCH_BLEDOW = 3; // przy interwale 30 min to 1.5h trwającej awarii Twitcha
 
-  billyDiscordInterval = setInterval(async () => {
+  billyDiscordInterval = ustawInterwal(async () => {
     // Self-check: EventSub 'stream.offline' mógł zostać zgubiony (np. WS się rekonektował
     // w tym momencie), więc zamiast ufać tylko eventom, sprawdzamy realny status za każdym razem.
     const jestLive = await czyKanalJestLive('billybulka', config);
 
     if (jestLive === false) {
-      clearInterval(billyDiscordInterval);
+      wyczyscInterwal(billyDiscordInterval);
       billyDiscordInterval = null;
       console.log('[Twitch/AutoMsg] ⏹️ Kanał nie jest już live (self-check) – interwał Billy zatrzymany');
       return;
@@ -8807,7 +8843,7 @@ function uruchomBillyDiscordInterval(clientLubTwitchClient, config = TWITCH_CONF
     if (jestLive === null) {
       kolejneBledyApi++;
       if (kolejneBledyApi >= MAX_KOLEJNYCH_BLEDOW) {
-        clearInterval(billyDiscordInterval);
+        wyczyscInterwal(billyDiscordInterval);
         billyDiscordInterval = null;
         console.error(`[Twitch/AutoMsg] ⏹️ ${MAX_KOLEJNYCH_BLEDOW} kolejnych błędów API przy self-checku — zatrzymuję interwał zamiast spamować w nieznane. Trzeba będzie go wznowić ręcznie albo poczekać na kolejny stream.online.`);
         return;
@@ -8882,7 +8918,7 @@ function zaplanujOdswiezenieTwitchChat(botKey) {
     odswiezTokenTwitchChat(botKey).catch(() => {});
   } else {
     console.log(`[Twitch Chat/${botKey}] Zaplanowano odświeżenie za ${Math.round(pozostaloMs / 60000)} min`);
-    setTimeout(() => odswiezTokenTwitchChat(botKey), pozostaloMs);
+    ustawTimeout(() => odswiezTokenTwitchChat(botKey), pozostaloMs);
   }
 }
 
@@ -8931,7 +8967,7 @@ async function odswiezTokenTwitchChat(botKey) {
       stan.dead = false;
       const refreshTime = ((data.expires_in ?? 3600) - 60) * 1000;
       console.log(`[Twitch Chat/${botKey}] ✅ Token odświeżony! Następne za ${Math.round(refreshTime / 60000)} min`);
-      setTimeout(() => odswiezTokenTwitchChat(botKey), Math.max(refreshTime, 10000));
+      ustawTimeout(() => odswiezTokenTwitchChat(botKey), Math.max(refreshTime, 10000));
     } catch (err) {
       const trwaleMartwy = err.status === 400 || err.status === 401;
       if (trwaleMartwy) {
@@ -8943,7 +8979,7 @@ async function odswiezTokenTwitchChat(botKey) {
         ).catch(() => {});
       } else {
         console.error(`[Twitch Chat/${botKey}] ❌ Błąd odświeżania (chwilowy?):`, err.message);
-        setTimeout(() => odswiezTokenTwitchChat(botKey), 30000);
+        ustawTimeout(() => odswiezTokenTwitchChat(botKey), 30000);
       }
     } finally {
       stan.refreshPromise = null;
@@ -8964,6 +9000,11 @@ function uruchomTwitch(config) {
     channels: config.obserwowaneKanaly,
   });
 
+  lifecycle.zarejestruj('Twitch IRC ' + config.botNick, async () => {
+    try { await client.disconnect(); } catch (error) {
+      console.warn('[Lifecycle] Twitch IRC nie zamknął się czysto:', error?.message || error);
+    }
+  });
   const joinTracker = createTwitchJoinTracker(config.obserwowaneKanaly);
   let validationRetryTimer = null;
   let periodicValidationRetryTimer = null;
@@ -9034,7 +9075,7 @@ function uruchomTwitch(config) {
 
   const zaplanujPonownaWalidacje = () => {
     if (validationRetryTimer) return;
-    validationRetryTimer = setTimeout(() => {
+    validationRetryTimer = ustawTimeout(() => {
       validationRetryTimer = null;
       uruchomPoWalidacji().catch(obslugaBleduAuth);
     }, 30000);
@@ -9043,7 +9084,7 @@ function uruchomTwitch(config) {
 
   const zaplanujPonownaWalidacjeOkresowa = () => {
     if (periodicValidationRetryTimer) return;
-    periodicValidationRetryTimer = setTimeout(async () => {
+    periodicValidationRetryTimer = ustawTimeout(async () => {
       periodicValidationRetryTimer = null;
       try {
         await walidujTokenCzatu();
@@ -9153,7 +9194,7 @@ function uruchomTwitch(config) {
   });
 
   // Twitch wymaga walidacji tokena przy starcie i cyklicznie w trakcie działania.
-  const validationInterval = setInterval(async () => {
+  const validationInterval = ustawInterwal(async () => {
     try {
       await walidujTokenCzatu();
     } catch (err) {
@@ -9189,6 +9230,7 @@ const YT_KANALY_ARBUZIK = [
 //  START
 // =============================================
 const startBot = async () => {
+  lifecycle.zainstalujObslugeProcesu();
   console.log('🚀 Uruchamiam CzituchBota (YouTube + Twitch)...\n');
   console.log('[Wersja] v24.5 AI hardened — GameLore lore + GameFAQs gameplay RAG + unique Tavily source IDs + claim validator | Twitch przez Helix\n');
 
@@ -9272,10 +9314,10 @@ const startBot = async () => {
   // zapytaniami OAuth tuż po starcie (patrz komentarz przy getAccessToken wyżej).
   if (youtubeReady) {
     youtubeWatcher(KONFIGURACJA.youtubeTargetKanal, wyslijYoutube);
-    setTimeout(() => youtubeWatcher(KONFIGURACJA.youtubeTargetKanal2, wyslijYoutube), 1000);
-    setTimeout(() => youtubeWatcher(KONFIGURACJA.youtubeTargetKanal4, wyslijYoutube), 2000);
-    setTimeout(() => youtubeWatcher(KONFIGURACJA.youtubeTargetKanal5, wyslijYoutube), 3000);
-    setTimeout(() => youtubeWatcher(KONFIGURACJA.youtubeTargetKanal6, wyslijYoutube), 4000);
+    ustawTimeout(() => youtubeWatcher(KONFIGURACJA.youtubeTargetKanal2, wyslijYoutube), 1000);
+    ustawTimeout(() => youtubeWatcher(KONFIGURACJA.youtubeTargetKanal4, wyslijYoutube), 2000);
+    ustawTimeout(() => youtubeWatcher(KONFIGURACJA.youtubeTargetKanal5, wyslijYoutube), 3000);
+    ustawTimeout(() => youtubeWatcher(KONFIGURACJA.youtubeTargetKanal6, wyslijYoutube), 4000);
   } else {
     console.warn('[YouTube] Watchery nie zostały uruchomione z powodu niedostępnej autoryzacji.');
   }
@@ -9287,7 +9329,7 @@ const startBot = async () => {
 if (require.main === module) {
   startBot().catch(err => {
     console.error('[START] Nieobsłużony błąd startu bota:', err?.stack || err);
-    process.exitCode = 1;
+    void lifecycle.zamknijWszystko('startup-error').finally(() => { process.exitCode = 1; });
   });
 }
 
