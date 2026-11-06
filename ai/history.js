@@ -42,26 +42,54 @@ function zbudujKluczHistorii(platforma, kanal, userId) {
   ].join(':');
 }
 
+const NIEBEZPIECZNE_KLUCZE = new Set(['__proto__', 'prototype', 'constructor']);
+
+function czyBezpiecznySlownik(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value) || value === Object.prototype) return false;
+  try {
+    const prototype = Object.getPrototypeOf(value);
+    return prototype === Object.prototype || prototype === null;
+  } catch (_) {
+    return false;
+  }
+}
+
 function oznaczUzycieHistorii(ostatnieUzycie, klucz, teraz = Date.now()) {
-  if (!ostatnieUzycie || typeof ostatnieUzycie !== 'object' || Array.isArray(ostatnieUzycie)) return false;
+  if (!czyBezpiecznySlownik(ostatnieUzycie)) return false;
   const key = String(klucz || '').trim();
-  if (!key) return false;
-  Object.defineProperty(ostatnieUzycie, key, { value: Number.isFinite(teraz) ? teraz : Date.now(), writable: true, configurable: true, enumerable: true });
-  return true;
+  if (!key || NIEBEZPIECZNE_KLUCZE.has(key)) return false;
+  try {
+    Object.defineProperty(ostatnieUzycie, key, {
+      value: Number.isFinite(teraz) ? teraz : Date.now(),
+      writable: true,
+      configurable: true,
+      enumerable: true,
+    });
+    return true;
+  } catch (_) {
+    return false;
+  }
 }
 
 function ograniczHistorieRozmow(historie, ostatnieUzycie, limit = 500) {
-  if (!historie || typeof historie !== 'object' || Array.isArray(historie)) return [];
-  if (!ostatnieUzycie || typeof ostatnieUzycie !== 'object' || Array.isArray(ostatnieUzycie)) return [];
+  if (!czyBezpiecznySlownik(historie) || !czyBezpiecznySlownik(ostatnieUzycie)) return [];
+
+  // Usuń niebezpieczne własne klucze JSON bez przypisywania ich do prototypu.
+  for (const key of NIEBEZPIECZNE_KLUCZE) {
+    Reflect.deleteProperty(historie, key);
+    Reflect.deleteProperty(ostatnieUzycie, key);
+  }
+
   const max = Number.isSafeInteger(limit) && limit >= 0 ? limit : 500;
   const klucze = Object.keys(historie);
   if (klucze.length <= max) return [];
   klucze.sort((a, b) => (Number(ostatnieUzycie[a]) || 0) - (Number(ostatnieUzycie[b]) || 0));
-  const usuniete = klucze.slice(0, klucze.length - max);
-  for (const key of usuniete) {
-    if (key === '__proto__' || key === 'prototype' || key === 'constructor') continue;
-    Reflect.deleteProperty(historie, key);
-    Reflect.deleteProperty(ostatnieUzycie, key);
+  const kandydaci = klucze.slice(0, klucze.length - max);
+  const usuniete = [];
+  for (const key of kandydaci) {
+    const usunietoHistorie = Reflect.deleteProperty(historie, key);
+    const usunietoUzycie = Reflect.deleteProperty(ostatnieUzycie, key);
+    if (usunietoHistorie || usunietoUzycie) usuniete.push(key);
   }
   return usuniete;
 }
