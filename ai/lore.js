@@ -7,7 +7,7 @@ const GAMELORE_NAME = 'GameLore Wiki';
 // Intencja lore opisuje pytanie o treść świata gry, a nie samo wspomnienie tytułu.
 // Nie umieszczamy tu ogólnego „dlaczego”: pytania o wydajność, błędy i zakup gry
 // nie mogą trafiać do RAG fabularnego tylko dlatego, że zawierają nazwę gry.
-const LORE_INTENT_RE = /(?<![\p{L}\p{N}_])(?:lore|fabuł[aeęy]|histori(?:a|ę|ii|e)|kim\s+(?:[\p{L}]+\s+){0,2}(?:jest|był|była|byli)|kto\s+(?:[\p{L}]+\s+){0,2}(?:to|jest|był|była)|co\s+się\s+(?:stało|wydarzyło)|pochodzeni[ae]|backstory|kanon|canon|timeline|chronologi[ae]|zakończeni[ae]|teori[ae]|easter\s+egg|sekret(?:y|ach)?|symbolik[ai]|znaczeni[ae]|relacj[ae]\s+(?:między|z)|zwi[aą]zk(?:u|i|iem|ach)|konflikt(?:u|em|ach)?|motywacj[ae]|wpływ(?:u|em)?|wpłyn(?:ął|ęło|ęła|ęły)|wydarzeni(?:a|ach)\s+w\s+grze)(?![\p{L}\p{N}_])/iu;
+const LORE_INTENT_RE = /(?<![\p{L}\p{N}_])(?:lore|fabuł[aeęy]|histori(?:a|ę|ii|e)|kim\s+(?:[\p{L}]+\s+){0,2}(?:jest|był|była|byli)|kto\s+(?:[\p{L}]+\s+){0,2}(?:to|jest|był|była)|co\s+się\s+(?:stało|wydarzyło)|pochodzeni[ae]|backstory|kanon|canon|timeline|chronologi[ae]|zakończeni[ae]|teori[ae]|easter\s+egg|sekret(?:y|ach)?|symbolik[ai]|znaczeni[ae]|uniwersum|relacj[ae]\s+(?:między|z)|zwi[aą]zk(?:u|i|iem|ach)|konflikt(?:u|em|ach)?|motywacj[ae]|wpływ(?:u|em)?|wpłyn(?:ął|ęło|ęła|ęły)|wydarzeni(?:a|ach)\s+w\s+grze)(?![\p{L}\p{N}_])/iu;
 
 // „Dlaczego” kwalifikuje się jako lore dopiero wtedy, gdy pytanie dotyczy
 // motywacji lub zdarzenia fabularnego, a nie np. crasha czy wymagań sprzętowych.
