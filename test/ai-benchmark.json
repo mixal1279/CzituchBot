@@ -185,7 +185,7 @@
     {
       "id": "why-007",
       "category": "why",
-      "game": "The Witcher 3",
+      "game": "Mass Effect 2",
       "question": "Dlaczego Shepard rekrutuje sojuszników przed misją samobójczą?",
       "routing": {
         "intent": "web_fact",
@@ -316,7 +316,7 @@
     {
       "id": "how-062",
       "category": "how",
-      "game": "Skyrim",
+      "game": "Minecraft",
       "question": "Jak przygotować miksturę niewidzialności w Minecraft?",
       "routing": {
         "intent": "web_fact",
@@ -425,7 +425,7 @@
     {
       "id": "when-122",
       "category": "when",
-      "game": "GTA V",
+      "game": "Red Dead Redemption 2",
       "question": "Kiedy Arthur Morgan trafia do Guarmy?",
       "routing": {
         "intent": "web_fact",
@@ -560,7 +560,7 @@
     {
       "id": "where-177",
       "category": "where",
-      "game": "Skyrim",
+      "game": "Minecraft",
       "question": "Gdzie w Minecraft znaleźć pradawne zgliszcza?",
       "routing": {
         "intent": "web_fact",
@@ -725,7 +725,7 @@
     {
       "id": "who-232",
       "category": "who",
-      "game": "The Witcher 3",
+      "game": "Portal 2",
       "question": "Kim jest GLaDOS?",
       "routing": {
         "intent": "web_fact",
@@ -833,8 +833,8 @@
     {
       "id": "quantity-287",
       "category": "quantity",
-      "game": "The Witcher 3",
-      "question": "Ile aktów ma Baldur's Gate 3?",
+      "game": "Cyberpunk 2077",
+      "question": "Ile trwa przejście dodatku Phantom Liberty?",
       "routing": {
         "intent": "web_fact",
         "is_lore": false,
@@ -1110,7 +1110,7 @@
     {
       "id": "outcome-402",
       "category": "outcome",
-      "game": "Portal 2",
+      "game": "Red Dead Redemption 2",
       "question": "Co stało się z Dutch van der Linde po wydarzeniach Red Dead Redemption 2?",
       "routing": {
         "intent": "web_fact",
@@ -1268,7 +1268,7 @@
     {
       "id": "relationship-457",
       "category": "relationship",
-      "game": "Cyberpunk 2077",
+      "game": "The Last of Us",
       "question": "Jaka jest relacja między Joelem a Ellie w The Last of Us?",
       "routing": {
         "intent": "web_fact",
