@@ -5,7 +5,7 @@ const { NIE_CZAS_GRY } = require('./patterns');
 const WEB_CATEGORIES = new Set(['weather', 'hltb', 'youtube', 'web_fact']);
 const { czyPytanieOLore } = require('./lore');
 const { czyPytanieOGameplay } = require('./gameplay');
-const { resolveGameEntity, resolveCompanyEntity } = require('./entities');
+const { resolveGameEntity, resolveCompanyEntity, czyPytanieOFirmie } = require('./entities');
 
 const SOURCE_TYPES = { weather: 'weather_api', hltb: 'hltb', youtube: 'youtube_api', minecraft_recipe: 'local_minecraft_data' };
 
@@ -21,7 +21,8 @@ function classifyAIRequest(pytanie, policyCategory, recipeDetector = () => false
   const resolvedGame = resolveGameEntity(text);
   const resolved = resolvedCompany || resolvedGame;
   const hasKnownGame = Boolean(resolvedGame && (resolvedGame.type === 'game' || resolvedGame.type === 'franchise' || resolvedGame.game));
-  const hasKnownCompany = Boolean(resolvedCompany);
+  const hasCompanyContext = czyPytanieOFirmie(text);
+  const hasKnownCompany = Boolean(resolvedCompany || hasCompanyContext);
   // Opinia o rozpoznanej grze lub firmie może wymagać faktów. Tylko pytanie bez
   // rozpoznanej encji i bez sygnału faktograficznego pozostaje small talkiem.
   const category = isHLTB ? 'hltb' : (isOpinion && !hasKnownGame && !hasKnownCompany ? 'conversation' : policyResult);
@@ -55,7 +56,7 @@ function classifyAIRequest(pytanie, policyCategory, recipeDetector = () => false
   // podmiotem pytania” wymaga osobnej heurystyki — game_type jest raportowane
   // obok, żeby rozbieżność była widoczna w logu.
   return {
-    intent: category, entity, entity_type: resolved?.type || (entity ? 'entity' : null),
+    intent: category, entity, entity_type: resolved?.type || (hasCompanyContext ? 'company' : (entity ? 'entity' : null)),
     game: resolvedGame?.game || (resolvedGame?.type === 'game' ? resolvedGame.name : null), resolved_entity: resolved,
     company: resolvedCompany?.name || null,
     game_type: resolved?.game_type || null,
