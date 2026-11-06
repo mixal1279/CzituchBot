@@ -10,6 +10,7 @@ const {
   czyPytanieOLore,
   dodajGameLoreDomenę,
 } = require('../ai/lore');
+const { czyPoprawnyWpisCacheTavily } = require('../ai/tavily');
 
 const benchmark = JSON.parse(fs.readFileSync(
   path.join(__dirname, 'ai-lore-benchmark.json'),
@@ -65,4 +66,24 @@ test('generic lore terms without a game context do not trigger GameLore retrieva
   assert.equal(czyPytanieOLore('Opowiedz mi o historii tej postaci.'), false);
   assert.equal(czyPytanieOLore('Dlaczego to się stało?'), false);
   assert.equal(czyPytanieOLore('Czy warto kupić nową grę?'), false);
+});
+
+test('Tavily Firestore cache accepts the canonical object shape and rejects malformed or expired entries', () => {
+  const now = Date.now();
+  const valid = {
+    wynik: {
+      status: 'ok',
+      text: '[SOURCE 1]\nTREŚĆ: potwierdzony fragment',
+      sources: [{ url: 'https://gamelore.fandom.com/wiki/Example' }],
+    },
+    czas: now - 100,
+    ttl: 10_000,
+  };
+  assert.equal(czyPoprawnyWpisCacheTavily(valid, now), true);
+  assert.equal(czyPoprawnyWpisCacheTavily({ ...valid, wynik: valid.wynik.text }, now), false);
+  assert.equal(czyPoprawnyWpisCacheTavily({ ...valid, czas: now - 20_000 }, now), false);
+  assert.equal(czyPoprawnyWpisCacheTavily({
+    ...valid,
+    wynik: { ...valid.wynik, sources: [{ title: 'missing URL' }] },
+  }, now), false);
 });
