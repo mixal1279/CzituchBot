@@ -169,6 +169,31 @@ test('secondary provider forwards its bounded timeout to wrapped transports', as
 
 
 
+test('Tavily basic search snippets are not returned as factual source evidence', async () => {
+  const search = createTavilySearch({
+    apiKey: 'test-tavily-key',
+    groq: null,
+    normalizeQuery: value => value,
+    fetchZTimeout: async () => new Response(JSON.stringify({
+      results: [{
+        title: 'Snippet only',
+        url: 'https://example.com/snippet',
+        content: 'A short search excerpt without extracted page text.',
+        score: 0.99,
+      }],
+    }), { status: 200, headers: { 'content-type': 'application/json' } }),
+    logger: { log() {}, warn() {}, error() {} },
+    cacheFile: '/tmp/czituch-tavily-snippet-only-test.json',
+    geminiKey: '',
+    exaKey: '',
+  });
+  const result = await search('fact question', { _skipRewrite: true, returnMeta: true });
+  assert.equal(result.status, 'empty');
+  assert.equal(result.text, '');
+  assert.equal(result.sources.length, 0);
+  assert.equal(result.reason, 'snippet_only');
+});
+
 test('Tavily sends chunks_per_source for basic and advanced search depths', async () => {
   for (const [depth, shouldInclude] of [['basic', true], ['advanced', true]]) {
     let requestBody = null;
