@@ -15,7 +15,7 @@ const TYPY_TEMATOW = new Set([
 function czyWymagaKlasyfikacjiSemantycznej(routing = {}) {
   return routing.intent !== 'conversation'
     && routing.topic_type === 'general'
-    && Number(routing.confidence) <= 0.7;
+    && Number(routing.confidence) <= 0.8;
 }
 
 function parsujKlasyfikacje(tresc) {
