@@ -218,6 +218,15 @@ function scoreExternalGameCandidate(query, candidateName) {
   const n = normalize(candidateName);
   if (!q || !n) return 0;
   if (q === n) return 1;
+  const suffix = n.startsWith(q + ' ') ? n.slice(q.length + 1) : '';
+  const editionSuffixes = new Set([
+    'ultimate edition', 'game of the year edition', 'goty edition',
+    'definitive edition', 'complete edition', 'deluxe edition',
+    'collector edition', 'collectors edition', 'enhanced edition',
+    'gold edition', 'standard edition', 'digital deluxe edition',
+  ]);
+  // Wydania handlowe tej samej gry nie są sequelami ani spin-offami.
+  if (suffix && editionSuffixes.has(suffix)) return 0.9;
 
   const qt = q.split(' ');
   const nt = n.split(' ');

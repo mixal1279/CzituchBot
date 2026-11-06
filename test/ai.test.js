@@ -355,6 +355,7 @@ assert.match(require('fs').readFileSync(require('path').join(__dirname, '..', 'c
   // Nazwa franczyzy nie może automatycznie wskazywać pierwszego dopasowanego sequela.
   assert.ok(scoreExternalGameCandidate('Portal', 'Portal 2') < 0.72);
   assert.ok(scoreExternalGameCandidate('The Last of Us', 'The Last of Us Part II') < 0.72);
+  assert.ok(scoreExternalGameCandidate('Cyberpunk 2077', 'Cyberpunk 2077 Ultimate Edition') >= 0.82);
   assert.ok(scoreExternalGameCandidate('Portal 2', 'Portal') < 0.72);
   assert.equal(scoreExternalGameCandidate('Portal II', 'Portal 2'), 1);
   assert.equal(externalGameCandidateMatchesQuery('Portal: kim jest GLaDOS?', 'Portal 2').ok, false);
