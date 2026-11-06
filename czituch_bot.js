@@ -8159,7 +8159,7 @@ async function wyslijTwitchHelix(tekst, kanal, config = TWITCH_CONFIG_BILLYBULKA
     const [broadcasterId, senderId, appToken] = await Promise.all([
       pobierzUserId(czystyKanal, config),
       pobierzUserId(config.botNick, config),
-      pobierzTwitchAppToken(config),
+      pobierzTwitchAppToken(),
     ]);
     if (!broadcasterId || !senderId) {
       console.error(`[Twitch Helix] ❌ Brak ID Twitcha: broadcaster=${broadcasterId}, sender=${senderId}`);
@@ -8268,7 +8268,7 @@ async function pobierzStartStreamu(config = TWITCH_CONFIG_BILLYBULKA) {
   try {
     // Zawsze pobieramy świeżą wartość (funkcja jest tania — bez requestu sieciowego),
     // żeby złapać kolejne odświeżenia tokenu zamiast trzymać jednorazowy cache na zawsze.
-    await pobierzTwitchAppToken(config);
+    await pobierzTwitchAppToken();
     const res  = await fetchZTimeout(`https://api.twitch.tv/helix/streams?user_login=${config.kanal}`, {
       headers: {
         'Client-ID':     config.clientId,
@@ -8506,7 +8506,7 @@ async function pobierzAktualneVodTwitch(kanal, config = TWITCH_CONFIG_BILLYBULKA
   try {
     const userId = await pobierzUserId(kanal, config);
     if (!userId) return null;
-    await pobierzTwitchAppToken(config);
+    await pobierzTwitchAppToken();
     const res = await fetchZTimeout(`https://api.twitch.tv/helix/videos?user_id=${userId}&type=archive&first=1`, {
       headers: {
         'Client-ID':     config.clientId,
@@ -8851,7 +8851,7 @@ async function czyKanalJestLive(login, config = TWITCH_CONFIG_BILLYBULKA) {
   try {
     // Zawsze pobieramy świeżą wartość (funkcja jest tania — bez requestu sieciowego),
     // żeby złapać kolejne odświeżenia tokenu zamiast trzymać jednorazowy cache na zawsze.
-    await pobierzTwitchAppToken(config);
+    await pobierzTwitchAppToken();
     const res  = await fetchZTimeout(`https://api.twitch.tv/helix/streams?user_login=${login}`, {
       headers: {
         'Client-ID':     config.clientId,
