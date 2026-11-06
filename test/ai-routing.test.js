@@ -229,3 +229,12 @@ for (const question of [
 ]) {
   assert.equal(okreslKategorieAI(question), 'conversation', question);
 }
+
+
+for (const question of ['Ile to 12 * 4?', 'Oblicz 1,5 + 2,5.', 'Policz 100 / 4']) {
+  const routing = classifyAIRequest(question, okreslKategorieAI);
+  assert.equal(routing.intent, 'calculation', question);
+  assert.equal(routing.question_type, 'calculation', question);
+  assert.equal(routing.source_type, 'calculation', question);
+  assert.equal(routing.needs_web, false, question);
+}
