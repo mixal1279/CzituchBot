@@ -217,6 +217,7 @@ test('P0-B secondary retrieval keeps a one-to-one mapping between source blocks 
     apiKey: 'test-key',
     exaKey: 'exa-test-key',
     groq: { chat: { completions: { create: async () => { throw new Error('rewrite should be skipped'); } } } },
+    lookupFn: async () => [{ address: '93.184.216.34', family: 4 }],
     fetchZTimeout: async (url) => {
       let host = '';
       try {

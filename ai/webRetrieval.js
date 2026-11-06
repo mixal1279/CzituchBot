@@ -315,9 +315,9 @@ async function extractTavilyPages({ apiKey, urls, fetchFn = fetch, lookupFn = lo
   }
 }
 
-async function zastapStreszczeniaTrescia(result, { tavilyKey, fetchFn, timeoutMs, startIndex }) {
+async function zastapStreszczeniaTrescia(result, { tavilyKey, fetchFn, lookupFn = lookupDns, timeoutMs, startIndex }) {
   if (process.env.AI_GEMINI_EXTRACT !== '1' || !tavilyKey || !result?.sources?.length) return result;
-  const pages = await extractTavilyPages({ apiKey: tavilyKey, urls: result.sources.map(x => x.url), fetchFn, timeoutMs });
+  const pages = await extractTavilyPages({ apiKey: tavilyKey, urls: result.sources.map(x => x.url), fetchFn, lookupFn, timeoutMs });
   if (!pages.size) return result;
   const sources = result.sources.map((source, i) => {
     const page = pages.get(source.url);
@@ -328,7 +328,7 @@ async function zastapStreszczeniaTrescia(result, { tavilyKey, fetchFn, timeoutMs
   return { ...result, status: hasPageText ? 'ok' : result.status, sources, text: formatSources(sources, startIndex) };
 }
 
-async function searchSecondaryProviders({ query, geminiKey, exaKey, tavilyKey = null, fetchFn = fetch, startIndex = 0, domains = [], prefer = 'gemini', timeoutMs = 15000 }) {
+async function searchSecondaryProviders({ query, geminiKey, exaKey, tavilyKey = null, fetchFn = fetch, lookupFn = lookupDns, startIndex = 0, domains = [], prefer = 'gemini', timeoutMs = 15000 }) {
   const budgetMs = Number.isFinite(Number(timeoutMs)) ? Math.max(0, Number(timeoutMs)) : 15000;
   const startedAt = Date.now();
   const remainingTimeoutMs = () => Math.max(0, budgetMs - (Date.now() - startedAt));
@@ -346,7 +346,7 @@ async function searchSecondaryProviders({ query, geminiKey, exaKey, tavilyKey = 
     if (provider === 'gemini' && result.sources.length) {
       const extractTimeoutMs = remainingTimeoutMs();
       const extracted = extractTimeoutMs > 0
-        ? await zastapStreszczeniaTrescia(result, { tavilyKey, fetchFn, timeoutMs: extractTimeoutMs, startIndex })
+        ? await zastapStreszczeniaTrescia(result, { tavilyKey, fetchFn, lookupFn, timeoutMs: extractTimeoutMs, startIndex })
         : result;
       if (extracted.status === 'ok' && extracted.sources.some(source => source?.url && String(source.content || '').trim())) return extracted;
       errors.push('gemini: grounding returned URL metadata but no extracted page text');

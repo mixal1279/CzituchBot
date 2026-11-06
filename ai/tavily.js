@@ -564,7 +564,7 @@ function czyPoprawnyWpisCacheTavily(value, now = Date.now()) {
     && now >= createdAt && now - createdAt < ttl;
 }
 
-function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logger = console, onStatus = () => {}, cacheFile = './tavily_cache.json', stateStore = null, geminiKey = process.env.GEMINI_API_KEY, exaKey = process.env.EXA_API_KEY }) {
+function createTavilySearch({ apiKey, groq, fetchZTimeout, lookupFn, normalizeQuery, logger = console, onStatus = () => {}, cacheFile = './tavily_cache.json', stateStore = null, geminiKey = process.env.GEMINI_API_KEY, exaKey = process.env.EXA_API_KEY }) {
   const cache = new Map();
   const inFlight = new Map();
   let persistQueue = Promise.resolve();
@@ -863,6 +863,7 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
         exaKey,
         tavilyKey: null,
         fetchFn: fetchZTimeout,
+        lookupFn,
         startIndex: 0,
         domains,
         prefer: 'gemini',
@@ -994,6 +995,7 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
             exaKey,
             tavilyKey: apiKey,
             fetchFn: fetchZTimeout,
+        lookupFn,
             startIndex: primaryResults.length,
             domains,
             prefer: time_range ? 'gemini' : 'exa',
@@ -1131,6 +1133,7 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
         exaKey,
         tavilyKey: ['rate_limited', 'plan_limit_exceeded', 'payg_limit_exceeded'].includes(status) ? null : apiKey,
         fetchFn: fetchZTimeout,
+        lookupFn,
         startIndex: 0,
         domains,
         prefer: 'gemini',
