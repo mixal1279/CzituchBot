@@ -34,6 +34,8 @@ function classifyAIRequest(pytanie, policyCategory, recipeDetector = () => false
   const needsWeb = WEB_CATEGORIES.has(category) || lore || gameplay;
   const needsFreshData = freshness === 'live' || freshness === 'recent';
   const sourceType = lore ? 'game_lore' : gameplay ? 'gameplay_guide' : (SOURCE_TYPES[category] || (needsWeb ? 'web_search' : 'none'));
+  const questionType = classifyQuestionType(text, { intent: category, is_lore: lore, is_gameplay: gameplay, freshness, game: resolvedGame?.game || (resolvedGame?.type === 'game' ? resolvedGame.name : null) });
+  const topicType = classifyTopicType(text, { intent: category, entity_type: resolved?.type || (hasCompanyContext ? 'company' : null), company: resolvedCompany?.name || null, game: resolvedGame?.game || (resolvedGame?.type === 'game' ? resolvedGame.name : null), is_lore: lore, is_gameplay: gameplay });
 
   let confidence = 0.65;
   if (category === 'minecraft_recipe') confidence = 0.99;
@@ -59,12 +61,47 @@ function classifyAIRequest(pytanie, policyCategory, recipeDetector = () => false
     intent: category, entity, entity_type: resolved?.type || (hasCompanyContext ? 'company' : (entity ? 'entity' : null)),
     game: resolvedGame?.game || (resolvedGame?.type === 'game' ? resolvedGame.name : null), resolved_entity: resolved,
     company: resolvedCompany?.name || null,
+    question_type: questionType, topic_type: topicType,
     game_type: resolved?.game_type || null,
     needs_web: needsWeb, needs_fresh_data: needsFreshData, freshness, source_type: sourceType,
     is_lore: lore, is_gameplay: gameplay, confidence,
     confidence_policy: confidence < 0.65 ? 'clarify' : confidence < 0.8 ? 'retrieve_and_guard' : 'normal', query: text,
   };
 }
+
+function classifyQuestionType(question, routing = {}) {
+  const p = String(question || '').toLocaleLowerCase('pl-PL');
+  if (routing.intent === 'conversation') return 'conversation';
+  if (routing.intent === 'hltb') return 'duration';
+  if (routing.intent === 'weather') return 'forecast';
+  if (routing.intent === 'youtube') return 'channel_or_creator';
+  if (routing.is_gameplay) return 'how_to';
+  if (routing.is_lore) return 'lore';
+  if (/(?:porównaj|porownaj|czym się różni|czym sie rozni|różnica|roznica|vs\\.?|versus|lepszy|lepsza|lepsze)/iu.test(p)) return 'comparison';
+  if (/(?:ile kosztuje|jaka cena|cena|kosztuje|za ile|price|how much)/iu.test(p)) return 'price';
+  if (/(?:czy warto|polecasz|opłaca się|oplaca sie|warto kupić|warto kupic|co sądzisz|co sadzisz|co myślisz|co myslisz|jak oceniasz|opinia)/iu.test(p)) return 'recommendation';
+  if (/(?:jak naprawić|jak naprawic|nie działa|nie dziala|nie uruchamia|błąd|blad|error|problem|crash|wysypuje się|wysypuje sie)/iu.test(p)) return 'troubleshooting';
+  if (/(?:jak zrobić|jak zrobic|jak skonfigurować|jak skonfigurowac|jak podłączyć|jak podlaczyc|jak użyć|jak uzyc|jak zdobyć|jak zdobyc|jak zainstalować|jak zainstalowac|how to)/iu.test(p)) return 'how_to';
+  if (/(?:dzisiaj|dziś|dzis|teraz|aktualnie|obecnie|najnowsz|ostatni[eao]? wiadomości|news|co nowego)/iu.test(p) || routing.freshness === 'live' || routing.freshness === 'recent') return 'current_info';
+  if (/(?:historia|history|kiedy powstał|kiedy powstal|kiedy założono|kiedy zalozono|pochodzenie|geneza)/iu.test(p)) return 'history';
+  if (/(?:ile osób|ilu użytkowników|ilu uzytkownikow|ile subskrypcji|ile subów|ile subow|liczba użytkowników|liczba uzytkownikow|statystyki|przychód|przychod|obroty|wycena|wartość rynkowa|wartosc rynkowa)/iu.test(p)) return 'statistics';
+  if (/(?:kim jest|kto to jest|who is)/iu.test(p)) return 'identity';
+  if (/(?:co to jest|czym jest|co oznacza|co znaczy|jak działa|jak dziala|na czym polega|wyjaśnij|wyjasnij)/iu.test(p)) return 'explanation';
+  if (/(?:gdzie|dokąd|dokad|lokalizacj|adres)/iu.test(p)) return 'location';
+  return 'fact';
+}
+
+function classifyTopicType(question, routing = {}) {
+  const p = String(question || '').toLocaleLowerCase('pl-PL');
+  if (routing.entity_type === 'company' || routing.company || czyPytanieOFirmie(question)) return 'company';
+  if (routing.game || routing.entity_type === 'game' || routing.entity_type === 'franchise' || routing.is_lore || routing.is_gameplay) return 'game';
+  if (routing.intent === 'weather') return 'weather';
+  if (routing.intent === 'youtube') return 'creator_platform';
+  if (/(?:node\\.?js|javascript|typescript|python|programow|kodzie|api|oauth|serwer|hosting|procesor|gpu|cpu|ram|karta graficzna|system operacyjny|linux|windows|android|ios|smartfon|telefon|komputer)/iu.test(p)) return 'technology';
+  if (/(?:kim jest|kto to jest|biografia|życiorys|zyciorys)/iu.test(p)) return 'person';
+  return 'general';
+}
+
 function detectFreshness(p) {
   const S = '(?<![\\p{L}\\p{N}_])', E = '(?![\\p{L}\\p{N}_])';
   // Tylko wyraźne "tu i teraz". "ostatni boss/misja" to zwykłe słowa z gier.
@@ -82,4 +119,4 @@ function detectEntity(p) {
   ];
   return patterns.find(([, re]) => re.test(p))?.[0] || null;
 }
-module.exports = { classifyAIRequest, detectFreshness, detectEntity };
+module.exports = { classifyAIRequest, classifyQuestionType, classifyTopicType, detectFreshness, detectEntity };
