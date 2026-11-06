@@ -18,8 +18,8 @@ function parseAssignedJson(html, variableName) {
     while ((match = pattern.exec(source))) {
       let start = match.index + match[0].length;
       const limit = Math.min(source.length, start + 256);
-      while (start < limit && source[start] !== '{' && source[start] !== '[') start += 1;
-      if (start >= limit) continue;
+      while (start < source.length && /\\s/.test(source[start])) start += 1;
+      if (start >= source.length || (source[start] !== '{' && source[start] !== '[')) continue;
 
       const otwarte = [];
       let inString = false;
@@ -66,7 +66,7 @@ function hasLiveBadge(renderer) {
   const badges = Array.isArray(renderer.badges) ? renderer.badges : [];
   if (badges.some(badge => {
     const meta = badge?.metadataBadgeRenderer;
-    return LIVE_BADGE_STYLES.has(meta?.style) || maEtykieteLive(meta);
+    return LIVE_BADGE_STYLES.has(meta?.style) || (!meta?.style && maEtykieteLive(meta));
   })) return true;
 
   const overlays = Array.isArray(renderer.thumbnailOverlays) ? renderer.thumbnailOverlays : [];
@@ -166,6 +166,8 @@ function videoIdFromUrl(value) {
 function analizujStroneLive(html, finalUrl) {
   const source = String(html || '');
   const ids = new Set();
+  const redirectedId = videoIdFromUrl(finalUrl);
+  if (redirectedId) ids.add(redirectedId);
   const playerResponse = parseAssignedJson(source, 'ytInitialPlayerResponse');
   const playerVideoId = playerResponse?.videoDetails?.videoId;
   if (playerResponse?.microformat?.playerMicroformatRenderer?.liveBroadcastDetails?.isLiveNow === true &&
@@ -174,9 +176,6 @@ function analizujStroneLive(html, finalUrl) {
   const initialData = parseAssignedJson(source, 'ytInitialData');
   const analiza = analizujRenderery(initialData, 20);
   for (const id of analiza.ids) ids.add(id);
-
-  const redirectedId = videoIdFromUrl(finalUrl);
-  if (redirectedId) ids.add(redirectedId);
 
   return {
     ids: [...ids].slice(0, MAX_VIDEO_CANDIDATES),
