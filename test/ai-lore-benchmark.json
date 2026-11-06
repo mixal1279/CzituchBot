@@ -17,7 +17,7 @@
       "id": "lore-chronology-hades",
       "skill": "chronology",
       "game": "Hades",
-      "question": "Jaka jest chronologia wydarzeń w historii świata Hades?",
+      "question": "Jaka jest chronologia wydarzeń w Hades?",
       "expected": {
         "isLore": true,
         "sourceType": "game_lore"
@@ -37,7 +37,7 @@
       "id": "lore-relationship-tlou",
       "skill": "character_relationships",
       "game": "The Last of Us",
-      "question": "Jaka relacja łączy Joela i Ellie w The Last of Us?",
+      "question": "Jaka jest relacja między Joelem a Ellie w The Last of Us?",
       "expected": {
         "isLore": true,
         "sourceType": "game_lore"
