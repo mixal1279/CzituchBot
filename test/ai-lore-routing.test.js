@@ -11,7 +11,7 @@ const {
   czyMaKontekstGry,
   dodajGameLoreDomenę,
 } = require('../ai/lore');
-const { czyPoprawnyWpisCacheTavily } = require('../ai/tavily');
+const { czyPoprawnyWpisCacheTavily, createTavilySearch } = require('../ai/tavily');
 const { buildAnswerPlan } = require('../ai/answer-plan');
 
 const benchmark = JSON.parse(fs.readFileSync(
@@ -109,4 +109,39 @@ test('lore answer plan separates canon, interpretation, fan theory, missing data
   assert.match(plan.instruction, /teorię fanowską/i);
   assert.match(plan.instruction, /brakuje danych/i);
   assert.match(plan.instruction, /sprzeczne wersje/i);
+});
+
+test('GameLore is sent as a preferred Tavily domain and its source provenance survives retrieval', async () => {
+  let requestBody = null;
+  const search = createTavilySearch({
+    apiKey: 'test-tavily-key',
+    groq: null,
+    normalizeQuery: value => value,
+    fetchZTimeout: async (_url, options) => {
+      requestBody = JSON.parse(options.body);
+      return new Response(JSON.stringify({
+        results: [{
+          title: 'Hornet - Hollow Knight',
+          url: 'https://gamelore.fandom.com/wiki/Hornet',
+          content: 'Hornet is a character in Hollow Knight.',
+          score: 0.95,
+        }],
+      }), { status: 200, headers: { 'content-type': 'application/json' } });
+    },
+    logger: { log() {}, warn() {}, error() {} },
+    cacheFile: '/tmp/czituch-gamelore-source-test.json',
+    geminiKey: '',
+    exaKey: '',
+  });
+
+  const result = await search('Kim jest Hornet w Hollow Knight?', {
+    domains: [GAMELORE_DOMAIN],
+    _skipRewrite: true,
+    returnMeta: true,
+  });
+  assert.deepEqual(requestBody.include_domains, [GAMELORE_DOMAIN]);
+  assert.equal(result.status, 'ok');
+  assert.match(result.text, /HOST: gamelore\.fandom\.com/);
+  assert.match(result.text, /URL: https:\/\/gamelore\.fandom\.com\/wiki\/Hornet/);
+  assert.equal(result.sources[0].sourceId, 'SOURCE 1');
 });
