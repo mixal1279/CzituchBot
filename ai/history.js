@@ -27,6 +27,20 @@ function parsujStrukturalnePodsumowanie(text) {
   catch (_) { return null; }
 }
 
+
+function zbudujKluczHistorii(platforma, kanal, userId) {
+  const normalizuj = (value, fallback) => {
+    const result = String(value ?? '').trim().toLocaleLowerCase('pl-PL')
+      .replace(/[\\u0000-\\u001f\\u007f]/g, '').slice(0, 128);
+    return result || fallback;
+  };
+  return [
+    normalizuj(platforma, 'unknown'),
+    normalizuj(kanal, 'brak-kanalu'),
+    normalizuj(userId, 'unknown'),
+  ].join(':');
+}
+
 function oznaczUzycieHistorii(ostatnieUzycie, klucz, teraz = Date.now()) {
   if (!ostatnieUzycie || typeof ostatnieUzycie !== 'object' || Array.isArray(ostatnieUzycie)) return false;
   const key = String(klucz || '').trim();
@@ -50,4 +64,4 @@ function ograniczHistorieRozmow(historie, ostatnieUzycie, limit = 500) {
   return usuniete;
 }
 
-module.exports = { normalizujStrukturalnePodsumowanie, parsujStrukturalnePodsumowanie, oznaczUzycieHistorii, ograniczHistorieRozmow };
+module.exports = { normalizujStrukturalnePodsumowanie, parsujStrukturalnePodsumowanie, oznaczUzycieHistorii, ograniczHistorieRozmow, zbudujKluczHistorii };
