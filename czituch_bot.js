@@ -8335,6 +8335,7 @@ async function obslugaTwitch(nick, message, wyslijFn, config = TWITCH_CONFIG_BIL
                 domains: KONFIGURACJA.tavilyBillybulkaDomains,
                 time_range: KONFIGURACJA.tavilyBillybulkaTimeRange,
               },
+              memoryUserId: historiaKlucz,
             }
           ))
         );
