@@ -117,6 +117,8 @@ const { obliczPytanie, formatujWynik } = require('./ai/calculator');
 const { czyWymagaKlasyfikacjiSemantycznej, klasyfikujSemantycznie } = require('./ai/semantic-classifier');
 const { planAIRequest, responseContract, RESPONSE_PROFILES, buildRetrievalQueries, czyPotrzebujeRewrite } = require('./ai/planner');
 const { resolveGameEntity, scoreExternalGameCandidate, wyodrebnijJawnyTytulGry, externalGameCandidateMatchesQuery } = require('./ai/entities');
+const { utworzCacheIGDB } = require('./ai/igdb-cache');
+const igdbSearchCache = utworzCacheIGDB({ maxEntries: 100, ttlMs: 30 * 60 * 1000, negativeTtlMs: 5 * 60 * 1000 });
 const { extractExplicitUserMemories, mergeMemoryRecords, buildVerifiedMemoryContext, pruneExpiredMemories } = require('./ai/memory');
 const { parseMemoryCommand, forgetMemories, describeMemories } = require('./ai/memory_manager');
 const { decomposeQuestion, isMultiPartQuestion, buildAdvancedRetrievalPlan, buildSupplementalRetrievalQuery, selectRetrievalQueries, selectRetrievalDomains, selectGameSpecificRetrievalDomains, initialRetrievalQueryLimit } = require('./ai/retrieval');
@@ -1174,21 +1176,25 @@ async function znajdzGreIGDB(pytanie, requestState = null) {
     const igdbSearchTerm = nazwaGry.replace(/[";\\]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120);
     if (!igdbSearchTerm) return null;
 
-    const token = await pobierzTokenIGDB();
-    const res = await fetchZTimeout('https://api.igdb.com/v4/games', {
-      method: 'POST',
-      headers: {
-        'Client-ID': KONFIGURACJA.twitchClientId,
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'text/plain',
-      },
-      // IGDB zwraca wyniki uporządkowane wg podobieństwa, ale pierwszy rekord
-      // może być edycją/spinoffem. Pobieramy kilka kandydatów i weryfikujemy
-      // nazwę lokalnie przed użyciem encji w routingu.
-      body: `search "${igdbSearchTerm}"; fields name,genres.name; limit 5;`,
-    }, 6000);
-    if (!res.ok) return null;
-    const data = await res.json();
+    // Wyniki IGDB są publiczne, więc cache może być współdzielony między kanałami.
+    // Ograniczony TTL/LRU i single-flight redukują quota bez przechowywania danych użytkowników.
+    const cacheKey = 'games:' + igdbSearchTerm.toLocaleLowerCase('en-US').trim();
+    const data = await igdbSearchCache.pobierzLubWczytaj(cacheKey, async () => {
+      const token = await pobierzTokenIGDB();
+      const res = await fetchZTimeout('https://api.igdb.com/v4/games', {
+        method: 'POST',
+        headers: {
+          'Client-ID': KONFIGURACJA.twitchClientId,
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'text/plain',
+        },
+        // IGDB zwraca wyniki uporządkowane wg podobieństwa; pobieramy maksymalnie 5 kandydatów.
+        body: `search "${igdbSearchTerm}"; fields name,genres.name; limit 5;`,
+      }, 6000);
+      if (!res.ok) throw new Error(`IGDB HTTP ${res.status}`);
+      const responseData = await res.json();
+      return Array.isArray(responseData) ? responseData.slice(0, 5) : null;
+    });
     if (!Array.isArray(data) || !data.length) return null;
 
     const kandydaci = data
