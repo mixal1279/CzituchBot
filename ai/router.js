@@ -14,7 +14,7 @@ function classifyAIRequest(pytanie, policyCategory, recipeDetector = () => false
   const p = text.toLocaleLowerCase('pl-PL');
   const policyResult = policyCategory(text, recipeDetector);
   const isOpinion = /(?<![\p{L}\p{N}_])(?:czy warto|co (?:myślisz|myslisz|sądzisz)|co sądzisz|co sadzisz|jaka jest twoja opinia|jak oceniasz|polecasz|jest nadal dobre|jest nadal dobry|opłaca się|oplaca sie)(?![\p{L}\p{N}_])/iu.test(p);
-  const isPurchaseOpinion = /(?<![\\p{L}\\p{N}_])(?:czy warto\\s+(?:kupić|kupic)|opłaca się\\s+(?:kupić|kupic)|oplaca sie\\s+(?:kupić|kupic)|polecasz\\s+(?:kupić|kupic))(?![\\p{L}\\p{N}_])/iu.test(p);
+  const isPurchaseOpinion = /(?<![\p{L}\p{N}_])(?:czy warto\s+(?:kupić|kupic)|opłaca się\s+(?:kupić|kupic)|oplaca sie\s+(?:kupić|kupic)|polecasz\s+(?:kupić|kupic))(?![\p{L}\p{N}_])/iu.test(p);
   // "Ile trwa walka/misja/aktualizacja…" to nie czas przejścia gry (HowLongToBeat).
   const isHLTB = /(?<![\p{L}\p{N}_])(?:ile\s+(?:jest\s+)?(?:godzin|czasu)|ile\s+godzin\s+(?:ma|zajmuje)|ile\s+trwa|jak\s+d[łl]ugo(?:\s+trwa)?|czas(?:u)?\s+(?:gry|przejścia|przejscia|ukończenia|ukonczenia)|przejście\s+gry|przejscie\s+gry)(?![\p{L}\p{N}_])/iu.test(p)
     && !NIE_CZAS_GRY.test(p);
