@@ -794,7 +794,7 @@ test('Gemini text-only result is never promoted to source evidence', async () =>
 
 test('secondary retrieval is skipped for a strong single evergreen source', () => {
   assert.equal(czyWymagaSecondaryRetrieval([
-    { score: 0.82, url: 'https://minecraft.wiki/a' },
+    { score: 0.82, url: 'https://minecraft.wiki/a', raw_content: 'Extracted Minecraft wiki page content with enough context.' },
   ], 'Minecraft wiki article', null), false);
 });
 
