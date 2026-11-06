@@ -57,7 +57,7 @@ function classifyAIRequest(pytanie, policyCategory, recipeDetector = () => false
   } else if (category === 'conversation') confidence = 0.88;
 
   if (resolved?.resolution === 'deterministic_ambiguous') {
-    confidence = Math.min(confidence, 0.68);
+    confidence = Math.min(confidence, 0.62);
   }
 
   // entity_type opisuje typ DOPASOWANEGO aliasu, nie encji raportowanej.
