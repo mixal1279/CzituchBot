@@ -32,10 +32,10 @@ test('conversation usage is tracked by the complete platform-channel-user key', 
 test('history usage updates cannot mutate object prototypes through hostile keys', () => {
   const usage = {};
   const prototypeBefore = Object.getPrototypeOf(usage);
-  assert.equal(oznaczUzycieHistorii(usage, '__proto__', 123), true);
+  assert.equal(oznaczUzycieHistorii(usage, '__proto__', 123), false);
   assert.equal(Object.getPrototypeOf(usage), prototypeBefore);
-  assert.equal(Object.hasOwn(usage, '__proto__'), true);
-  assert.equal(usage.__proto__, 123);
+  assert.equal(Object.hasOwn(usage, '__proto__'), false);
+  assert.equal(usage.__proto__, prototypeBefore);
 });
 
 test('history eviction removes the least recently used conversation and its matching usage key', () => {

@@ -57,7 +57,7 @@ function czyBezpiecznySlownik(value) {
 function oznaczUzycieHistorii(ostatnieUzycie, klucz, teraz = Date.now()) {
   if (!czyBezpiecznySlownik(ostatnieUzycie)) return false;
   const key = String(klucz || '').trim();
-  if (!key || NIEBEZPIECZNE_KLUCZE.has(key)) return false;
+  if (key === '__proto__' || key === 'prototype' || key === 'constructor') return false;
   try {
     Object.defineProperty(ostatnieUzycie, key, {
       value: Number.isFinite(teraz) ? teraz : Date.now(),
