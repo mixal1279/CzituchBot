@@ -211,12 +211,23 @@ function sourceMatchesRequestContext(source = {}, routing = {}) {
   // specific character. Require the character (or one of its aliases) itself.
   const characterScoped = resolved.type === 'character' || routing.entity_type === 'character';
   const characterName = resolved.name || (characterScoped ? routing.entity : '');
+  const gameName = resolved.game || routing.game;
   if (characterScoped && characterName) {
     const characterAliases = aliasesFor(CHARACTER_ALIASES, characterName);
-    return characterAliases.some(alias => containsAlias(haystack, alias));
+    const matchesCharacter = characterAliases.some(alias => containsAlias(haystack, alias));
+    if (!matchesCharacter) return false;
+
+    // Sama nazwa postaci nie identyfikuje uniwersum (np. Alex, Chris, Jack).
+    // Gdy znany jest kontekst gry, źródło musi potwierdzać jednocześnie postać
+    // i grę; inaczej retrieval może połączyć materiały z różnych tytułów.
+    if (gameName) {
+      const gameAliases = aliasesFor(GAME_ALIASES, gameName);
+      return gameAliases.some(alias => containsAlias(haystack, alias));
+    }
+    return true;
   }
 
-  const gameName = resolved.game || routing.game;
+
   if (gameName) {
     const gameAliases = aliasesFor(GAME_ALIASES, gameName);
     return gameAliases.some(alias => containsAlias(haystack, alias));
