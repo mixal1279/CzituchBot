@@ -120,3 +120,43 @@ test('core policy never disables validation for factual retrieval', () => {
   assert.equal(policy.forbidUnsupportedFacts,true);
   assert.equal(policy.mustAllowPartial,true);
 });
+
+
+test('game-scoped retrieval rejects sequel-only sources for a specific base-game request', () => {
+  const baseGame = {
+    is_lore: true,
+    game: 'Aetherfall',
+    resolved_entity: { type: 'game', name: 'Aetherfall', game: 'Aetherfall' },
+  };
+  assert.equal(sourceMatchesRequestContext({
+    title: 'Aetherfall 2 - GameLore',
+    content: 'Aetherfall 2 introduces a new protagonist.',
+  }, baseGame), false);
+  assert.equal(sourceMatchesRequestContext({
+    title: 'Aetherfall II story guide',
+    content: 'Aetherfall II follows a different timeline.',
+  }, baseGame), false);
+  assert.equal(sourceMatchesRequestContext({
+    title: 'Aetherfall original game',
+    content: 'Aetherfall tells the story of the first expedition.',
+  }, baseGame), true);
+
+  const sequel = {
+    ...baseGame,
+    game: 'Aetherfall 2',
+    resolved_entity: { type: 'game', name: 'Aetherfall 2', game: 'Aetherfall 2' },
+  };
+  assert.equal(sourceMatchesRequestContext({
+    title: 'Aetherfall 2 - GameLore',
+    content: 'Aetherfall 2 introduces a new protagonist.',
+  }, sequel), true);
+
+  const franchise = {
+    ...baseGame,
+    resolved_entity: { type: 'franchise', name: 'Aetherfall', game: 'Aetherfall' },
+  };
+  assert.equal(sourceMatchesRequestContext({
+    title: 'Aetherfall 2 - GameLore',
+    content: 'Aetherfall 2 introduces a new protagonist.',
+  }, franchise), true);
+});
