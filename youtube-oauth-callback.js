@@ -86,7 +86,7 @@ function oczekujNaKodOAuth({
       if (zakonczono) return;
       zakonczono = true;
       if (timer) clearTimeout(timer);
-      server.close();
+      if (server.listening) server.close();
       if (error) reject(error);
       else resolve(code);
     }
