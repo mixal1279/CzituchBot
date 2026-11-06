@@ -60,3 +60,6 @@ Dla pytań lore z jawnym kontekstem „w grze X” pipeline najpierw wyodrębnia
 ## Bezpieczeństwo URL w ekstrakcji stron
 
 Przed przekazaniem adresów źródeł do Tavily Extract pipeline odrzuca adresy inne niż HTTP(S), hosty lokalne i zarezerwowane, literały IP, URL-e z userinfo, niestandardowe porty, parametry z typowymi sekretami oraz wejścia dłuższe niż 2048 znaków. Walidacja ogranicza oczywiste wektory SSRF, ale nie zastępuje ochrony przed DNS rebindingiem ani walidacji przekierowań po stronie zewnętrznego ekstraktora.
+## Intencja obliczeniowa
+
+Jawne polecenia arytmetyczne („oblicz”, „policz”, „ile to”) zawierające wyrażenie liczbowe otrzymują intencję calculation i nie uruchamiają wyszukiwania webowego. Sam wynik nadal generuje model; osobny deterministyczny evaluator arytmetyczny nie jest jeszcze częścią pipeline'u.
