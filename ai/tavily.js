@@ -887,7 +887,7 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
             chunks_per_source: 3,
             include_answer: false,
             // Pełny Markdown pobieramy tylko w droższym, celowanym etapie advanced.
-            // Ograniczenie do 3 wyników chroni kredyty i budżet promptu.
+            // Ograniczenie do 3 wyników ogranicza payload i budżet promptu.
             include_raw_content: depth === 'advanced' ? 'markdown' : false,
             ...(domains && { include_domains: domains }),
             ...(validTimeRange && { time_range: validTimeRange }),
