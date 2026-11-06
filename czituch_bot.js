@@ -6963,10 +6963,13 @@ async function zalogujYouTube() {
     port: 3000,
     host: 'localhost',
     timeoutMs: 5 * 60 * 1000,
-    onServer: server => lifecycle.zarejestruj('YouTube OAuth callback', () => new Promise(resolve => {
-      if (!server.listening) return resolve();
-      server.close(() => resolve());
-    })),
+    onServer: server => {
+      const wyrejestruj = lifecycle.zarejestruj('YouTube OAuth callback', () => new Promise(resolve => {
+        if (!server.listening) return resolve();
+        server.close(() => resolve());
+      }));
+      server.once('close', wyrejestruj);
+    },
     onListen: () => console.log('[YT Auth] ⏳ Czekam na autoryzację na porcie 3000...'),
   });
 
