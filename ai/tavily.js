@@ -999,7 +999,7 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
             onStatus({ status: 'secondary', query: searchQuery, providers: secondaryProviders, sourceCount: secondary.sources?.length || 0 });
             // Secondary retrieval może uzupełnić tylko pełne ekstrakty stron; search snippets
             // pozostają metadanymi i nie trafiają do walidatora jako dowody.
-            const primaryEvidenceResults = primaryResults.filter(r => String(r?.raw_content || '').trim().length >= 200);
+            const primaryEvidenceResults = primaryResults.filter(r => String(r?.raw_content || '').trim().length > 0);
             const secondaryResults = (secondary.sources || []).filter(source => source?.url && String(source?.content || '').trim().length > 0);
             const secondaryRebased = secondaryResults.length
               ? formatSources(secondaryResults, primaryEvidenceResults.length)
@@ -1040,7 +1040,7 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
         }
         if (!results.length) { onStatus({ status: 'empty', query: searchQuery }); return { status: 'empty', text: '' }; }
         const limit = depth === 'advanced' ? 8000 : (historical ? 6000 : 5000);
-        const primaryEvidenceResults = primaryResults.filter(r => String(r?.raw_content || '').trim().length >= 200);
+        const primaryEvidenceResults = primaryResults.filter(r => String(r?.raw_content || '').trim().length > 0);
         const sourceBlocks = primaryEvidenceResults.map((r, index) => {
           const raw = String(r.raw_content || '').trim();
           const content = raw;
