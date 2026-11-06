@@ -46,7 +46,7 @@ function czyPytanieOLore(pytanie, domeny = null) {
   const gamingDomain = Array.isArray(domeny) && domeny.some(d =>
     /(?:minecraft\.wiki|gamelore\.fandom\.com|fandom\.com|ign\.com|gamespot\.com|pcgamer\.com|eurogamer|rockstargames\.com|thewitcher\.com|bandainamco|playstation\.com|naughtydog\.com|baldursgate3\.game|larian\.com|fortnite\.gg)/i.test(String(d))
   );
-  return czyMaKontekstGry(p) || gamingDomain || Boolean(resolved);
+  return czyMaKontekstGry(p) || gamingDomain || Boolean(resolved && resolved.resolution !== 'deterministic_ambiguous');
 }
 
 function normalizujHost(wartosc) {
