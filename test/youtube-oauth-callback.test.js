@@ -20,15 +20,19 @@ function zapytanie(port, path, method = 'GET') {
 
 test('błędny state i ścieżka nie kończą oczekiwania na prawidłowy callback', async () => {
   let adres;
+  let serwer;
   const oczekiwanie = oczekujNaKodOAuth({
     state: 'a'.repeat(64),
     port: 0,
     host: '127.0.0.1',
     timeoutMs: 5000,
     onListen: value => { adres = value; },
+    onServer: value => { serwer = value; },
   });
 
   while (!adres) await new Promise(resolve => setImmediate(resolve));
+  assert.ok(serwer instanceof http.Server);
+  assert.equal(serwer.listening, true);
   const zlaSciezka = await zapytanie(adres.port, '/inna');
   assert.equal(zlaSciezka.status, 404);
 
