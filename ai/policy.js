@@ -83,10 +83,11 @@ function okreslKategorieAI(pytanie, czyPytanieOReceptureMC = () => false) {
   if ((jawnyCzasGry || trwaGra) && !czyNieCzasGry(tokeny)) return 'hltb';
   if (maToken(tokeny, 'youtube*', 'kanal*', 'youtuber*', 'subskryb*', 'streamer*', 'twitch*', 'kick')) return 'youtube';
   const czynnosci = ['isc', 'jechac', 'zrobic', 'wybrac', 'wziac', 'kupic', 'brac', 'zostac'];
-  const indeksCzy = tokeny.findIndex(token => token === 'czy' || token === 'albo');
-  const sygnalZdrowegoRozsadku = (indeksCzy > 0
-    && tokeny.slice(0, indeksCzy).some(token => czynnosci.includes(token))
-    && tokeny.slice(indeksCzy + 1).some(token => czynnosci.includes(token)))
+  const sygnalWyboru = tokeny.some((token, indeks) =>
+    (token === 'czy' || token === 'albo')
+    && tokeny.slice(0, indeks).some(slowo => czynnosci.includes(slowo))
+    && tokeny.slice(indeks + 1).some(slowo => czynnosci.includes(slowo)));
+  const sygnalZdrowegoRozsadku = sygnalWyboru
     || maFraze(tokeny, 'co lepiej') || maFraze(tokeny, 'co rozsadniej')
     || maFraze(tokeny, 'co najlepiej') || maFraze(tokeny, 'czy warto lepiej')
     || maFraze(tokeny, 'czy lepiej') || maFraze(tokeny, 'czy oplaca sie');
