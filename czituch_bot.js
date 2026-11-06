@@ -84,6 +84,7 @@ const { czyPytanieOLore, dodajGameLoreDomenę, wytnijAtrybucjeGameLore, GAMELORE
 const { czyPytanieOGameplay, dodajGameFAQsDomenę, wytnijAtrybucjeGameFAQs, GAMEFAQS_DOMAIN } = require('./ai/gameplay');
 const { przygotujHistorieDoModelu, opakujDaneReferencyjne } = AI_POLICY;
 const { classifyAIRequest } = require('./ai/router');
+const { czyWymagaKlasyfikacjiSemantycznej, klasyfikujSemantycznie } = require('./ai/semantic-classifier');
 const { planAIRequest, responseContract, RESPONSE_PROFILES, buildRetrievalQueries, czyPotrzebujeRewrite } = require('./ai/planner');
 const { resolveGameEntity, scoreExternalGameCandidate, externalGameCandidateMatchesQuery } = require('./ai/entities');
 const { extractExplicitUserMemories, mergeMemoryRecords, buildVerifiedMemoryContext, pruneExpiredMemories } = require('./ai/memory');
@@ -3002,6 +3003,31 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
     routingAI.entity_type = routingAI.entity_type || resolvedEntity.type;
     routingAI.game = routingAI.game || resolvedEntity.game || (resolvedEntity.type === 'game' ? resolvedEntity.name : null);
   }
+
+  // Fallback semantyczny uruchamiamy tylko dla pytań faktograficznych bez
+  // rozpoznanego tematu. Nie zmienia on intent ani decyzji o retrievalu.
+  if (czyWymagaKlasyfikacjiSemantycznej(routingAI) && groqClient) {
+    const timeoutKlasyfikacji = Math.min(1800, Math.max(0, pozostalyCzasMs() - 6500));
+    if (timeoutKlasyfikacji >= 250 && zarezerwujModel('semantic-routing')) {
+      const klasyfikacja = await klasyfikujSemantycznie(pytanie, {
+        klient: groqClient,
+        model: AI_MODELS.queryRewrite,
+        timeoutMs: timeoutKlasyfikacji,
+        utworzCompletion: createGroqCompletion,
+      });
+      if (klasyfikacja) {
+        routingAI.topic_type = klasyfikacja.topic_type;
+        if (routingAI.question_type === 'fact') {
+          routingAI.question_type = klasyfikacja.question_type;
+        }
+        routingAI.semantic_classification = 'groq_fallback';
+        console.log(`[AI][${requestId}] semantic fallback: topic=${routingAI.topic_type} question=${routingAI.question_type}`);
+      } else {
+        console.warn(`[AI][${requestId}] semantic fallback niedostępny lub niepoprawny — zachowuję routing deterministyczny`);
+      }
+    }
+  }
+
   if (routingAI.confidence_policy === 'clarify') {
     console.log(`[AI][${requestId}] routing confidence too low (${routingAI.confidence}) — clarification required`);
     await wyslijFn(`@${nick} Nie jestem pewien, o jaki konkretnie fakt chodzi — doprecyzuj proszę pytanie.`);
@@ -3025,7 +3051,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
   max_tokens = Math.max(Number(max_tokens) || 200, responseCfg.maxTokens);
   systemPrompt = `${systemPrompt}\n\n${responseContract(aiPlan.responseProfile)}\n\n[ANSWER PLAN]\n${answerPlan.instruction}\n\n[EVIDENCE-FIRST GENERATION]\nDla każdej informacji faktograficznej najpierw wybierz konkretny EVIDENCE CANDIDATE, a dopiero potem napisz zdanie. Jedno zdanie ma zawierać tylko jeden materialny claim albo bardzo ścisłe parafrazowanie jednego fragmentu dowodu. Nie łącz kilku wydarzeń w jeden claim, jeśli wymagają różnych dowodów. Nie wyciągaj przyczynowości z samej kolejności wydarzeń: użyj relacji przyczynowej tylko wtedy, gdy pojedynczy dowód wyraźnie ją stwierdza. ${answerPlan.causalQuestion ? 'To pytanie wymaga wyjaśnienia przyczyny: jeśli źródło jawnie opisuje skutek (np. „putting him in control” lub „giving him control”), nazwij tę relację wprost („co dało mu kontrolę”); samo „po”, „następnie” lub „w trakcie” nie wyjaśnia przyczyny. Jeśli źródło podaje tylko następstwo, nie wymyślaj przyczyny.' : ''} Zachowuj kategorię rzeczy podczas tłumaczenia: „cart/carriage/wagon” to „wóz/wózek”, a nie „kosz/basket”; jeśli nie znasz polskiego odpowiednika, użyj neutralnego opisu zamiast zmieniać rodzaj obiektu. Przy pytaniu „kim jest X?” podaj najbardziej konkretną, źródłowo potwierdzoną tożsamość/rolę i wyróżniającą cechę; nie kończ na ogólnym „towarzysz” lub „postać”, jeśli materiał podaje dokładniejszy opis. Nie wymyślaj cytatów, source_id, nazw własnych, dat, liczb ani szczegółów. Jeśli EVIDENCE CANDIDATES nie potwierdzają części pytania, pomiń tę część albo jasno powiedz, że brak wystarczających danych. Przed wysłaniem odpowiedzi sprawdź mentalnie każde zdanie: „który dokładnie candidate je potwierdza?”. Nigdy nie wypisuj etykiet technicznych „EVIDENCE CANDIDATE” ani numerów candidate w odpowiedzi dla użytkownika. Jeśli pytanie zaczyna się od „W grze <tytuł>:”, potraktuj tytuł jako kontekst retrieval, nie powtarzaj go w claimach bez dowodu z treści źródła.`;
   const kategoriaAI = routingAI.intent;
-  console.log(`[AI][${requestId}] routing=${JSON.stringify({ intent: routingAI.intent, entity: routingAI.entity, game: routingAI.game, entity_type: routingAI.entity_type, game_type: routingAI.game_type, needs_web: routingAI.needs_web, freshness: routingAI.freshness, source_type: routingAI.source_type, response_profile: aiPlan.responseProfile, confidence: routingAI.confidence })}`);
+  console.log(`[AI][${requestId}] routing=${JSON.stringify({ intent: routingAI.intent, entity: routingAI.entity, game: routingAI.game, entity_type: routingAI.entity_type, game_type: routingAI.game_type, needs_web: routingAI.needs_web, freshness: routingAI.freshness, source_type: routingAI.source_type, response_profile: aiPlan.responseProfile, topic_type: routingAI.topic_type, question_type: routingAI.question_type, semantic_classification: routingAI.semantic_classification || 'deterministic', confidence: routingAI.confidence })}`);
   console.log(`[AI] kategoria=${kategoriaAI} nick=${nick}`);
   const jestRecepturaMC = czyPytanieOReceptureMC(pytanie);
   const daneRecepturyMC = jestRecepturaMC ? await pobierzDaneRecepturyMC(pytanie) : null;
@@ -3112,6 +3138,9 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
     entityType: routingAI.entity_type || null,
     game: routingAI.game || null,
     intent: routingAI.intent,
+    topicType: routingAI.topic_type,
+    questionType: routingAI.question_type,
+    semanticClassification: routingAI.semantic_classification || 'deterministic',
     responseProfile: aiPlan.responseProfile,
     sourcePolicy: aiPlan.sourcePolicy,
     freshness: routingAI.freshness,

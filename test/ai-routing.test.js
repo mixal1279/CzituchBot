@@ -1,7 +1,7 @@
 'use strict';
 
 const assert = require('node:assert/strict');
-const { classifyAIRequest } = require('../ai/router');
+const { classifyAIRequest, classifyQuestionType, classifyTopicType } = require('../ai/router');
 const { planAIRequest, buildRetrievalQueries } = require('../ai/planner');
 const { okreslKategorieAI } = require('../ai/policy');
 const { dodajGameFAQsDomenę, czyPytanieOGameplay } = require('../ai/gameplay');
@@ -97,6 +97,28 @@ for (const question of [
   assert.equal(routing.needs_web, true, question);
 }
 
+// Tytuły gier są pobierane z centralnej tabeli aliasów, nie z osobnej listy regexów.
+for (const question of [
+  'Kim jest Lilith w Diablo IV?',
+  'Jak pokonać bossa w Diablo 4?',
+  'Historia serii Diablo',
+  'Kim jest Ezio w Assassin’s Creed?',
+]) {
+  const routing = classifyAIRequest(question, okreslKategorieAI);
+  assert.equal(routing.needs_web, true, question);
+  assert.notEqual(routing.intent, 'conversation', question);
+}
+
+// Pytanie opiniotwórcze o konkretną grę nie może wyłączać retrieval.
+const gameOpinion = classifyAIRequest('Czy warto kupić Diablo IV?', okreslKategorieAI);
+assert.equal(gameOpinion.needs_web, true);
+assert.equal(gameOpinion.intent, 'web_fact');
+
+// Ogólny small talk nadal nie uruchamia wyszukiwania.
+const genericOpinion = classifyAIRequest('Co myślisz o tej grze?', okreslKategorieAI);
+assert.equal(genericOpinion.needs_web, false);
+assert.equal(genericOpinion.intent, 'conversation');
+
 console.log('AI routing benchmark: OK');
 
 
@@ -120,3 +142,90 @@ const elytraHowQueries = buildRetrievalQueries('Jak zdobyć elytrę?', {
   needs_web: true, is_gameplay: true, entity: 'Minecraft', game: 'Minecraft',
 }, { maxQueries: 4 });
 assert.ok(elytraHowQueries.some(query => /elytra obtain Survival mode End ship/i.test(query)), JSON.stringify(elytraHowQueries));
+
+
+// Firmy i marki nie mogą być klasyfikowane jako gry tylko przez podobną nazwę.
+const diabloChairs = classifyAIRequest('Czy warto kupić fotel Diablo Chairs?', okreslKategorieAI);
+assert.equal(diabloChairs.intent, 'web_fact');
+assert.equal(diabloChairs.needs_web, true);
+assert.equal(diabloChairs.entity, 'Diablo Chairs');
+assert.equal(diabloChairs.entity_type, 'company');
+assert.equal(diabloChairs.game, null);
+assert.equal(diabloChairs.company, 'Diablo Chairs');
+
+const diabloGame = classifyAIRequest('Jak pokonać bossa w Diablo IV?', okreslKategorieAI);
+assert.equal(diabloGame.entity, 'Diablo IV');
+assert.equal(diabloGame.entity_type, 'game');
+assert.equal(diabloGame.game, 'Diablo IV');
+
+const genericCompany = classifyAIRequest('Czym zajmuje się firma TSMC?', okreslKategorieAI);
+assert.equal(genericCompany.intent, 'web_fact');
+assert.equal(genericCompany.entity, 'TSMC');
+assert.equal(genericCompany.entity_type, 'company');
+assert.equal(genericCompany.game, null);
+
+const unknownCompany = classifyAIRequest('Co produkuje firma Acme Robotics?', okreslKategorieAI);
+assert.equal(unknownCompany.intent, 'web_fact');
+assert.equal(unknownCompany.needs_web, true);
+assert.equal(unknownCompany.entity_type, 'company');
+assert.equal(unknownCompany.game, null);
+
+const unknownCompanyInflected = classifyAIRequest('Co wiesz o firmie Acme Robotics?', okreslKategorieAI);
+assert.equal(unknownCompanyInflected.entity_type, 'company');
+assert.equal(unknownCompanyInflected.needs_web, true);
+
+const companyOpinion = classifyAIRequest('Co sądzisz o Diablo Chairs?', okreslKategorieAI);
+assert.equal(companyOpinion.intent, 'web_fact');
+assert.equal(companyOpinion.needs_web, true);
+assert.equal(companyOpinion.entity_type, 'company');
+
+const unknownCompanyOpinion = classifyAIRequest('Co sądzisz o firmie Acme Robotics?', okreslKategorieAI);
+assert.equal(unknownCompanyOpinion.intent, 'web_fact');
+assert.equal(unknownCompanyOpinion.needs_web, true);
+assert.equal(unknownCompanyOpinion.entity_type, 'company');
+
+const categoryCases = [
+  ['Jak pokonać bossa w Diablo IV?', 'how_to', 'game'],
+  ['Kim jest Lilith w Diablo IV?', 'lore', 'game'],
+  ['Czy warto kupić Diablo Chairs?', 'recommendation', 'company'],
+  ['Ile kosztuje RTX 5090?', 'price', 'technology'],
+  ['Czym różni się PS5 od Xboxa?', 'comparison', 'technology'],
+  ['Dlaczego komputer się restartuje?', 'troubleshooting', 'technology'],
+  ['Co to jest TSMC?', 'explanation', 'company'],
+  ['Jaka jest dzisiaj pogoda?', 'forecast', 'weather'],
+  ['Co nowego dzisiaj na YouTube?', 'channel_or_creator', 'creator_platform'],
+  ['Kiedy powstało Sony?', 'history', 'company'],
+];
+for (const [question, expectedQuestionType, expectedTopicType] of categoryCases) {
+  const result = classifyAIRequest(question, okreslKategorieAI);
+  assert.equal(result.question_type, expectedQuestionType, question);
+  assert.equal(result.topic_type, expectedTopicType, question);
+}
+
+
+// Regresje z przeglądu PR #129: granice słów, escapowanie i aliasy wieloznaczne.
+assert.equal(classifyQuestionType('Czy PS5 jest lepsze vs. Xbox?', {}), 'comparison');
+assert.equal(classifyQuestionType('Czy PS5 jest lepsze vs Xbox?', {}), 'comparison');
+assert.equal(classifyQuestionType('Jaki jest scenariusz tej gry?', {}), 'fact');
+assert.equal(classifyQuestionType('Ile kosztuje RTX 5090?', {}), 'price');
+assert.equal(classifyTopicType('Jak działa Node.js?', {}), 'technology');
+assert.equal(classifyTopicType('Jak działa program?', {}), 'technology');
+assert.equal(classifyTopicType('Co oznacza kapitał zakładowy?', {}), 'general');
+assert.equal(classifyTopicType('Czy warto kupić grę akcji?', {}), 'general');
+
+const chessD4 = classifyAIRequest('Jak grać po 1.d4?', okreslKategorieAI);
+assert.notEqual(chessD4.entity, 'Diablo IV');
+assert.equal(chessD4.game, null);
+assert.equal(classifyTopicType('Co to jest firmware?', {}), 'general');
+
+// Długi, niezaufany input nie powinien trafiać do regexów bez limitu długości.
+assert.doesNotThrow(() => okreslKategorieAI('ile godzin zajmuje '.repeat(10000) + 'gra?'));
+
+// Powtórzone „czy” i alternatywa z „albo” muszą wykrywać wybór.
+for (const question of [
+  'Czy iść, czy zostać?',
+  'Czy iść czy zostać?',
+  'Czy kupić, albo zostać?',
+]) {
+  assert.equal(okreslKategorieAI(question), 'conversation', question);
+}

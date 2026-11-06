@@ -13,7 +13,9 @@ const GAME_ALIASES = [
   { name: 'Grand Theft Auto VI', type: 'game', aliases: ['gta vi', 'gta 6', 'grand theft auto vi', 'grand theft auto 6'] },
   { name: 'Elden Ring', type: 'game', aliases: ['elden ring'] },
   { name: 'Dark Souls', type: 'franchise', aliases: ['dark souls'] },
+  { name: 'Assassin’s Creed', type: 'franchise', aliases: ['assassin’s creed', "assassin's creed", 'assassins creed'] },
   { name: 'Baldur’s Gate 3', type: 'game', aliases: ['baldur’s gate 3', "baldur's gate 3", 'bg3'] },
+  { name: 'Diablo IV', type: 'game', aliases: ['diablo iv', 'diablo 4'] },
   { name: 'The Last of Us', type: 'franchise', aliases: ['the last of us', 'tlou'] },
   { name: 'God of War', type: 'franchise', aliases: ['god of war'] },
   { name: 'Dying Light: The Beast', type: 'game', aliases: ['dying light the beast', 'dying light: the beast'] },
@@ -24,6 +26,63 @@ const GAME_ALIASES = [
   { name: 'Starfield', type: 'game', aliases: ['starfield'] },
   { name: 'Fortnite', type: 'game', aliases: ['fortnite'] },
 ];
+
+
+const COMPANY_ALIASES = [
+  { name: 'Diablo Chairs', type: 'company', aliases: ['diablo chairs', 'diablochairs'] },
+  { name: 'TSMC', type: 'company', aliases: ['tsmc', 'taiwan semiconductor manufacturing'] },
+  { name: 'Samsung', type: 'company', aliases: ['samsung'] },
+  { name: 'Sony', type: 'company', aliases: ['sony'] },
+  { name: 'NVIDIA', type: 'company', aliases: ['nvidia'] },
+  { name: 'AMD', type: 'company', aliases: ['amd', 'advanced micro devices'] },
+  { name: 'Intel', type: 'company', aliases: ['intel'] },
+  { name: 'Microsoft', type: 'company', aliases: ['microsoft'] },
+  { name: 'OpenAI', type: 'company', aliases: ['openai'] },
+  { name: 'Google', type: 'company', aliases: ['google'] },
+  { name: 'Valve', type: 'company', aliases: ['valve'] },
+  { name: 'CD Projekt', type: 'company', aliases: ['cd projekt', 'cdprojekt'] },
+  { name: 'Logitech', type: 'company', aliases: ['logitech'] },
+  { name: 'Razer', type: 'company', aliases: ['razer'] },
+  { name: 'Endorfy', type: 'company', aliases: ['endorfy'] },
+  { name: 'Corsair', type: 'company', aliases: ['corsair'] },
+  { name: 'MSI', type: 'company', aliases: ['msi'] },
+  { name: 'Gigabyte', type: 'company', aliases: ['gigabyte'] },
+  { name: 'ASUS', type: 'company', aliases: ['asus'] },
+  { name: 'Qualcomm', type: 'company', aliases: ['qualcomm'] },
+  { name: 'Xiaomi', type: 'company', aliases: ['xiaomi'] },
+  { name: 'Dell', type: 'company', aliases: ['dell'] },
+  { name: 'Lenovo', type: 'company', aliases: ['lenovo'] },
+];
+
+// Krótkie lub wieloznaczne nazwy firm wymagają dodatkowego kontekstu biznesowego.
+const AMBIGUOUS_COMPANY_ALIASES = new Set(['apple', 'meta', 'valve', 'dell', 'msi']);
+const COMPANY_CONTEXT_RE = /(?<![\p{L}\p{N}_])(?:firm(?:a|y|ie|ę|ą|ami|ach)|mark(?:a|i|ę|ą|ami|ach)|producent(?:a|em|owi|ów|ami|ach)?|przedsiębiorstw(?:o|a|em|ie|ami|ach)|spółk(?:a|i|ę|ą|om|ami|ach)|korporacj(?:a|i|ę|ą|om|ami|ach)|przychod(?:y|u|em|zie)?|obrot(?:y|u|em|ach)?|zysk(?:i|u|iem)?|wycen(?:a|y|ę|ą|ie)|giełd(?:a|y|ę|ą|zie)|ceo|prezes(?:a|em|owi|ów)?|założon\p{L}*|powstał\p{L}*|produkuje|wypuszcza|portfolio|produkty|sprzęt|fotele|procesor\p{L}*|karty\s+graficzne)(?![\p{L}\p{N}_])/iu;
+
+
+// Rozpoznaje jawny kontekst przedsiębiorstwa także wtedy, gdy nazwa nie jest
+// jeszcze obecna w lokalnym słowniku aliasów.
+function czyPytanieOFirmie(text) {
+  return COMPANY_CONTEXT_RE.test(String(text || ''));
+}
+
+function resolveCompanyEntity(text) {
+  const normalizedText = normalizujEncje(text);
+  const match = findAlias(normalizedText, COMPANY_ALIASES);
+  if (!match) return null;
+  const ambiguous = AMBIGUOUS_COMPANY_ALIASES.has(normalizujEncje(match.alias));
+  if (ambiguous && !COMPANY_CONTEXT_RE.test(text)) return null;
+  return {
+    type: 'company',
+    name: match.entry.name,
+    confidence: match.confidence,
+    matchedAlias: match.alias,
+    resolution: 'deterministic',
+  };
+}
+
+function resolveEntity(text) {
+  return resolveCompanyEntity(text) || resolveGameEntity(text);
+}
 
 const CHARACTER_ALIASES = [
   { name: 'Wheatley', game: 'Portal 2', aliases: ['wheatley'] },
@@ -177,6 +236,15 @@ function gameAliasesForText(normalizedText) {
   })).filter((entry) => entry.aliases.length);
 }
 
+// Wspólny sygnał gry dla routingu. Korzysta z tej samej tabeli aliasów co resolver,
+// więc dodanie gry w jednym miejscu automatycznie rozszerza klasyfikację pytań.
+function czyWspomnianoGre(text) {
+  const normalizedText = normalizujEncje(text);
+  return gameAliasesForText(normalizedText).some(entry =>
+    entry.aliases.some(alias => containsAlias(normalizedText, alias))
+  );
+}
+
 function followedByForeignSurname(rawText, alias, entry) {
   const tokens = String(rawText || '').match(/[\p{L}][\p{L}’']*/gu) || [];
   // Znane są tylko tokeny tej samej postaci (np. „Arthur Morgan”), bo „Miller”
@@ -250,11 +318,16 @@ function externalGameCandidateMatchesQuery(query, candidateName) {
 
 module.exports = {
   GAME_ALIASES,
+  COMPANY_ALIASES,
   CHARACTER_ALIASES,
   normalizujEncje,
   containsAlias,
   containsExactAlias,
+  czyWspomnianoGre,
   scoreExternalGameCandidate,
   externalGameCandidateMatchesQuery,
   resolveGameEntity,
+  resolveCompanyEntity,
+  czyPytanieOFirmie,
+  resolveEntity,
 };
