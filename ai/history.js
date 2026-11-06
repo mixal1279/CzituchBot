@@ -46,7 +46,7 @@ function oznaczUzycieHistorii(ostatnieUzycie, klucz, teraz = Date.now()) {
   if (!ostatnieUzycie || typeof ostatnieUzycie !== 'object' || Array.isArray(ostatnieUzycie)) return false;
   const key = String(klucz || '').trim();
   if (!key) return false;
-  ostatnieUzycie[key] = Number.isFinite(teraz) ? teraz : Date.now();
+  Object.defineProperty(ostatnieUzycie, key, { value: Number.isFinite(teraz) ? teraz : Date.now(), writable: true, configurable: true, enumerable: true });
   return true;
 }
 
@@ -59,9 +59,9 @@ function ograniczHistorieRozmow(historie, ostatnieUzycie, limit = 500) {
   klucze.sort((a, b) => (Number(ostatnieUzycie[a]) || 0) - (Number(ostatnieUzycie[b]) || 0));
   const usuniete = klucze.slice(0, klucze.length - max);
   for (const key of usuniete) {
-    delete historie[key];
-    delete ostatnieUzycie[key];
-  }
+    if (key === '__proto__' || key === 'prototype' || key === 'constructor') continue;
+    Reflect.deleteProperty(historie, key);
+    Reflect.deleteProperty(ostatnieUzycie, key);
   return usuniete;
 }
 
