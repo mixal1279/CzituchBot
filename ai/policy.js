@@ -61,7 +61,7 @@ function okreslKategorieAI(pytanie, czyPytanieOReceptureMC = () => false) {
   if (sygnalZdrowegoRozsadku && !graSygnal) return 'conversation';
 
   if (/(?<![\p{L}\p{N}_])(?:dzisiaj|dzis|dziś|wczoraj|najnowsz\p{L}*|wiadomo[śs]\p{L}*|news|aktualn\p{L}*)(?![\p{L}\p{N}_])/iu.test(p)) return 'web_fact';
-  if (graSygnal || /(?<![\p{L}\p{N}_])(?:jak|gdzie|co\s+to|co\s+(?:się|stało|robi|oznacza|znaczy)|z\s+czego|kiedy|od\s+kiedy|ile|kto|kim|czym|czy|jaki|jaka|jakie|premier\p{L}*|data|cena|koszt|informacj\p{L}*|aktualizacj\p{L}*|dlaczego|czemu|r[óo]żni\p{L}*|działa|dziala|bezpiecz\p{L}*|powstał\p{L}*|został\p{L}*|rozwija\p{L}*|opracow\p{L}*|stworzył\p{L}*|firma|firmy|marka|marki|producent\p{L}*|przedsiębiorstw\p{L}*|spółk\p{L}*|korporac\p{L}*|technolog\p{L}*|model\p{L}*|histori\p{L}*|pierwsz\p{L}*|prototyp\p{L}*|http|https|dns|ram|cpu|gpu|api|oauth|javascript|node\.?js|python|groq|gemini|openrouter|discord|crafting)(?![\p{L}\p{N}_])/iu.test(pytanie)) return 'web_fact';
+  if (graSygnal || /(?<![\p{L}\p{N}_])(?:jak|gdzie|co\s+to|co\s+(?:się|stało|robi|oznacza|znaczy)|z\s+czego|kiedy|od\s+kiedy|ile|kto|kim|czym|czy|jaki|jaka|jakie|premier\p{L}*|data|cena|koszt|informacj\p{L}*|aktualizacj\p{L}*|dlaczego|czemu|r[óo]żni\p{L}*|działa|dziala|bezpiecz\p{L}*|powstał\p{L}*|został\p{L}*|rozwija\p{L}*|opracow\p{L}*|stworzył\p{L}*|firma|firmy|marka|marki|producent\p{L}*|przedsiębiorstw\p{L}*|spółk\p{L}*|korporac\p{L}*|technolog\p{L}*|model\p{L}*|histori\p{L}*|pierwsz\p{L}*|prototyp\p{L}*|http|https|dns|ram|cpu|gpu|api|oauth|javascript|node\.?js|python|groq|gemini|openrouter|discord|crafting)(?![\p{L}\p{N}_])/iu.test(p)) return 'web_fact';
   return 'conversation';
 }
 
