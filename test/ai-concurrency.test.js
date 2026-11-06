@@ -89,6 +89,21 @@ test('AI queue releases its slot after task failure and after beforeStart failur
   assert.equal(kolejkaZPrzygotowaniem.stan().aktywne, 0);
 });
 
+test('AI queue also bounds provider-state initialization time', async () => {
+  const kolejka = utworzKolejkeAI({
+    maxConcurrent: 1,
+    maxQueued: 1,
+    maxWaitMs: 20,
+    beforeStart: () => new Promise(() => {}),
+  });
+  await assert.rejects(
+    kolejka.wykonaj(async () => 'nie powinno się uruchomić'),
+    error => error.code === 'AI_QUEUE_TIMEOUT',
+  );
+  assert.equal(kolejka.stan().aktywne, 0);
+  assert.equal(kolejka.stan().oczekujace, 0);
+});
+
 test('AI queue validates its limits and task input', async () => {
   assert.throws(() => utworzKolejkeAI({ maxConcurrent: 0 }), RangeError);
   assert.throws(() => utworzKolejkeAI({ maxQueued: -1 }), RangeError);
