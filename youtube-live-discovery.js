@@ -6,71 +6,131 @@ const MAX_VIDEO_CANDIDATES = 30;
 
 function parseAssignedJson(html, variableName) {
   const source = String(html || '');
-  const marker = new RegExp(variableName + '\\s*=\\s*');
-  const match = marker.exec(source);
-  if (!match) return null;
-  const start = source.indexOf('{', match.index + match[0].length);
-  if (start < 0) return null;
-  let depth = 0;
-  let inString = false;
-  let escaped = false;
-  for (let i = start; i < source.length; i += 1) {
-    const char = source[i];
-    if (inString) {
-      if (escaped) escaped = false;
-      else if (char === '\\') escaped = true;
-      else if (char === '"') inString = false;
-      continue;
-    }
-    if (char === '"') inString = true;
-    else if (char === '{') depth += 1;
-    else if (char === '}') {
-      depth -= 1;
-      if (depth === 0) {
-        try { return JSON.parse(source.slice(start, i + 1)); }
-        catch { return null; }
+  const escapedName = variableName === 'ytInitialData' ? 'ytInitialData' : 'ytInitialPlayerResponse';
+  const patterns = [
+    new RegExp('(?:\\b(?:var|let|const)\\s+)?(?:window\\s*\\.\\s*)?' + escapedName + '\\s*=\\s*', 'g'),
+    new RegExp('window\\s*\\[\\s*["\\']' + escapedName + '["\\']\\s*\\]\\s*=\\s*', 'g'),
+    new RegExp('["\\']' + escapedName + '["\\']\\s*:\\s*', 'g'),
+  ];
+
+  for (const pattern of patterns) {
+    let match;
+    while ((match = pattern.exec(source))) {
+      let start = match.index + match[0].length;
+      const limit = Math.min(source.length, start + 256);
+      while (start < limit && source[start] !== '{' && source[start] !== '[') start += 1;
+      if (start >= limit) continue;
+
+      const otwarte = [];
+      let inString = false;
+      let escaped = false;
+      for (let i = start; i < source.length; i += 1) {
+        const char = source[i];
+        if (inString) {
+          if (escaped) escaped = false;
+          else if (char === '\\') escaped = true;
+          else if (char === '"') inString = false;
+          continue;
+        }
+        if (char === '"') inString = true;
+        else if (char === '{' || char === '[') otwarte.push(char);
+        else if (char === '}' || char === ']') {
+          const poprzedni = otwarte.pop();
+          if ((char === '}' && poprzedni !== '{') || (char === ']' && poprzedni !== '[')) break;
+          if (otwarte.length === 0) {
+            try { return JSON.parse(source.slice(start, i + 1)); }
+            catch { break; }
+          }
+        }
       }
     }
   }
   return null;
 }
 
+function maEtykieteLive(obiekt) {
+  const wartosci = [
+    obiekt?.label,
+    obiekt?.text?.simpleText,
+    obiekt?.accessibilityData?.label,
+  ];
+  return wartosci.some(wartosc =>
+    typeof wartosc === 'string' && wartosc.trim().toUpperCase() === 'LIVE'
+  );
+}
+
 function hasLiveBadge(renderer) {
   if (!renderer || typeof renderer !== 'object') return false;
   if (renderer.isLive === true || renderer.isLiveNow === true) return true;
+
   const badges = Array.isArray(renderer.badges) ? renderer.badges : [];
-  if (badges.some(badge => LIVE_BADGE_STYLES.has(badge?.metadataBadgeRenderer?.style))) return true;
+  if (badges.some(badge => {
+    const meta = badge?.metadataBadgeRenderer;
+    return LIVE_BADGE_STYLES.has(meta?.style) || maEtykieteLive(meta);
+  })) return true;
+
   const overlays = Array.isArray(renderer.thumbnailOverlays) ? renderer.thumbnailOverlays : [];
-  return overlays.some(item => item?.thumbnailOverlayTimeStatusRenderer?.style === 'LIVE');
+  return overlays.some(item => {
+    const status = item?.thumbnailOverlayTimeStatusRenderer;
+    return status?.style === 'LIVE' || maEtykieteLive(status);
+  });
 }
 
-function findVideoIds(data, limit = MAX_VIDEO_CANDIDATES, requireLiveBadge = false) {
-  if (!data || typeof data !== 'object') return [];
+function pobierzVideoIdZRenderera(obiekt) {
+  const id = obiekt?.videoId || obiekt?.navigationEndpoint?.watchEndpoint?.videoId;
+  return VIDEO_ID_RE.test(id || '') ? id : null;
+}
+
+function analizujRenderery(data, limit = MAX_VIDEO_CANDIDATES) {
+  if (!data || typeof data !== 'object') {
+    return { ids: [], liczbaObiektow: 0, rendereryVideo: 0, sygnalyLive: 0, limitPrzeszukiwania: false };
+  }
+
   const stack = [data];
   const visitedObjects = new Set();
   const ids = new Set();
+  let rendereryVideo = 0;
+  let sygnalyLive = 0;
+
   while (stack.length && visitedObjects.size < 100000 && ids.size < limit) {
     const current = stack.pop();
     if (!current || typeof current !== 'object' || visitedObjects.has(current)) continue;
     visitedObjects.add(current);
-    if (VIDEO_ID_RE.test(current.videoId || '') && (!requireLiveBadge || hasLiveBadge(current))) {
-      ids.add(current.videoId);
+
+    const videoId = pobierzVideoIdZRenderera(current);
+    if (videoId) {
+      rendereryVideo += 1;
+      if (hasLiveBadge(current)) {
+        sygnalyLive += 1;
+        ids.add(videoId);
+      }
     }
+
     for (const value of Object.values(current)) {
       if (value && typeof value === 'object') stack.push(value);
     }
   }
-  return [...ids];
+
+  return {
+    ids: [...ids],
+    liczbaObiektow: visitedObjects.size,
+    rendereryVideo,
+    sygnalyLive,
+    limitPrzeszukiwania: stack.length > 0 && visitedObjects.size >= 100000,
+  };
+}
+
+function findVideoIds(data, limit = MAX_VIDEO_CANDIDATES, requireLiveBadge = false) {
+  return analizujRenderery(data, limit).ids;
 }
 
 function findLiveVideoIds(data, limit = 20) {
-  return findVideoIds(data, limit, true);
+  return analizujRenderery(data, limit).ids;
 }
 
 function findLiveVideoId(data) {
   return findLiveVideoIds(data, 1)[0] || null;
 }
-
 function isLiveVideoFromChannel(video, expectedChannelId) {
   return Boolean(
     video &&
@@ -104,29 +164,38 @@ function videoIdFromUrl(value) {
   }
 }
 
-function extractLiveVideoIds(html, finalUrl) {
+function analizujStroneLive(html, finalUrl) {
   const source = String(html || '');
   const ids = new Set();
-  const add = id => {
-    if (VIDEO_ID_RE.test(id || '') && ids.size < MAX_VIDEO_CANDIDATES) ids.add(id);
-  };
-
-  add(videoIdFromUrl(finalUrl));
-
   const playerResponse = parseAssignedJson(source, 'ytInitialPlayerResponse');
   const playerVideoId = playerResponse?.videoDetails?.videoId;
-  if (playerResponse?.microformat?.playerMicroformatRenderer?.liveBroadcastDetails?.isLiveNow === true) {
-    add(playerVideoId);
-  }
+  if (playerResponse?.microformat?.playerMicroformatRenderer?.liveBroadcastDetails?.isLiveNow === true &&
+      VIDEO_ID_RE.test(playerVideoId || '')) ids.add(playerVideoId);
 
   const initialData = parseAssignedJson(source, 'ytInitialData');
-  for (const id of findLiveVideoIds(initialData, 20)) add(id);
+  const analiza = analizujRenderery(initialData, 20);
+  for (const id of analiza.ids) ids.add(id);
 
+  const redirectedId = videoIdFromUrl(finalUrl);
+  if (redirectedId) ids.add(redirectedId);
 
-
-  return [...ids];
+  return {
+    ids: [...ids].slice(0, MAX_VIDEO_CANDIDATES),
+    diagnostyka: {
+      znalezionoInitialData: Boolean(initialData),
+      znalezionoPlayerResponse: Boolean(playerResponse),
+      liczbaObiektow: analiza.liczbaObiektow,
+      rendereryVideo: analiza.rendereryVideo,
+      sygnalyLive: analiza.sygnalyLive,
+      limitPrzeszukiwania: analiza.limitPrzeszukiwania,
+      redirectVideoId: Boolean(redirectedId),
+    },
+  };
 }
 
+function extractLiveVideoIds(html, finalUrl) {
+  return analizujStroneLive(html, finalUrl).ids;
+}
 // Backward-compatible strict helper: unlike discoverLiveVideoId, this only
 // returns IDs with an explicit LIVE signal (or a direct /live redirect).
 function extractLiveVideoId(html, finalUrl) {
@@ -173,10 +242,17 @@ async function discoverLiveVideoId(channelId, options) {
     });
     if (!response.ok) throw new Error('Strona YouTube /live zwróciła HTTP ' + response.status + '.');
     const html = await response.text();
-    pageCandidates = extractLiveVideoIds(html, response.url || url);
+    const analizaStrony = analizujStroneLive(html, response.url || url);
+    pageCandidates = analizaStrony.ids;
     if (!pageCandidates.length) {
-      console.warn('[YouTube LIVE] Strona /live nie zwróciła kandydatów videoId dla kanału ' + channelId +
-        ' (HTTP ' + response.status + ', HTML: ' + html.length + ' znaków, URL: ' + (response.url || url) + ').');
+      const d = analizaStrony.diagnostyka;
+      console.warn('[YouTube LIVE] Brak kandydatów dla ' + channelId +
+        ' (HTTP ' + response.status + ', HTML: ' + html.length + ' znaków, ' +
+        'ytInitialData: ' + (d.znalezionoInitialData ? 'tak' : 'nie') + ', ' +
+        'ytInitialPlayerResponse: ' + (d.znalezionoPlayerResponse ? 'tak' : 'nie') + ', ' +
+        'obiekty: ' + d.liczbaObiektow + ', renderery video: ' + d.rendereryVideo + ', ' +
+        'sygnały LIVE: ' + d.sygnalyLive + ', limit DFS: ' + (d.limitPrzeszukiwania ? 'osiągnięty' : 'nie') +
+        ', URL: ' + (response.url || url) + ').');
     }
   } catch (error) {
     pageError = error?.name === 'AbortError'
