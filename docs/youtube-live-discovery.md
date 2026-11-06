@@ -17,3 +17,11 @@ An active broadcast is not treated as offline merely because Live Chat is disabl
 The 80-request rolling counter is persisted in `.youtube-search-quota.json`, so it survives normal process restarts and deployments that preserve this file. The file is excluded from Git. The counter is designed for one bot process/instance; multiple concurrent instances would require a shared atomic store. The verification cache is in-memory and resets on restart. The normal 3-hour per-channel fallback cooldown also applies independently.
 
 Tests: `node --test test/youtube-live-discovery.test.js`.
+
+
+Parser strony /live obsługuje przypisania `ytInitialData` i `ytInitialPlayerResponse`
+w kilku wariantach składni, dodatkowe etykiety LIVE oraz identyfikatory w
+`navigationEndpoint.watchEndpoint`. Kandydat nadal wymaga jawnego sygnału LIVE
+i potwierdzenia przez `videos.list`. Przy braku kandydatów log zawiera teraz
+diagnostykę parsowania: obecność obiektów inicjalizacyjnych, liczbę rendererów,
+liczbę sygnałów LIVE oraz informację o osiągnięciu limitu przeszukiwania.
