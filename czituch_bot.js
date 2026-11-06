@@ -1131,21 +1131,10 @@ async function wybierzDomenyDlaPytania(pytanie, domyslnieMinecraft = false, requ
 // =============================================
 //  RAWG – rozpoznawanie gier
 // =============================================
-let igdbToken = null;
-let igdbTokenExpiry = 0;
-
+// IGDB i pozostałe wywołania Helix korzystają z tego samego App Access Tokena.
+// Jeden cache i jeden Promise odświeżania zapobiegają równoległym żądaniom OAuth.
 async function pobierzTokenIGDB() {
-  if (igdbToken && Date.now() < igdbTokenExpiry) return igdbToken;
-  const res = await fetchZTimeout(
-    `https://id.twitch.tv/oauth2/token?client_id=${KONFIGURACJA.twitchClientId}&client_secret=${KONFIGURACJA.twitchClientSecret}&grant_type=client_credentials`,
-    { method: 'POST' },
-    6000
-  );
-  if (!res.ok) throw new Error(`IGDB token HTTP ${res.status}`);
-  const data = await res.json();
-  igdbToken = data.access_token;
-  igdbTokenExpiry = Date.now() + (data.expires_in - 60) * 1000;
-  return igdbToken;
+  return pobierzTwitchAppToken();
 }
 
 async function znajdzGreIGDB(pytanie, requestState = null) {
