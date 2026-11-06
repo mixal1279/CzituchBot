@@ -6,6 +6,9 @@ on:
     paths:
       - 'ai/**'
       - 'test/**'
+      - 'economy/**'
+      - 'lifecycle.js'
+      - 'youtube-oauth-callback.js'
       - 'package.json'
       - 'czituch_bot.js'
       - '.github/workflows/ai-tests.yml'
@@ -13,7 +16,11 @@ on:
     paths:
       - 'ai/**'
       - 'test/**'
+      - 'economy/**'
+      - 'lifecycle.js'
+      - 'youtube-oauth-callback.js'
       - 'package.json'
+      - 'czituch_bot.js'
       - '.github/workflows/ai-tests.yml'
 
 permissions:
