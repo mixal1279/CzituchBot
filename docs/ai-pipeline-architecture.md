@@ -39,7 +39,7 @@ Conversation history and verified user memory use a stable scope key:
 - Platform and channel components are normalized to lowercase. Platform user IDs retain their original case because provider IDs may be case-sensitive.
 - The in-memory conversation history is bounded to 500 scopes and evicted by least-recent use. The LRU timestamp must use the same complete scope key as the history map.
 
-The AI request queue is process-wide because it protects shared provider capacity: at most 3 active jobs and 20 queued jobs. A completed job transfers its slot directly to the next waiter; the active counter is not decremented during handoff. A full queue rejects the new request with `AI_QUEUE_FULL`.
+The AI request queue is process-wide because it protects shared provider capacity: at most 3 active jobs and 20 queued jobs. A completed job transfers its slot directly to the next waiter; the active counter is not decremented during handoff. A full queue rejects the new request with `AI_QUEUE_FULL`, and a queued request expires after 15 seconds with `AI_QUEUE_TIMEOUT` so stale work cannot hold memory indefinitely.
 
 Provider diagnostics use an allowlist of safe error fields. Request headers, request bodies, credentials, raw generated payloads, and provider response bodies are not serialized into logs. Error messages are redacted before logging.
 
