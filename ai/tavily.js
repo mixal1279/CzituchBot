@@ -22,7 +22,7 @@ const TAVILY_PERSIST_DEBOUNCE_MS = 5000;
 const TAVILY_CACHE_MAX_ENTRIES = 300;
 const TAVILY_CACHE_MAX_BYTES = 700 * 1024; // poniżej limitu 1 MiB pojedynczego dokumentu Firestore
 const TAVILY_REWRITE_MAX_ENTRIES = 500;
-const TAVILY_CACHE_VERSION = 4;
+const TAVILY_CACHE_VERSION = 5;
 const TAVILY_REWRITE_CACHE_VERSION = 1;
 const TAVILY_QUOTA_COOLDOWN_MS = Math.max(60_000, Number(process.env.TAVILY_QUOTA_COOLDOWN_MS) || 15 * 60 * 1000);
 const TAVILY_RATE_LIMIT_COOLDOWN_MS = Math.max(1_000, Number(process.env.TAVILY_RATE_LIMIT_COOLDOWN_MS) || 60_000);
@@ -509,7 +509,7 @@ function czyWymagaSecondaryRetrieval(results, sourceQuestion = '', timeRange = n
   if (lista.length === 0) return true;
   // Tavily Search `content` is a short search excerpt. It may guide retrieval,
   // but only raw_content from page extraction is eligible as factual evidence.
-  if (!lista.some(r => String(r?.raw_content || '').trim().length >= 200)) return true;
+  if (!lista.some(r => String(r?.raw_content || '').trim().length > 0)) return true;
   if (lista.length >= 2) {
     const hosts = new Set(lista.map(r => { try { return new URL(r?.url).hostname.toLowerCase().replace(/^www\./, ''); } catch (_) { return ''; } }).filter(Boolean));
     const providers = new Set(lista.map(r => String(r?.provider || 'tavily')).filter(Boolean));
@@ -991,7 +991,7 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
             // Secondary retrieval może uzupełnić tylko pełne ekstrakty stron; search snippets
             // pozostają metadanymi i nie trafiają do walidatora jako dowody.
             const primaryEvidenceResults = primaryResults.filter(r => String(r?.raw_content || '').trim().length >= 200);
-            const secondaryResults = (secondary.sources || []).filter(source => source?.url && String(source?.content || '').trim().length >= 200);
+            const secondaryResults = (secondary.sources || []).filter(source => source?.url && String(source?.content || '').trim().length > 0);
             const secondaryRebased = secondaryResults.length
               ? formatSources(secondaryResults, primaryEvidenceResults.length)
               : '';
