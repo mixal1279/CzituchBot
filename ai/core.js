@@ -336,6 +336,7 @@ function assessEvidence(results = [], question, routing = {}) {
   });
 
   const hosts = new Set(selected.map(x => x.host).filter(Boolean));
+  const independentHosts = new Set(selected.filter(x => !czyStreszczenieModelu(x)).map(x => x.host).filter(Boolean));
   const strong = selected.filter(x => x.coreScore >= 0.55);
   const relevant = selected.filter(x => x.relevance >= 0.35 || x.titleRelevance >= 0.45);
 
@@ -363,7 +364,7 @@ function assessEvidence(results = [], question, routing = {}) {
     status,
     sources: selected,
     sourceCount: selected.length,
-    independentHosts: evidenceHosts.size,
+    independentHosts: independentHosts.size,
     uniqueHosts: hosts.size,
     relevantHosts: evidenceHosts.size,
     modelSummarySources: selected.filter(czyStreszczenieModelu).length,

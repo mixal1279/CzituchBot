@@ -141,7 +141,8 @@ function stratifiedCases(all, requested, seed = 0) {
   for (const [category, bucket] of groups) {
     if (selected.length >= limit) break;
     if (selectedCategories.has(category)) continue;
-    const candidate = bucket.find(item => !selectedIds.has(item.id));
+    const candidate = bucket.find(item => !selectedIds.has(item.id) && item.expected?.factual?.independentGold !== true)
+      || bucket.find(item => !selectedIds.has(item.id));
     if (!candidate) continue;
     selected.push(candidate);
     selectedIds.add(candidate.id);
@@ -155,7 +156,13 @@ function stratifiedCases(all, requested, seed = 0) {
     const bucket = groups.get(key);
     while (bucket.length && selectedIds.has(bucket[0].id)) bucket.shift();
     if (bucket.length) {
-      const item = bucket.shift();
+      let index = bucket.findIndex(item => !selectedIds.has(item.id) && item.expected?.factual?.independentGold !== true);
+      if (index < 0) index = bucket.findIndex(item => !selectedIds.has(item.id));
+      if (index < 0) {
+        keys.splice(cursor % keys.length, 1);
+        continue;
+      }
+      const [item] = bucket.splice(index, 1);
       selected.push(item);
       selectedIds.add(item.id);
       cursor++;
