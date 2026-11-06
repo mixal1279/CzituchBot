@@ -1084,11 +1084,13 @@ async function wybierzDomenyDlaPytania(pytanie, domyslnieMinecraft = false, requ
     && znanaGra.resolution !== 'deterministic_ambiguous'
     && (znanaGra.game || znanaGra.type === 'game')
   );
+  let probowanoDynamicznegoRozpoznania = false;
 
   // Ogólna reguła „gra/gry/game” zwracała domeny poradnikowe i blokowała IGDB.
   // Dla pytań lore o nieznanym lokalnie tytule uruchamiamy rozpoznanie gry
   // niezależnie od tego, czy wcześniej dobrano już ogólne domeny gamingowe.
   if (!maPewnaGre && czyPytanieOLore(pytanie) && czyMaKontekstGry(pytanie) && KONFIGURACJA.twitchClientId) {
+    probowanoDynamicznegoRozpoznania = true;
     try {
       const gra = await znajdzGreIGDB(pytanie, requestState);
       if (gra) {
@@ -1113,7 +1115,7 @@ async function wybierzDomenyDlaPytania(pytanie, domyslnieMinecraft = false, requ
     };
   }
 
-  if (!domeny && KONFIGURACJA.twitchClientId) {
+  if (!domeny && !probowanoDynamicznegoRozpoznania && KONFIGURACJA.twitchClientId) {
     try {
       const gra = await znajdzGreIGDB(pytanie, requestState);
       if (gra) {
