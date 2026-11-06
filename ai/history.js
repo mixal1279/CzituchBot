@@ -29,15 +29,16 @@ function parsujStrukturalnePodsumowanie(text) {
 
 
 function zbudujKluczHistorii(platforma, kanal, userId) {
-  const normalizuj = (value, fallback) => {
-    const result = String(value ?? '').trim().toLocaleLowerCase('pl-PL')
-      .replace(/[\x00-\x1f\x7f]/g, '').slice(0, 128);
+  const normalizuj = (value, fallback, lowercase = true) => {
+    let result = String(value ?? '').trim().replace(/[\x00-\x1f\x7f]/g, '').slice(0, 128);
+    if (lowercase) result = result.toLocaleLowerCase('pl-PL');
     return result || fallback;
   };
   return [
     normalizuj(platforma, 'unknown'),
     normalizuj(kanal, 'brak-kanalu'),
-    normalizuj(userId, 'unknown'),
+    // Identyfikatory YouTube są case-sensitive; nie sprowadzaj ich do lowercase.
+    normalizuj(userId, 'unknown', false),
   ].join(':');
 }
 
