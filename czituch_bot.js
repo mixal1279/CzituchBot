@@ -3018,7 +3018,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
     };
     console.log(`[AI][${requestId}] SUMMARY ${JSON.stringify(summary)}`);
     if (onAISummary) {
-      try { onAISummary({ ...summary, validatorMetricsRaw: [...(aiState.validatorMetrics || [])] }); } catch (err) { console.warn(`[AI][${requestId}] summary hook error: ${err.message}`); }
+      try { onAISummary({ ...summary, validatorMetricsRaw: [...(aiState.validatorMetrics || [])] }); } catch (err) { console.warn(`[AI][${requestId}] summary hook error: ${sanitizujKomunikatBledu(err.message)}`); }
     }
   };
   console.log(`[AI][${requestId}] start kategoria=pending persona=${aiProfile}`);
@@ -3594,10 +3594,10 @@ Pytanie użytkownika: ${pytanie}`;
         ...(parsed.safetyRatings ? { safetyRatings: parsed.safetyRatings } : {}),
       };
     } catch (err) {
-      console.error(`[Gemini] Fallback nieudany (${powod}):`, err.message);
+      console.error(`[Gemini] Fallback nieudany (${powod}):`, sanitizujKomunikatBledu(err.message));
       const cooldownMs = geminiGenerationCooldownMsFromError(err);
       if (cooldownMs > 0) ustawGeminiGenerationCooldown(AI_MODELS.generatorGemini, cooldownMs);
-      return wynikPusty('gemini', AI_MODELS.generatorGemini, err.message);
+      return wynikPusty('gemini', AI_MODELS.generatorGemini, sanitizujKomunikatBledu(err.message));
     } finally { wyczyscTimeout(timer); }
   }
 
@@ -3640,10 +3640,10 @@ Pytanie użytkownika: ${pytanie}`;
         ...(parsed.safetyRatings ? { safetyRatings: parsed.safetyRatings } : {}),
       };
     } catch (err) {
-      console.error(`[Gemini Lite] Fallback nieudany (${powod}):`, err.message);
+      console.error(`[Gemini Lite] Fallback nieudany (${powod}):`, sanitizujKomunikatBledu(err.message));
       const cooldownMs = geminiGenerationCooldownMsFromError(err);
       if (cooldownMs > 0) ustawGeminiGenerationCooldown(AI_MODELS.generatorGeminiLite, cooldownMs);
-      return wynikPusty('gemini', AI_MODELS.generatorGeminiLite, err.message);
+      return wynikPusty('gemini', AI_MODELS.generatorGeminiLite, sanitizujKomunikatBledu(err.message));
     } finally { wyczyscTimeout(timer); }
   }
 
@@ -3686,7 +3686,7 @@ Pytanie użytkownika: ${pytanie}`;
       }
       return { tekst, ucieta: data?.choices?.[0]?.finish_reason === 'length', provider: 'openrouter', model: data?.model || KONFIGURACJA.openrouterGeneratorModel };
     } catch (err) {
-      console.error(`[OpenRouter] Fallback nieudany (${powod}):`, err.message);
+      console.error(`[OpenRouter] Fallback nieudany (${powod}):`, sanitizujKomunikatBledu(err.message));
       return wynikPusty('openrouter', KONFIGURACJA.openrouterGeneratorModel, formatProviderError('openrouter', KONFIGURACJA.openrouterGeneratorModel, err));
     } finally { wyczyscTimeout(timer); }
   }
@@ -3745,8 +3745,8 @@ Pytanie użytkownika: ${pytanie}`;
       if (!tekst) throw new Error('xKiro zwrócił pustą odpowiedź');
       return ujednolicWynik({ tekst, ucieta: choice?.finish_reason === 'length' }, 'xkiro', data?.model || model);
     } catch (err) {
-      console.error(`[xKiro] Fallback nieudany (${powod}):`, err.message);
-      return wynikPusty('xkiro', model, err.message);
+      console.error(`[xKiro] Fallback nieudany (${powod}):`, sanitizujKomunikatBledu(err.message));
+      return wynikPusty('xkiro', model, sanitizujKomunikatBledu(err.message));
     }
   }
 
@@ -4571,7 +4571,7 @@ function zaplanujKompresjeHistorii(historia) {
   const kolejna = poprzednia
     .catch(() => {})
     .then(() => skompresujHistorie(historia))
-    .catch(err => console.error('[Historia] Błąd w tle:', err.message));
+    .catch(err => console.error('[Historia] Błąd w tle:', sanitizujKomunikatBledu(err.message)));
   historiaKolejki.set(historia, kolejna);
   return kolejna;
 }
@@ -4624,7 +4624,7 @@ async function skompresujHistorie(historiaRozmowy) {
     historiaRozmowy.push(...resztaPelna);
     zmienWersjeHistorii(historiaRozmowy);
   } catch (err) {
-    console.error('[Historia] ❌ Błąd kompresji, awaryjnie obcinam do ostatnich wymian:', err.message);
+    console.error('[Historia] ❌ Błąd kompresji, awaryjnie obcinam do ostatnich wymian:', sanitizujKomunikatBledu(err.message));
     if (/quota|rate.?limit|tokens per day|tokens per minute|TPD|TPM|429/i.test(err.message || '')) {
       groqHistoryCooldownUntil = Date.now() + 15 * 60_000;
     }
