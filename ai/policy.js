@@ -100,9 +100,12 @@ function okreslKategorieAI(pytanie, czyPytanieOReceptureMC = () => false) {
     'marka', 'marki', 'producent', 'przedsiebiorstw', 'spolk', 'korporacj', 'technolog', 'model',
     'histori', 'pierwsz', 'prototyp', 'http', 'https', 'dns', 'ram', 'cpu', 'gpu', 'api', 'oauth',
     'javascript', 'nodejs', 'python', 'groq', 'gemini', 'openrouter', 'discord', 'crafting'];
+  const prefiksy = new Set(['informacj', 'aktualizacj', 'roznic', 'bezpiecz', 'powstal', 'zostal',
+    'rozwija', 'opracow', 'stworzyl', 'przedsiebiorstw', 'spolk', 'korporacj', 'technolog',
+    'histori', 'pierwsz', 'prototyp', 'producent']);
   const faktograficzne = frazy.some(wzorzec => wzorzec.includes(' ')
     ? maFraze(tokeny, wzorzec)
-    : tokeny.some(token => token === wzorzec || token.startsWith(wzorzec)))
+    : tokeny.some(token => prefiksy.has(wzorzec) ? token.startsWith(wzorzec) : token === wzorzec))
     || maFraze(tokeny, 'node js');
   return graSygnal || faktograficzne ? 'web_fact' : 'conversation';
 }
