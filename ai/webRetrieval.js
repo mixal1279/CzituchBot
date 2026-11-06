@@ -170,9 +170,10 @@ async function searchExa({ apiKey, query, fetchFn = fetch, startIndex = 0, domai
 // Tavily Extract. Dzięki temu walidator porównuje cytat z prawdziwym tekstem strony, a nie z
 // parafrazą modelu. Odpowiedź API czytamy defensywnie (kształt nieweryfikowany na żywym API).
 function isSafePublicHttpUrl(value) {
+  if (typeof value !== 'string' || value.length > 2048) return false;
   let parsed;
   try {
-    parsed = new URL(String(value || '').trim());
+    parsed = new URL(value.trim());
   } catch (_) {
     return false;
   }
