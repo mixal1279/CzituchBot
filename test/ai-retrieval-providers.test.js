@@ -972,6 +972,7 @@ test('Tavily page extraction rejects local, IP-literal and credential-bearing UR
     'http://192.168.1.10/private',
     'http://169.254.169.254/latest/meta-data',
     'https://user:password@example.com/private',
+    'https://example.com/private?access_token=secret',
     'https://example.com:8443/private',
     'https://service.internal/data',
   ]) {
