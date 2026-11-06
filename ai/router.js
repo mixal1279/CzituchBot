@@ -77,7 +77,7 @@ function classifyQuestionType(question, routing = {}) {
   if (routing.intent === 'youtube') return 'channel_or_creator';
   if (routing.is_gameplay) return 'how_to';
   if (routing.is_lore) return 'lore';
-  if (/(?:porównaj|porownaj|czym się różni|czym sie rozni|różnica|roznica|vs\\.?|versus|lepszy|lepsza|lepsze)/iu.test(p)) return 'comparison';
+  if (/(?:porównaj|porownaj|czym się różni|czym sie rozni|czym różni się|czym rozni sie|różni\p{L}*|rozni\p{L}*|różnica|roznica|vs\\.?|versus|lepszy|lepsza|lepsze)/iu.test(p)) return 'comparison';
   if (/(?:ile kosztuje|jaka cena|cena|kosztuje|za ile|price|how much)/iu.test(p)) return 'price';
   if (/(?:czy warto|polecasz|opłaca się|oplaca sie|warto kupić|warto kupic|co sądzisz|co sadzisz|co myślisz|co myslisz|jak oceniasz|opinia)/iu.test(p)) return 'recommendation';
   if (/(?:jak naprawić|jak naprawic|nie działa|nie dziala|nie uruchamia|błąd|blad|error|problem|crash|wysypuje się|wysypuje sie)/iu.test(p)) return 'troubleshooting';
@@ -97,7 +97,7 @@ function classifyTopicType(question, routing = {}) {
   if (routing.game || routing.entity_type === 'game' || routing.entity_type === 'franchise' || routing.is_lore || routing.is_gameplay) return 'game';
   if (routing.intent === 'weather') return 'weather';
   if (routing.intent === 'youtube') return 'creator_platform';
-  if (/(?:node\\.?js|javascript|typescript|python|programow|kodzie|api|oauth|serwer|hosting|procesor|gpu|cpu|ram|karta graficzna|system operacyjny|linux|windows|android|ios|smartfon|telefon|komputer)/iu.test(p)) return 'technology';
+  if (/(?:node\\.?js|javascript|typescript|python|programow|kodzie|api|oauth|serwer|hosting|procesor|gpu|cpu|ram|karta graficzna|rtx|geforce|radeon|playstation|xbox|ps[345]|nintendo|konsol|system operacyjny|linux|windows|android|ios|smartfon|telefon|komputer)/iu.test(p)) return 'technology';
   if (/(?:kim jest|kto to jest|biografia|życiorys|zyciorys)/iu.test(p)) return 'person';
   return 'general';
 }
