@@ -102,6 +102,7 @@ const BILLY_CM = require('./billy-cm');
 const BILLY_SEX = require('./billy-sex');
 const { createFirestoreState, encryptSecret, encryptionKeyFromEnv } = require('./storage/firestore-state');
 const AI_POLICY = require('./ai/policy');
+const { utworzKolejkeAI } = require('./ai/concurrency');
 const AI_VALIDATOR = require('./ai/validator');
 const { createVerdictCache } = require('./ai/verdict-cache');
 const verdictCache = createVerdictCache();
@@ -4740,32 +4741,15 @@ function zablokuj120BGlobalnie(powod = 'limit') {
   console.error(`[AI] 120B global circuit breaker: ${powod}`);
 }
 
-// Kolejka chroni przed jednoczesnym uruchomieniem dużej liczby drogich sekwencji
-// !ai. Zachowujemy wszystkie prośby, ale maksymalnie trzy są obsługiwane naraz.
-const AI_MAX_ROWNOLEGLE = 3;
-const AI_MAX_QUEUED = 20;
-let aiAktywne = 0;
-const aiKolejka = [];
+// Wspólny limit procesu chroni providery przed nadmierną współbieżnością.
+const kolejkaAI = utworzKolejkeAI({
+  maxConcurrent: 3,
+  maxQueued: 20,
+  beforeStart: quotaStateReady,
+});
 
-async function wykonajWKolejceAI(zadanie) {
-  // Do not start provider selection until persisted cooldowns have been restored.
-  await quotaStateReady();
-  if (aiAktywne >= AI_MAX_ROWNOLEGLE) {
-    if (aiKolejka.length >= AI_MAX_QUEUED) {
-      const err = new Error('AI queue full');
-      err.code = 'AI_QUEUE_FULL';
-      throw err;
-    }
-    await new Promise(resolve => aiKolejka.push(resolve));
-  }
-  aiAktywne += 1;
-  try {
-    return await zadanie();
-  } finally {
-    aiAktywne -= 1;
-    const nastepne = aiKolejka.shift();
-    if (nastepne) nastepne();
-  }
+function wykonajWKolejceAI(zadanie) {
+  return kolejkaAI.wykonaj(zadanie);
 }
 
 // =============================================
