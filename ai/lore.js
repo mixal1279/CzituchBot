@@ -20,7 +20,8 @@ const LORE_CAUSAL_CONTEXT_RE = /(?<![\p{L}\p{N}_])(?:w\s+(?:fabule|historii|lore
 const GAME_CONTEXT_RE = /(?<![\p{L}\p{N}_])(?:gra|gry|grze|grę|grą|gier|game|gaming|w\s+(?:tej|tejże)\s+grze|w\s+grze|z\s+gry|świat\s+gry|uniwersum|w\s+uniwersum|game\s+world|in\s+the\s+game)(?![\p{L}\p{N}_])/iu;
 const GAME_TITLE_RE = /\b(?:minecraft|portal(?:\s+2)?|red\s+dead(?:\s+redemption)?(?:\s+2)?|cyberpunk(?:\s+2077)?|wied[źz]min(?:\s+3)?|witcher(?:\s+3)?|gta(?:\s+[iv1-6]+)?|grand\s+theft\s+auto|fallout(?:\s+\d+)?|skyrim|starfield|elden\s+ring|dark\s+souls|baldur[’']?s\s+gate(?:\s+3)?|the\s+last\s+of\s+us|god\s+of\s+war|assassin'?s\s+creed|fortnite)\b/i;
 const GAME_TITLE_AFTER_PREPOSITION_RE = /(?<![\p{L}\p{N}_])(?:w|we|z|ze|do|dla|about|of|in|from)\s+(?:the\s+)?[\p{Lu}\p{N}][\p{L}\p{N}'’:&-]*(?:\s+(?:(?:of|the|and|&)\s+)?[\p{Lu}\p{N}][\p{L}\p{N}'’:&-]*){0,4}/u;
-const GAME_TITLE_NEAR_LORE_RE = /(?:(?:lore|fabuł[aeęy]|histori[aeęy]|chronologi[ae]|zakończeni[ae]|teori[ae]|świata|uniwersum)\s+(?:gry\s+)?(?:(?:o|of|about)\s+)?(?:the\s+)?[\p{Lu}\p{N}][\p{L}\p{N}'’:&-]*(?:\s+(?:(?:of|the|and|&)\s+)?[\p{Lu}\p{N}][\p{L}\p{N}'’:&-]*){0,4}|(?:^|[^\p{L}\p{N}_])(?:the\s+)?[\p{Lu}\p{N}][\p{L}\p{N}'’:&-]*(?:\s+(?:(?:of|the|and|&)\s+)?[\p{Lu}\p{N}][\p{L}\p{N}'’:&-]*){0,4}\s+(?:lore|fabuł[aeęy]|histori[aeęy]|chronologi[ae]|uniwersum)(?![\p{L}\p{N}_])/u;
+const GAME_TITLE_AFTER_LORE_RE = /(?:^|[^\p{L}\p{N}_])(?:lore|fabuł[aeęy]|histori[aeęy]|chronologi[ae]|zakończeni[ae]|teori[ae]|świata|uniwersum)\s+(?:gry\s+)?(?:(?:o|of|about)\s+)?(?:the\s+)?[\p{Lu}\p{N}][\p{L}\p{N}'’:&-]*(?:\s+(?:(?:of|the|and|&)\s+)?[\p{Lu}\p{N}][\p{L}\p{N}'’:&-]*){0,4}/u;
+const GAME_TITLE_BEFORE_LORE_RE = /(?:^|[^\p{L}\p{N}_])(?:the\s+)?[\p{Lu}\p{N}][\p{L}\p{N}'’:&-]*(?:\s+(?:(?:of|the|and|&)\s+)?[\p{Lu}\p{N}][\p{L}\p{N}'’:&-]*){0,4}\s+(?:lore|fabuł[aeęy]|histori[aeęy]|chronologi[ae]|uniwersum)(?![\p{L}\p{N}_])/u;
 
 function czyMaKontekstGry(pytanie) {
   const p = String(pytanie || '').trim();
