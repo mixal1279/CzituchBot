@@ -539,6 +539,20 @@ function czyZablokowanyHostTavily(url) {
   catch (_) { return true; }
 }
 
+function czyPoprawnyWpisCacheTavily(value, now = Date.now()) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const canonical = value.wynik;
+  if (!canonical || typeof canonical !== 'object' || Array.isArray(canonical)) return false;
+  if (!['ok', 'empty'].includes(canonical.status) || typeof canonical.text !== 'string' || canonical.text.length > 12000) return false;
+  if (canonical.sources !== undefined && (!Array.isArray(canonical.sources)
+    || canonical.sources.some(source => !source || typeof source !== 'object' || typeof source.url !== 'string'))) return false;
+  const createdAt = Number(value.czas);
+  const ttl = Number(value.ttl) || TAVILY_CACHE_TTL_MS;
+  return Number.isFinite(createdAt) && createdAt > 0
+    && Number.isFinite(ttl) && ttl > 0
+    && now >= createdAt && now - createdAt < ttl;
+}
+
 function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logger = console, onStatus = () => {}, cacheFile = './tavily_cache.json', stateStore = null, geminiKey = process.env.GEMINI_API_KEY, exaKey = process.env.EXA_API_KEY }) {
   const cache = new Map();
   const inFlight = new Map();
@@ -588,8 +602,8 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
       if (entries && typeof entries === 'object' && !Array.isArray(entries)) {
         for (const [key, value] of Object.entries(entries)) {
           if (typeof key !== 'string' || key.length > 2048) continue;
-          if (!value || typeof value.wynik !== 'string' || value.wynik.length > 12000) continue;
-          if (value.czas && Date.now() - value.czas < (value.ttl || TAVILY_CACHE_TTL_MS)) cache.set(key, value);
+          if (!czyPoprawnyWpisCacheTavily(value)) continue;
+          cache.set(key, value);
         }
       }
       // Merge entries created in memory during a Firestore outage; newer timestamps win.
@@ -1117,6 +1131,7 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
 
 module.exports = {
   createTavilySearch,
+  czyPoprawnyWpisCacheTavily,
   hostnamePasujeDoDomenyTavily,
   czyZablokowanyHostTavily,
   ttlDlaZakresu,
