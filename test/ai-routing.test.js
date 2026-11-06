@@ -173,3 +173,13 @@ assert.equal(unknownCompany.game, null);
 const unknownCompanyInflected = classifyAIRequest('Co wiesz o firmie Acme Robotics?', okreslKategorieAI);
 assert.equal(unknownCompanyInflected.entity_type, 'company');
 assert.equal(unknownCompanyInflected.needs_web, true);
+
+const companyOpinion = classifyAIRequest('Co sądzisz o Diablo Chairs?', okreslKategorieAI);
+assert.equal(companyOpinion.intent, 'web_fact');
+assert.equal(companyOpinion.needs_web, true);
+assert.equal(companyOpinion.entity_type, 'company');
+
+const unknownCompanyOpinion = classifyAIRequest('Co sądzisz o firmie Acme Robotics?', okreslKategorieAI);
+assert.equal(unknownCompanyOpinion.intent, 'web_fact');
+assert.equal(unknownCompanyOpinion.needs_web, true);
+assert.equal(unknownCompanyOpinion.entity_type, 'company');
