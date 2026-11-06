@@ -25,7 +25,7 @@ function classifyAIRequest(pytanie, policyCategory, recipeDetector = () => false
   const hasKnownCompany = Boolean(resolvedCompany || hasCompanyContext);
   // Opinia o rozpoznanej grze lub firmie może wymagać faktów. Tylko pytanie bez
   // rozpoznanej encji i bez sygnału faktograficznego pozostaje small talkiem.
-  const category = isHLTB ? 'hltb' : (isOpinion && !hasKnownGame && !hasKnownCompany ? 'conversation' : policyResult);
+  const category = isHLTB ? 'hltb' : (isOpinion && hasKnownCompany ? 'web_fact' : (isOpinion && !hasKnownGame ? 'conversation' : policyResult));
   const entity = resolved?.game || resolved?.name || detectEntity(p) || null;
   const freshness = detectFreshness(p);
   const isMinecraftRecipe = category === 'minecraft_recipe';
