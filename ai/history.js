@@ -31,7 +31,7 @@ function parsujStrukturalnePodsumowanie(text) {
 function zbudujKluczHistorii(platforma, kanal, userId) {
   const normalizuj = (value, fallback) => {
     const result = String(value ?? '').trim().toLocaleLowerCase('pl-PL')
-      .replace(/[\\u0000-\\u001f\\u007f]/g, '').slice(0, 128);
+      .replace(/[\x00-\x1f\x7f]/g, '').slice(0, 128);
     return result || fallback;
   };
   return [
