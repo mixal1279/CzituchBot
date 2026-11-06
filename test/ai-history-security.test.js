@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { oznaczUzycieHistorii, ograniczHistorieRozmow } = require('../ai/history');
+const { oznaczUzycieHistorii, ograniczHistorieRozmow, zbudujKluczHistorii, zbudujKluczeUzytkownika } = require('../ai/history');
 
 test('history usage tracking rejects prototype-sensitive keys and Object.prototype', () => {
   for (const key of ['__proto__', 'prototype', 'constructor']) {
@@ -39,4 +39,20 @@ test('history pruning rejects Object.prototype and custom-prototype dictionaries
   custom.entry = [];
   assert.deepEqual(ograniczHistorieRozmow(custom, {}, 0), []);
   assert.equal(custom.entry.length, 0);
+});
+
+test('anonymous platform users never share history keys or personal memory', () => {
+  const first = zbudujKluczeUzytkownika('youtube', 'channel', null, 'SameNick', 'request-1');
+  const second = zbudujKluczeUzytkownika('youtube', 'channel', null, 'SameNick', 'request-2');
+  assert.equal(first.hasStableId, false);
+  assert.equal(second.hasStableId, false);
+  assert.notEqual(first.historyKey, second.historyKey);
+  assert.equal(first.cooldownKey, second.cooldownKey);
+});
+
+test('stable platform IDs produce a persistent isolated history key', () => {
+  const result = zbudujKluczeUzytkownika('youtube', 'ChannelID', 'UCUserCaseSensitive', 'nick', 'unused');
+  assert.equal(result.hasStableId, true);
+  assert.equal(result.historyKey, zbudujKluczHistorii('youtube', 'ChannelID', 'UCUserCaseSensitive'));
+  assert.equal(result.cooldownKey, result.historyKey);
 });

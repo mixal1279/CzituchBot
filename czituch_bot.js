@@ -130,7 +130,7 @@ const { Firestore } = require('@google-cloud/firestore');
 const { ocenJakoscOdpowiedzi } = require('./ai/quality');
 const { usunEtykietyEvidenceCandidate, maEtykieteEvidenceCandidate, oczyscOdpowiedzPrzedWalidacja } = require('./ai/answer-sanitize');
 const { AI_MODELS } = require('./ai/modelConfig');
-const { parsujStrukturalnePodsumowanie, oznaczUzycieHistorii, ograniczHistorieRozmow, zbudujKluczHistorii } = require('./ai/history');
+const { parsujStrukturalnePodsumowanie, oznaczUzycieHistorii, ograniczHistorieRozmow, zbudujKluczHistorii, zbudujKluczeUzytkownika } = require('./ai/history');
 const { createRequestId, sanitizeQuestion, planRequest, evaluateEvidence, shouldValidate, decideValidation, finalText: finalizeAIPipelineText } = require('./ai/pipeline');
 const { buildAnswerPlan } = require('./ai/answer-plan');
 const { judgeAnswer, partialAnswerPreservesCoreIntent } = require('./ai/answer-judge');
@@ -2931,7 +2931,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
   const loadMemory = opcje.__testDeps?.loadMemory || wczytajZweryfikowanaPamiecAI;
   const testMaxTavilySearches = Number.isInteger(opcje.__testDeps?.maxWyszukanTavily) ? Math.max(2, opcje.__testDeps.maxWyszukanTavily) : DEFAULTS.maxTavilySearches;
   const onAISummary = typeof opcje.__testDeps?.onSummary === 'function' ? opcje.__testDeps.onSummary : null;
-  const verifiedMemoryUserId = memoryUserId || String(nick || '').toLowerCase();
+  const verifiedMemoryUserId = opcje.disableMemory === true ? null : (memoryUserId || String(nick || '').toLowerCase());
   systemPrompt = `${systemPrompt}\n\nNie umieszczaj w odpowiedzi nazw źródeł, atrybucji, etykiet „Źródło:” ani URL-i. Źródła są wyłącznie wewnętrznym materiałem RAG i walidacji. Jeśli pytanie zaczyna się od „W grze <tytuł>:”, traktuj ten prefiks wyłącznie jako kontekst gry i nie powtarzaj go jako twierdzenia faktograficznego, chyba że treść źródła wprost potwierdza tytuł.`;
   const jestAI_Billy = aiProfile === 'billy' || systemPrompt === AI_SYSTEM_PROMPT_BILLY;
   const jestAI_EdzzI = aiProfile === 'edzzi' || systemPrompt === AI_SYSTEM_PROMPT_EDZZI;
@@ -3098,7 +3098,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
     zalogujPodsumowanieAI('accepted');
     return;
   }
-  const verifiedMemoryPromise = loadMemory(verifiedMemoryUserId);
+  const verifiedMemoryPromise = verifiedMemoryUserId ? loadMemory(verifiedMemoryUserId) : Promise.resolve([]);
   console.log(`[AI][${requestId}] routing=${JSON.stringify({ intent: routingAI.intent, entity: routingAI.entity, game: routingAI.game, entity_type: routingAI.entity_type, game_type: routingAI.game_type, needs_web: routingAI.needs_web, freshness: routingAI.freshness, source_type: routingAI.source_type, response_profile: aiPlan.responseProfile, topic_type: routingAI.topic_type, question_type: routingAI.question_type, semantic_classification: routingAI.semantic_classification || 'deterministic', confidence: routingAI.confidence })}`);
   console.log(`[AI] kategoria=${kategoriaAI} nick=${nick}`);
   const jestRecepturaMC = czyPytanieOReceptureMC(pytanie);
@@ -6279,12 +6279,19 @@ async function obslugaWiadomosci(nick, message, platforma, wyslijFn, kanal = nul
   if (platforma === 'youtube' && ARBUZIK_KANALY.includes(kanalNorm) && msgLower !== '!arbuz') {
     return;
   }
-  // Stan użytkownika jest izolowany między platformami i kanałami.
-  const historiaKlucz = zbudujKluczHistorii(platforma, kanalNorm, nadawca?.userId || nick);
-  const cooldownKey = historiaKlucz;
+  const stableUserId = String(nadawca?.userId ?? '').trim();
+  const kluczeUzytkownika = zbudujKluczeUzytkownika(
+    platforma, kanalNorm, stableUserId, nick, crypto.randomUUID?.(),
+  );
+  // Bez stabilnego ID nie współdzielimy historii ani pamięci przez nick.
+  // Losowy klucz ogranicza historię do bieżącej wiadomości; cooldown pozostaje per nick.
+  const historiaKlucz = kluczeUzytkownika.historyKey;
+  const cooldownKey = kluczeUzytkownika.cooldownKey;
+  if (!historiaKlucz) return;
 
   const memoryCommand = parseMemoryCommand(message);
   if (memoryCommand) {
+    if (!kluczeUzytkownika.hasStableId) return await wyslijFn(`@${nick} Pamięć wymaga stabilnego identyfikatora konta z platformy.`);
     const records = await wczytajZweryfikowanaPamiecAI(historiaKlucz);
     if (memoryCommand.type === 'list') return await wyslijFn('@' + nick + ' Zapamiętane informacje:\n' + describeMemories(records));
     const result = forgetMemories(records, memoryCommand.query);
@@ -6622,7 +6629,7 @@ async function obslugaWiadomosci(nick, message, platforma, wyslijFn, kanal = nul
         : {};
 
     try {
-      await wykonajAIWHistorii(historiaRozmowy[historiaKlucz], () => wykonajWKolejceAI(() => zapytajAI(nick, pytanie, historiaRozmowy[historiaKlucz], prompt, wyslijFn, { temperature: 0.25, max_tokens: 150, aiProfile, tavilyOptions, memoryUserId: historiaKlucz })));
+      await wykonajAIWHistorii(historiaRozmowy[historiaKlucz], () => wykonajWKolejceAI(() => zapytajAI(nick, pytanie, historiaRozmowy[historiaKlucz], prompt, wyslijFn, { temperature: 0.25, max_tokens: 150, aiProfile, tavilyOptions, memoryUserId: historiaKlucz, disableMemory: !kluczeUzytkownika.hasStableId })));
     } catch (err) {
       console.error('[Groq] Błąd:', sanitizujKomunikatBledu(err?.message));
       if (['AI_QUEUE_FULL', 'AI_QUEUE_TIMEOUT'].includes(err.code)) await wyslijFn(`@${nick} AI jest teraz zajęte — spróbuj za chwilę.`);
@@ -6732,6 +6739,7 @@ async function obslugaWiadomosci(nick, message, platforma, wyslijFn, kanal = nul
           aiProfile: 'angie',
           tavilyOptions: { domains: KONFIGURACJA.tavilyAngieDomains, time_range: KONFIGURACJA.tavilyAngieTimeRange },
           memoryUserId: historiaKlucz,
+          disableMemory: !kluczeUzytkownika.hasStableId,
         })));
       } catch (err) {
         console.error('[Groq/Angie] Błąd:', sanitizujKomunikatBledu(err?.message));

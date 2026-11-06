@@ -94,4 +94,19 @@ function ograniczHistorieRozmow(historie, ostatnieUzycie, limit = 500) {
   return usuniete;
 }
 
-module.exports = { normalizujStrukturalnePodsumowanie, parsujStrukturalnePodsumowanie, oznaczUzycieHistorii, ograniczHistorieRozmow, zbudujKluczHistorii };
+function zbudujKluczeUzytkownika(platforma, kanal, userId, nick, anonimowyId) {
+  const stableId = String(userId ?? '').trim();
+  const nickKey = String(nick ?? '').trim().toLocaleLowerCase('pl-PL') || 'unknown';
+  if (stableId) {
+    const key = zbudujKluczHistorii(platforma, kanal, stableId);
+    return { historyKey: key, cooldownKey: key, hasStableId: true };
+  }
+  const anonymousId = String(anonimowyId ?? '').trim();
+  return {
+    historyKey: anonymousId ? zbudujKluczHistorii(platforma, kanal, `anonymous:${anonymousId}`) : null,
+    cooldownKey: zbudujKluczHistorii(platforma, kanal, `nickname:${nickKey}`),
+    hasStableId: false,
+  };
+}
+
+module.exports = { normalizujStrukturalnePodsumowanie, parsujStrukturalnePodsumowanie, oznaczUzycieHistorii, ograniczHistorieRozmow, zbudujKluczHistorii, zbudujKluczeUzytkownika };
