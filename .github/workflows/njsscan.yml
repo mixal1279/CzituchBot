@@ -22,6 +22,7 @@ permissions:
 
 jobs:
   njsscan:
+    timeout-minutes: 15
     permissions:
       contents: read # for actions/checkout to fetch code
       security-events: write # for github/codeql-action/upload-sarif to upload SARIF results
@@ -41,6 +42,24 @@ jobs:
       uses: ajinabraham/njsscan-action@7237412fdd36af517e2745077cedbf9d6900d711
       with:
         args: '. --json --output njsscan-report.json || true'
+    - name: Validate njsscan JSON report
+      if: always()
+      run: |
+        node <<'NODE'
+        const fs = require('node:fs');
+        const file = 'njsscan-report.json';
+        if (!fs.existsSync(file)) throw new Error('njsscan JSON report is missing');
+        const report = JSON.parse(fs.readFileSync(file, 'utf8'));
+        if (!report || typeof report !== 'object' || !report.nodejs || typeof report.nodejs !== 'object') {
+          throw new Error('njsscan JSON report has an unexpected schema');
+        }
+        const errors = Array.isArray(report.errors) ? report.errors : [];
+        if (errors.length) {
+          const summary = errors.map(error => `${error.rule_id || 'unknown'}:${error.type || 'error'}`).join(', ');
+          throw new Error(`njsscan analysis incomplete: ${errors.length} scanner error(s): ${summary}`);
+        }
+        console.log('njsscan JSON report validated; no scanner errors or timeouts.');
+        NODE
     - name: Upload njsscan JSON artifact
       if: always()
       uses: actions/upload-artifact@v4
@@ -50,6 +69,7 @@ jobs:
         if-no-files-found: warn
         retention-days: 30
     - name: Upload njsscan SARIF report
+      if: always()
       uses: github/codeql-action/upload-sarif@v3
       with:
         sarif_file: results.sarif
