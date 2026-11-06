@@ -989,4 +989,11 @@ console.log('AI regression tests: OK');
     'jawny tytuł musi być sprawdzony przed wywołaniem Groq');
   assert.ok(body.includes('sanitizujKomunikatBledu(err?.message)'),
     'błąd IGDB musi przejść przez redakcję sekretów');
+
+  const domainsStart = source.indexOf('async function wybierzDomenyDlaPytania(');
+  const domainsEnd = source.indexOf('// =============================================\\n//  RAWG', domainsStart);
+  assert.ok(domainsStart >= 0 && domainsEnd > domainsStart, 'wybór domen gry musi istnieć');
+  const domainsBody = source.slice(domainsStart, domainsEnd);
+  assert.ok(domainsBody.includes('sanitizujKomunikatBledu(err?.message)'),
+    'błąd dynamicznego rozpoznawania gry musi przejść przez redakcję sekretów');
 }
