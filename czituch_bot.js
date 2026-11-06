@@ -4719,6 +4719,7 @@ function zablokuj120BGlobalnie(powod = 'limit') {
 const kolejkaAI = utworzKolejkeAI({
   maxConcurrent: 3,
   maxQueued: 20,
+  maxWaitMs: 15000,
   beforeStart: quotaStateReady,
 });
 
@@ -8343,7 +8344,7 @@ async function obslugaTwitch(nick, message, wyslijFn, config = TWITCH_CONFIG_BIL
         );
       } catch (err) {
         console.error('[Groq/Billy] Błąd:', err.message);
-        if (err.code === 'AI_QUEUE_FULL') {
+        if (['AI_QUEUE_FULL', 'AI_QUEUE_TIMEOUT'].includes(err.code)) {
           await wyslijFn(`@${nick} AI jest teraz zajęte — spróbuj za chwilę.`);
         }
       }
