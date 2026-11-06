@@ -103,6 +103,7 @@ const BILLY_SEX = require('./billy-sex');
 const { createFirestoreState, encryptSecret, encryptionKeyFromEnv } = require('./storage/firestore-state');
 const AI_POLICY = require('./ai/policy');
 const { utworzKolejkeAI } = require('./ai/concurrency');
+const { serializujBladProvidera, sanitizujKomunikatBledu } = require('./ai/diagnostics');
 const AI_VALIDATOR = require('./ai/validator');
 const { createVerdictCache } = require('./ai/verdict-cache');
 const verdictCache = createVerdictCache();
@@ -2873,27 +2874,6 @@ function wykonajAIWHistorii(historia, zadanie) {
  * Provider diagnostics must be available to every AI provider path.
  * Keep this at module scope so validators/fallbacks cannot hit a TDZ/scope error.
  */
-function serializujBladProvidera(err) {
-  if (!err || typeof err !== 'object') return null;
-  const seen = new WeakSet();
-  const visit = (value, depth = 0) => {
-    if (value == null || depth > 3) return value;
-    if (typeof value !== 'object') return String(value).slice(0, 1600);
-    if (seen.has(value)) return '[Circular]';
-    seen.add(value);
-    if (Array.isArray(value)) return value.slice(0, 8).map(item => visit(item, depth + 1));
-    const out = {};
-    for (const key of Object.getOwnPropertyNames(value).slice(0, 40)) {
-      try {
-        const v = value[key];
-        if (v !== undefined) out[key] = visit(v, depth + 1);
-      } catch (_) {}
-    }
-    return out;
-  };
-  return visit(err);
-}
-
 function formatProviderError(provider, model, err, extra = {}) {
   const serializedError = serializujBladProvidera(err);
   const providerError = err?.error && typeof err.error === 'object'
@@ -2901,13 +2881,13 @@ function formatProviderError(provider, model, err, extra = {}) {
     : (serializedError?.error && typeof serializedError.error === 'object' ? serializedError.error : null);
   const responseData = extra.responseData && typeof extra.responseData === 'object' ? extra.responseData : null;
   const nestedResponseError = responseData?.error && typeof responseData.error === 'object' ? responseData.error : null;
-  const message = String(
+  const message = sanitizujKomunikatBledu(
     err?.message
       || providerError?.message
       || nestedResponseError?.message
       || (typeof err === 'string' ? err : '')
-      || 'unknown'
-  ).slice(0, 1600);
+      || 'unknown',
+  );
   const details = {
     provider,
     model,
