@@ -14,6 +14,8 @@ if (require.main === module && process.env.AI_LIVE_BENCHMARK !== '1') {
   process.exit(2);
 }
 
+const REQUIRED_BENCHMARK_CATEGORIES = new Set(['why', 'how', 'when', 'where', 'who', 'quantity', 'comparison', 'outcome', 'relationship']);
+
 function normalizeBenchmarkQuestion(value) {
   return normalizeFactText(value).replace(/\s+/g, ' ').trim();
 }
@@ -39,7 +41,11 @@ function validateBenchmarkDataset(data) {
     else categories.set(category, (categories.get(category) || 0) + 1);
   }
   for (const [category, count] of categories) {
+    if (!REQUIRED_BENCHMARK_CATEGORIES.has(category)) errors.push('nieznana kategoria: ' + category);
     if (count < 4) errors.push('zbyt mało przypadków w kategorii ' + category + ': ' + count);
+  }
+  for (const category of REQUIRED_BENCHMARK_CATEGORIES) {
+    if (!categories.has(category)) errors.push('brak wymaganej kategorii: ' + category);
   }
   const gold = all.filter(item => item.expected?.factual?.independentGold === true);
   const goldCategories = new Set(gold.map(item => item.category));
