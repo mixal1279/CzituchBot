@@ -59,8 +59,8 @@ test('AI queue never exceeds concurrency limit when queued tasks are handed off'
 
 test('AI queue expires stale waiters and releases their queue capacity', async () => {
   const kolejka = utworzKolejkeAI({ maxConcurrent: 1, maxQueued: 1, maxWaitMs: 25 });
-  const bramka = new Promise(resolve => { globalThis.__queueTestRelease = resolve; });
-  const aktywne = kolejka.wykonaj(async () => bramka);
+  const blokada = bramka();
+  const aktywne = kolejka.wykonaj(async () => blokada.promise);
   await new Promise(resolve => setImmediate(resolve));
 
   await assert.rejects(
@@ -70,8 +70,7 @@ test('AI queue expires stale waiters and releases their queue capacity', async (
   assert.equal(kolejka.stan().aktywne, 1);
   assert.equal(kolejka.stan().oczekujace, 0);
 
-  globalThis.__queueTestRelease();
-  delete globalThis.__queueTestRelease;
+  blokada.otworz();
   await aktywne;
   assert.equal(await kolejka.wykonaj(async () => 'ok'), 'ok');
   assert.equal(kolejka.stan().aktywne, 0);
