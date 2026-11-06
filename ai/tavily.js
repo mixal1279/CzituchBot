@@ -334,7 +334,7 @@ function wykryjKonfliktyZrodelTavily(results, sourceQuestion, requestedDomains =
   const questionKeywords = slowaKluczoweTavily(sourceQuestion).filter(k => k.length >= 5);
   const askedWhen = /(?<![\p{L}\p{N}_])(?:kiedy|którym\s+roku|w\s+którym|jaka\s+data|od\s+kiedy|data\s+premiery|rok\s+wydania|wyszed\p{L}*|wydan\p{L}*)(?![\p{L}\p{N}_])/iu.test(String(sourceQuestion || ''));
   const evidence = lista.map((r, index) => {
-    const text = String(r?.content || '').replace(/\s+/g, ' ').trim();
+    const text = String(r?.raw_content || r?.content || '').replace(/\s+/g, ' ').trim();
     // Porównujemy tylko zdania dotyczące pytania. Samo słowo „nie” albo inny rok w innym
     // kontekście (alfa 2009 vs wydanie 2011) nie jest sprzecznością źródeł.
     // Gdy temat pytania jest w tytule, cała strona jest o tym temacie (zdania mogą go nie powtarzać).
