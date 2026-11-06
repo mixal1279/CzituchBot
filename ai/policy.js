@@ -1,7 +1,7 @@
 'use strict';
 
 const { NIE_CZAS_GRY } = require('./patterns');
-const { czyWspomnianoGre, czyPytanieOFirmie } = require('./entities');
+const { czyWspomnianoGre, czyPytanieOFirmie, normalizujEncje } = require('./entities');
 
 function normalizujZapytanieTavily(q) {
   return String(q || '')
@@ -33,38 +33,76 @@ function zakresTavilyDlaPytania(pytanie, domyslny = null) {
   return domyslny;
 }
 
-function okreslKategorieAI(pytanie, czyPytanieOReceptureMC = () => false) {
-  // Ograniczamy dane użytkownika przed regexami.
-  const p = String(pytanie || '').slice(0, 5000);
-  const graSygnal = czyWspomnianoGre(p)
-    || /(?<![\p{L}\p{N}_])(?:game|gra|gry|grze|grę|grą|gier|tytuł\s+gry)(?![\p{L}\p{N}_])/iu.test(p);
-  if (czyPytanieOReceptureMC(p)) return 'minecraft_recipe';
-  if (czyPytanieOFirmie(p)) return 'web_fact';
-  if (/(?<![\p{L}\p{N}_])(?:pogod(?:a|y|ę|ą|zie|o)|temperatur\p{L}*|deszcz\p{L}*|wiatr(?:u|em|y|ów)?|słonecz(?:nie|ny|na|ne)|slonecz(?:nie|ny|na|ne)|forecast)(?![\p{L}\p{N}_])/iu.test(p)) return 'weather';
-  const jawnyCzasGry = /(?:czas(?:\s+(?:przej[śs]cia|uko[ńn]czenia))|(?<![\p{L}])(?:przej[śs]cie|uko[ńn]czenie)\s+(?:gry|kampanii|fabuły)|howlongtobeat|hltb|ile\s+(?:godzin|czasu)\s+(?:zajmuje|potrzeba)[\s\S]{0,160}(?:gry|tytułu|przej[śs]cia))/iu.test(p);
-  const trwaGra = graSygnal && /(?<![\p{L}])(?:ile\s+trwa|jak\s+d[łl]ugo)/iu.test(p) && !/aktualizacj|instalacj|pobier|serwer|event|wydarzen/i.test(p);
-  // Czas przejścia całej gry, nie czas walki/misji/animacji itp.
-  const hltbSygnal = (jawnyCzasGry || trwaGra) && !NIE_CZAS_GRY.test(p);
-  if (hltbSygnal) return 'hltb';
-  if (/(?<![\p{L}\p{N}_])(?:youtube\p{L}*|kana[łl](?:u|owi|em|ów|y|ie|ach)?|youtuber\p{L}*|subskryb\p{L}*|streamer\p{L}*|twitch\p{L}*|kick)(?![\p{L}\p{N}_])/iu.test(p)) return 'youtube';
-
-  // Pytania o zdrowy rozsądek / wybór codziennego działania nie wymagają
-  // wyszukiwarki. Muszą być rozpoznane PRZED ogólną regułą web_fact, bo słowa
-  // takie jak „czy”, „jak” albo „gdzie” występują w zwykłych pytaniach równie
-  // często jak w pytaniach faktograficznych. Nie dotyczy to pytań z wyraźnym
-  // sygnałem gry ani bieżących informacji, które zostały obsłużone wyżej.
-  const sygnalZdrowegoRozsadku =
-    /(?:iść|isc|jechać|jechac|zrobić|zrobic|wybrać|wybrac|wziąć|wziac|kupić|kupic|brać|brac|zostać|zostac)[\s\S]{0,100}(?:czy|albo)[\s\S]{0,100}(?:iść|isc|jechać|jechac|zrobić|zrobic|wybrać|wybrac|wziąć|wziac|kupić|kupic|brać|brac|zostać|zostac)/i.test(p)
-    || /\b(?:co|jak)\s+(?:lepiej|rozsądniej|rozsadniej|najlepiej)\b/i.test(p)
-    || /\b(?:czy|czy warto)\s+(?:lepiej|opłaca się|oplaca sie)\b/i.test(p);
-  // Pytania z wyraźnym sygnałem gry wymagają źródeł — nie traktujemy ich jak small talk.
-  if (sygnalZdrowegoRozsadku && !graSygnal) return 'conversation';
-
-  if (/(?<![\p{L}\p{N}_])(?:dzisiaj|dzis|dziś|wczoraj|najnowsz\p{L}*|wiadomo[śs]\p{L}*|news|aktualn\p{L}*)(?![\p{L}\p{N}_])/iu.test(p)) return 'web_fact';
-  if (graSygnal || /(?<![\p{L}\p{N}_])(?:jak|gdzie|co\s+to|co\s+(?:się|stało|robi|oznacza|znaczy)|z\s+czego|kiedy|od\s+kiedy|ile|kto|kim|czym|czy|jaki|jaka|jakie|premier\p{L}*|data|cena|koszt|informacj\p{L}*|aktualizacj\p{L}*|dlaczego|czemu|r[óo]żni\p{L}*|działa|dziala|bezpiecz\p{L}*|powstał\p{L}*|został\p{L}*|rozwija\p{L}*|opracow\p{L}*|stworzył\p{L}*|firma|firmy|marka|marki|producent\p{L}*|przedsiębiorstw\p{L}*|spółk\p{L}*|korporac\p{L}*|technolog\p{L}*|model\p{L}*|histori\p{L}*|pierwsz\p{L}*|prototyp\p{L}*|http|https|dns|ram|cpu|gpu|api|oauth|javascript|node\.?js|python|groq|gemini|openrouter|discord|crafting)(?![\p{L}\p{N}_])/iu.test(p)) return 'web_fact';
-  return 'conversation';
+function tokenyPytania(pytanie) {
+  return normalizujEncje(pytanie).split(' ').filter(Boolean);
 }
 
+function maToken(tokeny, ...wzorce) {
+  return tokeny.some(token => wzorce.some(wzorzec =>
+    wzorzec.endsWith('*') ? token.startsWith(wzorzec.slice(0, -1)) : token === wzorzec
+  ));
+}
+
+function maFraze(tokeny, fraza) {
+  const szukane = fraza.split(' ');
+  if (!szukane.length || tokeny.length < szukane.length) return false;
+  for (let i = 0; i <= tokeny.length - szukane.length; i++) {
+    let pasuje = true;
+    for (let j = 0; j < szukane.length; j++) {
+      if (tokeny[i + j] !== szukane[j]) { pasuje = false; break; }
+    }
+    if (pasuje) return true;
+  }
+  return false;
+}
+
+function czyNieCzasGry(tokeny) {
+  return maToken(tokeny, 'walk*', 'fight*', 'battle*', 'combat*', 'boss*', 'bitw*', 'misj*', 'mission*',
+    'quest*', 'zadani*', 'cutscen*', 'film*', 'video*', 'episode*', 'dzien', 'noc', 'cooldown*',
+    'efekt*', 'czar*', 'animacj*', 'wydarzeni*', 'event*', 'aktualizacj*', 'update*', 'instalacj*',
+    'install*', 'pobieran*', 'download*', 'serwer*', 'server*', 'proces*', 'process*', 'sezon*',
+    'season*', 'turniej*', 'mecz*', 'match*', 'stream*', 'odcink*', 'poziom*', 'level*',
+    'respawn*', 'ladowani*', 'loading');
+}
+
+function okreslKategorieAI(pytanie, czyPytanieOReceptureMC = () => false) {
+  const p = String(pytanie || '').slice(0, 5000);
+  const tokeny = tokenyPytania(p);
+  const graSygnal = czyWspomnianoGre(p)
+    || maToken(tokeny, 'game', 'gra', 'gry', 'grze', 'gre', 'gier', 'tytul')
+    || maFraze(tokeny, 'tytul gry');
+  if (czyPytanieOReceptureMC(p)) return 'minecraft_recipe';
+  if (czyPytanieOFirmie(p)) return 'web_fact';
+  if (maToken(tokeny, 'pogoda', 'pogod*', 'temperatur*', 'deszcz*', 'wiatr*', 'slonecz*', 'forecast')) return 'weather';
+  const jawnyCzasGry = maFraze(tokeny, 'czas przejscia') || maFraze(tokeny, 'czas ukonczenia')
+    || maFraze(tokeny, 'przejscie gry') || maFraze(tokeny, 'ukonczenie gry')
+    || maToken(tokeny, 'howlongtobeat', 'hltb')
+    || (maToken(tokeny, 'ile') && maToken(tokeny, 'godzin*', 'czasu')
+      && maToken(tokeny, 'zajmuje', 'potrzeba') && maToken(tokeny, 'gry', 'tytulu', 'przejscia'));
+  const trwaGra = graSygnal && (maFraze(tokeny, 'ile trwa') || maFraze(tokeny, 'jak dlugo'))
+    && !maToken(tokeny, 'aktualizacj*', 'instalacj*', 'pobier*', 'serwer*', 'event', 'wydarzen*');
+  if ((jawnyCzasGry || trwaGra) && !czyNieCzasGry(tokeny)) return 'hltb';
+  if (maToken(tokeny, 'youtube*', 'kanal*', 'youtuber*', 'subskryb*', 'streamer*', 'twitch*', 'kick')) return 'youtube';
+  const czynnosci = ['isc', 'jechac', 'zrobic', 'wybrac', 'wziac', 'kupic', 'brac', 'zostac'];
+  const indeksCzy = tokeny.findIndex(token => token === 'czy' || token === 'albo');
+  const sygnalZdrowegoRozsadku = (indeksCzy > 0
+    && tokeny.slice(0, indeksCzy).some(token => czynnosci.includes(token))
+    && tokeny.slice(indeksCzy + 1).some(token => czynnosci.includes(token)))
+    || maFraze(tokeny, 'co lepiej') || maFraze(tokeny, 'co rozsadniej')
+    || maFraze(tokeny, 'co najlepiej') || maFraze(tokeny, 'czy warto lepiej')
+    || maFraze(tokeny, 'czy lepiej') || maFraze(tokeny, 'czy oplaca sie');
+  if (sygnalZdrowegoRozsadku && !graSygnal) return 'conversation';
+  if (maToken(tokeny, 'dzisiaj', 'dzis', 'wczoraj', 'najnowsz*', 'wiadomos*', 'news', 'aktualn*')) return 'web_fact';
+  const frazy = ['jak', 'gdzie', 'co to', 'co sie', 'co stalo', 'co robi', 'co oznacza', 'co znaczy',
+    'z czego', 'kiedy', 'od kiedy', 'ile', 'kto', 'kim', 'czym', 'czy', 'jaki', 'jaka', 'jakie',
+    'premier', 'data', 'cena', 'koszt', 'informacj', 'aktualizacj', 'dlaczego', 'czemu', 'roznic',
+    'dziala', 'bezpiecz', 'powstal', 'zostal', 'rozwija', 'opracow', 'stworzyl', 'firma', 'firmy',
+    'marka', 'marki', 'producent', 'przedsiebiorstw', 'spolk', 'korporacj', 'technolog', 'model',
+    'histori', 'pierwsz', 'prototyp', 'http', 'https', 'dns', 'ram', 'cpu', 'gpu', 'api', 'oauth',
+    'javascript', 'node.js', 'nodejs', 'python', 'groq', 'gemini', 'openrouter', 'discord', 'crafting'];
+  const faktograficzne = tokeny.some(token => frazy.some(wzorzec => token === wzorzec || token.startsWith(wzorzec)));
+  return graSygnal || faktograficzne ? 'web_fact' : 'conversation';
+}
 function czyOdpowiedzToOdmowa(tekst) {
   if (!tekst) return false;
   const t = String(tekst).replace(/\s+/g, ' ').trim();
