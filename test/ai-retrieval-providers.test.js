@@ -963,10 +963,10 @@ test('Tavily serves cached evidence before applying an active quota cooldown', a
 
 
 test('Tavily page extraction rejects local, IP-literal and credential-bearing URLs', async () => {
-  const { extractTavilyPages, isSafePublicHttpUrl } = require('../ai/webRetrieval');
-  assert.equal(isSafePublicHttpUrl('https://example.com/article'), true);
-  assert.equal(isSafePublicHttpUrl(42), false);
-  assert.equal(isSafePublicHttpUrl('https://example.com/' + 'a'.repeat(2050)), false);
+  const { extractTavilyPages, czyBezpiecznyPublicznyUrl } = require('../ai/webRetrieval');
+  assert.equal(czyBezpiecznyPublicznyUrl('https://example.com/article'), true);
+  assert.equal(czyBezpiecznyPublicznyUrl(42), false);
+  assert.equal(czyBezpiecznyPublicznyUrl('https://example.com/' + 'a'.repeat(2050)), false);
   for (const url of [
     'file:///etc/passwd',
     'http://localhost/admin',
@@ -978,7 +978,7 @@ test('Tavily page extraction rejects local, IP-literal and credential-bearing UR
     'https://example.com:8443/private',
     'https://service.internal/data',
   ]) {
-    assert.equal(isSafePublicHttpUrl(url), false, url);
+    assert.equal(czyBezpiecznyPublicznyUrl(url), false, url);
   }
 
   let requestBody = null;
