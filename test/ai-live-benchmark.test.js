@@ -53,6 +53,22 @@ test('live benchmark does not duplicate a game already named in the question', (
   assert.equal(buildQuestionForBot({ game: 'Skyrim', question: 'Jak pokonać smoka w Skyrim?' }), 'Jak pokonać smoka w Skyrim?');
 });
 
+test('new independent gold facts accept grounded Polish alternatives', () => {
+  const benchmark = JSON.parse(fs.readFileSync(path.join(__dirname, 'ai-benchmark.json'), 'utf8'));
+  const samples = [
+    ['who-226', 'Wheatley to rdzeń osobowości Aperture Science.'],
+    ['who-228', 'Johnny Silverhand to rockerboy, a jego engram zapisano w Relic.'],
+    ['outcome-394', 'Jackie Welles ginie po nieudanym napadzie na Konpeki Plaza.'],
+    ['relationship-451', 'Geralt jest dla Ciri przybranym ojcem.'],
+    ['relationship-452', 'V i Johnny dzielą jedno ciało przez działanie Relic.'],
+  ];
+  for (const [id, answer] of samples) {
+    const item = benchmark.cases.find(entry => entry.id === id);
+    assert.ok(item, 'missing gold case ' + id);
+    assert.equal(scoreGoldenFacts(answer, item.expected.factual).passed, true, id);
+  }
+});
+
 test('gold facts require normalized whole phrases, not accidental substrings', () => {
   const facts = { independentGold: true, mustInclude: [['Wheatley', 'przejął kontrolę']], mustNot: ['GLaDOS nie została wyłączona'] };
   assert.equal(scoreGoldenFacts('Wheatley przejął kontrolę nad GLaDOS.', facts).passed, true);
