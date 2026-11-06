@@ -14,6 +14,7 @@ function classifyAIRequest(pytanie, policyCategory, recipeDetector = () => false
   const p = text.toLocaleLowerCase('pl-PL');
   const policyResult = policyCategory(text, recipeDetector);
   const isOpinion = /(?<![\p{L}\p{N}_])(?:czy warto|co (?:myślisz|myslisz|sądzisz)|co sądzisz|co sadzisz|jaka jest twoja opinia|jak oceniasz|polecasz|jest nadal dobre|jest nadal dobry|opłaca się|oplaca sie)(?![\p{L}\p{N}_])/iu.test(p);
+  const isPurchaseOpinion = /(?<![\\p{L}\\p{N}_])(?:czy warto\\s+(?:kupić|kupic)|opłaca się\\s+(?:kupić|kupic)|oplaca sie\\s+(?:kupić|kupic)|polecasz\\s+(?:kupić|kupic))(?![\\p{L}\\p{N}_])/iu.test(p);
   // "Ile trwa walka/misja/aktualizacja…" to nie czas przejścia gry (HowLongToBeat).
   const isHLTB = /(?<![\p{L}\p{N}_])(?:ile\s+(?:jest\s+)?(?:godzin|czasu)|ile\s+godzin\s+(?:ma|zajmuje)|ile\s+trwa|jak\s+d[łl]ugo(?:\s+trwa)?|czas(?:u)?\s+(?:gry|przejścia|przejscia|ukończenia|ukonczenia)|przejście\s+gry|przejscie\s+gry)(?![\p{L}\p{N}_])/iu.test(p)
     && !NIE_CZAS_GRY.test(p);
@@ -25,7 +26,7 @@ function classifyAIRequest(pytanie, policyCategory, recipeDetector = () => false
   const hasKnownCompany = Boolean(resolvedCompany || hasCompanyContext);
   // Opinia o rozpoznanej grze lub firmie może wymagać faktów. Tylko pytanie bez
   // rozpoznanej encji i bez sygnału faktograficznego pozostaje small talkiem.
-  const category = isHLTB ? 'hltb' : (isOpinion && hasKnownCompany ? 'web_fact' : (isOpinion && !hasKnownGame ? 'conversation' : policyResult));
+  const category = isHLTB ? 'hltb' : (isOpinion && hasKnownCompany ? 'web_fact' : (isOpinion && (!hasKnownGame || !isPurchaseOpinion) ? 'conversation' : policyResult));
   const entity = resolved?.game || resolved?.name || detectEntity(p) || null;
   const freshness = detectFreshness(p);
   const isMinecraftRecipe = category === 'minecraft_recipe';
