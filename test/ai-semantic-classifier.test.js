@@ -10,6 +10,8 @@ const {
 
 test('fallback działa tylko dla niejednoznacznego tematu pytania faktograficznego', () => {
   assert.equal(czyWymagaKlasyfikacjiSemantycznej({ intent: 'web_fact', topic_type: 'general', confidence: 0.65 }), true);
+  assert.equal(czyWymagaKlasyfikacjiSemantycznej({ intent: 'web_fact', topic_type: 'general', confidence: 0.78 }), true);
+  assert.equal(czyWymagaKlasyfikacjiSemantycznej({ intent: 'web_fact', topic_type: 'general', confidence: 0.81 }), false);
   assert.equal(czyWymagaKlasyfikacjiSemantycznej({ intent: 'conversation', topic_type: 'general', confidence: 0.65 }), false);
   assert.equal(czyWymagaKlasyfikacjiSemantycznej({ intent: 'web_fact', topic_type: 'technology', confidence: 0.65 }), false);
   assert.equal(czyWymagaKlasyfikacjiSemantycznej({ intent: 'web_fact', topic_type: 'general', confidence: 0.9 }), false);
