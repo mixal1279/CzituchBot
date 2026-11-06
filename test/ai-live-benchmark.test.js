@@ -71,7 +71,7 @@ test('new independent gold facts accept grounded Polish alternatives', () => {
     ['who-226', 'Wheatley to rdzeń osobowości Aperture Science.'],
     ['who-228', 'Johnny Silverhand to rockerboy, a jego engram zapisano w Relic.'],
     ['outcome-394', 'Jackie Welles ginie po nieudanym napadzie na Konpeki Plaza.'],
-    ['relationship-451', 'Geralt jest dla Ciri przybranym ojcem.'],
+    ['relationship-451', 'Geralt i Ciri mają relację ojciec i córka.'],
     ['relationship-452', 'V i Johnny dzielą jedno ciało przez działanie Relic.'],
   ];
   for (const [id, answer] of samples) {
