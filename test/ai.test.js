@@ -962,7 +962,7 @@ console.log('AI regression tests: OK');
   const body = source.slice(start, start + 30000);
   assert.doesNotMatch(
     body,
-    /console\.(?:error|warn)\([^\n]*err\.message/,
+    /console\.(?:error|warn)\((?![^\n]*sanitizujKomunikatBledu)[^\n]*err\.message/,
     'komunikaty błędów w pipeline AI muszą przechodzić przez redakcję sekretów',
   );
 }
