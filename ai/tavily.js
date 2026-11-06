@@ -731,13 +731,9 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, normalizeQuery, logge
   };
   const kluczRewrite = q => String(q || '').toLowerCase().replace(/\s+/g, ' ').trim();
 
-  const ocenaZrodla = (url, requestedDomains = []) => {
+  const ocenaZrodla = url => {
     try {
       const host = new URL(url).hostname.toLowerCase().replace(/^www\./, '');
-      const requested = Array.isArray(requestedDomains) && requestedDomains.some(d => {
-        const clean = String(d || '').toLowerCase().replace(/^www\./, '');
-        return clean && (host === clean || host.endsWith(`.${clean}`));
-      });
       const official = DOMENY_OFICJALNE
         .some(d => host === d || host.endsWith(`.${d}`));
       const specialized = DOMENY_WYSPECJALIZOWANE
