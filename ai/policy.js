@@ -1,6 +1,7 @@
 'use strict';
 
 const { NIE_CZAS_GRY } = require('./patterns');
+const { czyWspomnianoGre } = require('./entities');
 
 function normalizujZapytanieTavily(q) {
   return String(q || '')
@@ -34,7 +35,8 @@ function zakresTavilyDlaPytania(pytanie, domyslny = null) {
 
 function okreslKategorieAI(pytanie, czyPytanieOReceptureMC = () => false) {
   const p = String(pytanie || '');
-  const graSygnal = /(?<![\p{L}\p{N}_])(?:minecraft\p{L}*|wied[źz]min\p{L}*|cyberpunk(?:\s+2077)?|gta(?:\s+[iv1-6]+)?|fortnite\p{L}*|elden\s+ring|baldur['’]?s\s+gate|witcher\p{L}*|assassin['’]?s\s+creed|red\s+dead|fallout\p{L}*|skyrim\p{L}*|starfield\p{L}*|dark\s+souls|game|gra|gry|grze|grę|grą|gier|tytuł\s+gry)(?![\p{L}\p{N}_])/iu.test(p);
+  const graSygnal = czyWspomnianoGre(p)
+    || /(?<![\p{L}\p{N}_])(?:game|gra|gry|grze|grę|grą|gier|tytuł\s+gry)(?![\p{L}\p{N}_])/iu.test(p);
   if (czyPytanieOReceptureMC(p)) return 'minecraft_recipe';
   if (/(?<![\p{L}\p{N}_])(?:pogod(?:a|y|ę|ą|zie|o)|temperatur\p{L}*|deszcz\p{L}*|wiatr(?:u|em|y|ów)?|słonecz(?:nie|ny|na|ne)|slonecz(?:nie|ny|na|ne)|forecast)(?![\p{L}\p{N}_])/iu.test(p)) return 'weather';
   const jawnyCzasGry = /(?:czas(?:\s+(?:przej[śs]cia|uko[ńn]czenia))|(?<![\p{L}])(?:przej[śs]cie|uko[ńn]czenie)\s+(?:gry|kampanii|fabuły)|howlongtobeat|hltb|ile\s+(?:godzin|czasu)\s+(?:zajmuje|potrzeba).*(?:gry|tytułu|przej[śs]cia))/iu.test(p);
