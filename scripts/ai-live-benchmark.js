@@ -14,7 +14,56 @@ if (require.main === module && process.env.AI_LIVE_BENCHMARK !== '1') {
   process.exit(2);
 }
 
+function normalizeBenchmarkQuestion(value) {
+  return normalizeFactText(value).replace(/\\s+/g, ' ').trim();
+}
+
+function validateBenchmarkDataset(data) {
+  const errors = [];
+  const all = Array.isArray(data?.cases) ? data.cases : [];
+  if (all.length < 30) errors.push('benchmark musi zawierać co najmniej 30 przypadków');
+  const ids = new Set();
+  const questions = new Set();
+  const categories = new Map();
+  for (const item of all) {
+    const id = String(item?.id || '').trim();
+    const question = normalizeBenchmarkQuestion(item?.question);
+    const category = String(item?.category || '').trim();
+    if (!id) errors.push('przypadek bez ID');
+    else if (ids.has(id)) errors.push('powtórzone ID: ' + id);
+    else ids.add(id);
+    if (question.length < 8) errors.push('brak lub zbyt krótkie pytanie: ' + (id || 'unknown'));
+    else if (questions.has(question)) errors.push('powtórzone pytanie: ' + (id || 'unknown'));
+    else questions.add(question);
+    if (!category) errors.push('brak kategorii: ' + (id || 'unknown'));
+    else categories.set(category, (categories.get(category) || 0) + 1);
+  }
+  for (const [category, count] of categories) {
+    if (count < 4) errors.push('zbyt mało przypadków w kategorii ' + category + ': ' + count);
+  }
+  const gold = all.filter(item => item.expected?.factual?.independentGold === true);
+  const goldCategories = new Set(gold.map(item => item.category));
+  if (gold.length < Math.ceil(all.length * 0.15)) errors.push('za mało niezależnych gold cases');
+  if (goldCategories.size < 5) errors.push('gold cases muszą pokrywać co najmniej 5 kategorii');
+  for (const item of gold) {
+    const facts = item.expected.factual;
+    if (!Array.isArray(facts.mustInclude) && !Array.isArray(facts.mustIncludeAny)) errors.push('gold bez wymaganych faktów: ' + item.id);
+    if (!Array.isArray(facts.independentGoldSources) || !facts.independentGoldSources.some(url => /^https:\\/\\//i.test(String(url)))) errors.push('gold bez źródła HTTPS: ' + item.id);
+  }
+  return {
+    valid: errors.length === 0,
+    errors,
+    total: all.length,
+    uniqueQuestions: questions.size,
+    categories: Object.fromEntries(categories),
+    independentGoldCases: gold.length,
+    goldCategories: [...goldCategories].sort(),
+  };
+}
+
 const benchmark = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'test', 'ai-benchmark.json'), 'utf8'));
+const benchmarkValidation = validateBenchmarkDataset(benchmark);
+if (!benchmarkValidation.valid) throw new Error('Niepoprawny benchmark AI: ' + benchmarkValidation.errors.join('; '));
 const defaultLimit = Math.min(10, benchmark.cases.length);
 const requestedLimit = Number(process.env.AI_BENCHMARK_LIMIT);
 const limit = Math.max(1, Math.min(benchmark.cases.length, Number.isFinite(requestedLimit) && requestedLimit > 0 ? requestedLimit : defaultLimit));
@@ -625,6 +674,12 @@ async function run() {
     seed: benchmarkSeed,
     valid: isBenchmarkRunValid(diagnostic),
     total: results.length,
+    datasetQuality: {
+      uniqueQuestions: benchmarkValidation.uniqueQuestions,
+      independentGoldCases: benchmarkValidation.independentGoldCases,
+      goldCategories: benchmarkValidation.goldCategories,
+      categoryCounts: benchmarkValidation.categories,
+    },
     answeredAccuracy: Number((answered / results.length).toFixed(4)),
     completenessAccuracy: Number((complete / results.length).toFixed(4)),
     falseRejects: falseRejects.length,
@@ -679,7 +734,7 @@ async function run() {
   }
 }
 
-module.exports = { isBenchmarkRunValid, resolveDelayMs,
+module.exports = { validateBenchmarkDataset, normalizeBenchmarkQuestion, isBenchmarkRunValid, resolveDelayMs,
   wybierzOdrzuconaOdpowiedz, normalizeFactText, scoreGoldenFacts, stratifiedCases, buildQuestionForBot, isFailureText, evaluateBenchmarkAnswer, isFalseReject, extractClaimSupportAudit, classifyBenchmarkOutcome, buildBenchmarkDiagnostics, formatBenchmarkFailureDiagnostics, writeBenchmarkReport, writeStdoutAndWait, run };
 
 if (require.main === module) {
