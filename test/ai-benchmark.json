@@ -630,11 +630,13 @@
           "independentGold": true,
           "mustInclude": [
             [
+              "Aperture Science"
+            ]
+          ],
+          "mustIncludeAny": [
+            [
               "rdzeń osobowości",
               "personality core"
-            ],
-            [
-              "Aperture Science"
             ]
           ],
           "mustNot": [],
@@ -685,12 +687,14 @@
               "Johnny Silverhand"
             ],
             [
-              "rockerboy",
-              "muzyk rockowy"
-            ],
-            [
               "Relic",
               "relikt"
+            ]
+          ],
+          "mustIncludeAny": [
+            [
+              "rockerboy",
+              "muzyk rockowy"
             ]
           ],
           "mustNot": [],
@@ -1033,7 +1037,9 @@
             ],
             [
               "Konpeki Plaza"
-            ],
+            ]
+          ],
+          "mustIncludeAny": [
             [
               "ginie",
               "umiera",
@@ -1179,7 +1185,9 @@
             ],
             [
               "Ciri"
-            ],
+            ]
+          ],
+          "mustIncludeAny": [
             [
               "przybrany ojciec",
               "adopcyjny ojciec",
@@ -1221,7 +1229,9 @@
             [
               "Relic",
               "relikt"
-            ],
+            ]
+          ],
+          "mustIncludeAny": [
             [
               "współdzielą ciało",
               "dzielą ciało",
