@@ -970,6 +970,9 @@ console.log('AI regression tests: OK');
 {
   const { wyodrebnijJawnyTytulGry } = require('../ai/entities');
   assert.equal(wyodrebnijJawnyTytulGry('W grze Hades: kim jest Zagreus?'), 'Hades');
+  assert.equal(wyodrebnijJawnyTytulGry('Hades: kim jest Zagreus?'), 'Hades');
+  assert.equal(wyodrebnijJawnyTytulGry('hades: kim jest Zagreus?'), 'hades');
+  assert.equal(wyodrebnijJawnyTytulGry('Red Dead Redemption 2: dlaczego Arthur...?'), 'Red Dead Redemption 2');
   assert.equal(wyodrebnijJawnyTytulGry('w grze hades: kim jest Zagreus?'), 'hades');
   assert.equal(wyodrebnijJawnyTytulGry('Opowiedz o postaci w grze "unknown title".'), 'unknown title');
   assert.equal(wyodrebnijJawnyTytulGry('W grze Red Dead Redemption 2 kto jest Arthurem?'), 'Red Dead Redemption 2');
