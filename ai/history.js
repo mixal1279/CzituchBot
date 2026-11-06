@@ -26,4 +26,28 @@ function parsujStrukturalnePodsumowanie(text) {
   try { return normalizujStrukturalnePodsumowanie(JSON.parse(String(text || '').trim())); }
   catch (_) { return null; }
 }
-module.exports = { normalizujStrukturalnePodsumowanie, parsujStrukturalnePodsumowanie };
+
+function oznaczUzycieHistorii(ostatnieUzycie, klucz, teraz = Date.now()) {
+  if (!ostatnieUzycie || typeof ostatnieUzycie !== 'object' || Array.isArray(ostatnieUzycie)) return false;
+  const key = String(klucz || '').trim();
+  if (!key) return false;
+  ostatnieUzycie[key] = Number.isFinite(teraz) ? teraz : Date.now();
+  return true;
+}
+
+function ograniczHistorieRozmow(historie, ostatnieUzycie, limit = 500) {
+  if (!historie || typeof historie !== 'object' || Array.isArray(historie)) return [];
+  if (!ostatnieUzycie || typeof ostatnieUzycie !== 'object' || Array.isArray(ostatnieUzycie)) return [];
+  const max = Number.isSafeInteger(limit) && limit >= 0 ? limit : 500;
+  const klucze = Object.keys(historie);
+  if (klucze.length <= max) return [];
+  klucze.sort((a, b) => (Number(ostatnieUzycie[a]) || 0) - (Number(ostatnieUzycie[b]) || 0));
+  const usuniete = klucze.slice(0, klucze.length - max);
+  for (const key of usuniete) {
+    delete historie[key];
+    delete ostatnieUzycie[key];
+  }
+  return usuniete;
+}
+
+module.exports = { normalizujStrukturalnePodsumowanie, parsujStrukturalnePodsumowanie, oznaczUzycieHistorii, ograniczHistorieRozmow };
