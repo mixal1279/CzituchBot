@@ -5219,6 +5219,10 @@ async function szukajNaWiki(domena, fraza) {
   }
 }
 
+function czyBezpiecznaKwotaEko(kwota) {
+  return Number.isSafeInteger(kwota) && kwota > 0;
+}
+
 async function obslugaEkonomii(nick, message, wyslijFn, walutaNadpis = null) {
   if (!nick || !message) return;
   const waluta = {
@@ -5255,14 +5259,16 @@ async function obslugaEkonomii(nick, message, wyslijFn, walutaNadpis = null) {
 
     if (matchDaj) {
       const cel   = matchDaj[1].toLowerCase();
-      const kwota = parseInt(matchDaj[2]);
+      const kwota = Number(matchDaj[2]);
+      if (!czyBezpiecznaKwotaEko(kwota)) return wyslijFn('@' + nick + ' Podaj dodatnią kwotę mieszczącą się w bezpiecznym zakresie.');
       await ekoZapewnijGracza(cel, stmt);
       await stmt.dodaj({ nick: cel, kwota });
       return wyslijFn(`✅ Dodano ${kwota} ${waluta.symbol} dla @${cel}.`);
     }
     if (matchZabierz) {
       const cel   = matchZabierz[1].toLowerCase();
-      const kwota = parseInt(matchZabierz[2]);
+      const kwota = Number(matchZabierz[2]);
+      if (!czyBezpiecznaKwotaEko(kwota)) return wyslijFn('@' + nick + ' Podaj dodatnią kwotę mieszczącą się w bezpiecznym zakresie.');
       await ekoZapewnijGracza(cel, stmt);
       await stmt.zabierz({ kwota, nick: cel });
       return wyslijFn(`✅ Zabrano ${kwota} ${waluta.symbol} od @${cel}.`);
@@ -5324,7 +5330,8 @@ async function obslugaEkonomii(nick, message, wyslijFn, walutaNadpis = null) {
     // Lokata
     const matchLokata = msgL.match(/^!kup lokata (\d+)$/);
     if (matchLokata) {
-      const kwota = parseInt(matchLokata[1]);
+      const kwota = Number(matchLokata[1]);
+      if (!czyBezpiecznaKwotaEko(kwota)) return wyslijFn('@' + nick + ' Podaj prawidłową kwotę lokaty.');
       if (kwota < EKO.lokataKwotaMin) return wyslijFn(`@${nick} Minimalna lokata to ${EKO.lokataKwotaMin}${waluta.symbol}.`);
       const wynikLokata = await stmt.kupLokateAtomowo({ nick, kwota, czasTrwania: EKO.lokataCzas });
       if (!wynikLokata.ok) {
@@ -5370,7 +5377,8 @@ async function obslugaEkonomii(nick, message, wyslijFn, walutaNadpis = null) {
   const matchPrzelew = msgL.match(/^!przelej\s+@?(\S+)\s+(\d+)$/);
   if (matchPrzelew) {
     const cel   = matchPrzelew[1].toLowerCase();
-    const kwota = parseInt(matchPrzelew[2]);
+    const kwota = Number(matchPrzelew[2]);
+    if (!czyBezpiecznaKwotaEko(kwota)) return wyslijFn('@' + nick + ' Podaj dodatnią kwotę mieszczącą się w bezpiecznym zakresie.');
     if (cel === nick.toLowerCase()) return wyslijFn(`@${nick} Nie możesz przelać do siebie. 🤦`);
     if (kwota <= 0) return wyslijFn(`@${nick} Kwota musi być większa od 0.`);
     const g = await stmt.getGracz(nick);
@@ -5387,7 +5395,8 @@ async function obslugaEkonomii(nick, message, wyslijFn, walutaNadpis = null) {
   const matchGamble = msgL.match(/^!gamble\s+(\d+|all)$/);
   if (matchGamble) {
     const g     = await stmt.getGracz(nick);
-    let kwota   = matchGamble[1] === 'all' ? g.emeraldy : parseInt(matchGamble[1]);
+    let kwota   = matchGamble[1] === 'all' ? g.emeraldy : Number(matchGamble[1]);
+    if (!czyBezpiecznaKwotaEko(kwota)) return wyslijFn('@' + nick + ' Podaj prawidłową kwotę do gry.');
     if (kwota < EKO.gambleMin) return wyslijFn(`@${nick} Minimum to ${EKO.gambleMin}${waluta.symbol}.`);
     if (g.emeraldy < kwota)    return wyslijFn(`${await prefix()} @${nick} Nie masz tyle! Masz ${g.emeraldy}${waluta.symbol}.`);
 
@@ -5453,7 +5462,8 @@ async function obslugaEkonomii(nick, message, wyslijFn, walutaNadpis = null) {
   const matchDuel = msgL.match(/^!duel\s+@?(\S+)\s+(\d+)$/);
   if (matchDuel) {
     const cel   = matchDuel[1].toLowerCase();
-    const kwota = parseInt(matchDuel[2]);
+    const kwota = Number(matchDuel[2]);
+    if (!czyBezpiecznaKwotaEko(kwota)) return wyslijFn('@' + nick + ' Podaj dodatnią kwotę mieszczącą się w bezpiecznym zakresie.');
     if (cel === nick.toLowerCase()) return wyslijFn(`@${nick} Nie możesz duellować sam ze sobą. 🤦`);
     if (kwota < EKO.duelMin) return wyslijFn(`@${nick} Minimum do duelu to ${EKO.duelMin}${waluta.symbol}.`);
     const g = await stmt.getGracz(nick);
