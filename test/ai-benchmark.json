@@ -685,16 +685,16 @@
           "mustInclude": [
             [
               "Johnny Silverhand"
-            ],
-            [
-              "Relic",
-              "relikt"
             ]
           ],
           "mustIncludeAny": [
             [
               "rockerboy",
               "muzyk rockowy"
+            ],
+            [
+              "Relic",
+              "relikt"
             ]
           ],
           "mustNot": [],
@@ -1225,17 +1225,19 @@
             ],
             [
               "Johnny"
-            ],
-            [
-              "Relic",
-              "relikt"
             ]
           ],
           "mustIncludeAny": [
             [
+              "Relic",
+              "relikt"
+            ],
+            [
               "współdzielą ciało",
               "dzielą ciało",
-              "w jednym ciele"
+              "dzielą jedno ciało",
+              "w jednym ciele",
+              "to samo ciało"
             ]
           ],
           "mustNot": [],
