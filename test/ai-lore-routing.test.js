@@ -95,6 +95,7 @@ test('Tavily Firestore cache accepts the canonical object shape and rejects malf
 
 test('a named but unknown game title is recognized as game context without a title whitelist', () => {
   assert.equal(czyMaKontekstGry('Kim jest Neryth w grze Aetherfall?'), true);
+  assert.equal(czyMaKontekstGry('Opowiedz o lore o Hollow Knight.'), true);
   assert.equal(czyMaKontekstGry('Kim jest Alex?'), false);
 });
 
