@@ -6,6 +6,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const source = fs.readFileSync(path.join(__dirname, '..', 'czituch_bot.js'), 'utf8');
+const oauthCallback = fs.readFileSync(path.join(__dirname, '..', 'youtube-oauth-callback.js'), 'utf8');
 
 test('YouTube OAuth binds callback to state and uses PKCE S256', () => {
   const start = source.indexOf('async function zalogujYouTube()');
@@ -18,10 +19,16 @@ test('YouTube OAuth binds callback to state and uses PKCE S256', () => {
   assert.match(oauth, /state:\s*oauthState/);
   assert.match(oauth, /code_challenge:\s*codeChallenge/);
   assert.match(oauth, /code_challenge_method:\s*'S256'/);
-  assert.match(oauth, /callbackState !== oauthState/);
-  assert.match(oauth, /url\.searchParams\.get\('error'\)/);
-  assert.match(oauth, /Google OAuth zwrócił błąd; szczegóły odpowiedzi pominięto/);
-  assert.doesNotMatch(oauth, /'Google OAuth zwrócił błąd: '\s*\+\s*oauthError/);
+  assert.match(oauth, /oczekujNaKodOAuth\(\{/);
+  assert.match(oauth, /host:\s*'localhost'/);
+  assert.match(oauth, /timeoutMs:/);
+  assert.match(oauthCallback, /url\.searchParams\.get\('state'\)/);
+  assert.match(oauthCallback, /url\.searchParams\.get\('error'\)/);
+  assert.match(oauthCallback, /url\.searchParams\.get\('code'\)/);
+  assert.match(oauthCallback, /timingSafeEqual/);
+  assert.match(oauthCallback, /url\.pathname !== '\/callback'/);
+  assert.match(oauthCallback, /req\.method !== 'GET'/);
+  assert.doesNotMatch(oauthCallback, /server\.listen\(port\);/);
   assert.match(oauth, /getToken\(\{\s*code,\s*codeVerifier\s*\}\)/);
 });
 
