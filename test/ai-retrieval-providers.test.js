@@ -960,3 +960,41 @@ test('Tavily serves cached evidence before applying an active quota cooldown', a
   assert.equal(cached.cached, true);
   assert.equal(tavilyCalls, 2, 'a cached query must not be sent to Tavily or secondary providers during cooldown');
 });
+
+
+test('Tavily page extraction rejects local, IP-literal and credential-bearing URLs', async () => {
+  const { extractTavilyPages, isSafePublicHttpUrl } = require('../ai/webRetrieval');
+  assert.equal(isSafePublicHttpUrl('https://example.com/article'), true);
+  for (const url of [
+    'file:///etc/passwd',
+    'http://localhost/admin',
+    'http://127.0.0.1/admin',
+    'http://192.168.1.10/private',
+    'http://169.254.169.254/latest/meta-data',
+    'https://user:password@example.com/private',
+    'https://example.com:8443/private',
+    'https://service.internal/data',
+  ]) {
+    assert.equal(isSafePublicHttpUrl(url), false, url);
+  }
+
+  let requestBody = null;
+  const pages = await extractTavilyPages({
+    apiKey: 'test-tavily-key',
+    urls: [
+      'https://example.com/article',
+      'http://127.0.0.1/admin',
+      'https://localhost/private',
+      'https://user:password@example.com/private',
+    ],
+    fetchFn: async (_url, options) => {
+      requestBody = JSON.parse(options.body);
+      return new Response(JSON.stringify({ results: [] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    },
+  });
+  assert.deepEqual(requestBody.urls, ['https://example.com/article']);
+  assert.equal(pages.size, 0);
+});
