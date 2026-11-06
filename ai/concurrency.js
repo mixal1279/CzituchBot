@@ -14,8 +14,6 @@ function utworzKolejkeAI({ maxConcurrent = 3, maxQueued = 20, maxWaitMs = 15000,
 
   async function wykonaj(zadanie) {
     if (typeof zadanie !== 'function') throw new TypeError('zadanie musi być funkcją');
-    if (beforeStart) await beforeStart();
-
     if (aktywne < limit) {
       aktywne++;
     } else {
@@ -46,6 +44,23 @@ function utworzKolejkeAI({ maxConcurrent = 3, maxQueued = 20, maxWaitMs = 15000,
     }
 
     try {
+      if (beforeStart) {
+        let timer;
+        try {
+          await Promise.race([
+            Promise.resolve().then(beforeStart),
+            new Promise((_, reject) => {
+              timer = setTimeout(() => {
+                const blad = new Error('AI queue initialization timeout');
+                blad.code = 'AI_QUEUE_TIMEOUT';
+                reject(blad);
+              }, czasOczekiwania);
+            }),
+          ]);
+        } finally {
+          clearTimeout(timer);
+        }
+      }
       return await zadanie();
     } finally {
       const nastepne = oczekujace.shift();
