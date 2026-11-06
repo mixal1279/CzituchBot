@@ -56,7 +56,7 @@ test('Twitch AI passes its full platform-channel-user scope into persistent memo
   const end = source.indexOf('async function ', start + 1);
   assert.ok(start >= 0 && end > start, 'Twitch handler should exist');
   const handler = source.slice(start, end);
-  assert.match(handler, /const historiaKlucz = `twitch:\$\{kanalNorm \|\| 'brak-kanalu'\}:\$\{login\}`/);
+  assert.match(handler, /zbudujKluczHistorii\('twitch', kanalNorm, tags\?\.\['user-id'\] \|\| login\)/);
   assert.match(handler, /memoryUserId:\s*historiaKlucz/);
 });
 
