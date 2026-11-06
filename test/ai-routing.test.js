@@ -169,3 +169,7 @@ assert.equal(unknownCompany.intent, 'web_fact');
 assert.equal(unknownCompany.needs_web, true);
 assert.equal(unknownCompany.entity_type, 'company');
 assert.equal(unknownCompany.game, null);
+
+const unknownCompanyInflected = classifyAIRequest('Co wiesz o firmie Acme Robotics?', okreslKategorieAI);
+assert.equal(unknownCompanyInflected.entity_type, 'company');
+assert.equal(unknownCompanyInflected.needs_web, true);
