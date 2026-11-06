@@ -6714,7 +6714,7 @@ async function obslugaWiadomosci(nick, message, platforma, wyslijFn, kanal = nul
         })));
       } catch (err) {
         console.error('[Groq/Angie] Błąd:', err.message);
-        if (err.code === 'AI_QUEUE_FULL') await wyslijFn(`@${nick} AI jest teraz zajęte — spróbuj za chwilę.`);
+        if (['AI_QUEUE_FULL', 'AI_QUEUE_TIMEOUT'].includes(err.code)) await wyslijFn(`@${nick} AI jest teraz zajęte — spróbuj za chwilę.`);
       }
     }
 
