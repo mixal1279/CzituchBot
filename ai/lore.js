@@ -11,8 +11,8 @@ const LORE_INTENT_RE = /(?<![\p{L}\p{N}_])(?:lore|fabuł[aeęy]|histori(?:a|ę|i
 
 // „Dlaczego” kwalifikuje się jako lore dopiero wtedy, gdy pytanie dotyczy
 // motywacji lub zdarzenia fabularnego, a nie np. crasha czy wymagań sprzętowych.
-const LORE_CAUSAL_RE = /(?<![\p{L}\p{N}_])dlaczego(?![\p{L}\p{N}_])/iu;
-const LORE_CAUSAL_CONTEXT_RE = /(?<![\p{L}\p{N}_])(?:w\s+(?:fabule|historii|lore)|motywacj\p{L}*|powod\p{L}*|zdradził\p{L}*|zabił\p{L}*|uratował\p{L}*|opuścił\p{L}*|opuszcza\p{L}*|porzucił\p{L}*|zdradza\p{L}*|zabija\p{L}*|ratuje\p{L}*|przejmuje\p{L}*|wybiera\p{L}*|ucieka\p{L}*|poświęca\p{L}*|przejął\p{L}*|wybrał\p{L}*|uwięził\p{L}*|zniszczył\p{L}*|upadł\p{L}*|powstał\p{L}*|zaatakował\p{L}*|pomógł\p{L}*|uciekł\p{L}*|poświęcił\p{L}*|zdecydował\p{L}*|betrayed|killed|saved|left|abandoned|chose|destroyed|created|motiv(?:ation|e)|plot)(?![\p{L}\p{N}_])/iu;
+const LORE_CAUSAL_RE = /(?<![\p{L}\p{N}_])(?:dlaczego|czemu|why)(?![\p{L}\p{N}_])/iu;
+const LORE_CAUSAL_CONTEXT_RE = /(?<![\p{L}\p{N}_])(?:w\s+(?:fabule|historii|lore)|motywacj\p{L}*|powod\p{L}*|zdradził\p{L}*|zabił\p{L}*|uratował\p{L}*|opuścił\p{L}*|opuszcza\p{L}*|porzucił\p{L}*|zdradza\p{L}*|zabija\p{L}*|ratuje\p{L}*|przejmuje\p{L}*|wybiera\p{L}*|ucieka\p{L}*|poświęca\p{L}*|przejął\p{L}*|wybrał\p{L}*|uwięził\p{L}*|zniszczył\p{L}*|upadł\p{L}*|powstał\p{L}*|zaatakował\p{L}*|pomógł\p{L}*|uciekł\p{L}*|poświęcił\p{L}*|zdecydował\p{L}*|pokonan\p{L}*|przegrał\p{L}*|zachorował\p{L}*|walczy\p{L}*|walczył\p{L}*|powiesił\p{L}*|popełnił\p{L}*|umarł\p{L}*|zmarł\p{L}*|zginął\p{L}*|odszedł\p{L}*|betrayed|killed|saved|left|abandoned|chose|destroyed|created|motiv(?:ation|e)|plot)(?![\p{L}\p{N}_])/iu;
 
 // Kontekst gry może być jawny („w grze”, „uniwersum”) albo wynikać z tytułu,
 // którego nie ma w lokalnym słowniku. Wykrywamy tytuły zapisane nazwą własną,
@@ -48,7 +48,9 @@ function czyPytanieOLore(pytanie, domeny = null) {
   const gamingDomain = Array.isArray(domeny) && domeny.some(d =>
     /(?:minecraft\.wiki|gamelore\.fandom\.com|fandom\.com|ign\.com|gamespot\.com|pcgamer\.com|eurogamer|rockstargames\.com|thewitcher\.com|bandainamco|playstation\.com|naughtydog\.com|baldursgate3\.game|larian\.com|fortnite\.gg)/i.test(String(d))
   );
-  return czyMaKontekstGry(p) || gamingDomain || Boolean(resolved && resolved.resolution !== 'deterministic_ambiguous');
+  return czyMaKontekstGry(p) || gamingDomain
+    || Boolean(resolved && resolved.resolution !== 'deterministic_ambiguous')
+    || Boolean(resolved && LORE_CAUSAL_RE.test(p) && LORE_CAUSAL_CONTEXT_RE.test(p));
 }
 
 function normalizujHost(wartosc) {
