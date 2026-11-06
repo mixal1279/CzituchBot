@@ -25,15 +25,33 @@
             [
               "Wheatley",
               "przejął kontrolę"
+            ]
+          ],
+          "mustIncludeAny": [
+            [
+              "transfer rdzeni",
+              "transferu rdzeni",
+              "core transfer",
+              "zajął miejsce GLaDOS",
+              "przejął ciało GLaDOS"
             ],
             [
-              "GLaDOS",
-              "wyłączona"
+              "władza go skorumpowała",
+              "skorumpowany przez władzę",
+              "stał się skorumpowany po przejęciu władzy",
+              "korupcja władzy"
+            ],
+            [
+              "teraz to on jest szefem",
+              "chciał być szefem",
+              "chciał rządzić",
+              "uważał że jest szefem"
             ]
           ],
           "mustNot": [],
           "independentGold": true,
           "independentGoldSources": [
+            "https://theportalwiki.com/wiki/Wheatley",
             "https://theportalwiki.com/wiki/Portal_2"
           ]
         }
@@ -102,10 +120,20 @@
               "Relic"
             ]
           ],
+          "mustIncludeAny": [
+            [
+              "Relic nadpisuje świadomość V",
+              "Relic przejmuje mózg V",
+              "Relic stopniowo zastępuje V",
+              "Relic zabija V",
+              "chip nadpisuje świadomość V"
+            ]
+          ],
           "mustNot": [],
           "independentGold": true,
           "independentGoldSources": [
-            "https://cyberpunk.fandom.com/wiki/Johnny_Silverhand"
+            "https://cyberpunk.fandom.com/wiki/Johnny_Silverhand",
+            "https://cyberpunk.fandom.com/wiki/V_(character)"
           ]
         }
       }
@@ -395,15 +423,23 @@
           ],
           "mustIncludeAny": [
             [
-              "po około 50 000 latach",
-              "po 50 000 latach",
-              "po 50000 latach",
-              "po 50 tysiącach lat",
-              "po 50 tys. latach",
-              "po wielu tysiącach lat"
+              "nieokreślony czas",
+              "nie wiadomo dokładnie",
+              "czas nie jest określony",
+              "nieokreślonym czasie"
+            ],
+            [
+              "od 50 do 50 000 lat",
+              "między 50 a 50 000 lat",
+              "pomiędzy 50 a 50 000 lat",
+              "50–50 000 lat",
+              "50 do 50 tys. lat"
             ]
           ],
-          "mustNot": [],
+          "mustNot": [
+            "dokładnie 50 000 lat",
+            "dokładnie 50 lat"
+          ],
           "independentGold": true,
           "independentGoldSources": [
             "https://theportalwiki.com/wiki/Relaxation_Chamber",

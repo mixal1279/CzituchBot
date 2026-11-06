@@ -107,12 +107,14 @@ test('live benchmark does not duplicate a game already named in the question', (
 test('new independent gold facts accept grounded Polish alternatives', () => {
   const benchmark = JSON.parse(fs.readFileSync(path.join(__dirname, 'ai-benchmark.json'), 'utf8'));
   const samples = [
+    ['why-001', 'Wheatley przejął kontrolę po transferze rdzeni; władza go skorumpowała i uznał, że teraz to on jest szefem.'],
+    ['why-003', 'V przyjął pomoc Johnny’ego, ponieważ Relic nadpisuje świadomość V i zagraża jego życiu.'],
     ['who-226', 'Wheatley to rdzeń osobowości Aperture Science.'],
     ['who-228', 'Johnny Silverhand to rockerboy, a jego engram zapisano w Relic.'],
     ['outcome-394', 'Jackie Welles ginie po nieudanym napadzie na Konpeki Plaza.'],
     ['relationship-451', 'Geralt i Ciri mają relację ojciec i córka.'],
     ['relationship-452', 'V i Johnny dzielą jedno ciało przez działanie Relic.'],
-    ['when-115', 'Chell budzi się w Aperture Science po około 50 000 latach uśpienia.'],
+    ['when-115', 'Chell budzi się w Aperture Science po nieokreślonym czasie, w przedziale od 50 do 50 000 lat po wydarzeniach z Portal.'],
     ['quantity-285', 'Portal 2: główna historia trwa około 9 godzin.'],
   ];
   for (const [id, answer] of samples) {
