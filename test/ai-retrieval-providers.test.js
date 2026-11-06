@@ -460,11 +460,12 @@ test('Tavily deduplicated wait respects each caller deadline without cancelling 
   assert.equal(firstResult.status, 'empty', 'timing out a deduplicated waiter must not cancel the shared request');
 });
 
-test('Exa parser consumes highlights without requiring full page content', async () => {
+test('Exa parser keeps highlights as snippets and uses extracted page text as evidence', async () => {
   const fakeFetch = async () => new Response(JSON.stringify({
     results: [{
       title: 'Source',
       url: 'https://example.com/exa',
+      text: 'Extracted page text containing relevant facts from the original page. '.repeat(5),
       highlights: ['Relevant highlight'],
       score: 0.7,
       publishedDate: '2026-10-01T00:00:00Z',
@@ -473,7 +474,9 @@ test('Exa parser consumes highlights without requiring full page content', async
   const result = await searchExa({ apiKey: 'test', query: 'q', fetchFn: fakeFetch });
   assert.equal(result.status, 'ok');
   assert.equal(result.sources[0].score, 0.7);
-  assert.match(result.text, /Relevant highlight/);
+  assert.match(result.text, /Extracted page text/);
+  assert.equal(result.sources[0].snippet, 'Relevant highlight');
+  assert.match(result.sources[0].content, /Extracted page text/);
 });
 
 test('secondary retrieval uses the first healthy provider and falls back to the second', async () => {
@@ -482,7 +485,7 @@ test('secondary retrieval uses the first healthy provider and falls back to the 
     calls++;
     if (url.includes('generativelanguage')) return new Response(JSON.stringify({ error: { message: 'quota' } }), { status: 429 });
     return new Response(JSON.stringify({
-      results: [{ title: 'Exa', url: 'https://example.com/exa', highlights: ['ok'] }],
+      results: [{ title: 'Exa', url: 'https://example.com/exa', text: 'Extracted page content for the Exa result. '.repeat(6), highlights: ['ok'] }],
     }), { status: 200 });
   };
   const result = await searchSecondaryProviders({
@@ -529,7 +532,7 @@ test('Gemini grounded metadata falls through to Exa when no page text was extrac
           groundingSupports: [{ groundingChunkIndices: [0], segment: { startIndex: 0, endIndex: 25, text: 'A model-generated answer.' } }],
         } }],
       }), { status: 200, headers: { 'content-type': 'application/json' } });
-      return new Response(JSON.stringify({ results: [{ title: 'Exa page', url: 'https://example.com/exa', highlights: ['Verbatim page highlight.'] }] }), { status: 200, headers: { 'content-type': 'application/json' } });
+      return new Response(JSON.stringify({ results: [{ title: 'Exa page', url: 'https://example.com/exa', text: 'Full extracted page text from Exa. '.repeat(6), highlights: ['Verbatim page highlight.'] }] }), { status: 200, headers: { 'content-type': 'application/json' } });
     };
     const result = await searchSecondaryProviders({ query: 'q', geminiKey: 'gemini', exaKey: 'exa', fetchFn: fakeFetch });
     assert.equal(result.status, 'ok');
@@ -555,10 +558,28 @@ test('Gemini text-only result is never promoted to source evidence', async () =>
   assert.equal(result.answer, 'Uncited answer');
 });
 
+test('Exa highlights without extracted page text are never promoted to evidence', async () => {
+  const fakeFetch = async () => new Response(JSON.stringify({
+    results: [{
+      title: 'Snippet only',
+      url: 'https://example.com/snippet',
+      highlights: ['A search highlight is not full page evidence.'],
+      score: 0.95,
+    }],
+  }), { status: 200, headers: { 'content-type': 'application/json' } });
+  const result = await searchExa({ apiKey: 'test', query: 'q', fetchFn: fakeFetch });
+  assert.equal(result.status, 'empty');
+  assert.equal(result.sources.length, 0);
+  assert.equal(result.text, '');
+});
+
 test('secondary retrieval is skipped for a strong single evergreen source', () => {
   assert.equal(czyWymagaSecondaryRetrieval([
-    { score: 0.82, url: 'https://minecraft.wiki/a' },
+    { score: 0.82, url: 'https://minecraft.wiki/a', raw_content: 'Extracted page text. '.repeat(20) },
   ], 'Minecraft wiki article', null), false);
+  assert.equal(czyWymagaSecondaryRetrieval([
+    { score: 0.99, url: 'https://minecraft.wiki/a', content: 'short search snippet' },
+  ], 'Minecraft wiki article', null), true, 'snippet-only results require deeper retrieval');
 });
 
 test('secondary retrieval is used for weak, fresh, or fact-heavy single-source results', () => {
@@ -814,7 +835,7 @@ test('Tavily quota cooldown skips Tavily and continues with secondary providers'
     if (hostname === 'api.exa.ai') {
       exaCalls++;
       return new Response(JSON.stringify({
-        results: [{ title: 'Exa evidence', url: 'https://example.com/evidence', highlights: ['Grounded evidence.'] }],
+        results: [{ title: 'Exa evidence', url: 'https://example.com/evidence', text: 'Extracted source page evidence. '.repeat(6), highlights: ['Grounded evidence.'] }],
       }), { status: 200, headers: { 'content-type': 'application/json' } });
     }
     throw new Error('Unexpected URL: ' + url);
