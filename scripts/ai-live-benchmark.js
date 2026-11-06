@@ -156,8 +156,8 @@ function stratifiedCases(all, requested, seed = 0) {
     const bucket = groups.get(key);
     while (bucket.length && selectedIds.has(bucket[0].id)) bucket.shift();
     if (bucket.length) {
-      let index = bucket.findIndex(item => !selectedIds.has(item.id) && item.expected?.factual?.independentGold !== true);
-      if (index < 0) index = bucket.findIndex(item => !selectedIds.has(item.id));
+      // Po zebraniu docelowej liczby gold nie dokładamy kolejnych do próbki.
+      const index = bucket.findIndex(item => !selectedIds.has(item.id) && item.expected?.factual?.independentGold !== true);
       if (index < 0) {
         keys.splice(cursor % keys.length, 1);
         continue;
