@@ -97,6 +97,27 @@ for (const question of [
   assert.equal(routing.needs_web, true, question);
 }
 
+// Tytuły gier są pobierane z centralnej tabeli aliasów, nie z osobnej listy regexów.
+for (const question of [
+  'Kim jest Lilith w Diablo IV?',
+  'Jak pokonać bossa w Diablo 4?',
+  'Historia serii Diablo',
+]) {
+  const routing = classifyAIRequest(question, okreslKategorieAI);
+  assert.equal(routing.needs_web, true, question);
+  assert.notEqual(routing.intent, 'conversation', question);
+}
+
+// Pytanie opiniotwórcze o konkretną grę nie może wyłączać retrieval.
+const gameOpinion = classifyAIRequest('Czy warto kupić Diablo IV?', okreslKategorieAI);
+assert.equal(gameOpinion.needs_web, true);
+assert.equal(gameOpinion.intent, 'web_fact');
+
+// Ogólny small talk nadal nie uruchamia wyszukiwania.
+const genericOpinion = classifyAIRequest('Co myślisz o tej grze?', okreslKategorieAI);
+assert.equal(genericOpinion.needs_web, false);
+assert.equal(genericOpinion.intent, 'conversation');
+
 console.log('AI routing benchmark: OK');
 
 
