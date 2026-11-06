@@ -8,6 +8,7 @@ const { classifyAIRequest } = require('../ai/router');
 const {
   GAMELORE_DOMAIN,
   czyPytanieOLore,
+  czyMaKontekstGry,
   dodajGameLoreDomenę,
 } = require('../ai/lore');
 const { czyPoprawnyWpisCacheTavily } = require('../ai/tavily');
@@ -45,6 +46,9 @@ for (const item of benchmark.cases) {
     }
     if (Number.isFinite(item.expected.maxConfidence)) {
       assert.ok(routing.confidence <= item.expected.maxConfidence);
+    }
+    if (item.expected.requiresClarification) {
+      assert.equal(routing.confidence_policy, 'clarify');
     }
   });
 }
@@ -86,4 +90,9 @@ test('Tavily Firestore cache accepts the canonical object shape and rejects malf
     ...valid,
     wynik: { ...valid.wynik, sources: [{ title: 'missing URL' }] },
   }, now), false);
+});
+
+test('a named but unknown game title is recognized as game context without a title whitelist', () => {
+  assert.equal(czyMaKontekstGry('Kim jest Neryth w grze Aetherfall?'), true);
+  assert.equal(czyMaKontekstGry('Kim jest Alex?'), false);
 });
