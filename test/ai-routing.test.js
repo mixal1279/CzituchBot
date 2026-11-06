@@ -183,3 +183,21 @@ const unknownCompanyOpinion = classifyAIRequest('Co sądzisz o firmie Acme Robot
 assert.equal(unknownCompanyOpinion.intent, 'web_fact');
 assert.equal(unknownCompanyOpinion.needs_web, true);
 assert.equal(unknownCompanyOpinion.entity_type, 'company');
+
+const categoryCases = [
+  ['Jak pokonać bossa w Diablo IV?', 'how_to', 'game'],
+  ['Kim jest Lilith w Diablo IV?', 'lore', 'game'],
+  ['Czy warto kupić Diablo Chairs?', 'recommendation', 'company'],
+  ['Ile kosztuje RTX 5090?', 'price', 'technology'],
+  ['Czym różni się PS5 od Xboxa?', 'comparison', 'technology'],
+  ['Dlaczego komputer się restartuje?', 'troubleshooting', 'technology'],
+  ['Co to jest TSMC?', 'explanation', 'company'],
+  ['Jaka jest dzisiaj pogoda?', 'forecast', 'weather'],
+  ['Co nowego dzisiaj na YouTube?', 'channel_or_creator', 'creator_platform'],
+  ['Kiedy powstało Sony?', 'history', 'company'],
+];
+for (const [question, expectedQuestionType, expectedTopicType] of categoryCases) {
+  const result = classifyAIRequest(question, okreslKategorieAI);
+  assert.equal(result.question_type, expectedQuestionType, question);
+  assert.equal(result.topic_type, expectedTopicType, question);
+}
