@@ -326,8 +326,8 @@ function normalizujEkstraktTavily(source) {
   const { raw_content: rawContent, ...metadata } = source || {};
   return {
     ...metadata,
-    snippet: String(source?.content || source?.snippet || '').trim(),
-    content: String(rawContent || '').trim(),
+    snippet: sanityzujTrescZrodlaTavily(String(source?.content || source?.snippet || '').trim()),
+    content: sanityzujTrescZrodlaTavily(String(rawContent || '').trim()),
   };
 }
 
