@@ -7,7 +7,7 @@ const { czyPytanieOLore } = require('./lore');
 const { czyPytanieOGameplay } = require('./gameplay');
 const { resolveGameEntity, resolveCompanyEntity, czyPytanieOFirmie } = require('./entities');
 
-const SOURCE_TYPES = { weather: 'weather_api', hltb: 'hltb', youtube: 'youtube_api', minecraft_recipe: 'local_minecraft_data' };
+const SOURCE_TYPES = { weather: 'weather_api', hltb: 'hltb', youtube: 'youtube_api', minecraft_recipe: 'local_minecraft_data', calculation: 'calculation' };
 
 function classifyAIRequest(pytanie, policyCategory, recipeDetector = () => false) {
   const text = String(pytanie || '').trim();
@@ -51,6 +51,7 @@ function classifyAIRequest(pytanie, policyCategory, recipeDetector = () => false
   if (category === 'minecraft_recipe') confidence = 0.99;
   else if (category === 'weather' || category === 'hltb' || category === 'youtube') confidence = 0.95;
   else if (category === 'web_fact') confidence = entity ? 0.90 : 0.78;
+  else if (category === 'calculation') confidence = 0.99;
   else if (lore || gameplay) {
     if (resolved?.resolution === 'deterministic_ambiguous') confidence = Math.min(0.68, Number(resolved.confidence) || 0.68);
     else confidence = resolved ? Math.max(0.86, resolved.confidence) : 0.80;
@@ -82,6 +83,7 @@ function classifyAIRequest(pytanie, policyCategory, recipeDetector = () => false
 function classifyQuestionType(question, routing = {}) {
   const p = String(question || '').toLocaleLowerCase('pl-PL');
   if (routing.intent === 'conversation') return 'conversation';
+  if (routing.intent === 'calculation') return 'calculation';
   if (routing.intent === 'hltb') return 'duration';
   if (routing.intent === 'weather') return 'forecast';
   if (routing.intent === 'youtube') return 'channel_or_creator';
