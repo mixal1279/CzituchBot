@@ -938,3 +938,19 @@ console.log('AI regression tests: OK');
 {
   assert.equal(classifyFailure({ status: 'error', message: 'model returned pustą odpowiedź' }), 'empty_response');
 }
+
+{
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const source = fs.readFileSync(path.join(__dirname, '..', 'czituch_bot.js'), 'utf8');
+  const start = source.indexOf('async function zapytajAI(');
+  const end = source.indexOf('\\nasync function ', start + 1);
+  const body = source.slice(start, end > start ? end : start + 30000);
+  const validation = body.indexOf('const questionInput = sanitizeQuestion(');
+  const rejection = body.indexOf('if (!questionInput.ok)', validation);
+  const memoryRead = body.indexOf('const verifiedMemoryPromise = loadMemory(', validation);
+  assert.ok(validation >= 0, 'pytanie musi przejść sanitizeQuestion');
+  assert.ok(rejection > validation, 'odrzucenie wejścia musi następować przed odczytem pamięci');
+  assert.ok(memoryRead > rejection, 'Firestore memory read musi być uruchamiany dopiero po walidacji');
+}
+
