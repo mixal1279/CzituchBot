@@ -99,6 +99,21 @@ test('a named but unknown game title is recognized as game context without a tit
   assert.equal(czyMaKontekstGry('Kim jest Alex?'), false);
 });
 
+test('capitalized place names are not treated as unknown game titles without explicit game context', () => {
+  for (const question of [
+    'Jaka jest historia w Polsce?',
+    'Opowiedz o historii Warszawy.',
+    'Co wydarzyło się w Krakowie?',
+    'Jak wygląda lore polskiej historii?',
+  ]) {
+    assert.equal(czyMaKontekstGry(question), false, question);
+    assert.equal(czyPytanieOLore(question), false, question);
+    const routing = classifyAIRequest(question, policy, () => false);
+    assert.equal(routing.is_lore, false, question);
+    assert.notEqual(routing.source_type, 'game_lore', question);
+  }
+});
+
 test('lore answer plan separates canon, interpretation, fan theory, missing data and source conflicts', () => {
   const plan = buildAnswerPlan(
     'Czy teoria o G-Manie w Half-Life jest kanoniczna?',
