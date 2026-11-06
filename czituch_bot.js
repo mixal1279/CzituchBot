@@ -38,6 +38,7 @@ const { youtube: youtubeFactory } = require('@googleapis/youtube');
 const { discoverLiveVideoId, isLiveVideoFromChannel } = require('./youtube-live-discovery');
 const { agregujMetrykiWalidatorow, zbudujKontekstMetrykiWalidatora, wybierzTimeoutWalidatora } = require('./ai/validator-telemetry');
 const { OAuth2Client } = require('google-auth-library');
+const { oczekujNaKodOAuth } = require('./youtube-oauth-callback');
 const Groq       = require('groq-sdk');
 const tmi        = require('tmi.js');
 const {
@@ -6926,45 +6927,12 @@ async function zalogujYouTube() {
   console.log('\n2. Zaloguj się i kliknij "Zezwól"');
   console.log('3. Przeglądarka przekieruje na localhost – poczekaj chwilę.\n');
 
-  const code = await new Promise((resolve, reject) => {
-    const http = require('http');
-    const server = http.createServer((req, res) => {
-      const url = new URL(req.url, 'http://localhost:3000');
-      const callbackState = url.searchParams.get('state');
-      const oauthError = url.searchParams.get('error');
-      const code = url.searchParams.get('code');
-
-      if (!callbackState || callbackState !== oauthState) {
-        res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' });
-        res.end('Nieprawidłowy parametr state. Autoryzacja została odrzucona.');
-        server.close();
-        reject(new Error('Nieprawidłowy parametr state w callbacku OAuth'));
-        return;
-      }
-      if (oauthError) {
-        res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' });
-        res.end('Autoryzacja Google została anulowana lub odrzucona.');
-        server.close();
-        reject(new Error('Google OAuth zwrócił błąd; szczegóły odpowiedzi pominięto.'));
-        return;
-      }
-      if (!code) {
-        res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' });
-        res.end('Brak kodu autoryzacji.');
-        server.close();
-        reject(new Error('Brak kodu w callbacku'));
-        return;
-      }
-
-      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-      res.end('<h2>✅ Zalogowano! Możesz zamknąć tę kartę i wrócić do terminala.</h2>');
-      server.close();
-      resolve(code);
-    });
-    server.on('error', reject);
-    server.listen(3000, () => {
-      console.log('[YT Auth] ⏳ Czekam na autoryzację na porcie 3000...');
-    });
+  const code = await oczekujNaKodOAuth({
+    state: oauthState,
+    port: 3000,
+    host: 'localhost',
+    timeoutMs: 5 * 60 * 1000,
+    onListen: () => console.log('[YT Auth] ⏳ Czekam na autoryzację na porcie 3000...'),
   });
 
   const { tokens } = await oauth2Client.getToken({ code, codeVerifier });
@@ -8062,15 +8030,14 @@ const TWITCH_CONFIG_BILLYBULKA = {
 
 // App Access Token jest wspólny dla całej aplikacji Twitcha (nie dla konkretnego bota).
 // Nie ma scope'ów i służy m.in. do Get Users/Streams oraz Send Chat Message.
-const twitchAppTokens = {};
+// App Access Token należy do aplikacji Twitch, nie do pojedynczego bota.
+let twitchAppToken = null;
 let twitchAppTokenExpiresAt = 0;
 let twitchAppTokenPromise = null;
 
-async function pobierzTwitchAppToken(config = TWITCH_CONFIG_BILLYBULKA) {
+async function pobierzTwitchAppToken() {
   const teraz = Date.now();
-  if (twitchAppTokens[config.botNick] && teraz < twitchAppTokenExpiresAt - 60_000) {
-    return twitchAppTokens[config.botNick];
-  }
+  if (twitchAppToken && teraz < twitchAppTokenExpiresAt - 60_000) return twitchAppToken;
   if (twitchAppTokenPromise) return twitchAppTokenPromise;
 
   twitchAppTokenPromise = (async () => {
@@ -8084,16 +8051,17 @@ async function pobierzTwitchAppToken(config = TWITCH_CONFIG_BILLYBULKA) {
       }),
     }, 10000);
     if (!res.ok) {
-      throw new Error(`Nie udało się pobrać App Access Tokena: HTTP ${res.status} – ${await res.text()}`);
+      const szczegoly = await res.text().catch(() => '');
+      throw new Error(`Nie udało się pobrać App Access Tokena: HTTP ${res.status} – ${szczegoly.slice(0, 300)}`);
     }
     const data = await res.json();
-    // Jeden App Access Token należy do aplikacji, więc udostępniamy go obu
-    // konfiguracjom botów. Dzięki temu równoległy start michal/edlor nie
-    // powoduje drugiego requestu ani lookupu z pustym tokenem.
-    twitchAppTokens[config.botNick] = data.access_token;
-    twitchAppTokenExpiresAt = Date.now() + (data.expires_in ?? 3600) * 1000;
+    if (typeof data.access_token !== 'string' || !data.access_token || !Number.isFinite(Number(data.expires_in))) {
+      throw new Error('Twitch zwrócił nieprawidłowy App Access Token.');
+    }
+    twitchAppToken = data.access_token;
+    twitchAppTokenExpiresAt = Date.now() + Number(data.expires_in) * 1000;
     console.log('[Twitch API] ✅ Pobrano świeży App Access Token');
-    return data.access_token;
+    return twitchAppToken;
   })();
 
   try {
@@ -8222,7 +8190,7 @@ async function pobierzStartStreamu(config = TWITCH_CONFIG_BILLYBULKA) {
     const res  = await fetchZTimeout(`https://api.twitch.tv/helix/streams?user_login=${config.kanal}`, {
       headers: {
         'Client-ID':     config.clientId,
-        'Authorization': `Bearer ${twitchAppTokens[config.botNick]}`,
+        'Authorization': `Bearer ${twitchAppToken}`,
       },
     }, 8000);
     const data   = await res.json();
@@ -8423,11 +8391,11 @@ async function pobierzUserId(login, config = TWITCH_CONFIG_BILLYBULKA) {
   try {
     // Zawsze pobieramy świeżą wartość (funkcja jest tania — bez requestu sieciowego),
     // żeby złapać kolejne odświeżenia tokenu zamiast trzymać jednorazowy cache na zawsze.
-    await pobierzTwitchAppToken(config);
-    const res  = await fetchZTimeout(`https://api.twitch.tv/helix/users?login=${czystyLogin}`, {
+    const appToken = await pobierzTwitchAppToken();
+    const res  = await fetchZTimeout(`https://api.twitch.tv/helix/users?login=${encodeURIComponent(czystyLogin)}`, {
       headers: {
         'Client-ID':     config.clientId,
-        'Authorization': `Bearer ${twitchAppTokens[config.botNick]}`,
+        'Authorization': `Bearer ${appToken}`,
       },
     }, 3000);
     if (res.status === 429) {
@@ -8460,7 +8428,7 @@ async function pobierzAktualneVodTwitch(kanal, config = TWITCH_CONFIG_BILLYBULKA
     const res = await fetchZTimeout(`https://api.twitch.tv/helix/videos?user_id=${userId}&type=archive&first=1`, {
       headers: {
         'Client-ID':     config.clientId,
-        'Authorization': `Bearer ${twitchAppTokens[config.botNick]}`,
+        'Authorization': `Bearer ${twitchAppToken}`,
       },
     }, 8000);
     const data  = await res.json();
@@ -8797,7 +8765,7 @@ async function czyKanalJestLive(login, config = TWITCH_CONFIG_BILLYBULKA) {
     const res  = await fetchZTimeout(`https://api.twitch.tv/helix/streams?user_login=${login}`, {
       headers: {
         'Client-ID':     config.clientId,
-        'Authorization': `Bearer ${twitchAppTokens[config.botNick]}`,
+        'Authorization': `Bearer ${twitchAppToken}`,
       },
     }, 8000);
     if (!res.ok) {
