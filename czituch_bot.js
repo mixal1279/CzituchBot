@@ -115,7 +115,7 @@ const { przygotujHistorieDoModelu, opakujDaneReferencyjne } = AI_POLICY;
 const { classifyAIRequest } = require('./ai/router');
 const { czyWymagaKlasyfikacjiSemantycznej, klasyfikujSemantycznie } = require('./ai/semantic-classifier');
 const { planAIRequest, responseContract, RESPONSE_PROFILES, buildRetrievalQueries, czyPotrzebujeRewrite } = require('./ai/planner');
-const { resolveGameEntity, scoreExternalGameCandidate, extractExplicitGameTitle, externalGameCandidateMatchesQuery } = require('./ai/entities');
+const { resolveGameEntity, scoreExternalGameCandidate, wyodrebnijJawnyTytulGry, externalGameCandidateMatchesQuery } = require('./ai/entities');
 const { extractExplicitUserMemories, mergeMemoryRecords, buildVerifiedMemoryContext, pruneExpiredMemories } = require('./ai/memory');
 const { parseMemoryCommand, forgetMemories, describeMemories } = require('./ai/memory_manager');
 const { decomposeQuestion, isMultiPartQuestion, buildAdvancedRetrievalPlan, buildSupplementalRetrievalQuery, selectRetrievalQueries, selectRetrievalDomains, selectGameSpecificRetrievalDomains, initialRetrievalQueryLimit } = require('./ai/retrieval');
@@ -1145,7 +1145,7 @@ async function znajdzGreIGDB(pytanie, requestState = null) {
   try {
     // Jawny prefiks „w grze X” jest silniejszym sygnałem niż klasyfikator LLM.
     // W takim przypadku pytanie trafia bezpośrednio do IGDB, także przy awarii Groq.
-    let nazwaGry = extractExplicitGameTitle(pytanie);
+    let nazwaGry = wyodrebnijJawnyTytulGry(pytanie);
     if (!nazwaGry) {
       if (requestState?.zarezerwujModel && !requestState.zarezerwujModel('igdb-classifier')) return null;
       const classifierController = new AbortController();
