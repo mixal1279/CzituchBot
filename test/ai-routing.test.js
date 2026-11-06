@@ -142,3 +142,24 @@ const elytraHowQueries = buildRetrievalQueries('Jak zdobyć elytrę?', {
   needs_web: true, is_gameplay: true, entity: 'Minecraft', game: 'Minecraft',
 }, { maxQueries: 4 });
 assert.ok(elytraHowQueries.some(query => /elytra obtain Survival mode End ship/i.test(query)), JSON.stringify(elytraHowQueries));
+
+
+// Firmy i marki nie mogą być klasyfikowane jako gry tylko przez podobną nazwę.
+const diabloChairs = classifyAIRequest('Czy warto kupić fotel Diablo Chairs?', okreslKategorieAI);
+assert.equal(diabloChairs.intent, 'web_fact');
+assert.equal(diabloChairs.needs_web, true);
+assert.equal(diabloChairs.entity, 'Diablo Chairs');
+assert.equal(diabloChairs.entity_type, 'company');
+assert.equal(diabloChairs.game, null);
+assert.equal(diabloChairs.company, 'Diablo Chairs');
+
+const diabloGame = classifyAIRequest('Jak pokonać bossa w Diablo IV?', okreslKategorieAI);
+assert.equal(diabloGame.entity, 'Diablo IV');
+assert.equal(diabloGame.entity_type, 'game');
+assert.equal(diabloGame.game, 'Diablo IV');
+
+const genericCompany = classifyAIRequest('Czym zajmuje się firma TSMC?', okreslKategorieAI);
+assert.equal(genericCompany.intent, 'web_fact');
+assert.equal(genericCompany.entity, 'TSMC');
+assert.equal(genericCompany.entity_type, 'company');
+assert.equal(genericCompany.game, null);
