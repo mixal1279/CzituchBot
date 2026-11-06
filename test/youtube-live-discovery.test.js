@@ -129,6 +129,19 @@ test('zwraca null, gdy strona kanału nie pokazuje żadnych kandydatów', async 
 });
 
 
+
+test('nie łączy nieobiektowego ytInitialData z przypadkowym obiektem z dalszego HTML', () => {
+  const html = 'var ytInitialData = null; window.other = {"videoId":"' + VIDEO_ID + '"};';
+  assert.deepEqual(extractLiveVideoIds(html), []);
+});
+
+test('priorytetyzuje ID z redirectu /live przed innymi kandydatami strony', () => {
+  const html = assigned('ytInitialData', {
+    contents: { videoRenderer: liveRenderer(OTHER_VIDEO_ID) },
+  });
+  assert.equal(extractLiveVideoIds(html, 'https://www.youtube.com/watch?v=' + VIDEO_ID)[0], VIDEO_ID);
+});
+
 test('obsługuje alternatywne przypisanie window.ytInitialData', () => {
   const html = 'window.ytInitialData = ' + JSON.stringify({
     contents: { videoRenderer: liveRenderer(VIDEO_ID) },
