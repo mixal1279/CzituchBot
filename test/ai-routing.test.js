@@ -163,3 +163,9 @@ assert.equal(genericCompany.intent, 'web_fact');
 assert.equal(genericCompany.entity, 'TSMC');
 assert.equal(genericCompany.entity_type, 'company');
 assert.equal(genericCompany.game, null);
+
+const unknownCompany = classifyAIRequest('Co produkuje firma Acme Robotics?', okreslKategorieAI);
+assert.equal(unknownCompany.intent, 'web_fact');
+assert.equal(unknownCompany.needs_web, true);
+assert.equal(unknownCompany.entity_type, 'company');
+assert.equal(unknownCompany.game, null);
