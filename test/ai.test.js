@@ -2,7 +2,7 @@
 
 const assert = require('node:assert/strict');
 const { classifyAIRequest } = require('../ai/router');
-const { resolveGameEntity } = require('../ai/entities');
+const { resolveGameEntity, scoreExternalGameCandidate, externalGameCandidateMatchesQuery } = require('../ai/entities');
 const { planAIRequest, buildRetrievalQueries } = require('../ai/planner');
 const { czyPytanieOLore } = require('../ai/lore');
 const { przygotujHistorieDoModelu } = require('../ai/policy');
@@ -348,6 +348,16 @@ assert.match(require('fs').readFileSync(require('path').join(__dirname, '..', 'c
   assert.match(botSource, /async function walidujOdpowiedzXKiro\(/);
   assert.match(botSource, /response_format:\s*buildOpenRouterValidatorResponseFormat\(\)/);
   assert.match(botSource, /validator:xkiro/);
+}
+
+
+{
+  // Nazwa franczyzy nie może automatycznie wskazywać pierwszego dopasowanego sequela.
+  assert.ok(scoreExternalGameCandidate('Portal', 'Portal 2') < 0.72);
+  assert.ok(scoreExternalGameCandidate('The Last of Us', 'The Last of Us Part II') < 0.72);
+  assert.ok(scoreExternalGameCandidate('Portal 2', 'Portal') < 0.72);
+  assert.equal(scoreExternalGameCandidate('Portal II', 'Portal 2'), 1);
+  assert.equal(externalGameCandidateMatchesQuery('Portal: kim jest GLaDOS?', 'Portal 2').ok, false);
 }
 
 console.log('AI regression tests: OK');

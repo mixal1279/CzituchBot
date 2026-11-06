@@ -208,16 +208,31 @@ function findAlias(text, entries, options = {}) {
 }
 
 function scoreExternalGameCandidate(query, candidateName) {
-  const normalize = value => normalizujEncje(value);
+  const normalize = value => {
+    const tokens = normalizujEncje(value).split(' ').filter(Boolean);
+    const roman = { ii: '2', iii: '3', iv: '4', v: '5', vi: '6', vii: '7', viii: '8', ix: '9' };
+    if (tokens.length) tokens[tokens.length - 1] = roman[tokens[tokens.length - 1]] || tokens[tokens.length - 1];
+    return tokens.join(' ');
+  };
   const q = normalize(query);
   const n = normalize(candidateName);
   if (!q || !n) return 0;
   if (q === n) return 1;
-  const qt = q.split(' ').filter(Boolean);
-  const nt = n.split(' ').filter(Boolean);
-  const overlap = nt.length ? nt.filter(token => qt.includes(token)).length / nt.length : 0;
-  if (n.includes(q) || q.includes(n)) return Math.max(0.82, overlap);
-  return overlap;
+
+  const qt = q.split(' ');
+  const nt = n.split(' ');
+  const shared = nt.filter(token => qt.includes(token)).length;
+  const queryCoverage = shared / qt.length;
+  const candidateCoverage = shared / nt.length;
+
+  // Sam prefiks nazwy franczyzy nie identyfikuje konkretnej części.
+  // Wcześniej „Portal” dostawał 0.82 dla „Portal 2”, co pozwalało IGDB
+  // wybrać sequel/remake/spin-off tylko na podstawie kolejności wyników.
+  // Wymagamy wysokiego pokrycia obu nazw; nadmiarowe człony obniżają wynik.
+  if (queryCoverage >= 0.8 && candidateCoverage >= 0.8) {
+    return Math.min(queryCoverage, candidateCoverage);
+  }
+  return Math.min(queryCoverage, candidateCoverage) * 0.65;
 }
 
 // Aliasy będące zwykłymi słowami są uznawane za grę tylko z kontekstem gamingowym.
