@@ -149,3 +149,39 @@ test('GameLore is sent as a preferred Tavily domain and its source provenance su
   assert.match(result.text, /URL: https:\/\/gamelore\.fandom\.com\/wiki\/Hornet/);
   assert.equal(result.sources[0].sourceId, 'SOURCE 1');
 });
+
+test('advanced Tavily retrieval requests bounded Markdown and prefers full page evidence over snippets', async () => {
+  let requestBody = null;
+  const search = createTavilySearch({
+    apiKey: 'test-tavily-key',
+    groq: null,
+    normalizeQuery: value => value,
+    fetchZTimeout: async (_url, options) => {
+      requestBody = JSON.parse(options.body);
+      return new Response(JSON.stringify({
+        results: [{
+          title: 'Portal 2 Wheatley',
+          url: 'https://theportalwiki.com/wiki/Wheatley',
+          content: 'SNIPPET_ONLY_MARKER Wheatley appears in Portal 2.',
+          raw_content: 'RAW_PAGE_EVIDENCE_MARKER Wheatley is a personality core in Portal 2 and interacts with GLaDOS in Aperture Science.',
+          score: 0.99,
+        }],
+      }), { status: 200, headers: { 'content-type': 'application/json' } });
+    },
+    logger: { log() {}, warn() {}, error() {} },
+    cacheFile: '/tmp/czituch-advanced-raw-source-test.json',
+    geminiKey: '',
+    exaKey: '',
+  });
+
+  const result = await search('Kim jest Wheatley w Portal 2?', {
+    searchDepth: 'advanced',
+    _skipRewrite: true,
+    returnMeta: true,
+  });
+  assert.equal(requestBody.search_depth, 'advanced');
+  assert.equal(requestBody.include_raw_content, 'markdown');
+  assert.equal(requestBody.max_results, 3);
+  assert.match(result.text, /RAW_PAGE_EVIDENCE_MARKER/);
+  assert.doesNotMatch(result.text, /SNIPPET_ONLY_MARKER/);
+});

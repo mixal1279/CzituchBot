@@ -94,7 +94,7 @@ function classifyAuthority(source = {}) {
     'skyrim.fandom.com','cyberpunk.fandom.com','witcher.fandom.com','witcher-games.fandom.com','eldenring.fandom.com',
     'steamdb.info','howlongtobeat.com','pcgamingwiki.com'
   ];
-  const reference = ['wikipedia.org','imdb.com','mobygames.com'];
+  const reference = ['wikipedia.org','imdb.com','mobygames.com','isthereanydeal.com'];
   const guide = ['ign.com','gamespot.com','pcgamer.com','gamerant.com','polygon.com','gry-online.pl','eurogamer.net','eurogamer.pl','fandom.com'];
 
   const inList = list => list.some(d => host === d || host.endsWith('.' + d));

@@ -64,6 +64,7 @@ test('authority classification does not treat every Fandom wiki as a primary spe
   assert.equal(classifyAuthority({ url:'https://gamelore.fandom.com/wiki/Hornet' }), 'specialized');
   assert.equal(classifyAuthority({ url:'https://randomgame.fandom.com/wiki/Character' }), 'guide');
   assert.equal(classifyAuthority({ url:'https://theportalwiki.com/wiki/Wheatley' }), 'specialized');
+  assert.equal(classifyAuthority({ url:'https://isthereanydeal.com/game/portal-2/info/' }), 'reference');
 });
 
 test('one strong official source is usable but is not reported as independent multi-source confirmation', () => {

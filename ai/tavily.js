@@ -12,8 +12,8 @@ const { createGroqCompletion, awaitWithAbortTimeout } = require('./provider-runt
 
 // Jedna lista autorytetu domen (wcześniej dwie kopie w tym pliku rozjechały się:
 // np. eurogamer tylko w jednej, docs.npmjs.com tylko w drugiej).
-const DOMENY_OFICJALNE = ['minecraft.net', 'rockstargames.com', 'thewitcher.com', 'playstation.com', 'naughtydog.com', 'bandainamcoent.com', 'larian.com', 'baldursgate3.game', 'nvidia.com', 'openai.com', 'anthropic.com', 'microsoft.com', 'apple.com', 'discord.com', 'twitch.tv', 'kick.com'];
-const DOMENY_WYSPECJALIZOWANE = ['minecraft.wiki', 'gamelore.fandom.com', 'theportalwiki.com', 'bg3.wiki', 'combineoverwiki.net', 'skyrim.fandom.com', 'cyberpunk.fandom.com', 'witcher.fandom.com', 'witcher-games.fandom.com', 'eldenring.fandom.com', 'steamdb.info', 'developer.mozilla.org', 'docs.npmjs.com'];
+const DOMENY_OFICJALNE = ['minecraft.net', 'rockstargames.com', 'thewitcher.com', 'playstation.com', 'naughtydog.com', 'bandainamcoent.com', 'larian.com', 'baldursgate3.game', 'nvidia.com', 'openai.com', 'anthropic.com', 'microsoft.com', 'apple.com', 'discord.com', 'twitch.tv', 'kick.com', 'valvesoftware.com', 'steampowered.com', 'bethesda.net', 'cdprojektred.com', 'nintendo.com', 'xbox.com', 'ubisoft.com', 'ea.com', 'epicgames.com'];
+const DOMENY_WYSPECJALIZOWANE = ['minecraft.wiki', 'gamelore.fandom.com', 'theportalwiki.com', 'bg3.wiki', 'combineoverwiki.net', 'skyrim.fandom.com', 'cyberpunk.fandom.com', 'witcher.fandom.com', 'witcher-games.fandom.com', 'eldenring.fandom.com', 'isthereanydeal.com', 'steamdb.info', 'developer.mozilla.org', 'docs.npmjs.com'];
 const DOMENY_PRZEWODNIKI = ['ign.com', 'gamespot.com', 'pcgamer.com', 'gamerant.com', 'polygon.com', 'fandom.com', 'eurogamer.net', 'eurogamer.pl', 'gry-online.pl'];
 
 const TAVILY_CACHE_TTL_MS = 10 * 60 * 1000; // domyślne / pytania o świeże wiadomości
