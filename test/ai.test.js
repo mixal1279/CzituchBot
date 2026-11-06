@@ -997,3 +997,16 @@ console.log('AI regression tests: OK');
   assert.ok(domainsBody.includes('sanitizujKomunikatBledu(err?.message)'),
     'błąd dynamicznego rozpoznawania gry musi przejść przez redakcję sekretów');
 }
+
+{
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const source = fs.readFileSync(path.join(__dirname, '..', 'czituch_bot.js'), 'utf8');
+  const logiAI = source.split('\\n').filter(line =>
+    /\\[(?:AI Memory|Tavily|Groq(?:\\/Angie|\\/Billy)?)\\]/.test(line)
+    && /err\\??\\.message|error\\??\\.message/.test(line)
+  );
+  assert.ok(logiAI.length >= 7, 'test obejmuje logi pamięci, Tavily i providerów');
+  assert.ok(logiAI.every(line => line.includes('sanitizujKomunikatBledu')),
+    'błędy pamięci i routingu AI muszą przechodzić przez redakcję sekretów');
+}
