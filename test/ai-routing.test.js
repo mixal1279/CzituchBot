@@ -1,7 +1,7 @@
 'use strict';
 
 const assert = require('node:assert/strict');
-const { classifyAIRequest } = require('../ai/router');
+const { classifyAIRequest, classifyQuestionType, classifyTopicType } = require('../ai/router');
 const { planAIRequest, buildRetrievalQueries } = require('../ai/planner');
 const { okreslKategorieAI } = require('../ai/policy');
 const { dodajGameFAQsDomenę, czyPytanieOGameplay } = require('../ai/gameplay');
@@ -201,3 +201,22 @@ for (const [question, expectedQuestionType, expectedTopicType] of categoryCases)
   assert.equal(result.question_type, expectedQuestionType, question);
   assert.equal(result.topic_type, expectedTopicType, question);
 }
+
+
+// Regresje z przeglądu PR #129: granice słów, escapowanie i aliasy wieloznaczne.
+assert.equal(classifyQuestionType('Czy PS5 jest lepsze vs. Xbox?', {}), 'comparison');
+assert.equal(classifyQuestionType('Czy PS5 jest lepsze vs Xbox?', {}), 'comparison');
+assert.equal(classifyQuestionType('Jaki jest scenariusz tej gry?', {}), 'fact');
+assert.equal(classifyQuestionType('Ile kosztuje RTX 5090?', {}), 'price');
+assert.equal(classifyTopicType('Jak działa Node.js?', {}), 'technology');
+assert.equal(classifyTopicType('Jak działa program?', {}), 'technology');
+assert.equal(classifyTopicType('Co oznacza kapitał zakładowy?', {}), 'general');
+assert.equal(classifyTopicType('Czy warto kupić grę akcji?', {}), 'general');
+
+const chessD4 = classifyAIRequest('Jak grać po 1.d4?', okreslKategorieAI);
+assert.notEqual(chessD4.entity, 'Diablo IV');
+assert.equal(chessD4.game, null);
+assert.equal(classifyTopicType('Co to jest firmware?', {}), 'general');
+
+// Długi, niezaufany input nie powinien trafiać do regexów bez limitu długości.
+assert.doesNotThrow(() => okreslKategorieAI('ile godzin zajmuje '.repeat(10000) + 'gra?'));

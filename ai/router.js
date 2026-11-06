@@ -78,17 +78,17 @@ function classifyQuestionType(question, routing = {}) {
   if (routing.intent === 'youtube') return 'channel_or_creator';
   if (routing.is_gameplay) return 'how_to';
   if (routing.is_lore) return 'lore';
-  if (/(?:porównaj|porownaj|czym się różni|czym sie rozni|czym różni się|czym rozni sie|różni\p{L}*|rozni\p{L}*|różnica|roznica|vs\\.?|versus|lepszy|lepsza|lepsze)/iu.test(p)) return 'comparison';
-  if (/(?:ile kosztuje|jaka cena|cena|kosztuje|za ile|price|how much)/iu.test(p)) return 'price';
-  if (/(?:czy warto|polecasz|opłaca się|oplaca sie|warto kupić|warto kupic|co sądzisz|co sadzisz|co myślisz|co myslisz|jak oceniasz|opinia)/iu.test(p)) return 'recommendation';
-  if (/(?:jak naprawić|jak naprawic|nie działa|nie dziala|nie uruchamia|restart\p{L}*|uruchamia się ponownie|błąd|blad|error|problem|crash|wysypuje się|wysypuje sie)/iu.test(p)) return 'troubleshooting';
-  if (/(?:jak zrobić|jak zrobic|jak skonfigurować|jak skonfigurowac|jak podłączyć|jak podlaczyc|jak użyć|jak uzyc|jak zdobyć|jak zdobyc|jak zainstalować|jak zainstalowac|how to)/iu.test(p)) return 'how_to';
-  if (/(?:dzisiaj|dziś|dzis|teraz|aktualnie|obecnie|najnowsz|ostatni[eao]? wiadomości|news|co nowego)/iu.test(p) || routing.freshness === 'live' || routing.freshness === 'recent') return 'current_info';
-  if (/(?:historia|history|kiedy powstał|kiedy powstal|kiedy założono|kiedy zalozono|pochodzenie|geneza)/iu.test(p)) return 'history';
-  if (/(?:ile osób|ilu użytkowników|ilu uzytkownikow|ile subskrypcji|ile subów|ile subow|liczba użytkowników|liczba uzytkownikow|statystyki|przychód|przychod|obroty|wycena|wartość rynkowa|wartosc rynkowa)/iu.test(p)) return 'statistics';
-  if (/(?:kim jest|kto to jest|who is)/iu.test(p)) return 'identity';
-  if (/(?:co to jest|czym jest|co oznacza|co znaczy|jak działa|jak dziala|na czym polega|wyjaśnij|wyjasnij)/iu.test(p)) return 'explanation';
-  if (/(?:gdzie|dokąd|dokad|lokalizacj|adres)/iu.test(p)) return 'location';
+  if (/(?<![\p{L}\p{N}_])(?:porównaj|porownaj|czym\s+się\s+różni|czym\s+sie\s+rozni|czym\s+różni\s+się|czym\s+rozni\s+sie|różni\p{L}*|rozni\p{L}*|różnica|roznica|vs\.?|versus|lepszy|lepsza|lepsze)(?![\p{L}\p{N}_])/iu.test(p)) return 'comparison';
+  if (/(?<![\p{L}\p{N}_])(?:ile\s+kosztuje|jaka\s+cena|cen\p{L}*|kosztuje|za\s+ile|price|how\s+much)(?![\p{L}\p{N}_])/iu.test(p)) return 'price';
+  if (/(?<![\p{L}\p{N}_])(?:czy\s+warto|polecasz|opłaca\s+się|oplaca\s+sie|warto\s+kupić|warto\s+kupic|co\s+sądzisz|co\s+sadzisz|co\s+myślisz|co\s+myslisz|jak\s+oceniasz|opinia)(?![\p{L}\p{N}_])/iu.test(p)) return 'recommendation';
+  if (/(?<![\p{L}\p{N}_])(?:jak\s+naprawić|jak\s+naprawic|nie\s+działa|nie\s+dziala|nie\s+uruchamia|restart\p{L}*|uruchamia\s+się\s+ponownie|błąd|blad|error|problem|crash|wysypuje\s+się|wysypuje\s+sie)(?![\p{L}\p{N}_])/iu.test(p)) return 'troubleshooting';
+  if (/(?<![\p{L}\p{N}_])(?:jak\s+zrobić|jak\s+zrobic|jak\s+skonfigurować|jak\s+skonfigurowac|jak\s+podłączyć|jak\s+podlaczyc|jak\s+użyć|jak\s+uzyc|jak\s+zdobyć|jak\s+zdobyc|jak\s+zainstalować|jak\s+zainstalowac|how\s+to)(?![\p{L}\p{N}_])/iu.test(p)) return 'how_to';
+  if (/(?<![\p{L}\p{N}_])(?:dzisiaj|dziś|dzis|teraz|aktualnie|obecnie|najnowsz\p{L}*|ostatni[eao]?\s+wiadomości|news|co\s+nowego)(?![\p{L}\p{N}_])/iu.test(p) || routing.freshness === 'live' || routing.freshness === 'recent') return 'current_info';
+  if (/(?<![\p{L}\p{N}_])(?:historia|history|kiedy\s+powstał|kiedy\s+powstal|kiedy\s+założono|kiedy\s+zalozono|pochodzenie|geneza)(?![\p{L}\p{N}_])/iu.test(p)) return 'history';
+  if (/(?<![\p{L}\p{N}_])(?:ile\s+osób|ilu\s+użytkowników|ilu\s+uzytkownikow|ile\s+subskrypcji|ile\s+subów|ile\s+subow|liczba\s+użytkowników|liczba\s+uzytkownikow|statystyki|przychód|przychod|obroty|wycena|wartość\s+rynkowa|wartosc\s+rynkowa)(?![\p{L}\p{N}_])/iu.test(p)) return 'statistics';
+  if (/(?<![\p{L}\p{N}_])(?:kim\s+jest|kto\s+to\s+jest|who\s+is)(?![\p{L}\p{N}_])/iu.test(p)) return 'identity';
+  if (/(?<![\p{L}\p{N}_])(?:co\s+to\s+jest|czym\s+jest|co\s+oznacza|co\s+znaczy|jak\s+działa|jak\s+dziala|na\s+czym\s+polega|wyjaśnij|wyjasnij)(?![\p{L}\p{N}_])/iu.test(p)) return 'explanation';
+  if (/(?<![\p{L}\p{N}_])(?:gdzie|dokąd|dokad|lokalizacj\p{L}*|adres)(?![\p{L}\p{N}_])/iu.test(p)) return 'location';
   return 'fact';
 }
 
@@ -98,7 +98,7 @@ function classifyTopicType(question, routing = {}) {
   if (routing.game || routing.entity_type === 'game' || routing.entity_type === 'franchise' || routing.is_lore || routing.is_gameplay) return 'game';
   if (routing.intent === 'weather') return 'weather';
   if (routing.intent === 'youtube') return 'creator_platform';
-  if (/(?:node\\.?js|javascript|typescript|python|programow|kodzie|api|oauth|serwer|hosting|procesor|gpu|cpu|ram|karta graficzna|rtx|geforce|radeon|playstation|xbox|ps[345]|nintendo|konsol|system operacyjny|linux|windows|android|ios|smartfon|telefon|komputer)/iu.test(p)) return 'technology';
+  if (/(?<![\p{L}\p{N}_])(?:node\.?js|javascript|typescript|python|program\p{L}*|kodzie|api|oauth|serwer\p{L}*|hosting|procesor\p{L}*|gpu|cpu|ram|karta\s+graficzna|rtx|geforce|radeon|playstation|xbox|ps[345]|nintendo|konsol\p{L}*|system\s+operacyjny|linux|windows|android|ios|smartfon|telefon|komputer)(?![\p{L}\p{N}_])/iu.test(p)) return 'technology';
   if (/(?:kim jest|kto to jest|biografia|życiorys|zyciorys)/iu.test(p)) return 'person';
   return 'general';
 }

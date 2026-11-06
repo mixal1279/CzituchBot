@@ -15,7 +15,7 @@ const GAME_ALIASES = [
   { name: 'Dark Souls', type: 'franchise', aliases: ['dark souls'] },
   { name: 'Assassin’s Creed', type: 'franchise', aliases: ['assassin’s creed', "assassin's creed", 'assassins creed'] },
   { name: 'Baldur’s Gate 3', type: 'game', aliases: ['baldur’s gate 3', "baldur's gate 3", 'bg3'] },
-  { name: 'Diablo IV', type: 'game', aliases: ['diablo iv', 'diablo 4', 'd4'] },
+  { name: 'Diablo IV', type: 'game', aliases: ['diablo iv', 'diablo 4'] },
   { name: 'The Last of Us', type: 'franchise', aliases: ['the last of us', 'tlou'] },
   { name: 'God of War', type: 'franchise', aliases: ['god of war'] },
   { name: 'Dying Light: The Beast', type: 'game', aliases: ['dying light the beast', 'dying light: the beast'] },
@@ -56,7 +56,7 @@ const COMPANY_ALIASES = [
 
 // Krótkie lub wieloznaczne nazwy firm wymagają dodatkowego kontekstu biznesowego.
 const AMBIGUOUS_COMPANY_ALIASES = new Set(['apple', 'meta', 'valve', 'dell', 'msi']);
-const COMPANY_CONTEXT_RE = /(?:firm\p{L}*|mark\p{L}*|producent\p{L}*|przedsiębiorstw\p{L}*|spółk\p{L}*|korporac\p{L}*|przychod\p{L}*|obrot\p{L}*|zysk\p{L}*|wycen\p{L}*|akcj\p{L}*|giełd\p{L}*|ceo|prezes\p{L}*|założon\p{L}*|powstał\p{L}*|produkuje|wypuszcza|portfolio|produkty|sprzęt|fotele|procesor\p{L}*|karty graficzne)/iu;
+const COMPANY_CONTEXT_RE = /(?<![\p{L}\p{N}_])(?:firm(?:a|y|ie|ę|ą|ami|ach)|mark(?:a|i|ę|ą|ami|ach)|producent(?:a|em|owi|ów|ami|ach)?|przedsiębiorstw(?:o|a|em|ie|ami|ach)|spółk(?:a|i|ę|ą|om|ami|ach)|korporacj(?:a|i|ę|ą|om|ami|ach)|przychod(?:y|u|em|zie)?|obrot(?:y|u|em|ach)?|zysk(?:i|u|iem)?|wycen(?:a|y|ę|ą|ie)|giełd(?:a|y|ę|ą|zie)|ceo|prezes(?:a|em|owi|ów)?|założon\p{L}*|powstał\p{L}*|produkuje|wypuszcza|portfolio|produkty|sprzęt|fotele|procesor\p{L}*|karty\s+graficzne)(?![\p{L}\p{N}_])/iu;
 
 
 // Rozpoznaje jawny kontekst przedsiębiorstwa także wtedy, gdy nazwa nie jest
