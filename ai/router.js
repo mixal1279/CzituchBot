@@ -17,7 +17,10 @@ function classifyAIRequest(pytanie, policyCategory, recipeDetector = () => false
   // "Ile trwa walka/misja/aktualizacja…" to nie czas przejścia gry (HowLongToBeat).
   const isHLTB = /(?<![\p{L}\p{N}_])(?:ile\s+(?:jest\s+)?(?:godzin|czasu)|ile\s+godzin\s+(?:ma|zajmuje)|ile\s+trwa|jak\s+d[łl]ugo(?:\s+trwa)?|czas(?:u)?\s+(?:gry|przejścia|przejscia|ukończenia|ukonczenia)|przejście\s+gry|przejscie\s+gry)(?![\p{L}\p{N}_])/iu.test(p)
     && !NIE_CZAS_GRY.test(p);
-  const category = isOpinion ? 'conversation' : isHLTB ? 'hltb' : policyResult;
+  // Opinia o konkretnej grze nadal może wymagać faktów (np. ceny, stanu gry,
+  // aktualnych problemów). Small talk pozostaje bez wyszukiwania tylko wtedy,
+  // gdy polityka nie rozpoznała wcześniej faktograficznego sygnału.
+  const category = isHLTB ? 'hltb' : (isOpinion && policyResult === 'conversation' ? 'conversation' : policyResult);
   const resolved = resolveGameEntity(text);
   const entity = resolved?.game || resolved?.name || detectEntity(p) || null;
   const freshness = detectFreshness(p);
