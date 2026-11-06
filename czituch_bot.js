@@ -4658,8 +4658,8 @@ const szukajTavily = createTavilySearch({
     if (status?.status === 'cache' || status?.status === 'deduped') AI_METRYKI.tavilyCacheHits++;
   },
 });
-const historiaRozmowy = {};
-const ostatnieUzycie  = {};
+const historiaRozmowy = Object.create(null);
+const ostatnieUzycie  = Object.create(null);
 let botNaPrzerwie = false;
 
 // Globalna ochrona 120B: równoległe requesty nie mogą każdy osobno zużyć
