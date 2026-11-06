@@ -6604,7 +6604,7 @@ async function obslugaWiadomosci(nick, message, platforma, wyslijFn, kanal = nul
       await wykonajAIWHistorii(historiaRozmowy[historiaKlucz], () => wykonajWKolejceAI(() => zapytajAI(nick, pytanie, historiaRozmowy[historiaKlucz], prompt, wyslijFn, { temperature: 0.25, max_tokens: 150, aiProfile, tavilyOptions, memoryUserId: historiaKlucz })));
     } catch (err) {
       console.error('[Groq] Błąd:', err.message);
-      if (err.code === 'AI_QUEUE_FULL') await wyslijFn(`@${nick} AI jest teraz zajęte — spróbuj za chwilę.`);
+      if (['AI_QUEUE_FULL', 'AI_QUEUE_TIMEOUT'].includes(err.code)) await wyslijFn(`@${nick} AI jest teraz zajęte — spróbuj za chwilę.`);
     }
     return;
   }
