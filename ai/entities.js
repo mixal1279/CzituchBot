@@ -310,9 +310,9 @@ function resolveGameEntity(text) {
 function extractExplicitGameTitle(text) {
   const value = String(text || '').trim();
   if (!value || value.length > 500) return null;
-  const pattern = /(?:^|[^\p{L}\p{N}_])(?:w|we)\s+(?:tej\s+)?grze\s+(?!(?:kim|kto|co|jak|czy|dlaczego|czemu|gdzie|kiedy|jest|był|byla|było)\b)(?:"([^"\n]{1,120})"|“([^”\n]{1,120})”|([\p{L}\p{N}][\p{L}\p{N}'’:&-]*(?:\s+(?:(?:of|the|and|&)\s+)?[\p{Lu}\p{N}][\p{L}\p{N}'’:&-]*){0,4}))/u;
+  const pattern = /(?:^|[^\p{L}\p{N}_])[wW](?:[eE])?\s+(?:[tT][eE][jJ]\s+)?[gG][rR][zZ][eE]\s+(?!(?:[kK][iI][mM]|[kK][tT][oO]|[cC][oO]|[jJ][aA][kK]|[cC][zZ][yY]|[dD][lL][aA][cC][zZ][eE][gG][oO]|[cC][zZ][eE][mM][uU]|[gG][dD][zZ][iI][eE]|[kK][iI][eE][dD][yY]|[jJ][eE][sS][tT]|[bB][yY][łl]|[bB][yY][lL][aA]|[bB][yY][łl][oO])\b)(?:"([^"\n]{1,120})"|“([^”\n]{1,120})”|([\p{L}\p{N}][\p{L}\p{N}'’:&-]*(?:\s+(?:(?:[oO][fF]|[tT][hH][eE]|[aA][nN][dD]|&)\s+)?[\p{Lu}\p{N}][\p{L}\p{N}'’:&-]*){0,4}))/u;
   const match = value.match(pattern);
-  const title = (match?.[1] || match?.[2] || match?.[3] || '').replace(/\\s+/g, ' ').trim();
+  const title = (match?.[1] || match?.[2] || match?.[3] || '').replace(/\s+/g, ' ').replace(/[,:;.!?]+$/u, '').trim();
   if (!title || title.length > 120 || title.split(' ').length > 5) return null;
   return title;
 }
