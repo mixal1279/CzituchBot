@@ -246,8 +246,8 @@ test('P0-B secondary retrieval keeps a one-to-one mapping between source blocks 
   });
   const result = await search('Portal 2 secondary source mapping test', { _skipRewrite: true, returnMeta: true });
   assert.equal(result.status, 'ok');
-  assert.equal(result.sources.length, 6);
-  for (let index = 0; index < 6; index++) {
+  assert.equal(result.sources.length, 8);
+  for (let index = 0; index < 8; index++) {
     const sourceId = `SOURCE ${index + 1}`;
     assert.ok(result.text.includes(`[${sourceId}]`), `missing block ${sourceId}`);
     assert.equal(result.sources[index].sourceId, sourceId);
