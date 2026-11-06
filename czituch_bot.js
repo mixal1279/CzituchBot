@@ -2896,14 +2896,14 @@ function formatProviderError(provider, model, err, extra = {}) {
     code: err?.code ?? providerError?.code ?? serializedError?.code ?? nestedResponseError?.code ?? responseData?.error?.code ?? extra.code ?? null,
     type: err?.type ?? providerError?.type ?? serializedError?.type ?? nestedResponseError?.type ?? responseData?.error?.type ?? extra.type ?? null,
     param: err?.param ?? providerError?.param ?? serializedError?.param ?? nestedResponseError?.param ?? responseData?.error?.param ?? extra.param ?? null,
-    failed_generation: err?.failed_generation ?? providerError?.failed_generation ?? serializedError?.failed_generation ?? nestedResponseError?.failed_generation ?? responseData?.error?.failed_generation ?? extra.failed_generation ?? null,
+    failed_generation: null, // Nie logujemy surowego outputu providera — może zawierać treść promptu lub dane użytkownika.
     request_id: err?.request_id ?? providerError?.request_id ?? serializedError?.request_id ?? nestedResponseError?.request_id ?? responseData?.error?.request_id ?? extra.request_id ?? null,
     response_error: nestedResponseError ? {
-      message: String(nestedResponseError.message || '').slice(0, 1000),
+      message: sanitizujKomunikatBledu(nestedResponseError.message || '', 1000),
       code: nestedResponseError.code ?? null,
       type: nestedResponseError.type ?? null,
       param: nestedResponseError.param ?? null,
-      failed_generation: nestedResponseError.failed_generation ?? null,
+      failed_generation: null,
     } : null,
     error_object: serializedError,
     extra: Object.keys(extra).filter(key => key !== 'responseData').length ? extra : undefined,
