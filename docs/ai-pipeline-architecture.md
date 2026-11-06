@@ -12,7 +12,7 @@ This document defines the stage boundaries for the CzituchBot factual-answer pip
 6. **Claim-to-answer coverage** — independently check that the set of validated claims covers every material answer sentence. Claims may jointly cover a sentence only when each contributing claim has a meaningful lexical and semantic connection to that sentence; aggregate name overlap is not enough.
 7. **Answer completeness and deterministic guards** — evaluate the answer against the planned slots and apply hard factual/format guards. This stage answers "did we answer the question?" and does not replace the claim-support check.
 8. **Bounded repair** — repair only when the shared request deadline leaves enough time for generation and revalidation. Provider fallbacks stay inside the shared budget. A repaired answer goes through claim validation and deterministic guards again; repair never grants an exemption from the original checks.
-9. **Finalization** — deliver an answer only when the applicable gates pass. On rejection, inconclusive validation, or provider unavailability, abstain or return the explicitly configured unverified state rather than inventing facts.
+9. **Finalization** — deliver an answer only when the applicable gates pass. On rejection, inconclusive validation, or provider unavailability, abstain. A generated candidate marked `UNVERIFIED` is never sent to the user when the semantic validator is unavailable; deterministic format/completeness guards do not replace claim validation.
 
 ## Evaluation and diagnostics
 
@@ -34,8 +34,9 @@ Conversation history and verified user memory use a stable scope key:
 `platform:channel:user-id`
 
 - Twitch uses the IRC `user-id` tag, falling back to the normalized login when the tag is absent.
-- YouTube uses `authorDetails.channelId`, falling back to the display name only when the API omits the stable ID.
-- Kick uses the sender ID when supplied by the event, falling back to the sender name.
+- YouTube uses `authorDetails.channelId`. If the API omits it, the request receives a random one-message history key and verified personal memory is disabled; the display name is not used as a persistent identity.
+- Kick uses the sender ID. If the event omits it, the request receives a random one-message history key and verified personal memory is disabled; the sender name is used only for the non-sensitive cooldown scope.
+- Twitch retains the normalized login fallback because the IRC login is an account handle; the stable `user-id` tag is preferred.
 - Platform and channel components are normalized to lowercase. Platform user IDs retain their original case because provider IDs may be case-sensitive.
 - The in-memory conversation history is bounded to 500 scopes and evicted by least-recent use. The LRU timestamp must use the same complete scope key as the history map.
 
@@ -55,11 +56,16 @@ When changing a guard, add both a positive and a negative regression case. Prefe
 
 ## Dynamiczne rozpoznawanie gry i awaria klasyfikatora
 
-Dla pytań lore z jawnym kontekstem „w grze X” pipeline najpierw wyodrębnia tytuł bez użycia LLM. Tytuł jest następnie wyszukiwany w IGDB i przechodzi lokalne dopasowanie do oryginalnego pytania. Dotyczy to również nieznanych, jednowyrazowych nazw i nie wymaga rozszerzania statycznej whitelisty. Groq pozostaje fallbackiem dla pytań bez jednoznacznego prefiksu. Brak dopasowania IGDB nie jest traktowany jako dowód — retrieval zachowuje zwykły fallback GameLore.
+Dla pytań lore z jawnym kontekstem „w grze X” pipeline najpierw wyodrębnia tytuł bez użycia LLM. Tytuł jest następnie wyszukiwany w IGDB i przechodzi lokalne dopasowanie do oryginalnego pytania. Dotyczy to również nieznanych, jednowyrazowych nazw i nie wymaga rozszerzania statycznej whitelisty. Dopasowanie nie uznaje samego prefiksu nazwy za identyfikację części: `Portal` nie jest automatycznie dopasowywany do `Portal 2`. Końcowe numery rzymskie są normalizowane, a typowe wydania handlowe (np. Ultimate Edition) nie są traktowane jako sequel. Wyniki wyszukiwania IGDB są przechowywane w ograniczonym cache (100 wpisów, 30 min dla trafień, 5 min dla braku wyniku) z deduplikacją równoległych zapytań. Cache zawiera wyłącznie publiczne metadane gier, nie dane kanałów ani użytkowników. Groq pozostaje fallbackiem dla pytań bez jednoznacznego prefiksu. Brak dopasowania IGDB nie jest traktowany jako dowód — retrieval zachowuje zwykły fallback GameLore. Rozróżnianie wszystkich typów relacji IGDB (franczyza, remake, reboot, DLC, spin-off i kolekcja) nadal wymaga osobnego, pełnego testu integracyjnego; nie należy uznawać go za zakończone.
 
 ## Bezpieczeństwo URL w ekstrakcji stron
 
-Przed przekazaniem adresów źródeł do Tavily Extract pipeline odrzuca adresy inne niż HTTP(S), hosty lokalne i zarezerwowane, literały IP, URL-e z userinfo, niestandardowe porty, parametry z typowymi sekretami oraz wejścia dłuższe niż 2048 znaków. Walidacja ogranicza oczywiste wektory SSRF, ale nie zastępuje ochrony przed DNS rebindingiem ani walidacji przekierowań po stronie zewnętrznego ekstraktora.
+Przed przekazaniem adresów źródeł do Tavily Extract pipeline odrzuca adresy inne niż HTTP(S), hosty lokalne i zarezerwowane, literały IP, URL-e z userinfo, niestandardowe porty, parametry z typowymi sekretami oraz wejścia dłuższe niż 2048 znaków. Następnie sprawdza wszystkie odpowiedzi DNS A/AAAA; jeśli choć jeden adres jest prywatny, lokalny lub zarezerwowany albo DNS nie odpowie w 1,5 s, URL jest odrzucany. Jedno żądanie obejmuje maksymalnie 3 URL-e. Odpowiedzi providerów są ograniczone do 512 KiB, a tekst pojedynczej strony do 12 000 znaków. Żądania do stałych endpointów providerów używają `redirect: error`. To ogranicza SSRF, ale nie eliminuje DNS rebindingu między naszym sprawdzeniem a ponownym rozwiązaniem DNS przez zewnętrzny serwis Tavily ani nie pozwala nam kontrolować jego przekierowań. Ten residual risk pozostaje jawnie otwarty.
 ## Intencja obliczeniowa
 
-Jawne polecenia arytmetyczne („oblicz”, „policz”, „ile to”) zawierające wyrażenie liczbowe otrzymują intencję calculation i nie uruchamiają wyszukiwania webowego. Sam wynik nadal generuje model; osobny deterministyczny evaluator arytmetyczny nie jest jeszcze częścią pipeline'u.
+Jawne polecenia arytmetyczne („oblicz”, „policz”, „ile to”) zawierające wyrażenie liczbowe otrzymują intencję calculation i nie uruchamiają wyszukiwania webowego. Wynik pochodzi z lokalnego deterministycznego evaluatora bez `eval()` i `Function()`. Obsługuje `+`, `-`, `*`, `/`, nawiasy, jednoargumentowe znaki oraz przecinek lub kropkę dziesiętną. Ograniczenia: 120 znaków wyrażenia, 64 tokeny, 12 poziomów nawiasów i wartości bezwzględne do `1e12`; dzielenie przez zero i nieznane znaki są odrzucane. LLM nie wyznacza wyniku.
+
+
+## Kontrola kompletności njsscan
+
+Workflow generuje raport JSON i SARIF. Raport JSON jest walidowany przed zakończeniem joba: brak pliku, nieprawidłowy JSON, nieoczekiwany schemat lub błędy skanera (w tym timeouty analizy) powodują niezaliczenie kontroli. Sam fakt, że krok skanera zakończył się bez błędu procesu, nie oznacza kompletnego skanowania.
