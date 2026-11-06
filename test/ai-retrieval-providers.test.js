@@ -169,6 +169,33 @@ test('secondary provider forwards its bounded timeout to wrapped transports', as
 
 
 
+test('Tavily source metadata keeps search snippets separate from extracted page evidence', async () => {
+  const pageText = 'Minecraft page text is extracted from the original source. '.repeat(8);
+  const search = createTavilySearch({
+    apiKey: 'test-tavily-key',
+    groq: null,
+    normalizeQuery: value => value,
+    fetchZTimeout: async () => new Response(JSON.stringify({
+      results: [{
+        title: 'Minecraft reference',
+        url: 'https://minecraft.wiki/reference',
+        content: 'Short search snippet only.',
+        raw_content: pageText,
+        score: 0.95,
+      }],
+    }), { status: 200, headers: { 'content-type': 'application/json' } }),
+    logger: { log() {}, warn() {}, error() {} },
+    cacheFile: '/tmp/czituch-tavily-page-content-test.json',
+    geminiKey: '',
+    exaKey: '',
+  });
+  const result = await search('Minecraft reference', { _skipRewrite: true, returnMeta: true });
+  assert.equal(result.status, 'ok');
+  assert.equal(result.sources[0].content, pageText);
+  assert.equal(result.sources[0].snippet, 'Short search snippet only.');
+  assert.doesNotMatch(result.text, /Short search snippet only/);
+});
+
 test('Tavily basic search snippets are not returned as factual source evidence', async () => {
   const search = createTavilySearch({
     apiKey: 'test-tavily-key',
