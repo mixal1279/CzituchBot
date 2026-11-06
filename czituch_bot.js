@@ -84,6 +84,7 @@ const { czyPytanieOLore, dodajGameLoreDomenę, wytnijAtrybucjeGameLore, GAMELORE
 const { czyPytanieOGameplay, dodajGameFAQsDomenę, wytnijAtrybucjeGameFAQs, GAMEFAQS_DOMAIN } = require('./ai/gameplay');
 const { przygotujHistorieDoModelu, opakujDaneReferencyjne } = AI_POLICY;
 const { classifyAIRequest } = require('./ai/router');
+const { czyWymagaKlasyfikacjiSemantycznej, klasyfikujSemantycznie } = require('./ai/semantic-classifier');
 const { planAIRequest, responseContract, RESPONSE_PROFILES, buildRetrievalQueries, czyPotrzebujeRewrite } = require('./ai/planner');
 const { resolveGameEntity, scoreExternalGameCandidate, externalGameCandidateMatchesQuery } = require('./ai/entities');
 const { extractExplicitUserMemories, mergeMemoryRecords, buildVerifiedMemoryContext, pruneExpiredMemories } = require('./ai/memory');
@@ -3002,6 +3003,31 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
     routingAI.entity_type = routingAI.entity_type || resolvedEntity.type;
     routingAI.game = routingAI.game || resolvedEntity.game || (resolvedEntity.type === 'game' ? resolvedEntity.name : null);
   }
+
+  // Fallback semantyczny uruchamiamy tylko dla pytań faktograficznych bez
+  // rozpoznanego tematu. Nie zmienia on intent ani decyzji o retrievalu.
+  if (czyWymagaKlasyfikacjiSemantycznej(routingAI) && groqClient) {
+    const timeoutKlasyfikacji = Math.min(1800, Math.max(0, pozostalyCzasMs() - 6500));
+    if (timeoutKlasyfikacji >= 250 && zarezerwujModel('semantic-routing')) {
+      const klasyfikacja = await klasyfikujSemantycznie(pytanie, {
+        klient: groqClient,
+        model: AI_MODELS.queryRewrite,
+        timeoutMs: timeoutKlasyfikacji,
+        utworzCompletion: createGroqCompletion,
+      });
+      if (klasyfikacja) {
+        routingAI.topic_type = klasyfikacja.topic_type;
+        if (routingAI.question_type === 'fact') {
+          routingAI.question_type = klasyfikacja.question_type;
+        }
+        routingAI.semantic_classification = 'groq_fallback';
+        console.log(`[AI][${requestId}] semantic fallback: topic=${routingAI.topic_type} question=${routingAI.question_type}`);
+      } else {
+        console.warn(`[AI][${requestId}] semantic fallback niedostępny lub niepoprawny — zachowuję routing deterministyczny`);
+      }
+    }
+  }
+
   if (routingAI.confidence_policy === 'clarify') {
     console.log(`[AI][${requestId}] routing confidence too low (${routingAI.confidence}) — clarification required`);
     await wyslijFn(`@${nick} Nie jestem pewien, o jaki konkretnie fakt chodzi — doprecyzuj proszę pytanie.`);
