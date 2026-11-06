@@ -986,6 +986,6 @@ console.log('AI regression tests: OK');
   const body = source.slice(start, end);
   assert.ok(body.indexOf('extractExplicitGameTitle(pytanie)') < body.indexOf('createGroqCompletion('),
     'jawny tytuł musi być sprawdzony przed wywołaniem Groq');
-  assert.match(body, /sanitizujKomunikatBledu\\(err\\?\\.message\\)/,
+  assert.ok(body.includes('sanitizujKomunikatBledu(err?.message)'),
     'błąd IGDB musi przejść przez redakcję sekretów');
 }
