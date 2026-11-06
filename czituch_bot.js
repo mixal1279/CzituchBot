@@ -82,12 +82,12 @@ function ustawInterwal(fn, opoznienie, ...argumenty) {
   return timer;
 }
 function wyczyscTimeout(timer) {
-  globalThis.wyczyscTimeout(timer);
+  globalThis.clearTimeout(timer);
   zarejestrowaneTimery.get(timer)?.();
   zarejestrowaneTimery.delete(timer);
 }
 function wyczyscInterwal(timer) {
-  globalThis.wyczyscInterwal(timer);
+  globalThis.clearInterval(timer);
   zarejestrowaneTimery.get(timer)?.();
   zarejestrowaneTimery.delete(timer);
 }
