@@ -191,7 +191,7 @@ test('Tavily source metadata keeps search snippets separate from extracted page 
   });
   const result = await search('Minecraft reference', { _skipRewrite: true, returnMeta: true });
   assert.equal(result.status, 'ok');
-  assert.equal(result.sources[0].content, pageText);
+  assert.equal(result.sources[0].content, pageText.trim());
   assert.equal(result.sources[0].snippet, 'Short search snippet only.');
   assert.doesNotMatch(result.text, /Short search snippet only/);
 });
@@ -351,8 +351,8 @@ test('Tavily cache separates distinct source questions with the same keywords', 
       fetchCalls++;
       return new Response(JSON.stringify({
         results: [
-          { title: 'Portal 2 release date', url: 'https://source-one.example/portal-2', content: 'Portal 2 was released in 2011.', score: 0.95 },
-          { title: 'Portal 2 release details', url: 'https://source-two.example/portal-2', content: 'Portal 2 was released in 2011.', score: 0.90 },
+          { title: 'Portal 2 release date', url: 'https://source-one.example/portal-2', content: 'Portal 2 was released in 2011.', raw_content: 'Portal 2 was released in 2011. Full source page details are included.', score: 0.95 },
+          { title: 'Portal 2 release details', url: 'https://source-two.example/portal-2', content: 'Portal 2 was released in 2011.', raw_content: 'Portal 2 was released in 2011. Full source page details are included.', score: 0.90 },
         ],
       }), { status: 200, headers: { 'content-type': 'application/json' } });
     },
@@ -661,6 +661,7 @@ test('Tavily conflict report only references evidence blocks retained by the cha
     title: `Portal 2 release date source ${index + 1}`,
     url: `https://source${index + 1}.example/portal-2`,
     content: (`Portal 2 was released in ${year}. Portal 2 release details are described here. `).repeat(30),
+    raw_content: (`Portal 2 was released in ${year}. Portal 2 release details are described here. `).repeat(30),
   }));
   const search = createTavilySearch({
     apiKey: 'test-tavily-key',
@@ -712,7 +713,7 @@ test('secondary retrieval uses the first healthy provider and falls back to the 
     calls++;
     if (url.includes('generativelanguage')) return new Response(JSON.stringify({ error: { message: 'quota' } }), { status: 429 });
     return new Response(JSON.stringify({
-      results: [{ title: 'Exa', url: 'https://example.com/exa', highlights: ['ok'] }],
+      results: [{ title: 'Exa', url: 'https://example.com/exa', text: 'Extracted Exa page content for timeout and fallback verification. '.repeat(5), highlights: ['ok'] }],
     }), { status: 200 });
   };
   const result = await searchSecondaryProviders({
@@ -759,7 +760,7 @@ test('Gemini grounded metadata falls through to Exa when no page text was extrac
           groundingSupports: [{ groundingChunkIndices: [0], segment: { startIndex: 0, endIndex: 25, text: 'A model-generated answer.' } }],
         } }],
       }), { status: 200, headers: { 'content-type': 'application/json' } });
-      return new Response(JSON.stringify({ results: [{ title: 'Exa page', url: 'https://example.com/exa', highlights: ['Verbatim page highlight.'] }] }), { status: 200, headers: { 'content-type': 'application/json' } });
+      return new Response(JSON.stringify({ results: [{ title: 'Exa page', url: 'https://example.com/exa', text: 'Extracted Exa page content for grounded evidence. '.repeat(5), highlights: ['Verbatim page highlight.'] }] }), { status: 200, headers: { 'content-type': 'application/json' } });
     };
     const result = await searchSecondaryProviders({ query: 'q', geminiKey: 'gemini', exaKey: 'exa', fetchFn: fakeFetch });
     assert.equal(result.status, 'ok');
@@ -854,7 +855,7 @@ test('Tavily cache snapshot is size bounded and versioned', () => {
   ]);
   const snapshot = snapshotCacheTavily(cache, 500);
   assert.ok(Buffer.byteLength(snapshot, 'utf8') <= 500);
-  assert.equal(JSON.parse(snapshot).version, 4);
+  assert.equal(JSON.parse(snapshot).version, 5);
 });
 
 test('Tavily cache entry limit evicts oldest entries first', () => {
@@ -931,7 +932,7 @@ test('Tavily serves cached evidence before applying an active quota cooldown', a
       const query = JSON.parse(options.body).query;
       if (query === 'cached query') {
         return new Response(JSON.stringify({
-          results: [{ title: 'Cached evidence', url: 'https://example.com/cached', content: 'Cached evidence text.', score: 0.95 }],
+          results: [{ title: 'Cached evidence', url: 'https://example.com/cached', content: 'Cached evidence snippet.', raw_content: 'Cached evidence text with extracted page context. '.repeat(5), score: 0.95 }],
         }), { status: 200, headers: { 'content-type': 'application/json' } });
       }
       return new Response("This request exceeds your plan's set usage limit", { status: 432 });
