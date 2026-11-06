@@ -957,7 +957,7 @@ console.log('AI regression tests: OK');
   const start = source.indexOf('async function zapytajAI(');
   const validation = source.indexOf('const questionInput = sanitizeQuestion(', start);
   const rejection = source.indexOf('if (!questionInput.ok)', validation);
-  const memoryRead = source.indexOf('const verifiedMemoryPromise = loadMemory(', validation);
+  const memoryRead = source.indexOf('const verifiedMemoryPromise = verifiedMemoryUserId ? loadMemory(', validation);
   assert.ok(validation >= 0, 'pytanie musi przejść sanitizeQuestion');
   assert.ok(rejection > validation, 'odrzucenie wejścia musi następować przed odczytem pamięci');
   assert.ok(memoryRead > rejection, 'Firestore memory read musi być uruchamiany dopiero po walidacji');
