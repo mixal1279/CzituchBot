@@ -47,8 +47,8 @@ test('two weak Tavily results from one host do not count as sufficient evidence'
 
 test('strong multi-host retrieval can finish without secondary provider', () => {
   assert.equal(czyWymagaSecondaryRetrieval([
-    { score: 0.9, url: 'https://minecraft.wiki/a' },
-    { score: 0.8, url: 'https://example.org/b' },
+    { score: 0.9, url: 'https://minecraft.wiki/a', raw_content: 'Minecraft wiki extracted page content. '.repeat(8) },
+    { score: 0.8, url: 'https://example.org/b', raw_content: 'Independent extracted source page content. '.repeat(8) },
   ], 'Minecraft receptura', null), false);
 });
 
