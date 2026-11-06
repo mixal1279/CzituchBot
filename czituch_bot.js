@@ -2926,7 +2926,6 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
   const testMaxTavilySearches = Number.isInteger(opcje.__testDeps?.maxWyszukanTavily) ? Math.max(2, opcje.__testDeps.maxWyszukanTavily) : DEFAULTS.maxTavilySearches;
   const onAISummary = typeof opcje.__testDeps?.onSummary === 'function' ? opcje.__testDeps.onSummary : null;
   const verifiedMemoryUserId = memoryUserId || String(nick || '').toLowerCase();
-  const verifiedMemoryPromise = loadMemory(verifiedMemoryUserId);
   systemPrompt = `${systemPrompt}\n\nNie umieszczaj w odpowiedzi nazw źródeł, atrybucji, etykiet „Źródło:” ani URL-i. Źródła są wyłącznie wewnętrznym materiałem RAG i walidacji. Jeśli pytanie zaczyna się od „W grze <tytuł>:”, traktuj ten prefiks wyłącznie jako kontekst gry i nie powtarzaj go jako twierdzenia faktograficznego, chyba że treść źródła wprost potwierdza tytuł.`;
   const jestAI_Billy = aiProfile === 'billy' || systemPrompt === AI_SYSTEM_PROMPT_BILLY;
   const jestAI_EdzzI = aiProfile === 'edzzi' || systemPrompt === AI_SYSTEM_PROMPT_EDZZI;
@@ -2939,6 +2938,8 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
     return;
   }
   pytanie = questionInput.value;
+  // Nie wykonuj odczytu Firestore dla wejścia odrzuconego przez walidator.
+  const verifiedMemoryPromise = loadMemory(verifiedMemoryUserId);
   const requestId = createRequestId(crypto.randomUUID?.bind(crypto));
   // Jeden kontekst kontroluje czas i wszystkie limity całego pipeline'u AI.
   // Nie utrzymujemy osobnych budżetów w generatorze, retrievalu i validatorze.
