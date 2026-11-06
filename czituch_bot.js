@@ -105,7 +105,7 @@ const { createVerdictCache } = require('./ai/verdict-cache');
 const verdictCache = createVerdictCache();
 const { createTavilySearch } = require('./ai/tavily');
 const { normalizujZapytanieTavily } = AI_POLICY;
-const { czyPytanieOLore, dodajGameLoreDomenę, wytnijAtrybucjeGameLore, GAMELORE_DOMAIN } = require('./ai/lore');
+const { czyPytanieOLore, czyMaKontekstGry, dodajGameLoreDomenę, wytnijAtrybucjeGameLore, GAMELORE_DOMAIN } = require('./ai/lore');
 const { czyPytanieOGameplay, dodajGameFAQsDomenę, wytnijAtrybucjeGameFAQs, GAMEFAQS_DOMAIN } = require('./ai/gameplay');
 const { przygotujHistorieDoModelu, opakujDaneReferencyjne } = AI_POLICY;
 const { classifyAIRequest } = require('./ai/router');
@@ -1078,14 +1078,41 @@ function domenyDlaPytania(pytanie, domyslnieMinecraft = false) {
 // ALE tylko gdy domenyDlaPytania nie zwróciło już konkretnych domen (np. minecraft.wiki).
 async function wybierzDomenyDlaPytania(pytanie, domyslnieMinecraft = false, requestState = null) {
   let domeny = domenyDlaPytania(pytanie, domyslnieMinecraft);
-  if (!domeny && KONFIGURACJA.twitchClientId) {
-    const znanaGra = resolveGameEntity(pytanie);
-    if (znanaGra?.game) {
-      console.log('[IGDB] Pomijam classifier — używam encji deterministycznej:', znanaGra.game);
-      domeny = ['ign.com', 'gamespot.com', 'pcgamer.com', 'eurogamer.net', 'fandom.com'];
-      domeny.resolvedGame = { nazwa: znanaGra.game, confidence: znanaGra.confidence, resolution: 'deterministic' };
+  const znanaGra = resolveGameEntity(pytanie);
+  const maPewnaGre = Boolean(
+    znanaGra
+    && znanaGra.resolution !== 'deterministic_ambiguous'
+    && (znanaGra.game || znanaGra.type === 'game')
+  );
+
+  // Ogólna reguła „gra/gry/game” zwracała domeny poradnikowe i blokowała IGDB.
+  // Dla pytań lore o nieznanym lokalnie tytule uruchamiamy rozpoznanie gry
+  // niezależnie od tego, czy wcześniej dobrano już ogólne domeny gamingowe.
+  if (!maPewnaGre && czyPytanieOLore(pytanie) && czyMaKontekstGry(pytanie) && KONFIGURACJA.twitchClientId) {
+    try {
+      const gra = await znajdzGreIGDB(pytanie, requestState);
+      if (gra) {
+        console.log(`[IGDB] Dynamicznie rozpoznano grę dla pytania lore: ${gra.nazwa}`);
+        const domenyGamingowe = ['ign.com', 'gamespot.com', 'pcgamer.com', 'eurogamer.net', 'fandom.com'];
+        domeny = [...new Set([...(Array.isArray(domeny) ? domeny : []), ...domenyGamingowe])];
+        domeny.resolvedGame = gra;
+        return domeny;
+      }
+    } catch (err) {
+      console.warn('[IGDB] Dynamiczne rozpoznanie gry niedostępne — zachowuję wyszukiwanie GameLore:', err.message);
     }
   }
+
+  if (!domeny && KONFIGURACJA.twitchClientId && maPewnaGre) {
+    console.log('[IGDB] Pomijam classifier — używam encji deterministycznej:', znanaGra.game || znanaGra.name);
+    domeny = ['ign.com', 'gamespot.com', 'pcgamer.com', 'eurogamer.net', 'fandom.com'];
+    domeny.resolvedGame = {
+      nazwa: znanaGra.game || znanaGra.name,
+      confidence: znanaGra.confidence,
+      resolution: 'deterministic',
+    };
+  }
+
   if (!domeny && KONFIGURACJA.twitchClientId) {
     try {
       const gra = await znajdzGreIGDB(pytanie, requestState);
