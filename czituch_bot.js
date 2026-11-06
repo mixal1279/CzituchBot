@@ -128,7 +128,7 @@ const { Firestore } = require('@google-cloud/firestore');
 const { ocenJakoscOdpowiedzi } = require('./ai/quality');
 const { usunEtykietyEvidenceCandidate, maEtykieteEvidenceCandidate, oczyscOdpowiedzPrzedWalidacja } = require('./ai/answer-sanitize');
 const { AI_MODELS } = require('./ai/modelConfig');
-const { parsujStrukturalnePodsumowanie } = require('./ai/history');
+const { parsujStrukturalnePodsumowanie, oznaczUzycieHistorii, ograniczHistorieRozmow } = require('./ai/history');
 const { createRequestId, sanitizeQuestion, planRequest, evaluateEvidence, shouldValidate, decideValidation, finalText: finalizeAIPipelineText } = require('./ai/pipeline');
 const { buildAnswerPlan } = require('./ai/answer-plan');
 const { judgeAnswer, partialAnswerPreservesCoreIntent } = require('./ai/answer-judge');
@@ -4567,15 +4567,9 @@ Pytanie użytkownika: ${pytanie}`;
   if (newMemories.length) await zapiszZweryfikowanaPamiecAI(verifiedMemoryUserId, newMemories);
   historiaRozmowy.push({ role: 'user', content: pytanie }, { role: 'assistant', content: odp });
   zmienWersjeHistorii(historiaRozmowy);
-  ostatnieUzycie[nick] = Date.now();
-  const historiaKlucze = Object.keys(historiaRozmowy);
-  if (historiaKlucze.length > 500) {
-    historiaKlucze.sort((a, b) => (ostatnieUzycie[a] || 0) - (ostatnieUzycie[b] || 0));
-    for (const staryNick of historiaKlucze.slice(0, historiaKlucze.length - 500)) {
-      delete historiaRozmowy[staryNick];
-      delete ostatnieUzycie[staryNick];
-    }
-  }
+  // Historia jest indeksowana kluczem platforma:kanał:użytkownik, nie samym nickiem.
+  oznaczUzycieHistorii(ostatnieUzycie, verifiedMemoryUserId);
+  ograniczHistorieRozmow(historiaRozmowy, ostatnieUzycie, 500);
   await wyslijFn(`@${nick} ${odp}`);
   // Kompresje tego samego nicku są szeregowane, aby nie nadpisać wiadomości z równoległego requestu.
   zaplanujKompresjeHistorii(historiaRozmowy);
