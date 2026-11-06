@@ -41,6 +41,21 @@ test('benchmark validation rejects duplicate prompts, missing categories and uns
   assert.ok(sourceValidation.errors.some(error => error.includes('gold bez poprawnych źródeł HTTPS')));
 });
 
+test('dataset cannot silently fall below ten fact-checkable cases for the live sample', () => {
+  const benchmark = JSON.parse(fs.readFileSync(path.join(__dirname, 'ai-benchmark.json'), 'utf8'));
+  const seenGoldCategories = new Set();
+  benchmark.cases = benchmark.cases.filter(item => {
+    if (item.expected?.factual?.independentGold !== true) return true;
+    if (seenGoldCategories.has(item.category)) return false;
+    seenGoldCategories.add(item.category);
+    return true;
+  });
+  const validation = validateBenchmarkDataset(benchmark);
+  assert.equal(seenGoldCategories.size, 9);
+  assert.equal(validation.independentGoldCases, 9);
+  assert.ok(validation.errors.some(error => error.includes('co najmniej 10 gold cases')));
+});
+
 test('10-case live sample covers all nine categories and rotates independent gold categories', () => {
   const benchmark = JSON.parse(fs.readFileSync(path.join(__dirname, 'ai-benchmark.json'), 'utf8'));
   const first = stratifiedCases(benchmark.cases, 10, 0);

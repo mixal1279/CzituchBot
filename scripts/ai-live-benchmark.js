@@ -53,7 +53,7 @@ function validateBenchmarkDataset(data) {
     category, gold.filter(item => item.category === category).length,
   ]));
   const goldCategories = new Set(gold.map(item => item.category));
-  if (gold.length < Math.ceil(all.length * 0.15)) errors.push('za mało niezależnych gold cases');
+  if (gold.length < Math.max(10, Math.ceil(all.length * 0.15))) errors.push('benchmark musi zawierać co najmniej 10 gold cases dla pełnej próbki live');
   if (goldCategories.size !== REQUIRED_BENCHMARK_CATEGORIES.size) {
     errors.push('gold cases muszą pokrywać wszystkie wymagane kategorie');
   }
