@@ -194,6 +194,18 @@ function scoreSource(source, query, options = {}) {
   return { ...s, coreScore: Number(score.toFixed(4)), relevance, titleRelevance, authorityScore: authority };
 }
 
+const GAME_SEQUEL_SUFFIX_RE = /^(?:(?:part|episode|chapter)\s+)?(?:\d{1,2}|ii|iii|iv|v|vi|vii|viii|ix)\b/;
+
+function czyZrodloDotyczyInnejCzesciGry(source, gameName, routing) {
+  const entityType = routing.resolved_entity?.type || routing.entity_type;
+  if (entityType !== 'game') return false;
+  const requested = normalize(gameName);
+  if (!requested || /(?:^|\s)(?:\d{1,2}|ii|iii|iv|v|vi|vii|viii|ix)(?:\s|$)/.test(requested)) return false;
+  const title = normalize(source.title);
+  if (!title.startsWith(requested + ' ')) return false;
+  return GAME_SEQUEL_SUFFIX_RE.test(title.slice(requested.length).trim());
+}
+
 function sourceMatchesRequestContext(source = {}, routing = {}) {
   if (!routing?.is_lore && !routing?.is_gameplay) return true;
   const resolved = routing.resolved_entity || {};
@@ -212,6 +224,7 @@ function sourceMatchesRequestContext(source = {}, routing = {}) {
   const characterScoped = resolved.type === 'character' || routing.entity_type === 'character';
   const characterName = resolved.name || (characterScoped ? routing.entity : '');
   const gameName = resolved.game || routing.game;
+  if (gameName && czyZrodloDotyczyInnejCzesciGry(source, gameName, routing)) return false;
   if (characterScoped && characterName) {
     const characterAliases = aliasesFor(CHARACTER_ALIASES, characterName);
     const matchesCharacter = characterAliases.some(alias => containsAlias(haystack, alias));
