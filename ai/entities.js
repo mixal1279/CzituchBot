@@ -310,7 +310,7 @@ function resolveGameEntity(text) {
 function extractExplicitGameTitle(text) {
   const value = String(text || '').trim();
   if (!value || value.length > 500) return null;
-  const pattern = /(?:^|[^\\p{L}\\p{N}_])(?:w|we)\\s+(?:tej\\s+)?grze\\s+(?:"([^"\\n]{1,120})"|“([^”\\n]{1,120})”|([\\p{Lu}\\p{N}][\\p{L}\\p{N}'’:&-]*(?:\\s+(?:(?:of|the|and|&)\\s+)?[\\p{Lu}\\p{N}][\\p{L}\\p{N}'’:&-]*){0,4}))/u;
+  const pattern = /(?:^|[^\p{L}\p{N}_])(?:w|we)\s+(?:tej\s+)?grze\s+(?!(?:kim|kto|co|jak|czy|dlaczego|czemu|gdzie|kiedy|jest|był|byla|było)\b)(?:"([^"\n]{1,120})"|“([^”\n]{1,120})”|([\p{L}\p{N}][\p{L}\p{N}'’:&-]*(?:\s+(?:(?:of|the|and|&)\s+)?[\p{Lu}\p{N}][\p{L}\p{N}'’:&-]*){0,4}))/u;
   const match = value.match(pattern);
   const title = (match?.[1] || match?.[2] || match?.[3] || '').replace(/\\s+/g, ' ').trim();
   if (!title || title.length > 120 || title.split(' ').length > 5) return null;
