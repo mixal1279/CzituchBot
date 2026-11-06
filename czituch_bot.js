@@ -3243,7 +3243,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
       const wynikiHLTB = [];
       for (const tytulHLTB of gryHLTB) {
         const wynikHLTB = await pobierzCzasHLTBFn(tytulHLTB).catch(err => {
-          console.error(`[HLTB] Błąd pobierania danych dla ${tytulHLTB}:`, err.message);
+          console.error(`[HLTB] Błąd pobierania danych dla ${tytulHLTB}:`, sanitizujKomunikatBledu(err.message));
           return null;
         });
         console.log(`[HLTB] ⏱️ ${tytulHLTB} -> ${wynikHLTB ? 'OK' : 'brak danych'}`);
