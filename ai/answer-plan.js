@@ -33,7 +33,8 @@ function normalize(value) {
 }
 
 function buildAnswerPlan(question, routing = {}) {
-  const q = String(question || '').replace(/\s+/g, ' ').trim();
+  // Twardy limit chroni regexy planera, ale zachowuje kontrakt obiektu planu.
+  const q = String(question || '').slice(0, 4000).replace(/\s+/g, ' ').trim();
   const slots = new Set(INTENT_REQUIREMENTS[routing.intent] || []);
   const matched = [];
   for (const [slot, re] of Object.entries(SLOT_PATTERNS)) {
@@ -222,11 +223,11 @@ function coversQuestionClauses(answer, clauses) {
     .filter(word => word.length >= 4 && !CLAUSE_STOPWORDS.has(word)))]);
   return tokenLists.every((tokens, index) => {
     const distinctive = tokens.filter(token => !tokenLists.some((other, otherIndex) =>
-      otherIndex !== index && other.some(otherToken => otherToken === token)));
+      otherIndex !== index && other.some(otherToken => otherToken === token))); // njsscan-ignore: node_timing_attack — public query tokens, not secrets
     const candidates = distinctive.length ? distinctive : tokens;
     if (!candidates.length) return true;
     return candidates.some(token => answerWords.some(word => {
-      if (word === token) return true;
+      if (word === token) return true; // njsscan-ignore: node_timing_attack — public lexical tokens
       const prefixLength = Math.min(5, word.length, token.length);
       return prefixLength >= 4 && word.slice(0, prefixLength) === token.slice(0, prefixLength);
     }));

@@ -9,7 +9,7 @@ const GAME_CONTEXT_RE = /(?<![\p{L}\p{N}_])(?:(?:gra|gry|grze|grę|grą|gier|gam
 
 function czyPytanieOGameplay(pytanie, domeny = null) {
   const p = String(pytanie || '').trim();
-  if (!p || !GAMEPLAY_INTENT_RE.test(p)) return false;
+  if (!p || p.length > 4000 || !GAMEPLAY_INTENT_RE.test(p)) return false;
   const resolved = resolveGameEntity(p);
   const gamingDomain = Array.isArray(domeny) && domeny.some(d => /(?:gamefaqs\.gamespot\.com|gamelore\.fandom\.com|minecraft\.wiki|ign\.com|gamespot\.com|pcgamer\.com|eurogamer|thewitcher\.com|rockstargames\.com|bandainamco|playstation\.com|naughtydog\.com|baldursgate3\.game|larian\.com|fortnite\.gg)/i.test(String(d)));
   return GAME_CONTEXT_RE.test(p) || gamingDomain || Boolean(resolved);

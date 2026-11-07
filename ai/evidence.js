@@ -1,7 +1,7 @@
 'use strict';
 
 function normalizeEvidenceText(value) {
-  return String(value || '')
+  return String(value || '').slice(0, 12000)
     .toLocaleLowerCase('pl-PL')
     .replace(/ł/g, 'l')
     .normalize('NFD')

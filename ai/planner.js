@@ -42,7 +42,9 @@ function dodajUnikalneQuery(lista, query) {
 }
 
 function buildRetrievalQueries(question, routing = {}, options = {}) {
-  const original = String(question || '').replace(/\s+/g, ' ').trim();
+  const rawQuestion = String(question || '');
+  if (rawQuestion.length > 4000) return [];
+  const original = rawQuestion.replace(/\s+/g, ' ').trim();
   if (!original || routing?.needs_web === false) return [];
 
   const queries = [];
@@ -126,7 +128,9 @@ const RESPONSE_PROFILES = {
 };
 
 function detectResponseProfile(question, routing) {
-  const p = String(question || '').toLocaleLowerCase('pl-PL');
+  const rawQuestion = String(question || '');
+  if (rawQuestion.length > 4000) return 'simple';
+  const p = rawQuestion.toLocaleLowerCase('pl-PL');
   if (routing?.is_gameplay) return 'gameplay';
   if (routing?.is_lore) return /(?<![\p{L}\p{N}_])(?:timeline|chronolog\p{L}*|kolejno[śs][ćc]\p{L}*|oś czasu|os czasu)(?![\p{L}\p{N}_])/iu.test(p) ? 'timeline' : 'lore';
   // Rdzenie ze słowem odmienionym (porównaj, różni się, różnica) — `\b` po rdzeniu nigdy nie pasował.
@@ -185,6 +189,7 @@ function responseContract(profile) {
 // i z rozpoznaną grą/encją pytanie jest już samodzielne.
 function czyPotrzebujeRewrite(pytanie, { hasContext = false, hasEntity = false } = {}) {
   const q = String(pytanie || '').trim();
+  if (q.length > 4000) return false;
   if (!q) return false;
   const words = q.split(/\s+/).length;
   if (hasContext) {

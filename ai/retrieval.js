@@ -193,7 +193,7 @@ function selectGameSpecificRetrievalDomains(game, question = '', baseDomains = n
   const base = Array.isArray(baseDomains)
     ? baseDomains
     : (typeof baseDomains === 'string' && baseDomains.trim() ? [baseDomains.trim()] : []);
-  const context = [game, question].filter(Boolean).join(' ');
+  const context = [String(game || '').slice(0, 200), String(question || '').slice(0, 4000)].filter(Boolean).join(' ');
   const additions = GAME_SPECIFIC_RETRIEVAL_DOMAINS
     .filter(entry => entry.pattern.test(context))
     .flatMap(entry => entry.domains);

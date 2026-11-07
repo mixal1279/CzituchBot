@@ -128,12 +128,12 @@ function normalizeSource(source = {}, index = 0) {
   // webRetrieval deliberately marks them with content: ''; preserve that sentinel
   // instead of promoting the snippet into evidence during core normalization.
   const metadataOnlyGemini = /^gemini/i.test(String(source.provider || '')) && source.content === '';
-  const content = String(metadataOnlyGemini ? '' : (source.content || source.raw_content || source.snippet || '')).replace(/\s+/g, ' ').trim();
-  const title = String(source.title || '').replace(/\s+/g, ' ').trim();
+  const content = String(metadataOnlyGemini ? '' : (source.content || source.raw_content || source.snippet || '')).slice(0, 12000).replace(/\s+/g, ' ').trim();
+  const title = String(source.title || '').slice(0, 300).replace(/\s+/g, ' ').trim();
   return {
     ...source,
     sourceId: source.sourceId || `SOURCE ${index + 1}`,
-    url: String(source.url || '').trim(),
+    url: String(source.url || '').slice(0, 2048).trim(),
     title,
     content,
     host: hostOf(source.url),

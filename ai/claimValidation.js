@@ -150,7 +150,7 @@ for (const entry of buildEntityAliasPatterns(ENTITY_ALIAS_GROUPS)) {
   existing.pattern = new RegExp(`(?:${existing.pattern.source})|(?:${entry.pattern.source})`, 'iu');
 }
 function normalizujClaim(value) {
-  return String(value || '')
+  return String(value || '').slice(0, 12000)
     .replace(/\bdoesn['\u2019]t\b/giu, 'does not')
     .replace(/\bisn['\u2019]t\b/giu, 'is not')
     .replace(/\baren['\u2019]t\b/giu, 'are not')
@@ -668,7 +668,7 @@ function czyNazwaWlasnaWystepuje(entity, evidenceNormalized) {
     const normalized = String(variant || '').split(' ').filter(Boolean);
     if (!normalized.length || normalized.length > evidenceTokens.length) return false;
     for (let start = 0; start <= evidenceTokens.length - normalized.length; start++) {
-      if (normalized.every((token, offset) => evidenceTokens[start + offset] === token)) return true;
+      if (normalized.every((token, offset) => evidenceTokens[start + offset] === token)) return true; // njsscan-ignore: node_timing_attack — public evidence tokens
     }
     return false;
   });
@@ -1189,6 +1189,7 @@ function sprawdzPokrycieClaimamiOdpowiedzi(answer, claims) {
 }
 
 function czyDowodSemantyczniePokrywaClaim(evidence, claim, options = {}) {
+  if (String(evidence || '').length > 12000 || String(claim || '').length > 1000) return false;
   return zgodnoscStrukturalna(evidence, claim, options).ok;
 }
 // --- Tlumaczenie claimu (claim_en) -------------------------------------------------------------
@@ -1332,6 +1333,7 @@ function czyTlumaczenieOdwracaRelacjeKorupcjiWheatleya(claimPl, claimEn) {
 function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
   const pl = String(claimPl || '').trim();
   const en = String(claimEn || '').trim();
+  if (pl.length > 1000 || en.length > 1000) return { ok: false, reason: 'claim przekracza limit długości' };
   if (!pl || !en) return { ok: false, reason: 'brak tlumaczenia claimu' };
   if (en.length > pl.length * 3 + 60) return { ok: false, reason: 'tlumaczenie claimu jest nieproporcjonalnie dlugie' };
   if (!wygladaNaAngielski(en)) return { ok: false, reason: 'claim_en nie wyglada na tekst angielski' };

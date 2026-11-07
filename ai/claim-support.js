@@ -12,6 +12,7 @@ const HARD_OVERCLAIM_TYPES = new Set([
   'speculation_presented_as_fact',
   'interpretation_presented_as_fact',
   'canon_status_not_in_evidence',
+  'input_too_long',
 ]);
 
 function normalizeText(value) {
@@ -26,6 +27,7 @@ function normalizeText(value) {
 }
 
 function detectOverclaimTypes(claim, evidence, options = {}) {
+  if (String(claim || '').length > 1000 || String(evidence || '').length > 2000) return ['input_too_long'];
   const c = normalizeText(claim);
   const e = normalizeText(evidence);
   const context = normalizeText(options.context || '');

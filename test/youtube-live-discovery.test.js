@@ -183,6 +183,15 @@ test('rzuca błąd dla nieprawidłowego Channel ID', async () => {
   await assert.rejects(() => discoverLiveVideoId('not-a-channel'), TypeError);
 });
 
+test('odrzuca nadmiernie długi Channel ID przed wykonaniem fetch', async () => {
+  let fetchCalls = 0;
+  await assert.rejects(() => discoverLiveVideoId('UC' + 'A'.repeat(100000), {
+    fetchImpl: async () => { fetchCalls++; throw new Error('fetch nie powinien wystartować'); },
+    verifyVideo: async () => false,
+  }), TypeError);
+  assert.equal(fetchCalls, 0);
+});
+
 test('wymaga zgodnego właściciela i aktywnego Live Chat ID', () => {
   assert.equal(isVerifiedLiveVideo({
     snippet: { channelId: CHANNEL_ID, liveBroadcastContent: 'live' },

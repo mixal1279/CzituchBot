@@ -128,7 +128,7 @@ const CONTEXT_REQUIRED_CHARACTER_ALIASES = new Set([
 ]);
 
 function normalizujEncje(text) {
-  return String(text || '').toLocaleLowerCase('pl-PL')
+  return String(text || '').slice(0, 12000).toLocaleLowerCase('pl-PL')
     .replace(/ł/g, 'l')
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     .replace(/[’']/g, '').replace(/[^a-z0-9 ]/gi, ' ')
@@ -140,7 +140,7 @@ function tokenyEncji(text) {
 }
 
 function tokenPasujeDoAliasu(token, aliasToken) {
-  if (token === aliasToken) return true;
+  if (token === aliasToken) return true; // njsscan-ignore: node_timing_attack — public entity aliases
   // Dopuszczamy typowe końcówki fleksyjne (maks. 3 znaki), ale nie dowolny
   // prefiks. To zachowuje np. „Wiedźminem” bez dopasowywania „Minecraftowo”.
   if (aliasToken.length < 6 || !token.startsWith(aliasToken)) return false;
@@ -177,7 +177,7 @@ function containsExactAlias(text, alias) {
   const aliasTokens = tokenyEncji(alias);
   if (!aliasTokens.length || textTokens.length < aliasTokens.length) return false;
   for (let i = 0; i <= textTokens.length - aliasTokens.length; i++) {
-    if (aliasTokens.every((token, offset) => textTokens[i + offset] === token)) return true;
+    if (aliasTokens.every((token, offset) => textTokens[i + offset] === token)) return true; // njsscan-ignore: node_timing_attack — public entity aliases
   }
   return false;
 }

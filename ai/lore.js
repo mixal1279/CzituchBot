@@ -25,7 +25,7 @@ const GAME_TITLE_BEFORE_LORE_RE = /(?:^|[^\p{L}\p{N}_])(?:the\s+)?[\p{Lu}\p{N}][
 
 function czyMaKontekstGry(pytanie) {
   const p = String(pytanie || '').trim();
-  if (!p) return false;
+  if (!p || p.length > 4000) return false;
   const resolved = resolveGameEntity(p);
   const dopasowaniePoPrzyimku = p.match(GAME_TITLE_AFTER_PREPOSITION_RE);
   const tytulPoPrzyimku = dopasowaniePoPrzyimku?.[0]
