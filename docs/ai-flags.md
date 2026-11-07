@@ -15,7 +15,7 @@ Wszystkie ustawienia są opcjonalne, chyba że dana integracja jest wymagana prz
 | `AI_GEMINI_VALIDATOR_MODEL` | `gemini-3.5-flash-lite` | Model Gemini do walidacji; można go zmieniać na potrzeby porównania benchmarków. |
 | `OPENROUTER_VALIDATOR_MODEL` | wartość `AI_VALIDATOR_MODEL` | Osobny model walidatora OpenRouter. |
 | `OPENROUTER_GENERATOR_MODEL` | wartość `AI_GENERATOR_MODEL` | Osobny model generatora OpenRouter. |
-| `XKIRO_MODEL` | `qwen/qwen3.5-397b-a17b:free` | Model walidatora xKiro i generatora w łańcuchu fallbacków, jeśli `XKIRO_API_KEY` jest skonfigurowany. |
+| `XKIRO_MODEL` | `cohere/command-a-reasoning` | Model walidatora xKiro i generatora w łańcuchu fallbacków, jeśli `XKIRO_API_KEY` jest skonfigurowany. |
 | `AI_VALIDATOR_GROQ` | włączona | Ustaw `0`, aby wyłączyć ścieżkę walidatora Groq. |
 
 ## Limity i cache
