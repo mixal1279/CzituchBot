@@ -18,7 +18,9 @@ test('entity and intent matchers reject oversized untrusted input', () => {
   const oversized = 'x'.repeat(20000);
   assert.equal(resolveGameEntity(oversized), null);
   assert.equal(czyPytanieOLore(oversized), false);
+  assert.equal(czyPytanieOLore('Lore Portal ' + 'x'.repeat(5000)), false);
   assert.equal(czyPytanieOGameplay(oversized), false);
+  assert.equal(czyPytanieOGameplay('Jak pokonać bossa ' + 'x'.repeat(5000)), false);
   assert.ok(buildAnswerPlan(oversized, {}));
   assert.equal(buildRetrievalQueries(oversized, { needs_web: true }).length, 0);
   assert.equal(detectResponseProfile(oversized, {}), 'simple');

@@ -41,10 +41,10 @@ jobs:
             if [[ "${args[$i]}" == "--" ]]; then
               before=("${args[@]:0:i}")
               after=("${args[@]:i+1}")
-              exec "$NJSSCAN_SEMGREP_BIN" "${before[@]}" --timeout 30 -- "${after[@]}"
+              exec "$NJSSCAN_SEMGREP_BIN" "${before[@]}" --timeout 120 -- "${after[@]}"
             fi
           done
-          exec "$NJSSCAN_SEMGREP_BIN" "$@" --timeout 30
+          exec "$NJSSCAN_SEMGREP_BIN" "$@" --timeout 120
           SH
           chmod +x "$RUNNER_TEMP/njsscan-bin/semgrep"
           echo "NJSSCAN_SEMGREP_BIN=$real_semgrep" >> "$GITHUB_ENV"

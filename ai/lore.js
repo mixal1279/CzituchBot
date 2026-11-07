@@ -45,7 +45,7 @@ function czyMaKontekstGry(pytanie) {
 
 function czyPytanieOLore(pytanie, domeny = null) {
   const p = String(pytanie || '').trim();
-  if (!p) return false;
+  if (!p || p.length > 4000) return false;
 
   const resolved = resolveGameEntity(p);
   const loreIntent = LORE_INTENT_RE.test(p)
