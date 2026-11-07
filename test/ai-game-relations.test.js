@@ -189,6 +189,17 @@ test('IGDB version_title can ground an explicitly requested special edition', ()
   });
   assert.equal(result.ok, true);
   assert.equal(result.entity.versionTitle, 'Complete Edition');
+  const baseLookup = klasyfikujKandydataIGDB({
+    id: 8,
+    name: 'Example Complete Edition',
+    game_type: { name: 'Main Game' },
+    version_title: 'Complete Edition',
+  }, {
+    requestedTitle: 'Example',
+    question: 'Lore Example',
+  });
+  assert.equal(baseLookup.ok, false);
+  assert.equal(baseLookup.reason, 'non_base_game_candidate');
 });
 
 test('extended IGDB relation arrays are preserved without relabeling them as sequels or spin-offs', () => {
