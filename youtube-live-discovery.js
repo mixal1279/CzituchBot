@@ -42,7 +42,7 @@ async function readLimitedPageText(response, maxBytes = MAX_LIVE_PAGE_BYTES) {
 }
 
 function czyBialyZnak(znak) {
-  return znak === ' ' || znak === '\\t' || znak === '\\n' || znak === '\\r' || znak === '\\f' || znak === '\\v';
+  return znak === ' ' || znak === '\t' || znak === '\n' || znak === '\r' || znak === '\f' || znak === '\v';
 }
 
 function parseAssignedJson(html, variableName) {
@@ -80,7 +80,7 @@ function parseAssignedJson(html, variableName) {
       const char = source[i];
       if (inString) {
         if (escaped) escaped = false;
-        else if (char === '\\\\') escaped = true;
+        else if (char === '\\') escaped = true;
         else if (char === '"') inString = false;
         continue;
       }
