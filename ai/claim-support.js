@@ -209,6 +209,7 @@ function buildClaimSupportAudit({ claims = [], evidenceEvaluations = [], evidenc
       quoteVerified,
       localEvidenceVerified: evaluation.ok === true,
       supportMode: evaluation.mode || null,
+      sourceAuthority: evidenceAuthorities[index] || 'unknown',
       verdict,
       claimSourceVerdict,
       reason: hardOverclaims.length
