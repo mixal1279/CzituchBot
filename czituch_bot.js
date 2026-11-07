@@ -1202,8 +1202,16 @@ async function znajdzGreIGDB(pytanie, requestState = null) {
     const kandydaci = data
       .map(gra => ({
         gra,
-        score: scoreExternalGameCandidate(igdbSearchTerm, gra?.name),
         relacje: klasyfikujKandydataIGDB(gra, { requestedTitle: igdbSearchTerm, question: pytanie }),
+        score: scoreExternalGameCandidate(igdbSearchTerm, gra?.name),
+      }))
+      .map(item => ({
+        ...item,
+        // Potwierdzona relacja franczyzy/serii jest silniejsza niż podobieństwo
+        // tytułu pojedynczej gry (np. "The Witcher" -> "The Witcher 3").
+        score: item.relacje.ok && item.relacje.entity.type === 'franchise'
+          ? Math.max(item.score, 0.92)
+          : item.score,
       }))
       .filter(item => item.relacje.ok && item.score >= 0.72)
       .sort((a, b) => b.score - a.score);
