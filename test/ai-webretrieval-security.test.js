@@ -26,6 +26,43 @@ test('DNS validation fails closed if any answer is private or lookup fails', asy
   assert.equal(await czyHostMaPubliczneDNS('broken.example', async () => { throw new Error('dns failure'); }), false);
 });
 
+
+test('Tavily extraction bounds raw URL candidates before validation and DNS lookups', async () => {
+  let lookupCalls = 0;
+  let fetchCalls = 0;
+  const urls = Array.from({ length: 30 }, (_, index) => `https://invalid-${index}.example/article`);
+  urls.push('https://public.example/should-not-be-checked');
+  const pages = await extractTavilyPages({
+    apiKey: 'test-key',
+    urls,
+    lookupFn: async () => {
+      lookupCalls += 1;
+      return [{ address: '93.184.216.34', family: 4 }];
+    },
+    fetchFn: async () => {
+      fetchCalls += 1;
+      throw new Error('must not fetch');
+    },
+  });
+  assert.equal(pages.size, 0);
+  assert.equal(lookupCalls, 0);
+  assert.equal(fetchCalls, 0);
+});
+
+test('Tavily extraction treats non-array URL input as empty', async () => {
+  let fetchCalls = 0;
+  const pages = await extractTavilyPages({
+    apiKey: 'test-key',
+    urls: 'https://public.example/article',
+    fetchFn: async () => {
+      fetchCalls += 1;
+      throw new Error('must not fetch');
+    },
+  });
+  assert.equal(pages.size, 0);
+  assert.equal(fetchCalls, 0);
+});
+
 test('Tavily extraction validates resolved addresses before sending URLs', async () => {
   let fetchCalls = 0;
   const pages = await extractTavilyPages({
