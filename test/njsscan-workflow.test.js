@@ -7,6 +7,13 @@ const path = require('node:path');
 
 const workflow = fs.readFileSync(path.join(__dirname, '..', '.github', 'workflows', 'njsscan.yml'), 'utf8');
 
+
+test('njsscan runs once per PR update instead of duplicating push and pull_request scans', () => {
+  assert.match(workflow, /push:\s*\n\s+branches:\s*\[\s*main\s*\]/);
+  assert.match(workflow, /pull_request:\s*\n\s+branches:\s*\[\s*main\s*\]/);
+  assert.doesNotMatch(workflow, /push:\s*\n\s+branches:\s*\[[^\]]*audit\/full-bot-hardening/);
+});
+
 test('njsscan scans the complete repository with a bounded per-rule timeout', () => {
   assert.match(workflow, /NJSScan\(\['\.'\],\s*True,\s*False\)\.scan\(\)/);
   assert.match(workflow, /--timeout 300/);
