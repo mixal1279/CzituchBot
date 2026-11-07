@@ -53,6 +53,45 @@ function safeHost(url) {
 
 const MAX_PROVIDER_RESPONSE_BYTES = 512 * 1024;
 
+async function odczytajOgraniczonyTekst(response, maxBytes = MAX_PROVIDER_RESPONSE_BYTES) {
+  const declaredLength = Number(response.headers?.get?.('content-length'));
+  if (Number.isFinite(declaredLength) && declaredLength > maxBytes) throw new Error('provider_response_too_large');
+
+  if (response.body && typeof response.body.getReader === 'function') {
+    const reader = response.body.getReader();
+    const chunks = [];
+    let total = 0;
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        total += value?.byteLength || 0;
+        if (total > maxBytes) {
+          await reader.cancel().catch(() => {});
+          throw new Error('provider_response_too_large');
+        }
+        chunks.push(Buffer.from(value));
+      }
+    } finally {
+      reader.releaseLock?.();
+    }
+    return Buffer.concat(chunks, total).toString('utf8');
+  }
+
+  if (typeof response.text === 'function') {
+    const body = await response.text();
+    if (Buffer.byteLength(body, 'utf8') > maxBytes) throw new Error('provider_response_too_large');
+    return body;
+  }
+  if (typeof response.json === 'function') {
+    const data = await response.json().catch(() => ({}));
+    const body = JSON.stringify(data);
+    if (Buffer.byteLength(body, 'utf8') > maxBytes) throw new Error('provider_response_too_large');
+    return body;
+  }
+  return '';
+}
+
 async function odczytajOgraniczonyJson(response, maxBytes = MAX_PROVIDER_RESPONSE_BYTES) {
   const declaredLength = Number(response.headers?.get?.('content-length'));
   if (Number.isFinite(declaredLength) && declaredLength > maxBytes) throw new Error('provider_response_too_large');
@@ -369,4 +408,4 @@ async function searchSecondaryProviders({ query, geminiKey, exaKey, tavilyKey = 
   return { status: 'empty', text: '', sources: [], error: errors.join('; ') };
 }
 
-module.exports = { normalizeSource, formatSources, searchGeminiWeb, searchExa, searchSecondaryProviders, extractTavilyPages, czyBezpiecznyPublicznyUrl, czyPublicznyAdresIP, czyHostMaPubliczneDNS };
+module.exports = { normalizeSource, formatSources, searchGeminiWeb, searchExa, searchSecondaryProviders, extractTavilyPages, odczytajOgraniczonyJson, odczytajOgraniczonyTekst, czyBezpiecznyPublicznyUrl, czyPublicznyAdresIP, czyHostMaPubliczneDNS };
