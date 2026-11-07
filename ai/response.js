@@ -45,12 +45,7 @@ function zawieraTokenTwardy(refs, token) {
   const referenceText = String(refs || '');
   const safeToken = String(token || '').slice(0, 120);
   if (!safeToken || referenceText.length > 12000) return false;
-  const escaped = safeToken.replace(/[.*+?^${}()|[\]\\]/g, '\\function zawieraTokenTwardy(refs, token) {
-  const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  // Token kończący się literą (jednostka) może się odmieniać; kończący się cyfrą/% wymaga granicy.
-  const tail = /\p{L}$/u.test(safeToken) ? '' : '(?![\\p{L}\\p{N}_])';
-  return new RegExp('(?<![\\p{L}\\p{N}_.])' + escaped + tail, 'u').test(refs);
-}');
+  const escaped = safeToken.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   // Token kończący się literą (jednostka) może się odmieniać; kończący się cyfrą/% wymaga granicy.
   const tail = /\p{L}$/u.test(safeToken) ? '' : '(?![\\p{L}\\p{N}_])';
   return new RegExp('(?<![\\p{L}\\p{N}_.])' + escaped + tail, 'u').test(referenceText);
