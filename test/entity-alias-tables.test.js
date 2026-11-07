@@ -37,3 +37,16 @@ test('nazwa z grupy aliasowej jest wyciągana jako nazwa kanoniczna', () => {
     `oczekiwano nazwy kanonicznej, otrzymano: ${JSON.stringify(extracted)}`,
   );
 });
+
+
+test('generated alias regex rejects oversized or malformed input instead of building unbounded patterns', () => {
+  const { buildAliasPattern, buildEntityAliasPatterns } = require('../ai/entityAliases');
+  assert.equal(buildAliasPattern(['x'.repeat(121)]), null);
+  assert.equal(buildAliasPattern(['too many tokens '.repeat(5).trim()]), null);
+  assert.equal(buildAliasPattern(Array.from({ length: 33 }, (_, index) => 'alias' + index)), null);
+  assert.deepEqual(buildEntityAliasPatterns(Array.from({ length: 101 }, (_, index) => ({
+    canonical: 'entity ' + index,
+    names: ['entity ' + index],
+  }))), []);
+  assert.equal(buildAliasPattern(['Portal 2']).test('Portal 2'), true);
+});
