@@ -18,6 +18,30 @@ const {
 const { createTavilySearch, classifyTavilyError, filtrujPoScore, normalizujProgScore, normalizujZakresTavily, normalizujDomenyTavily, hostnamePasujeDoDomenyTavily, sanityzujTrescZrodlaTavily, czyWymagaSecondaryRetrieval, snapshotCacheTavily, ograniczCacheTavily } = require('../ai/tavily');
 const { assessEvidence, sourceMatchesRequestContext } = require('../ai/core');
 
+
+test('Tavily Search rejects oversized provider bodies before JSON parsing', async () => {
+  const search = createTavilySearch({
+    apiKey: 'test-tavily-key',
+    groq: null,
+    normalizeQuery: value => value,
+    fetchZTimeout: async () => new Response(
+      JSON.stringify({ results: [] }) + ' '.repeat(600 * 1024),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    ),
+    logger: { log() {}, warn() {}, error() {} },
+    cacheFile: '/tmp/czituch-tavily-oversized-response-test.json',
+    geminiKey: '',
+    exaKey: '',
+  });
+
+  const result = await search('Tavily oversized provider response', {
+    _skipRewrite: true,
+    returnMeta: true,
+  });
+  assert.equal(result.status, 'error');
+  assert.equal(result.error, 'provider_response_too_large');
+});
+
 test('retrieval source contract is normalized', () => {
   const source = normalizeSource({
     provider: 'exa',
