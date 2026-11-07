@@ -222,7 +222,7 @@ for (const [address, prefix] of [
 ]) BLOKOWANE_ADRESY.addSubnet(address, prefix, 'ipv4');
 for (const [address, prefix] of [
   ['::', 96], ['::1', 128], ['64:ff9b::', 96], ['64:ff9b:1::', 48],
-  ['100::', 64], ['2001::', 23], ['2001:db8::', 32], ['2002::', 16],
+  ['100::', 64], ['2001::', 23], ['2001:20::', 28], ['2001:db8::', 32], ['2002::', 16], ['3fff::', 20],
   ['fc00::', 7], ['fe80::', 10], ['ff00::', 8],
 ]) BLOKOWANE_ADRESY.addSubnet(address, prefix, 'ipv6');
 const GLOBALNY_ZAKRES_IPV6 = new BlockList();
