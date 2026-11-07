@@ -45,6 +45,19 @@ function czyBialyZnak(znak) {
   return znak === ' ' || znak === '\t' || znak === '\n' || znak === '\r' || znak === '\f' || znak === '\v';
 }
 
+function czyPoprawnyChannelId(channelId) {
+  if (typeof channelId !== 'string' || channelId.length !== 24 || !channelId.startsWith('UC')) {
+    return false;
+  }
+  for (let i = 2; i < channelId.length; i += 1) {
+    const kod = channelId.charCodeAt(i);
+    const litera = (kod >= 65 && kod <= 90) || (kod >= 97 && kod <= 122);
+    const cyfra = kod >= 48 && kod <= 57;
+    if (!litera && !cyfra && kod !== 95 && kod !== 45) return false;
+  }
+  return true;
+}
+
 function parseAssignedJson(html, variableName) {
   const source = String(html || '');
   if (Buffer.byteLength(source, 'utf8') > MAX_LIVE_PAGE_BYTES) return null;
@@ -267,7 +280,7 @@ function extractLiveVideoId(html, finalUrl) {
 
 async function discoverLiveVideoId(channelId, options) {
   const opts = options || {};
-  if (typeof channelId !== 'string' || channelId.length !== 24 || !/^UC[a-zA-Z0-9_-]{22}$/.test(channelId)) {
+  if (!czyPoprawnyChannelId(channelId)) {
     throw new TypeError('Nieprawidłowy YouTube Channel ID.');
   }
   const fetchImpl = opts.fetchImpl || globalThis.fetch;
