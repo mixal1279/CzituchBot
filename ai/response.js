@@ -42,10 +42,18 @@ function maskSentenceAbbreviations(text) {
 }
 
 function zawieraTokenTwardy(refs, token) {
+  const referenceText = String(refs || '');
+  const safeToken = String(token || '').slice(0, 120);
+  if (!safeToken || referenceText.length > 12000) return false;
+  const escaped = safeToken.replace(/[.*+?^${}()|[\]\\]/g, '\\function zawieraTokenTwardy(refs, token) {
   const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   // Token kończący się literą (jednostka) może się odmieniać; kończący się cyfrą/% wymaga granicy.
   const tail = /\p{L}$/u.test(safeToken) ? '' : '(?![\\p{L}\\p{N}_])';
   return new RegExp('(?<![\\p{L}\\p{N}_.])' + escaped + tail, 'u').test(refs);
+}');
+  // Token kończący się literą (jednostka) może się odmieniać; kończący się cyfrą/% wymaga granicy.
+  const tail = /\p{L}$/u.test(safeToken) ? '' : '(?![\\p{L}\\p{N}_])';
+  return new RegExp('(?<![\\p{L}\\p{N}_.])' + escaped + tail, 'u').test(referenceText);
 }
 
 const KONTEKSTY_GIER_AI = [
@@ -60,7 +68,8 @@ const KONTEKSTY_GIER_AI = [
 ];
 
 function wykryjKontekstyGierAI(tekst) {
-  return KONTEKSTY_GIER_AI.filter(kontekst => kontekst.patterns.some(re => re.test(String(tekst || '')))).map(kontekst => kontekst.name);
+  const boundedText = String(tekst || '').slice(0, 12000);
+  return KONTEKSTY_GIER_AI.filter(kontekst => kontekst.patterns.some(re => re.test(boundedText))).map(kontekst => kontekst.name);
 }
 
 function sprawdzZgodnoscKontekstuGry(odpowiedz, pytanie) {
@@ -72,8 +81,13 @@ function sprawdzZgodnoscKontekstuGry(odpowiedz, pytanie) {
 }
 
 function sprawdzSpojnoscLorePortal2(odpowiedz, pytanie) {
-  const q = String(pytanie || '').toLocaleLowerCase('pl-PL');
-  const a = String(odpowiedz || '').toLocaleLowerCase('pl-PL');
+  const rawQuestion = String(pytanie || '');
+  const rawAnswer = String(odpowiedz || '');
+  if (rawQuestion.length > 4000 || rawAnswer.length > 12000) {
+    return { ok: false, unsupported: ['przekroczono limit długości wejścia kontroli spójności lore'] };
+  }
+  const q = rawQuestion.toLocaleLowerCase('pl-PL');
+  const a = rawAnswer.toLocaleLowerCase('pl-PL');
   const portal = /\bportal\s*2\b|\bwheatley\b|\bglados\b|\bchell\b|\baperture\s+science\b/i.test(q);
   if (!portal) return { ok: true, unsupported: [] };
 
