@@ -137,6 +137,7 @@ function klasyfikujKandydataIGDB(candidate, { requestedTitle, question } = {}) {
       return { ok: false, reason: 'requested_version_not_verified' };
     }
   } else if (requested === 'remake' || requested === 'reboot' || requested === 'remaster' || requested === 'spinoff') {
+    // IGDB ma typ Fork, ale nie definiuje go jako rebootu ani spin-offu; nie utożsamiamy tych relacji.
     if (!gameType.includes(requested === 'spinoff' ? 'spin off' : requested)) {
       return { ok: false, reason: 'requested_variant_type_not_verified' };
     }
