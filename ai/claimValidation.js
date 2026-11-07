@@ -1390,7 +1390,7 @@ function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
   });
   const kontekstDowodu = String(options.evidenceContext || '');
   if (pierwszyPodmiot && czyNazwaWlasnaWystepuje(pierwszyPodmiot, kontekstDowodu)) {
-    const zaimek = en.match(/^(he|she|they|it|his|her|their|its)\\b/i);
+    const zaimek = en.match(/^(he|she|they|it|his|her|their|its)\b/i);
     if (zaimek) {
       const nazwa = pierwszyPodmiot.charAt(0).toLocaleUpperCase('en-US') + pierwszyPodmiot.slice(1);
       const podmiot = /^(?:his|her|their|its)$/i.test(zaimek[0]) ? nazwa + "'s" : nazwa;
