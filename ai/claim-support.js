@@ -36,11 +36,11 @@ function czyMarkerNieJestZaprzeczony(tekst, indeks) {
 }
 
 function znajdzStatusEpistemiczny(tekst, wzorzec) {
-  const wzorzecWszystkie = new RegExp(wzorzec.source, wzorzec.flags.includes('g') ? wzorzec.flags : wzorzec.flags + 'g');
-  let match;
   let pierwszy = null;
   let aktywne = false;
-  while ((match = wzorzecWszystkie.exec(tekst))) {
+  // Wzorce są prekompilowanymi stałymi z flagą g. matchAll kopiuje regex,
+  // więc nie zmienia jego lastIndex i nie wymaga dynamicznego konstruktora RegExp.
+  for (const match of tekst.matchAll(wzorzec)) {
     const marker = match[0].toLocaleLowerCase('pl-PL');
     const negatywnyPrefiks = czyMarkerNieJestZaprzeczony(tekst, match.index);
     const jawnieNegatywny = /^(?:non[- ]canonical|niekanoniczn)/u.test(marker);
