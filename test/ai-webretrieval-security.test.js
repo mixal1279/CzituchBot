@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { searchExa, extractTavilyPages, czyPublicznyAdresIP, czyHostMaPubliczneDNS } = require('../ai/webRetrieval');
+const { searchExa, extractTavilyPages, czyPublicznyAdresIP, czyHostMaPubliczneDNS, odczytajOgraniczonyJson, odczytajOgraniczonyTekst } = require('../ai/webRetrieval');
 
 test('IP validation rejects private, reserved and non-global IPv4/IPv6 ranges', () => {
   for (const address of [
@@ -14,6 +14,27 @@ test('IP validation rejects private, reserved and non-global IPv4/IPv6 ranges', 
   assert.equal(czyPublicznyAdresIP('8.8.8.8'), true);
   assert.equal(czyPublicznyAdresIP('2606:4700:4700::1111'), true);
   assert.equal(czyPublicznyAdresIP('::ffff:8.8.8.8'), true);
+});
+
+
+test('oversized declared provider bodies are cancelled before parsing', async () => {
+  for (const reader of [odczytajOgraniczonyJson, odczytajOgraniczonyTekst]) {
+    let cancelled = false;
+    const body = new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('oversized'));
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+    const response = {
+      headers: { get: () => '9' },
+      body,
+    };
+    await assert.rejects(() => reader(response, 8), /provider_response_too_large/);
+    assert.equal(cancelled, true);
+  }
 });
 
 test('DNS validation fails closed if any answer is private or lookup fails', async () => {
