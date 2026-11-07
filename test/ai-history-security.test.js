@@ -56,3 +56,11 @@ test('stable platform IDs produce a persistent isolated history key', () => {
   assert.equal(result.historyKey, zbudujKluczHistorii('youtube', 'ChannelID', 'UCUserCaseSensitive'));
   assert.equal(result.cooldownKey, result.historyKey);
 });
+
+
+test('missing stable platform ID yields no history key even when a login is known', () => {
+  const result = zbudujKluczeUzytkownika('twitch', 'billybulka', null, 'sameLogin', null);
+  assert.equal(result.hasStableId, false);
+  assert.equal(result.historyKey, null);
+  assert.equal(result.cooldownKey, 'twitch:billybulka:nickname:samelogin');
+});
