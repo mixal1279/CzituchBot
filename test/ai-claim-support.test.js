@@ -430,3 +430,14 @@ test('walidator wiąże status kanoniczny z autorytetem dokładnie cytowanego ź
   assert.equal(mixed.diagnostics.claimSupport.records[0].sourceAuthority, 'official');
   assert.ok(!mixed.diagnostics.claimSupport.records[0].overclaimTypes.includes('canon_status_not_official_source'));
 });
+
+test('oversized optional context cannot bypass the bounded causal evidence check', () => {
+  const claim = 'The transfer caused the outcome.';
+  const quote = 'The transfer occurred.';
+  const oversizedContext = 'The transfer occurred, causing the outcome. ' + 'x'.repeat(2500);
+
+  assert.ok(detectOverclaimTypes(claim, quote, {
+    context: oversizedContext,
+    allowContextForCausality: true,
+  }).includes('correlation_to_causation'));
+});
