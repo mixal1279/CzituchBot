@@ -447,5 +447,6 @@ test('adjacent entity names use literal matching with Unicode-safe boundaries', 
   assert.equal(claimValidation.czyNazwySasiaduja('Wheatley, Control', 'Wheatley', 'Control'), true);
   assert.equal(claimValidation.czyNazwySasiaduja('SuperWheatley Control', 'Wheatley', 'Control'), false);
   assert.equal(claimValidation.czyNazwySasiaduja('Wheatley Controller', 'Wheatley', 'Control'), false);
-  assert.equal(claimValidation.czyNazwySasiaduja('ąWheatley Control', 'Wheatley', 'Control'), false);
+  assert.equal(claimValidation.czyNazwySasiaduja('中Wheatley Control', 'Wheatley', 'Control'), false);
+  assert.equal(claimValidation.czyNazwySasiaduja('Wheatley Control中', 'Wheatley', 'Control'), false);
 });
