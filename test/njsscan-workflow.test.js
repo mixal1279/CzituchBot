@@ -38,6 +38,7 @@ test('njsscan workflow validates and uploads both machine-readable reports', () 
   assert.match(workflow, /JSON\.parse\(fs\.readFileSync\(sarifFile, 'utf8'\)\)/);
   assert.match(workflow, /name: njsscan-json-report/);
   assert.match(workflow, /sarif_file: results\.sarif/);
+  assert.match(workflow, /if: steps\.njsscan\.outcome == 'success' && steps\.validate_njsscan\.outcome == 'success'/);
 });
 
 
