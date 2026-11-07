@@ -94,3 +94,19 @@ test('nie rejestruje już zamkniętego WebSocketu', () => {
   assert.equal(typeof wyrejestruj, 'function');
   assert.equal(lifecycle.liczbaZasobow(), 0);
 });
+
+test('timeout zamykania zasobu nie blokuje cleanup kolejnych zasobów', async () => {
+  const zamkniete = [];
+  const lifecycle = utworzLifecycle({
+    logger: { info() {}, warn() {} },
+    closeTimeoutMs: 20,
+  });
+  lifecycle.zarejestruj('sprawny', () => zamkniete.push('sprawny'));
+  lifecycle.zarejestruj('zawieszony', () => new Promise(() => {}));
+
+  await lifecycle.zamknijWszystko();
+
+  assert.deepEqual(zamkniete, ['sprawny']);
+  assert.equal(lifecycle.czyZamykanie(), true);
+  assert.equal(lifecycle.liczbaZasobow(), 0);
+});
