@@ -3,6 +3,8 @@
 const { resolveGameEntity, normalizujEncje } = require('./entities');
 
 const PATTERNS = Object.freeze({
+  sequel: /(?<![\\p{L}])(?:sequel|kontynuacj\\p{L}*|kolejn\\p{L}*\\s+cz[eę]ść|nast[eę]pn\\p{L}*\\s+cz[eę]ść|ci[aą]g\\s+dalsz\\p{L}*)(?![\\p{L}])/iu,
+  prequel: /(?<![\\p{L}])(?:prequel|przedakcj\\p{L}*|histori\\p{L}*\\s+poprzedzaj[aą]c\\p{L}*)(?![\\p{L}])/iu,
   franchise: /\b(?:franczyz\p{L}*|serii|seria|uniwersum|franchise|series|universe|cał(?:a|ej)\s+seria)\b/iu,
   addon: /\b(?:dlc|dodatek|dodatku|expansion|expansion\s+pack|add.?on)\b/iu,
   remake: /\bremake\b/iu,
@@ -44,6 +46,11 @@ function wariantZapytania(question, requestedTitle) {
   const intentText = titleIndex >= 0
     ? text.slice(0, titleIndex) + ' ' + text.slice(titleIndex + title.length)
     : text;
+  const wantsSequel = PATTERNS.sequel.test(intentText);
+  const wantsPrequel = PATTERNS.prequel.test(intentText);
+  if (wantsSequel && wantsPrequel) return 'sequence';
+  if (wantsSequel) return 'sequel';
+  if (wantsPrequel) return 'prequel';
   if (PATTERNS.collection.test(intentText)) return 'collection';
   if (PATTERNS.franchise.test(intentText)) return 'franchise';
   if (PATTERNS.addon.test(intentText)) return 'addon';
@@ -86,7 +93,14 @@ function klasyfikujKandydataIGDB(candidate, { requestedTitle, question } = {}) {
   const collectionNames = nazwyRelacji(candidate.collections);
   const parentGame = nazwaRelacji(candidate.parent_game);
   const versionParent = nazwaRelacji(candidate.version_parent);
+  const versionTitle = nazwaRelacji(candidate.version_title);
   const requested = wariantZapytania(question, requestedTitle);
+
+  // IGDB nie publikuje bezpośrednich pól sequel_of/prequel_of. Frakcja i data
+  // premiery nie dowodzą relacji fabularnej, więc te pytania wymagają źródeł zewnętrznych.
+  if (['sequel', 'prequel', 'sequence'].includes(requested)) {
+    return { ok: false, reason: 'sequel_prequel_not_directly_exposed_by_igdb' };
+  }
 
   if (requested === 'franchise' || requested === 'collection') {
     const relations = requested === 'collection'
@@ -119,7 +133,7 @@ function klasyfikujKandydataIGDB(candidate, { requestedTitle, question } = {}) {
       return { ok: false, reason: 'requested_addon_type_not_verified' };
     }
   } else if (requested === 'version') {
-    if (!hasVersionParent && !/(?:edition|version)/.test(gameType)) {
+    if (!hasVersionParent && !versionTitle && !/(?:edition|version)/.test(gameType)) {
       return { ok: false, reason: 'requested_version_not_verified' };
     }
   } else if (requested === 'remake' || requested === 'reboot' || requested === 'remaster' || requested === 'spinoff') {
@@ -141,6 +155,7 @@ function klasyfikujKandydataIGDB(candidate, { requestedTitle, question } = {}) {
       collections: collectionNames,
       parentGame,
       versionParent,
+      versionTitle,
       candidateGameId: Number.isSafeInteger(candidate.id) ? candidate.id : null,
       firstReleaseDate: Number.isFinite(candidate.first_release_date) ? candidate.first_release_date : null,
       relations: {
@@ -149,6 +164,11 @@ function klasyfikujKandydataIGDB(candidate, { requestedTitle, question } = {}) {
         dlcs: nazwyRelacji(candidate.dlcs),
         expansions: nazwyRelacji(candidate.expansions),
         standaloneExpansions: nazwyRelacji(candidate.standalone_expansions),
+        expandedGames: nazwyRelacji(candidate.expanded_games),
+        forks: nazwyRelacji(candidate.forks),
+        ports: nazwyRelacji(candidate.ports),
+        bundles: nazwyRelacji(candidate.bundles),
+        similarGames: nazwyRelacji(candidate.similar_games),
       },
     },
   };
