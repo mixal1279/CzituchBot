@@ -96,3 +96,32 @@ test('a character question about Portal retains the franchise scope', () => {
     'franchise',
   );
 });
+
+
+test('unknown or non-main IGDB game types are never assumed to be a base game', () => {
+  for (const gameType of [null, { name: 'Pack' }, { name: 'Update' }, { name: 'Expanded Game' }]) {
+    const result = klasyfikujKandydataIGDB({
+      name: 'Example',
+      game_type: gameType,
+    }, { requestedTitle: 'Example', question: 'Lore Example' });
+    assert.equal(result.ok, false);
+  }
+});
+
+test('a variant marker inside the explicitly resolved title must match IGDB type', () => {
+  const candidate = { name: 'Example Remake', game_type: { name: 'Remake' } };
+  assert.equal(wariantZapytania('Lore Example Remake', 'Example Remake'), 'remake');
+  assert.equal(klasyfikujKandydataIGDB(candidate, {
+    requestedTitle: 'Example Remake',
+    question: 'Lore Example Remake',
+  }).ok, true);
+  assert.equal(klasyfikujKandydataIGDB(candidate, {
+    requestedTitle: 'Example',
+    question: 'Lore Example',
+  }).ok, false);
+  assert.equal(wariantZapytania('Lore reboot Example Remake', 'Example Remake'), 'reboot');
+  assert.equal(klasyfikujKandydataIGDB(candidate, {
+    requestedTitle: 'Example Remake',
+    question: 'Lore reboot Example Remake',
+  }).ok, false);
+});

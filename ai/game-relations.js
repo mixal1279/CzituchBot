@@ -16,7 +16,7 @@ const PATTERNS = Object.freeze({
 const NON_BASE_TYPES = new Set([
   'dlc', 'dlc addon', 'expansion', 'standalone expansion', 'bundle',
   'remake', 'remaster', 'port', 'episode', 'season', 'mod', 'fork',
-  'expanded game', 'spin off', 'reboot',
+  'expanded game', 'spin off', 'reboot', 'pack', 'update',
 ]);
 
 function nazwaRelacji(value) {
@@ -52,6 +52,13 @@ function wariantZapytania(question, requestedTitle) {
   if (PATTERNS.remaster.test(intentText)) return 'remaster';
   if (PATTERNS.spinoff.test(intentText)) return 'spinoff';
   if (PATTERNS.version.test(intentText)) return 'version';
+  // Marker wariantu może być częścią jawnie wskazanego tytułu (np. "Complete Edition").
+  if (PATTERNS.version.test(title)) return 'version';
+  if (PATTERNS.remake.test(title)) return 'remake';
+  if (PATTERNS.reboot.test(title)) return 'reboot';
+  if (PATTERNS.remaster.test(title)) return 'remaster';
+  if (PATTERNS.spinoff.test(title)) return 'spinoff';
+  if (PATTERNS.addon.test(title)) return 'addon';
   const deterministic = resolveGameEntity('gra ' + title) || resolveGameEntity(requestedTitle) || resolveGameEntity(question);
   return deterministic?.type === 'franchise' ? 'franchise' : 'game';
 }
@@ -119,8 +126,8 @@ function klasyfikujKandydataIGDB(candidate, { requestedTitle, question } = {}) {
     if (!gameType.includes(requested === 'spinoff' ? 'spin off' : requested)) {
       return { ok: false, reason: 'requested_variant_type_not_verified' };
     }
-  } else if (hasAddonParent || hasVersionParent || NON_BASE_TYPES.has(gameType)) {
-    return { ok: false, reason: 'non_base_game_candidate' };
+  } else if (gameType !== 'main game') {
+    return { ok: false, reason: gameType === 'unknown' ? 'game_type_not_verified' : 'non_base_game_candidate' };
   }
 
   return {
