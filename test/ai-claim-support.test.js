@@ -237,3 +237,37 @@ test('an explicit offer-to-join outcome supports a Polish causal connector', () 
     'Taking him up on this offer will see him officially join your party.',
   ), []);
 });
+
+
+test('fan theories cannot be promoted to established lore facts', () => {
+  assert.ok(detectOverclaimTypes(
+    'GLaDOS is secretly Caroline.',
+    'A popular fan theory suggests that GLaDOS is secretly Caroline.',
+  ).includes('speculation_presented_as_fact'));
+  assert.deepEqual(detectOverclaimTypes(
+    'A fan theory suggests that GLaDOS is secretly Caroline.',
+    'A popular fan theory suggests that GLaDOS is secretly Caroline.',
+  ), []);
+});
+
+test('interpretations remain labelled and are not converted into plot events', () => {
+  assert.ok(detectOverclaimTypes(
+    'The ending means that the protagonist is dead.',
+    'The ending can be interpreted as suggesting that the protagonist is dead.',
+  ).includes('interpretation_presented_as_fact'));
+  assert.deepEqual(detectOverclaimTypes(
+    'One interpretation is that the protagonist is dead.',
+    'The ending can be interpreted as suggesting that the protagonist is dead.',
+  ), []);
+});
+
+test('canonical status must appear in the cited evidence span', () => {
+  assert.ok(detectOverclaimTypes(
+    'To wydarzenie jest kanoniczne.',
+    'The character appears in the final mission.',
+  ).includes('canon_status_not_in_evidence'));
+  assert.deepEqual(detectOverclaimTypes(
+    'To wydarzenie jest kanoniczne.',
+    'This event is part of the official canon.',
+  ), []);
+});

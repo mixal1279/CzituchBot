@@ -69,3 +69,8 @@ Jawne polecenia arytmetyczne („oblicz”, „policz”, „ile to”) zawieraj
 ## Kontrola kompletności njsscan
 
 Workflow generuje raport JSON i SARIF. Raport JSON jest walidowany przed zakończeniem joba: brak pliku, nieprawidłowy JSON, nieoczekiwany schemat lub błędy skanera (w tym timeouty analizy) powodują niezaliczenie kontroli. Sam fakt, że krok skanera zakończył się bez błędu procesu, nie oznacza kompletnego skanowania.
+
+
+## Epistemic status of lore claims
+
+Lore claim support has additional hard-overclaim checks. If the cited span explicitly frames a proposition as a fan theory, hypothesis, rumour, or unconfirmed claim, the answer must preserve that label; otherwise the claim is rejected as speculation presented as fact. Interpretive readings must likewise remain labelled as interpretations. A claim that asserts canonical or official status must contain explicit status language in its own cited span; ordinary plot evidence is not sufficient to establish canonicity. These checks validate the wording present in the cited evidence, not the real-world authority of the publisher or developer. Source authenticity and official provenance still require separate source-level verification.

@@ -9,6 +9,9 @@ const HARD_OVERCLAIM_TYPES = new Set([
   'hedge_to_absolute',
   'up_to_qualifier_dropped',
   'unsupported_quantifier',
+  'speculation_presented_as_fact',
+  'interpretation_presented_as_fact',
+  'canon_status_not_in_evidence',
 ]);
 
 function normalizeText(value) {
@@ -38,6 +41,25 @@ function detectOverclaimTypes(claim, evidence, options = {}) {
   const causalEvidence = CAUSAL_EVIDENCE_RE.test(e)
     || (options.allowContextForCausality === true && CAUSAL_EVIDENCE_RE.test(context));
   if (causalClaim && !causalEvidence) types.push('correlation_to_causation');
+
+  // Lore: a quote explicitly framed as a fan theory, hypothesis or rumour
+  // cannot support the same proposition stated as an established event.
+  // The answer must preserve the epistemic label instead of dropping it.
+  const theoryEvidence = /(?<![\\p{L}\\p{N}_])(?:fan theor(?:y|ies)|theor(?:y|ies)|speculat\\p{L}*|rumou?r\\p{L}*|unconfirmed|hypothes\\p{L}*|teori\\p{L}*|spekulacj\\p{L}*|plotk\\p{L}*|niepotwierdzon\\p{L}*|hipotez\\p{L}*|wedlug fanow|fani uwazaja|niektorzy gracze uwazaja)(?![\\p{L}\\p{N}_])/u.test(e);
+  const theoryLabelInClaim = /(?<![\\p{L}\\p{N}_])(?:fan theor(?:y|ies)|theor(?:y|ies)|speculat\\p{L}*|rumou?r\\p{L}*|unconfirmed|hypothes\\p{L}*|teori\\p{L}*|spekulacj\\p{L}*|plotk\\p{L}*|niepotwierdzon\\p{L}*|hipotez\\p{L}*|wedlug fanow|fani uwazaja)(?![\\p{L}\\p{N}_])/u.test(c);
+  if (theoryEvidence && !theoryLabelInClaim) types.push('speculation_presented_as_fact');
+
+  // Preserve interpretation as interpretation. A symbolic/interpretive reading
+  // is not a plot event merely because the same nouns appear in the quote.
+  const interpretationEvidence = /(?<![\\p{L}\\p{N}_])(?:interpretation\\p{L}*|interpreted as|can be interpreted|fans interpret|interpretacj\\p{L}*|interpretowan\\p{L}*|mozna interpretowac|fani interpretuja|symboliz\\p{L}*|moze oznaczac)(?![\\p{L}\\p{N}_])/u.test(e);
+  const interpretationLabelInClaim = /(?<![\\p{L}\\p{N}_])(?:interpretation\\p{L}*|interpreted as|interpretacj\\p{L}*|interpretowan\\p{L}*|interpretacyj\\p{L}*|symboliczn\\p{L}* interpretacj\\p{L}*)(?![\\p{L}\\p{N}_])/u.test(c);
+  if (interpretationEvidence && !interpretationLabelInClaim) types.push('interpretation_presented_as_fact');
+
+  // A claim about canonical/official status needs that status stated in its
+  // own cited span. Ordinary plot evidence does not prove canonicity.
+  const canonStatusClaim = /(?<![\\p{L}\\p{N}_])(?:canon(?:ical(?:ly)?|ically)?|kanon\\p{L}*|oficjaln\\p{L}*|official(?:ly)?|potwierdzon\\p{L}* przez tworc\\p{L}*|confirmed by (?:the )?(?:developers|creators|writers))(?![\\p{L}\\p{N}_])/u.test(c);
+  const canonStatusEvidence = /(?<![\\p{L}\\p{N}_])(?:canon(?:ical(?:ly)?|ically)?|kanon\\p{L}*|oficjaln\\p{L}*|official(?:ly)?|potwierdzon\\p{L}* przez tworc\\p{L}*|confirmed by (?:the )?(?:developers|creators|writers))(?![\\p{L}\\p{N}_])/u.test(e);
+  if (canonStatusClaim && !canonStatusEvidence) types.push('canon_status_not_in_evidence');
 
   const sourceHedged = /\b(?:may|might|could|possibly|potentially|suggests?|appears? to|limited evidence|small study|moze|mozliwe|mozna(?:\s+byc)?|da\s+sie|bywa|prawdopodobnie|sugeruje|wstepne dane|niewielkim badaniu)\b/u.test(e);
   const claimAbsolute = /\b(?:always|never|proves?|guarantees?|definitely|certainly|undoubtedly|all|every|none|must|zawsze|nigdy|dowodzi|udowodniono|gwarantuje|bez watpienia|na pewno|wszyscy|wszystkie|kazdy|kazda|zaden|zadna)\b/u.test(c);
