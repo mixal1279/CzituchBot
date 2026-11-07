@@ -65,10 +65,10 @@ function wariantZapytania(question, requestedTitle) {
 
 function zgodnaNazwaRelacji(names, requestedTitle) {
   const wanted = normalizujEncje(requestedTitle);
-  return names.find(name => {
-    const actual = normalizujEncje(name);
-    return actual === wanted || actual.startsWith(wanted + ' ') || wanted.startsWith(actual + ' ');
-  }) || null;
+  if (!wanted) return null;
+  // Nazwa gry z prefiksem serii nie jest dowodem, że to ta sama encja-franczyza.
+  // Relację potwierdzamy wyłącznie po dokładnej nazwie z metadanych IGDB.
+  return names.find(name => normalizujEncje(name) === wanted) || null;
 }
 
 function klasyfikujKandydataIGDB(candidate, { requestedTitle, question } = {}) {
