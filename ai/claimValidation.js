@@ -1389,7 +1389,19 @@ function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
     return nazwaNorm && normalizujClaim(pl).startsWith(nazwaNorm + ' ');
   });
   const kontekstDowodu = String(options.evidenceContext || '');
-  if (pierwszyPodmiot && czyNazwaWlasnaWystepuje(pierwszyPodmiot, kontekstDowodu)) {
+  const prefiksCytatu = options.evidenceQuote
+    ? findQuotePrefix(kontekstDowodu, options.evidenceQuote)
+    : null;
+  const prefiksTegoSamegoZdania = prefiksCytatu === null
+    ? ''
+    : (prefiksCytatu.split(/\bsentenceboundarytoken\b/u).at(-1) || '');
+  const inneMozliwePodmioty = prefiksTegoSamegoZdania
+    ? wyodrebnijNazwyWlasne(prefiksTegoSamegoZdania)
+      .filter(nazwa => normalizujClaim(nazwa) !== normalizujClaim(pierwszyPodmiot || ''))
+    : [];
+  if (pierwszyPodmiot
+    && czyNazwaWlasnaWystepuje(pierwszyPodmiot, kontekstDowodu)
+    && inneMozliwePodmioty.length === 0) {
     const zaimek = en.match(/^(he|she|they|it|his|her|their|its)\b/i);
     if (zaimek) {
       const nazwa = pierwszyPodmiot.charAt(0).toLocaleUpperCase('en-US') + pierwszyPodmiot.slice(1);
