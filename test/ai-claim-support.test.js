@@ -51,6 +51,14 @@ test('claim-support audit distinguishes exact entailment, bounded-context partia
   });
 });
 
+test('status epistemiczny można wykrywać wielokrotnie bez wycieku lastIndex regexu', () => {
+  const claim = 'GLaDOS is Caroline.';
+  const evidence = 'A popular fan theory suggests that GLaDOS is Caroline.';
+  for (let i = 0; i < 3; i += 1) {
+    assert.ok(detectOverclaimTypes(claim, evidence).includes('speculation_presented_as_fact'));
+  }
+});
+
 test('claim-support audit flags correlation-to-causation overclaim', () => {
   assert.ok(detectOverclaimTypes(
     'The patch caused the performance increase.',
