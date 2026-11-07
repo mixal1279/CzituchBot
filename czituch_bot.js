@@ -669,7 +669,7 @@ async function ustawZweryfikowanaPamiecAI(userId, records) {
 
 const readline   = require('readline');
 const crypto     = require('crypto');
-const { wylosujBit } = require('./economy/random');
+const { wylosujLiczbe, wylosujIndeks, wylosujBit } = require('./economy/random');
 
 // Nie logujemy nawet samej obecności kluczy API — ograniczamy ujawnianie konfiguracji providerów.
 
@@ -6410,7 +6410,7 @@ async function obslugaWiadomosci(nick, message, platforma, wyslijFn, kanal = nul
       for (const klucz of Object.keys(arbuzDzienneCache)) {
         if (!klucz.endsWith(`_${dzisiaj}`)) delete arbuzDzienneCache[klucz];
       }
-      arbuz = ARBUZY[Math.floor(Math.random() * ARBUZY.length)];
+      arbuz = ARBUZY[wylosujIndeks(ARBUZY.length)];
       arbuzDzienneCache[cacheKey] = arbuz;
       await zapiszCacheArbuzow(arbuzDzienneCache);
     }
@@ -6444,7 +6444,7 @@ async function obslugaWiadomosci(nick, message, platforma, wyslijFn, kanal = nul
       for (const key of Object.keys(cmStreamCache)) {
         if (key.startsWith(streamPrefix) && !key.startsWith(currentStreamPrefix)) delete cmStreamCache[key];
       }
-      wynik = Math.floor(Math.random() * 30) + 1;
+      wynik = wylosujLiczbe(1, 31);
       cmStreamCache[cacheKey] = wynik;
       await zapiszCacheCm(cmStreamCache);
     }
@@ -6464,7 +6464,7 @@ async function obslugaWiadomosci(nick, message, platforma, wyslijFn, kanal = nul
       for (const klucz of Object.keys(ciastkoDzienneCache)) {
         if (!klucz.endsWith(`_${dzisiaj}`)) delete ciastkoDzienneCache[klucz];
       }
-      ciastko = CIASTKA[Math.floor(Math.random() * CIASTKA.length)];
+      ciastko = CIASTKA[wylosujIndeks(CIASTKA.length)];
       ciastkoDzienneCache[cacheKey] = ciastko;
       await zapiszCacheCiastek(ciastkoDzienneCache);
     }
@@ -6506,7 +6506,7 @@ async function obslugaWiadomosci(nick, message, platforma, wyslijFn, kanal = nul
 
   if (msgLower === '!iq') {
     ostatnieUzycie[cooldownKey] = teraz;
-    const iq = Math.floor(Math.random() * 151) + 50; // 50–200
+    const iq = wylosujLiczbe(50, 201); // 50–200
     const komentarz =
       iq >= 160 ? 'Einstein by się zawstydził 🧬' :
       iq >= 130 ? 'Całkiem nieźle, szkoda że na Kicku siedzisz 😅' :
@@ -6526,14 +6526,14 @@ async function obslugaWiadomosci(nick, message, platforma, wyslijFn, kanal = nul
         'Nie licz na to. 🎱', 'Moje źródła mówią nie. 🎱', 'Perspektywy nie są dobre. 🎱',
         'Bardzo wątpliwe. 🎱', 'Zdecydowanie nie. 🎱',
       ];
-      const odp8ball = odpowiedzi8ball[Math.floor(Math.random() * odpowiedzi8ball.length)];
+      const odp8ball = odpowiedzi8ball[wylosujIndeks(odpowiedzi8ball.length)];
       return await wyslijFn(`@${nick} 🎱 ${odp8ball}`);
     }
 
     if (msgLower.startsWith('!sus')) {
       ostatnieUzycie[cooldownKey] = teraz;
       const cel = message.split(' ')[1]?.replace(/^@/, '') || nick;
-      const procent = Math.floor(Math.random() * 101);
+      const procent = wylosujLiczbe(0, 101);
       const komentarzSus =
         procent === 100 ? 'Przyznaj się. Wszyscy widzieli.' :
         procent >= 81   ? 'GŁOSUJCIE! TO ON!' :
@@ -6546,7 +6546,7 @@ async function obslugaWiadomosci(nick, message, platforma, wyslijFn, kanal = nul
     if (msgLower.startsWith('!simp')) {
       ostatnieUzycie[cooldownKey] = teraz;
       const cel = message.split(' ')[1]?.replace(/^@/, '') || nick;
-      const procent = Math.floor(Math.random() * 101);
+      const procent = wylosujLiczbe(0, 101);
       const komentarzSimp =
         procent === 100 ? 'Absolutny simp. Bez ratunku.' :
         procent >= 81   ? 'Zmieniłby nick na jej/jego imię gdyby mógł.' :
@@ -6560,7 +6560,7 @@ async function obslugaWiadomosci(nick, message, platforma, wyslijFn, kanal = nul
   // ---- !mamdepresje – Kick EdzziLive oraz kanały YouTube Edzzi ----
   if ((platforma === 'youtube' && ['edzzi_minecraft', 'edzzi'].includes(kanalNorm)) && msgLower === '!mamdepresje') {
     ostatnieUzycie[cooldownKey] = teraz;
-    const poziom = Math.floor(Math.random() * 101); // 0-100%
+    const poziom = wylosujLiczbe(0, 101); // 0-100%
 
     const KOMUNIKATY_DEPRESJI = [
       { max: 20, teksty: [
@@ -6587,7 +6587,7 @@ async function obslugaWiadomosci(nick, message, platforma, wyslijFn, kanal = nul
 
     const cel = message.split(' ')[1]?.replace(/^@/, '') || nick;
     const kategoria = KOMUNIKATY_DEPRESJI.find(k => poziom <= k.max);
-    const komunikat = kategoria.teksty[Math.floor(Math.random() * kategoria.teksty.length)];
+    const komunikat = kategoria.teksty[wylosujIndeks(kategoria.teksty.length)];
 
     return await wyslijFn(`@${cel} poziom depresji: ${poziom}% – ${komunikat}`);
   }
@@ -6595,7 +6595,7 @@ async function obslugaWiadomosci(nick, message, platforma, wyslijFn, kanal = nul
   // ---- !californiarz – Kick EdzziLive oraz kanały YouTube Edzzi ----
   if ((platforma === 'youtube' && ['edzzi_minecraft', 'edzzi'].includes(kanalNorm)) && msgLower === '!californiarz') {
     ostatnieUzycie[cooldownKey] = teraz;
-    const procent = Math.floor(Math.random() * 101); // 0-100%
+    const procent = wylosujLiczbe(0, 101); // 0-100%
 
     const komentarzCalifornia =
       procent === 100 ? 'W 100% CERTIFIED CALIFORNIARZ. White 2115 dzwoni żeby zapytać Cię o radę.' :
@@ -6708,7 +6708,7 @@ async function obslugaWiadomosci(nick, message, platforma, wyslijFn, kanal = nul
         for (const key of Object.keys(cmStreamCache)) {
           if (key.startsWith(streamPrefix) && !key.startsWith(currentStreamPrefix)) delete cmStreamCache[key];
         }
-        wynik = Math.floor(Math.random() * 30) + 1;
+        wynik = wylosujLiczbe(1, 31);
         cmStreamCache[cacheKey] = wynik;
         await zapiszCacheCm(cmStreamCache);
       }
@@ -6749,7 +6749,7 @@ async function obslugaWiadomosci(nick, message, platforma, wyslijFn, kanal = nul
         'Kurwa, nawet się nie pożegnał.',
         'Do zobaczenia… jeśli starczy odwagi.'
       ];
-      const odpowiedz = odpowiedziAngie[Math.floor(Math.random() * odpowiedziAngie.length)];
+      const odpowiedz = odpowiedziAngie[wylosujIndeks(odpowiedziAngie.length)];
       return await wyslijFn(`@${nick} ${odpowiedz}`);
     }
 
@@ -8431,7 +8431,7 @@ async function obslugaTwitch(nick, message, wyslijFn, config = TWITCH_CONFIG_BIL
       ostatnieUzycie[cooldownKey] = teraz;
 
       const argZnak = message.split(' ')[1]?.toLowerCase().trim();
-      const znak = argZnak ? ZNAKI_ZODIAKU[argZnak] : ZNAKI_UNIKALNE[Math.floor(Math.random() * ZNAKI_UNIKALNE.length)];
+      const znak = argZnak ? ZNAKI_ZODIAKU[argZnak] : ZNAKI_UNIKALNE[wylosujIndeks(ZNAKI_UNIKALNE.length)];
 
       if (!znak) {
         return await wyslijFn(`@${nick} Nie znam takiego znaku. Dostępne: baran, byk, bliźnięta, rak, lew, panna, waga, skorpion, strzelec, koziorożec, wodnik, ryby.`);
@@ -8445,7 +8445,7 @@ async function obslugaTwitch(nick, message, wyslijFn, config = TWITCH_CONFIG_BIL
       }
 
       // Fallback na żartobliwą tabelę, gdy API/tłumaczenie zawiedzie
-      const horoskop = HOROSKOPY[Math.floor(Math.random() * HOROSKOPY.length)];
+      const horoskop = HOROSKOPY[wylosujIndeks(HOROSKOPY.length)];
       return await wyslijFn(`🔮 ${znak.pl} @${nick}: ${horoskop}`);
     }
 
@@ -8469,7 +8469,7 @@ async function obslugaTwitch(nick, message, wyslijFn, config = TWITCH_CONFIG_BIL
         for (const klucz of Object.keys(bulkaDzienneCache)) {
           if (!klucz.endsWith(`_${dzisiaj}`)) delete bulkaDzienneCache[klucz];
         }
-        bulka = BULKI[Math.floor(Math.random() * BULKI.length)];
+        bulka = BULKI[wylosujIndeks(BULKI.length)];
         bulkaDzienneCache[cacheKey] = bulka;
         await zapiszCacheBulek(bulkaDzienneCache);
       }
