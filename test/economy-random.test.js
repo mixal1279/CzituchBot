@@ -51,5 +51,5 @@ test('cryptographic integer draws reject invalid ranges and empty collections', 
 
 test('bot command handlers do not use Math.random for user-visible outcomes', () => {
   const source = fs.readFileSync(path.join(__dirname, '..', 'czituch_bot.js'), 'utf8');
-  assert.doesNotMatch(source, /Math\\.random\\s*\\(/u);
+  assert.doesNotMatch(source, /Math\.random\s*\(/u);
 });
