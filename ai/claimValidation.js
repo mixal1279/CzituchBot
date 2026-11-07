@@ -4,7 +4,6 @@ const { ENTITY_ALIAS_GROUPS, buildEntityAliasPatterns } = require('./entityAlias
 const { slowaLiczbowe } = require('./polishNumbers');
 const { GAME_ALIASES } = require('./entities');
 const { findQuotePrefix } = require('./evidence');
-const { ucieknijRegex } = require('./regex-utils');
 
 const NEGATION_RE = /(?<![\p{L}])(?:nie|nigdy|brak|bez|zaden|zadna|zadne|never|no|not|cannot|without|lack\s+of|absence\s+of|unable|neither|nor|fails?\s+to|\p{L}+n['\u2019]t)(?![\p{L}])/iu;
 // Ta sama lista bez gołego „no”: „no damage” to kwantyfikator zerowy, a nie zaprzeczenie czasownika.
@@ -151,7 +150,7 @@ for (const entry of buildEntityAliasPatterns(ENTITY_ALIAS_GROUPS)) {
   existing.pattern = new RegExp(`(?:${existing.pattern.source})|(?:${entry.pattern.source})`, 'iu');
 }
 function czyZnakSlowaUnicode(znak) {
-  return Boolean(znak) && /[\\p{L}\\p{N}_]/u.test(znak);
+  return Boolean(znak) && /[\p{L}\p{N}_]/u.test(znak);
 }
 
 function znakPrzed(tekst, indeks) {
@@ -560,7 +559,7 @@ function tekstDoWykrywaniaNegacji(value) {
   // to nie twierdzenie o tym, ze Astarion NIE wystepuje w grze. Usuwamy taka
   // wprowadzajaca fraze PRZED normalizacja, bo normalizacja zamienia przecinki
   // na spacje i rozmywa granice zdania podrzednego.
-  let cleaned = String(value || '');
+  let cleaned = String(value || '').slice(0, 12000);
   cleaned = cleaned.replace(/\b(?:if|when)\s+not\s+[^,.!?;:]*?\s*[,;:]/giu, ' ');
   cleaned = cleaned.replace(/\bunless\s+[^,.!?;:]*?\s*[,;:]/giu, ' ');
   cleaned = cleaned.replace(/\b(?:jesli|jeśli|jezeli|jeżeli|gdy|kiedy)\s+nie\s+[^,.!?;:]*?\s*(?:[,;:]|\sto\s)/giu, ' ');
