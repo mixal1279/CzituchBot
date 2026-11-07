@@ -12,7 +12,18 @@ const {
   spojnoscTlumaczeniaClaimu,
   pojeciaCrossLanguage,
   wyodrebnijLiczbyIDaty,
+  czyNazwySasiaduja,
 } = require('../ai/claimValidation');
+
+
+test('dynamic proper-name adjacency uses escaped fragments and Unicode-aware boundaries', () => {
+  assert.equal(czyNazwySasiaduja('Waga Żółć pojawia się w opisie.', 'Waga', 'Żółć'), true);
+  assert.equal(czyNazwySasiaduja('Uwaga Żółć pojawia się w opisie.', 'Waga', 'Żółć'), false);
+  assert.equal(czyNazwySasiaduja('Wagami Żółć pojawia się w opisie.', 'Waga', 'Żółć'), false);
+  assert.equal(czyNazwySasiaduja('A.*B C+D występują obok siebie.', 'A.*B', 'C+D'), true);
+  assert.equal(czyNazwySasiaduja('AxxxB C+D występują obok siebie.', 'A.*B', 'C+D'), false);
+  assert.equal(czyNazwySasiaduja('x'.repeat(121) + ' Y', 'x'.repeat(121), 'Y'), false);
+});
 
 test('dragon landing concept does not match generic land or lands wording', () => {
   assert.equal(pojeciaCrossLanguage('The lands around the castle are fertile.').has('smok_na_ziemi'), false);
