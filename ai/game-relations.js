@@ -3,8 +3,8 @@
 const { resolveGameEntity, normalizujEncje } = require('./entities');
 
 const PATTERNS = Object.freeze({
-  sequel: /(?<![\p{L}])(?:sequel|kontynuacj\p{L}*|kolejn\p{L}*\s+cz[eę]ść|nast[eę]pn\p{L}*\s+cz[eę]ść|ci[aą]g\s+dalsz\p{L}*)(?![\p{L}])/iu,
-  prequel: /(?<![\p{L}])(?:prequel|przedakcj\p{L}*|histori\p{L}*\s+poprzedzaj[aą]c\p{L}*)(?![\p{L}])/iu,
+  sequel: /(?<![\p{L}])(?:sequel\p{L}*|kontynuacj\p{L}*|kolejn\p{L}*\s+cz[eę]ść|nast[eę]pn\p{L}*\s+cz[eę]ść|ci[aą]g\s+dalsz\p{L}*)(?![\p{L}])/iu,
+  prequel: /(?<![\p{L}])(?:prequel\p{L}*|przedakcj\p{L}*|histori\p{L}*\s+poprzedzaj[aą]c\p{L}*)(?![\p{L}])/iu,
   franchise: /\b(?:franczyz\p{L}*|serii|seria|uniwersum|franchise|series|universe|cał(?:a|ej)\s+seria)\b/iu,
   addon: /\b(?:dlc|dodatek|dodatku|expansion|expansion\s+pack|add.?on)\b/iu,
   remake: /\bremake\b/iu,
