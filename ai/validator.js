@@ -1,7 +1,7 @@
 'use strict';
 // CI regression: causal evidence contract.
 
-const { assessEvidence } = require('./core');
+const { assessEvidence, classifyAuthority } = require('./core');
 
 const { sprawdzTwardeFaktyOdpowiedzi } = require('./response');
 const { czyDowodSemantyczniePokrywaClaim, czyRelacjaPrzyczynowaPokrywaClaim, zgodnoscStrukturalna, sprawdzTwardeKonflikty, sprawdzSprzecznosciSemantyczne, sprawdzPokrycieClaimamiOdpowiedzi, spojnoscTlumaczeniaClaimu, zbudujWyroczniaNazw, wyodrebnijNazwyWlasne, czyNazwaWlasnaWystepuje, wyglądaNaAngielski, normalizujClaim, CAUSAL_RE, CAUSAL_EVIDENCE_RE, czyOgraniczenieDowodowe } = require('./claimValidation');
@@ -685,12 +685,21 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
     return claim.evidence_quote || '';
   });
   const evidenceQuotes = claims.map(claim => String(claim.evidence_quote || ''));
+  const evidenceAuthorities = claims.map((claim, index) => {
+    for (const id of effectiveClaimSourceIds[index]) {
+      const block = blockBySourceId.get(id);
+      if (!block || !quoteExists(block.content, claim.evidence_quote)) continue;
+      return classifyAuthority({ url: block.url, provider: block.provider });
+    }
+    return 'unknown';
+  });
   const claimSupportAudit = buildClaimSupportAudit({
     claims,
     evidenceEvaluations,
     evidenceQuoteVerified,
     evidenceQuotes,
     evidenceContexts,
+    evidenceAuthorities,
   });
   const hardOverclaimClaimIndexes = claimSupportAudit.records
     .filter(record => record.overclaimTypes.some(type => HARD_OVERCLAIM_TYPES.has(type)))
