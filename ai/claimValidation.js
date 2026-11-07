@@ -150,15 +150,42 @@ for (const entry of buildEntityAliasPatterns(ENTITY_ALIAS_GROUPS)) {
   }
   existing.pattern = new RegExp(`(?:${existing.pattern.source})|(?:${entry.pattern.source})`, 'iu');
 }
+function czyZnakSlowaUnicode(znak) {
+  return Boolean(znak) && /[\\p{L}\\p{N}_]/u.test(znak);
+}
+
+function znakPrzed(tekst, indeks) {
+  if (indeks <= 0) return '';
+  let poczatek = indeks - 1;
+  const kod = tekst.charCodeAt(poczatek);
+  if (kod >= 0xDC00 && kod <= 0xDFFF && poczatek > 0) poczatek--;
+  return tekst.slice(poczatek, indeks);
+}
+
+function znakPo(tekst, indeks) {
+  if (indeks >= tekst.length) return '';
+  return String.fromCodePoint(tekst.codePointAt(indeks));
+}
+
 function czyNazwySasiaduja(tekst, pierwsza, druga) {
   const lewa = normalizujClaim(pierwsza);
   const prawa = normalizujClaim(druga);
   if (!lewa || !prawa || lewa.length > 120 || prawa.length > 120) return false;
-  const wzorzec = new RegExp(
-    `(?<![\\p{L}\\p{N}_])${ucieknijRegex(lewa)}\\s+${ucieknijRegex(prawa)}(?![\\p{L}\\p{N}_])`,
-    'u',
-  );
-  return wzorzec.test(normalizujClaim(tekst));
+
+  // normalizujClaim sprowadza separatory i wielokrotne odstępy do jednej spacji.
+  // Szukamy dosłownego ciągu, bez budowania RegExp z nazw pochodzących z danych.
+  const znormalizowany = normalizujClaim(tekst);
+  const szukany = lewa + ' ' + prawa;
+  let pozycja = znormalizowany.indexOf(szukany);
+  while (pozycja !== -1) {
+    const koniec = pozycja + szukany.length;
+    if (
+      !czyZnakSlowaUnicode(znakPrzed(znormalizowany, pozycja))
+      && !czyZnakSlowaUnicode(znakPo(znormalizowany, koniec))
+    ) return true;
+    pozycja = znormalizowany.indexOf(szukany, pozycja + 1);
+  }
+  return false;
 }
 
 function normalizujClaim(value) {
