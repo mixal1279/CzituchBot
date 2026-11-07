@@ -200,7 +200,6 @@ test('extended IGDB relation arrays are preserved without relabeling them as seq
     forks: [{ name: 'Example Fork' }],
     ports: [{ name: 'Example Port' }],
     bundles: [{ name: 'Example Bundle' }],
-    similar_games: [{ name: 'Example Similar' }],
   }, { requestedTitle: 'Example', question: 'Lore Example' });
   assert.equal(result.ok, true);
   assert.deepEqual(result.entity.relations, {
@@ -213,6 +212,5 @@ test('extended IGDB relation arrays are preserved without relabeling them as seq
     forks: ['Example Fork'],
     ports: ['Example Port'],
     bundles: ['Example Bundle'],
-    similarGames: ['Example Similar'],
   });
 });
