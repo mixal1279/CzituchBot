@@ -183,6 +183,22 @@ test('rzuca błąd dla nieprawidłowego Channel ID', async () => {
   await assert.rejects(() => discoverLiveVideoId('not-a-channel'), TypeError);
 });
 
+test('waliduje Channel ID bez regexu i odrzuca niedozwolone znaki', async () => {
+  const nieprawidlowe = [
+    'UCANPTDOw4sbMwVhITet1Qb!',
+    'UAANPTDOw4sbMwVhITet1Qbw',
+    'UCANPTDOw4sbMwVhITet1Qb',
+  ];
+  let fetchCalls = 0;
+  for (const channelId of nieprawidlowe) {
+    await assert.rejects(() => discoverLiveVideoId(channelId, {
+      fetchImpl: async () => { fetchCalls += 1; throw new Error('fetch nie powinien wystartować'); },
+      verifyVideo: async () => false,
+    }), TypeError);
+  }
+  assert.equal(fetchCalls, 0);
+});
+
 test('odrzuca nadmiernie długi Channel ID przed wykonaniem fetch', async () => {
   let fetchCalls = 0;
   await assert.rejects(() => discoverLiveVideoId('UC' + 'A'.repeat(100000), {
