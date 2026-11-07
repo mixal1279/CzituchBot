@@ -1396,8 +1396,17 @@ function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
     ? ''
     : (prefiksCytatu.split(/\bsentenceboundarytoken\b/u).at(-1) || '');
   const inneMozliwePodmioty = prefiksTegoSamegoZdania
-    ? wyodrebnijNazwyWlasne(prefiksTegoSamegoZdania)
-      .filter(nazwa => normalizujClaim(nazwa) !== normalizujClaim(pierwszyPodmiot || ''))
+    ? [
+        ...wyodrebnijNazwyWlasne(prefiksTegoSamegoZdania),
+        // Nazwy bestii i typów przeciwników bywają zapisane małą literą.
+        // Alias z tego samego zdania również jest konkurencyjnym referentem zaimka.
+        ...KNOWN_ENTITY_ALIAS_PATTERNS
+          .map(alias => alias.canonical)
+          .filter(nazwa => czyNazwaWlasnaWystepuje(nazwa, prefiksTegoSamegoZdania)),
+      ].filter((nazwa, index, lista) =>
+        normalizujClaim(nazwa) !== normalizujClaim(pierwszyPodmiot || '')
+        && lista.findIndex(inna => normalizujClaim(inna) === normalizujClaim(nazwa)) === index
+      )
     : [];
   if (pierwszyPodmiot
     && czyNazwaWlasnaWystepuje(pierwszyPodmiot, kontekstDowodu)
