@@ -154,3 +154,65 @@ test('a similar franchise-name prefix cannot substitute for an exact IGDB franch
   assert.equal(result.ok, false);
   assert.equal(result.reason, 'franchise_relation_not_verified');
 });
+
+
+test('sequel and prequel questions are recognized but never inferred from IGDB chronology alone', () => {
+  assert.equal(wariantZapytania('Czy Portal 2 jest sequelem Portal?', 'Portal 2'), 'sequel');
+  assert.equal(wariantZapytania('Czy ta gra jest prequelem Portal?', 'Portal'), 'prequel');
+  assert.equal(wariantZapytania('Czy to sequel czy prequel Portal?', 'Portal'), 'sequence');
+  for (const question of [
+    'Czy Portal 2 jest sequelem Portal?',
+    'Czy ta gra jest prequelem Portal?',
+    'Czy to sequel czy prequel Portal?',
+  ]) {
+    const result = klasyfikujKandydataIGDB({
+      id: 7,
+      name: 'Portal 2',
+      game_type: { name: 'Main Game' },
+      franchise: { name: 'Portal' },
+      first_release_date: 1276646400,
+    }, { requestedTitle: 'Portal 2', question });
+    assert.equal(result.ok, false);
+    assert.equal(result.reason, 'sequel_prequel_not_directly_exposed_by_igdb');
+  }
+});
+
+test('IGDB version_title can ground an explicitly requested special edition', () => {
+  const result = klasyfikujKandydataIGDB({
+    id: 8,
+    name: 'Example Complete Edition',
+    game_type: { name: 'Main Game' },
+    version_title: 'Complete Edition',
+  }, {
+    requestedTitle: 'Example Complete Edition',
+    question: 'Lore Example Complete Edition',
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.entity.versionTitle, 'Complete Edition');
+});
+
+test('extended IGDB relation arrays are preserved without relabeling them as sequels or spin-offs', () => {
+  const result = klasyfikujKandydataIGDB({
+    id: 9,
+    name: 'Example',
+    game_type: { name: 'Main Game' },
+    expanded_games: [{ name: 'Example Expanded' }],
+    forks: [{ name: 'Example Fork' }],
+    ports: [{ name: 'Example Port' }],
+    bundles: [{ name: 'Example Bundle' }],
+    similar_games: [{ name: 'Example Similar' }],
+  }, { requestedTitle: 'Example', question: 'Lore Example' });
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.entity.relations, {
+    remakes: [],
+    remasters: [],
+    dlcs: [],
+    expansions: [],
+    standaloneExpansions: [],
+    expandedGames: ['Example Expanded'],
+    forks: ['Example Fork'],
+    ports: ['Example Port'],
+    bundles: ['Example Bundle'],
+    similarGames: ['Example Similar'],
+  });
+});
