@@ -340,7 +340,7 @@ test('wykrywanie statusu pomija zanegowany marker, ale analizuje dalszą częś�
   ).includes('speculation_presented_as_fact'));
   assert.ok(detectOverclaimTypes(
     'The ending means the protagonist is dead.',
-    'This is not an interpretation; it may symbolize the protagonist\\'s death.',
+    'This is not an interpretation; it may symbolize the protagonist’s death.',
   ).includes('interpretation_presented_as_fact'));
 });
 
