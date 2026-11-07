@@ -350,3 +350,25 @@ test('sformułowanie „theory suggests” zachowuje status hipotezy', () => {
     'A theory suggests that the facility was built by the founders.',
   ).includes('speculation_presented_as_fact'));
 });
+
+
+test('status kanoniczny wymaga źródła pierwotnego, nie tylko wyspecjalizowanej wiki', () => {
+  const input = {
+    claims: [{
+      claim: 'To wydarzenie jest kanoniczne.',
+      source_ids: ['SOURCE 1'],
+      evidence_quote: 'This event is part of the official canon.',
+      supported: true,
+    }],
+    evidenceEvaluations: [{ ok: true, mode: 'exact_quote', reason: 'exact quote' }],
+    evidenceQuoteVerified: [true],
+    evidenceQuotes: ['This event is part of the official canon.'],
+  };
+  const communityWiki = buildClaimSupportAudit({ ...input, evidenceAuthorities: ['specialized'] });
+  assert.equal(communityWiki.records[0].verdict, 'unsupported');
+  assert.ok(communityWiki.records[0].overclaimTypes.includes('canon_status_not_official_source'));
+
+  const officialSource = buildClaimSupportAudit({ ...input, evidenceAuthorities: ['official'] });
+  assert.equal(officialSource.records[0].verdict, 'entailed');
+  assert.deepEqual(officialSource.records[0].overclaimTypes, []);
+});
