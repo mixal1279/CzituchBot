@@ -670,9 +670,7 @@ async function ustawZweryfikowanaPamiecAI(userId, records) {
 const readline   = require('readline');
 const crypto     = require('crypto');
 
-console.log('[DEBUG] GOOGLE_API_KEY:', process.env.GOOGLE_API_KEY ? '✅ ustawiony' : '❌ BRAK');
-console.log('[Gemini] 🔑 GEMINI_API_KEY:', process.env.GEMINI_API_KEY ? '✅ ustawiony (fallback aktywny)' : '❌ BRAK (fallback wyłączony)');
-console.log('[OpenRouter] 🔑 OPENROUTER_API_KEY:', process.env.OPENROUTER_API_KEY ? '✅ ustawiony (fallback aktywny)' : '❌ BRAK (fallback wyłączony)');
+// Nie logujemy nawet samej obecności kluczy API — ograniczamy ujawnianie konfiguracji providerów.
 
 // =============================================
 //  KONFIGURACJA
