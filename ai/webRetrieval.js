@@ -297,7 +297,8 @@ async function extractTavilyPages({ apiKey, urls, fetchFn = fetch, lookupFn = lo
   // DNS i pobranie strony wykonuje infrastruktura Tavily, więc nie chroni nas
   // przed DNS rebindingiem po stronie providera. Nie traktuj tego jako pełnej
   // ochrony SSRF; provider musi egzekwować własne blokady adresów i redirectów.
-  const candidates = [...new Set((urls || []).filter(czyBezpiecznyPublicznyUrl).map(u => String(u).trim()))].slice(0, 3);
+  const inputUrls = Array.isArray(urls) ? urls.slice(0, 30) : [];
+  const candidates = [...new Set(inputUrls.filter(czyBezpiecznyPublicznyUrl).map(u => String(u).trim()))].slice(0, 3);
   if (!apiKey || !candidates.length) return new Map();
   const checked = await Promise.all(candidates.map(async url => {
     const host = new URL(url).hostname;
