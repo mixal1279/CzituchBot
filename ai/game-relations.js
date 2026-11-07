@@ -37,15 +37,22 @@ function maRelacje(value) {
 
 function wariantZapytania(question, requestedTitle) {
   const text = String(question || '');
-  if (PATTERNS.collection.test(text)) return 'collection';
-  if (PATTERNS.franchise.test(text)) return 'franchise';
-  if (PATTERNS.addon.test(text)) return 'addon';
-  if (PATTERNS.remake.test(text)) return 'remake';
-  if (PATTERNS.reboot.test(text)) return 'reboot';
-  if (PATTERNS.remaster.test(text)) return 'remaster';
-  if (PATTERNS.spinoff.test(text)) return 'spinoff';
-  if (PATTERNS.version.test(text)) return 'version';
-  const deterministic = resolveGameEntity(requestedTitle);
+  const title = String(requestedTitle || '').trim();
+  const lowerText = text.toLocaleLowerCase('pl-PL');
+  const lowerTitle = title.toLocaleLowerCase('pl-PL');
+  const titleIndex = lowerTitle ? lowerText.indexOf(lowerTitle) : -1;
+  const intentText = titleIndex >= 0
+    ? text.slice(0, titleIndex) + ' ' + text.slice(titleIndex + title.length)
+    : text;
+  if (PATTERNS.collection.test(intentText)) return 'collection';
+  if (PATTERNS.franchise.test(intentText)) return 'franchise';
+  if (PATTERNS.addon.test(intentText)) return 'addon';
+  if (PATTERNS.remake.test(intentText)) return 'remake';
+  if (PATTERNS.reboot.test(intentText)) return 'reboot';
+  if (PATTERNS.remaster.test(intentText)) return 'remaster';
+  if (PATTERNS.spinoff.test(intentText)) return 'spinoff';
+  if (PATTERNS.version.test(intentText)) return 'version';
+  const deterministic = resolveGameEntity(question) || resolveGameEntity(requestedTitle);
   return deterministic?.type === 'franchise' ? 'franchise' : 'game';
 }
 

@@ -173,7 +173,7 @@ test('IGDB search terms from the model cannot append Apicalypse clauses', () => 
   assert.ok(start >= 0 && end > start, 'IGDB game lookup should exist');
   const lookup = source.slice(start, end);
   assert.match(lookup, /const igdbSearchTerm = nazwaGry\.replace/);
-  assert.match(lookup, /body: `search "\$\{igdbSearchTerm\}"; fields name,genres\.name; limit 5;`/);
+  assert.match(lookup, /body: `search "\$\{igdbSearchTerm\}"; fields id,name,genres\.name,game_type\.name,franchise\.name,franchises\.name,collections\.name,parent_game\.name,version_parent\.name,first_release_date,remakes\.name,remasters\.name,dlcs\.name,expansions\.name,standalone_expansions\.name; limit 8;`/);
   assert.doesNotMatch(lookup, /body: `search "\$\{nazwaGry\}"/);
 });
 
