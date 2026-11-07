@@ -39,6 +39,28 @@ test('Tavily extraction validates resolved addresses before sending URLs', async
 });
 
 
+test('Tavily extract sends only preflight-approved URLs to the fixed provider endpoint without redirects', async () => {
+  let requestUrl;
+  let requestOptions;
+  const pages = await extractTavilyPages({
+    apiKey: 'test-key',
+    urls: ['https://public.example/article'],
+    lookupFn: async () => [{ address: '93.184.216.34', family: 4 }],
+    fetchFn: async (url, options) => {
+      requestUrl = url;
+      requestOptions = options;
+      return new Response(JSON.stringify({ results: [{
+        url: 'https://public.example/article',
+        raw_content: 'A'.repeat(100),
+      }] }), { status: 200, headers: { 'content-type': 'application/json' } });
+    },
+  });
+  assert.equal(requestUrl, 'https://api.tavily.com/extract');
+  assert.equal(requestOptions.redirect, 'error');
+  assert.deepEqual(JSON.parse(requestOptions.body).urls, ['https://public.example/article']);
+  assert.equal(pages.get('https://public.example/article').length, 100);
+});
+
 test('bounded JSON reader preserves custom transports exposing both json() and text()', async () => {
   const result = await searchExa({
     apiKey: 'test-key',
