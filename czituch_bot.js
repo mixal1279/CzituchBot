@@ -1190,7 +1190,7 @@ async function znajdzGreIGDB(pytanie, requestState = null) {
           'Content-Type': 'text/plain',
         },
         // IGDB zwraca wyniki uporządkowane wg podobieństwa; pobieramy maksymalnie 5 kandydatów.
-        body: `search "${igdbSearchTerm}"; fields id,name,genres.name,game_type.name,franchise.name,franchises.name,collections.name,parent_game.name,version_parent.name,version_title,first_release_date,remakes.name,remasters.name,dlcs.name,expansions.name,standalone_expansions.name,expanded_games.name,forks.name,ports.name,bundles.name,similar_games.name; limit 8;`,
+        body: `search "${igdbSearchTerm}"; fields id,name,genres.name,game_type.name,franchise.name,franchises.name,collections.name,parent_game.name,version_parent.name,version_title,first_release_date,remakes.name,remasters.name,dlcs.name,expansions.name,standalone_expansions.name,expanded_games.name,forks.name,ports.name,bundles.name; limit 8;`,
       }, 6000);
       if (!res.ok) throw new Error(`IGDB HTTP ${res.status}`);
       const responseData = await res.json();
