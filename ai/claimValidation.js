@@ -4,6 +4,7 @@ const { ENTITY_ALIAS_GROUPS, buildEntityAliasPatterns } = require('./entityAlias
 const { slowaLiczbowe } = require('./polishNumbers');
 const { GAME_ALIASES } = require('./entities');
 const { findQuotePrefix } = require('./evidence');
+const { ucieknijRegex } = require('./regex-utils');
 
 const NEGATION_RE = /(?<![\p{L}])(?:nie|nigdy|brak|bez|zaden|zadna|zadne|never|no|not|cannot|without|lack\s+of|absence\s+of|unable|neither|nor|fails?\s+to|\p{L}+n['\u2019]t)(?![\p{L}])/iu;
 // Ta sama lista bez gołego „no”: „no damage” to kwantyfikator zerowy, a nie zaprzeczenie czasownika.
@@ -149,6 +150,17 @@ for (const entry of buildEntityAliasPatterns(ENTITY_ALIAS_GROUPS)) {
   }
   existing.pattern = new RegExp(`(?:${existing.pattern.source})|(?:${entry.pattern.source})`, 'iu');
 }
+function czyNazwySasiaduja(tekst, pierwsza, druga) {
+  const lewa = normalizujClaim(pierwsza);
+  const prawa = normalizujClaim(druga);
+  if (!lewa || !prawa || lewa.length > 120 || prawa.length > 120) return false;
+  const wzorzec = new RegExp(
+    `(?<![\\\\p{L}\\\\p{N}_])${ucieknijRegex(lewa)}\\\\s+${ucieknijRegex(prawa)}(?![\\\\p{L}\\\\p{N}_])`,
+    'u',
+  );
+  return wzorzec.test(normalizujClaim(tekst));
+}
+
 function normalizujClaim(value) {
   return String(value || '').slice(0, 12000)
     .replace(/\bdoesn['\u2019]t\b/giu, 'does not')
@@ -1561,7 +1573,7 @@ function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
     const retainedNames = claimNames.filter(name => !missing.includes(name) && czyNazwaWlasnaWystepuje(name, enNormalized));
     // Zachowana czesc musi sasiadowac z brakujaca w polskim claimie.
     const adjacentRetainedNames = retainedNames.filter(retained => missing.some(name =>
-      new RegExp(`\\b${normalizujClaim(retained)}\\s+${normalizujClaim(name)}\\b`, 'u').test(normalizujClaim(pl))
+      czyNazwySasiaduja(pl, retained, name)
     ));
     const hasRetainedEntity = adjacentRetainedNames.length > 0 && adjacentRetainedNames.every(retained =>
       czyNazwaWlasnaWystepuje(retained, quoteText)
@@ -1605,4 +1617,4 @@ function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
   return { ok: true };
 }
 
-module.exports = { KNOWN_ENTITY_ALIAS_PATTERNS, pojeciaCrossLanguage, CAUSAL_RE, CAUSAL_EVIDENCE_RE, wyglądaNaAngielski, wygladaNaAngielski, spojnoscTlumaczeniaClaimu, czyTlumaczenieOdwracaRelacjeKorupcjiWheatleya, czyOgraniczenieDowodowe, normalizujClaim, tokenyClaim, liczbyDoPorownania, czyRelacjaPrzyczynowaPokrywaClaim, wyodrebnijLiczbyIDaty, wyodrebnijJednostkoweWartosci, wyodrebnijNazwyWlasne, zbudujWyroczniaNazw, zgodnoscStrukturalna, sprawdzTwardeKonflikty, sprawdzSprzecznosciSemantyczne, dopasowanieSemantyczne, sprawdzPokrycieClaimamiOdpowiedzi, czyDowodSemantyczniePokrywaClaim, tokenyPokrywajaSie, czyNazwaWlasnaWystepuje, usunEtykietyDowodow };
+module.exports = { KNOWN_ENTITY_ALIAS_PATTERNS, pojeciaCrossLanguage, CAUSAL_RE, CAUSAL_EVIDENCE_RE, wyglądaNaAngielski, wygladaNaAngielski, spojnoscTlumaczeniaClaimu, czyTlumaczenieOdwracaRelacjeKorupcjiWheatleya, czyOgraniczenieDowodowe, normalizujClaim, tokenyClaim, liczbyDoPorownania, czyRelacjaPrzyczynowaPokrywaClaim, wyodrebnijLiczbyIDaty, wyodrebnijJednostkoweWartosci, wyodrebnijNazwyWlasne, zbudujWyroczniaNazw, zgodnoscStrukturalna, sprawdzTwardeKonflikty, sprawdzSprzecznosciSemantyczne, dopasowanieSemantyczne, sprawdzPokrycieClaimamiOdpowiedzi, czyDowodSemantyczniePokrywaClaim, tokenyPokrywajaSie, czyNazwaWlasnaWystepuje, czyNazwySasiaduja, usunEtykietyDowodow };
