@@ -41,44 +41,57 @@ async function readLimitedPageText(response, maxBytes = MAX_LIVE_PAGE_BYTES) {
   return text;
 }
 
+function czyBialyZnak(znak) {
+  return znak === ' ' || znak === '\\t' || znak === '\\n' || znak === '\\r' || znak === '\\f' || znak === '\\v';
+}
+
 function parseAssignedJson(html, variableName) {
   const source = String(html || '');
   if (Buffer.byteLength(source, 'utf8') > MAX_LIVE_PAGE_BYTES) return null;
-  const escapedName = variableName === 'ytInitialData' ? 'ytInitialData' : 'ytInitialPlayerResponse';
-  const patterns = [
-    new RegExp('(?:\\b(?:var|let|const)\\s+)?(?:window\\s*\\.\\s*)?' + escapedName + '\\s*=\\s*', 'g'),
-    new RegExp("window\\s*\\[\\s*['\\\"]" + escapedName + "['\\\"]\\s*\\]\\s*=\\s*", 'g'),
-    new RegExp("['\\\"]" + escapedName + "['\\\"]\\s*:\\s*", 'g'),
-  ];
+  const nazwa = variableName === 'ytInitialData' ? 'ytInitialData' : 'ytInitialPlayerResponse';
+  let pozycja = 0;
 
-  for (const pattern of patterns) {
-    let match;
-    while ((match = pattern.exec(source))) {
-      let start = match.index + match[0].length;
-      const limit = Math.min(source.length, start + 256);
-      while (start < source.length && /\\s/.test(source[start])) start += 1;
-      if (start >= source.length || (source[start] !== '{' && source[start] !== '[')) continue;
+  // Szukamy wyłącznie dwóch dozwolonych nazw przez indexOf. Nie budujemy regexu
+  // z tekstu strony, która pochodzi z zewnętrznego źródła.
+  while ((pozycja = source.indexOf(nazwa, pozycja)) !== -1) {
+    let start = pozycja + nazwa.length;
+    pozycja = start;
+    while (start < source.length && czyBialyZnak(source[start])) start += 1;
 
-      const otwarte = [];
-      let inString = false;
-      let escaped = false;
-      for (let i = start; i < source.length; i += 1) {
-        const char = source[i];
-        if (inString) {
-          if (escaped) escaped = false;
-          else if (char === '\\') escaped = true;
-          else if (char === '"') inString = false;
-          continue;
-        }
-        if (char === '"') inString = true;
-        else if (char === '{' || char === '[') otwarte.push(char);
-        else if (char === '}' || char === ']') {
-          const poprzedni = otwarte.pop();
-          if ((char === '}' && poprzedni !== '{') || (char === ']' && poprzedni !== '[')) break;
-          if (otwarte.length === 0) {
-            try { return JSON.parse(source.slice(start, i + 1)); }
-            catch { break; }
-          }
+    // Obsługa window["nazwa"] oraz klucza "nazwa": w obiekcie.
+    if (source[start] === '"' || source[start] === "'") {
+      start += 1;
+      while (start < source.length && czyBialyZnak(source[start])) start += 1;
+      if (source[start] === ']') {
+        start += 1;
+        while (start < source.length && czyBialyZnak(source[start])) start += 1;
+      }
+    }
+
+    if (source[start] !== '=' && source[start] !== ':') continue;
+    start += 1;
+    while (start < source.length && czyBialyZnak(source[start])) start += 1;
+    if (start >= source.length || (source[start] !== '{' && source[start] !== '[')) continue;
+
+    const otwarte = [];
+    let inString = false;
+    let escaped = false;
+    for (let i = start; i < source.length; i += 1) {
+      const char = source[i];
+      if (inString) {
+        if (escaped) escaped = false;
+        else if (char === '\\\\') escaped = true;
+        else if (char === '"') inString = false;
+        continue;
+      }
+      if (char === '"') inString = true;
+      else if (char === '{' || char === '[') otwarte.push(char);
+      else if (char === '}' || char === ']') {
+        const poprzedni = otwarte.pop();
+        if ((char === '}' && poprzedni !== '{') || (char === ']' && poprzedni !== '[')) break;
+        if (otwarte.length === 0) {
+          try { return JSON.parse(source.slice(start, i + 1)); }
+          catch { break; }
         }
       }
     }
