@@ -28,7 +28,6 @@ function utworzLifecycle({ logger = console, closeTimeoutMs = DEFAULT_CLOSE_TIME
         Promise.resolve().then(zamknij),
         new Promise((_, reject) => {
           timer = setTimeout(() => reject(new Error('timeout')), closeTimeoutMs);
-          timer.unref?.();
         }),
       ]);
     } catch (error) {
@@ -74,7 +73,6 @@ function utworzLifecycle({ logger = console, closeTimeoutMs = DEFAULT_CLOSE_TIME
           try { socket.terminate?.(); } catch (_) {}
           zakoncz();
         }, Math.min(closeTimeoutMs, 1500));
-        timer.unref?.();
         try { socket.close(1001, 'Server shutdown'); }
         catch (_) { zakoncz(); }
       });
@@ -97,7 +95,6 @@ function utworzLifecycle({ logger = console, closeTimeoutMs = DEFAULT_CLOSE_TIME
         logger.error?.('[Lifecycle] Przekroczono limit zamykania; wymuszam zakończenie procesu.');
         exitFn(kod || 1);
       }, 15000);
-      wymuszenie.unref?.();
       void zamknijWszystko(powod).finally(() => {
         if (wymuszenie) clearTimeout(wymuszenie);
         wymuszenie = null;
