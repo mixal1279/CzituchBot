@@ -45,7 +45,7 @@ function czyZnakSlowa(tekst, indeks, kropka = false) {
   if (indeks < 0 || indeks >= tekst.length) return false;
   const kod = tekst.codePointAt(indeks);
   const znak = String.fromCodePoint(kod);
-  return kropka ? /[\\p{L}\\p{N}_.]/u.test(znak) : /[\\p{L}\\p{N}_]/u.test(znak);
+  return kropka ? /[\p{L}\p{N}_.]/u.test(znak) : /[\p{L}\p{N}_]/u.test(znak);
 }
 
 function czyPoprzedniZnakSlowa(tekst, indeks, kropka = false) {
@@ -66,7 +66,7 @@ function zawieraTokenTwardy(refs, token) {
 
   // Odpowiednik granic Unicode bez dynamicznego RegExp. indexOf nie interpretuje
   // metaznaków tokenu i nie uruchamia backtrackingu na treści źródła.
-  const wymagaGranicyKoncowej = !/\\p{L}$/u.test(safeToken);
+  const wymagaGranicyKoncowej = !/\p{L}$/u.test(safeToken);
   let pozycja = referenceText.indexOf(safeToken);
   while (pozycja !== -1) {
     const koniec = pozycja + safeToken.length;
