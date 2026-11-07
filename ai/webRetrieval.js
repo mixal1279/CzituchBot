@@ -293,6 +293,10 @@ function czyBezpiecznyPublicznyUrl(value) {
 async function extractTavilyPages({ apiKey, urls, fetchFn = fetch, lookupFn = lookupDns, timeoutMs = 12000 }) {
   // Sprawdź składnię URL i wszystkie odpowiedzi DNS. W razie błędu lookup
   // lub choć jednego adresu prywatnego odrzuć cały URL (fail closed).
+  // To jest preflight przed przekazaniem URL do Tavily, a nie pinning połączenia:
+  // DNS i pobranie strony wykonuje infrastruktura Tavily, więc nie chroni nas
+  // przed DNS rebindingiem po stronie providera. Nie traktuj tego jako pełnej
+  // ochrony SSRF; provider musi egzekwować własne blokady adresów i redirectów.
   const candidates = [...new Set((urls || []).filter(czyBezpiecznyPublicznyUrl).map(u => String(u).trim()))].slice(0, 3);
   if (!apiKey || !candidates.length) return new Map();
   const checked = await Promise.all(candidates.map(async url => {
