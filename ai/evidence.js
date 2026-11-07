@@ -2,6 +2,8 @@
 
 function normalizeEvidenceText(value) {
   return String(value || '').slice(0, 12000)
+    .replace(/!\\[[^\\]]*\\]\\([^)]*\\)/gu, ' ')
+    .replace(/\\[([^\\]]+)\\]\\((?:[^()]|\\([^()]*\\))*\\)/gu, '$1')
     .toLocaleLowerCase('pl-PL')
     .replace(/ł/g, 'l')
     .normalize('NFD')

@@ -11,6 +11,7 @@ const { normalizujGroqBaseUrl } = require('../ai/provider-runtime');
 const { GEMINI_VALIDATOR_JSON_SCHEMA } = require('../ai/validator');
 const { buildGeminiGenerateContentUrl, buildGeminiValidatorGenerationConfig } = require('../ai/gemini-response');
 const { isBlockingPreflightFailure } = require('../ai/validator-preflight-policy');
+const { buildGeminiCountTokensBody } = require('../ai/gemini-count-tokens');
 
 const PROD_TIMEOUT_BY_PROVIDER = Object.freeze({
   Gemini: 12000,
@@ -187,7 +188,7 @@ async function countGeminiInputTokens(probe) {
   const started = Date.now();
   try {
     const countUrl = probe.url.replace(':generateContent', ':countTokens');
-    const { generationConfig, ...countBody } = probe.body;
+    const countBody = buildGeminiCountTokensBody(probe.body);
     const response = await fetch(countUrl, {
       method: 'POST',
       headers: probe.headers,

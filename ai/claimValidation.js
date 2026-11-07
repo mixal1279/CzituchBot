@@ -454,7 +454,9 @@ function wyodrebnijNazwyWlasne(value, options = {}) {
     // Zwykle slowa otwierajace zdanie z przypadkow false-rejection.
     // „Statki End…”: obok stoi nazwa pisana wielka litera, wiec sygnal „nazwa wielowyrazowa” nie
     // odrozni rzeczownika pospolitego od imienia i slowo musi byc na liscie.
-    'materialy', 'dostepne', 'dostepnych', 'danych', 'jedynym', 'jedyna', 'jedynie', 'ponadto', 'dodatkowo', 'aby', 'jesli', 'relacja', 'relacji', 'relacje', 'poznanie', 'poznania', 'statki', 'statek', 'statku', 'statkiem'
+    'materialy', 'dostepne', 'dostepnych', 'danych', 'jedynym', 'jedyna', 'jedynie', 'ponadto', 'dodatkowo', 'aby', 'jesli', 'relacja', 'relacji', 'relacje', 'poznanie', 'poznania', 'statki', 'statek', 'statku', 'statkiem',
+    // Odmiany rzeczownika „głos” nie mogą być mylone z nazwą własną w claimach o aktorach.
+    'glos', 'glosu', 'glosowi', 'glosie', 'glosami', 'glosow'
   ].map(normalizujClaim));
   const candidates = [];
   const aliasSpans = [];
@@ -1374,11 +1376,27 @@ function czyTlumaczenieOdwracaRelacjeKorupcjiWheatleya(claimPl, claimEn) {
 
 function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
   const pl = String(claimPl || '').trim();
-  const en = String(claimEn || '').trim();
+  let en = String(claimEn || '').trim();
   if (pl.length > 1000 || en.length > 1000) return { ok: false, reason: 'claim przekracza limit długości' };
   if (!pl || !en) return { ok: false, reason: 'brak tlumaczenia claimu' };
   if (en.length > pl.length * 3 + 60) return { ok: false, reason: 'tlumaczenie claimu jest nieproporcjonalnie dlugie' };
   if (!wygladaNaAngielski(en)) return { ok: false, reason: 'claim_en nie wyglada na tekst angielski' };
+  // Jeśli źródło używa zaimka na początku cytatu, tłumaczenie claimu nadal
+  // musi zachować jawny podmiot z polskiego claimu. Wolno to zrobić tylko,
+  // gdy nazwa występuje w bezpośrednim kontekście tego samego źródła.
+  const pierwszyPodmiot = wyodrebnijNazwyWlasne(pl).find(nazwa => {
+    const nazwaNorm = normalizujClaim(nazwa);
+    return nazwaNorm && normalizujClaim(pl).startsWith(nazwaNorm + ' ');
+  });
+  const kontekstDowodu = String(options.evidenceContext || '');
+  if (pierwszyPodmiot && czyNazwaWlasnaWystepuje(pierwszyPodmiot, kontekstDowodu)) {
+    const zaimek = en.match(/^(he|she|they|it|his|her|their|its)\\b/i);
+    if (zaimek) {
+      const nazwa = pierwszyPodmiot.charAt(0).toLocaleUpperCase('en-US') + pierwszyPodmiot.slice(1);
+      const podmiot = /^(?:his|her|their|its)$/i.test(zaimek[0]) ? nazwa + "'s" : nazwa;
+      en = podmiot + en.slice(zaimek[0].length);
+    }
+  }
   // Zbieznosc claim_en z cytatem sama w sobie nie dowodzi bledu: poprawny claim
   // moze byc wiernym tlumaczeniem zdania zrodlowego. Jesli jednak model skopiowal
   // caly cytat, wymagamy tez pozytywnej zgodnosci semantycznej PL→EN; inaczej
