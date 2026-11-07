@@ -8,7 +8,7 @@ on:
 
 jobs:
   njsscan:
-    timeout-minutes: 15
+    timeout-minutes: 30
     permissions:
       contents: read
       security-events: write
@@ -41,10 +41,10 @@ jobs:
             if [[ "${args[$i]}" == "--" ]]; then
               before=("${args[@]:0:i}")
               after=("${args[@]:i+1}")
-              exec "$NJSSCAN_SEMGREP_BIN" "${before[@]}" --timeout 120 -- "${after[@]}"
+              exec "$NJSSCAN_SEMGREP_BIN" "${before[@]}" --timeout 300 -- "${after[@]}"
             fi
           done
-          exec "$NJSSCAN_SEMGREP_BIN" "$@" --timeout 120
+          exec "$NJSSCAN_SEMGREP_BIN" "$@" --timeout 300
           SH
           chmod +x "$RUNNER_TEMP/njsscan-bin/semgrep"
           echo "NJSSCAN_SEMGREP_BIN=$real_semgrep" >> "$GITHUB_ENV"
@@ -86,7 +86,8 @@ jobs:
               || !report.templates || typeof report.templates !== 'object') {
             throw new Error('njsscan JSON report has an unexpected schema');
           }
-          const errors = Array.isArray(report.errors) ? report.errors : [];
+          if (!Array.isArray(report.errors)) throw new Error('njsscan report is missing scanner error metadata');
+          const errors = report.errors;
           const count = Object.values({ ...report.nodejs, ...report.templates })
             .reduce((sum, rule) => sum + (Array.isArray(rule.files) ? rule.files.length : 0), 0);
           console.log(`njsscan findings: ${count}; scanner errors: ${errors.length}`);
@@ -94,6 +95,10 @@ jobs:
             const summary = errors.map(error => `${error.type || 'error'}`).join(', ');
             throw new Error(`njsscan analysis incomplete: ${errors.length} scanner error(s): ${summary}`);
           }
+          const sarifFile = 'results.sarif';
+          if (!fs.existsSync(sarifFile)) throw new Error('njsscan SARIF report is missing');
+          const sarif = JSON.parse(fs.readFileSync(sarifFile, 'utf8'));
+          if (!Array.isArray(sarif.runs) || sarif.runs.length === 0) throw new Error('njsscan SARIF report has no analysis runs');
           NODE
 
       - name: Upload njsscan JSON artifact
