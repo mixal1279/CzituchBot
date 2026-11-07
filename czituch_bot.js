@@ -3208,6 +3208,9 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
     const nazwaGry = String(resolved.nazwa || resolved.name || '').trim().slice(0, 120);
     const typEncji = resolved.type === 'franchise' ? 'franchise' : 'game';
     const pewnoscGry = Number(resolved.confidence);
+    const dataPierwszegoWydania = Number.isFinite(resolved.firstReleaseDate)
+      ? new Date(resolved.firstReleaseDate * 1000).toISOString().slice(0, 10)
+      : null;
     if (nazwaGry) {
       routingAI.game = typEncji === 'franchise' ? null : nazwaGry;
       routingAI.entity = nazwaGry;
@@ -3230,7 +3233,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
       answerPlan.instruction += typEncji === 'franchise'
         ? ` Rozpoznany zakres to franczyza/seria "${nazwaGry}", nie pierwsza część. Uwzględniaj różne gry z tej serii i nie przypisuj wydarzeń do konkretnej części bez dowodu.`
         : ` Kontekst gry rozpoznany dynamicznie: ${nazwaGry}. Nie łącz go z innymi seriami bez bezpośredniego dowodu.`;
-      systemPrompt += `\n\n[RESOLVED GAME CONTEXT]\nZakres encji: ${typEncji}. Tytuł/seria: ${nazwaGry}. Typ IGDB: ${resolved.gameType || 'nieustalony'}. Franczyza: ${resolved.franchise || 'nieustalona'}. Kolekcje: ${(resolved.collections || []).join(', ') || 'brak danych'}. Data pierwszego wydania (metadane identyfikacyjne IGDB, nie dowód fabularny): ${resolved.firstReleaseDate || 'brak danych'}. Używaj tych relacji wyłącznie do rozpoznawania zakresu gry. Nie traktuj metadanych IGDB jako źródła faktów fabularnych. Nie mieszaj remake'u, remastera, DLC ani wersji z grą podstawową.\n[/RESOLVED GAME CONTEXT]`;
+      systemPrompt += `\n\n[RESOLVED GAME CONTEXT]\nZakres encji: ${typEncji}. Tytuł/seria: ${nazwaGry}. Typ IGDB: ${resolved.gameType || 'nieustalony'}. Franczyza: ${resolved.franchise || 'nieustalona'}. Kolekcje: ${(resolved.collections || []).join(', ') || 'brak danych'}. Data pierwszego wydania (metadane identyfikacyjne IGDB, nie dowód fabularny): ${dataPierwszegoWydania || 'brak danych'}. Używaj tych relacji wyłącznie do rozpoznawania zakresu gry. Nie traktuj metadanych IGDB jako źródła faktów fabularnych. Nie mieszaj remake'u, remastera, DLC ani wersji z grą podstawową.\n[/RESOLVED GAME CONTEXT]`;
     }
   }
 
@@ -3366,8 +3369,10 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
     const intentSpecificRetrievalQueries = plannedRetrievalQueries.filter(query =>
       /(?:exact location landmark nearby map|story timeline quest order arrival|character identity background role companion lore|cause reason motivation (?:event core transfer|story conflict)|gameplay strategy mechanics guide walkthrough)/i.test(query)
     );
-    const dynamicGameLoreQueries = aiPlan.responseProfile === 'lore' && routingAI.game
-      ? [`${routingAI.game} lore canon story timeline character relationships`]
+    const loreScopeName = routingAI.game
+      || (routingAI.entity_type === 'franchise' ? routingAI.entity : '');
+    const dynamicGameLoreQueries = aiPlan.responseProfile === 'lore' && loreScopeName
+      ? [`${loreScopeName} ${routingAI.entity_type === 'franchise' ? 'franchise series' : 'game'} lore canon story timeline character relationships`]
       : [];
     const specializedRetrievalQueries = [
       ...intentSpecificRetrievalQueries,
