@@ -12,7 +12,7 @@ function ucieknijRegex(value) {
 
 function utworzRegexPelnejNazwy(value) {
   const fragment = ucieknijRegex(value);
-  if (!fragment) return /(?!) /u;
+  if (!fragment) return /(?!)/u;
   return new RegExp(`(?<![\\p{L}\\p{N}_])${fragment}(?![\\p{L}\\p{N}_])`, 'iu');
 }
 
