@@ -14,6 +14,12 @@ test('njsscan runs once per PR update instead of duplicating push and pull_reque
   assert.doesNotMatch(workflow, /push:\s*\n\s+branches:\s*\[[^\]]*audit\/full-bot-hardening/);
 });
 
+
+test('njsscan cancels superseded scans for the same pull request', () => {
+  assert.match(workflow, /group:\s*njsscan-\$\{\{\s*github\.event\.pull_request\.number\s*\|\|\s*github\.ref\s*\}\}/);
+  assert.match(workflow, /cancel-in-progress:\s*true/);
+});
+
 test('njsscan scans the complete repository with a bounded per-rule timeout', () => {
   assert.match(workflow, /NJSScan\(\['\.'\],\s*True,\s*False\)\.scan\(\)/);
   assert.match(workflow, /--timeout 300/);
