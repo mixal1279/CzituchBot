@@ -55,7 +55,10 @@ const MAX_PROVIDER_RESPONSE_BYTES = 512 * 1024;
 
 async function odczytajOgraniczonyTekst(response, maxBytes = MAX_PROVIDER_RESPONSE_BYTES) {
   const declaredLength = Number(response.headers?.get?.('content-length'));
-  if (Number.isFinite(declaredLength) && declaredLength > maxBytes) throw new Error('provider_response_too_large');
+  if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
+    try { await response.body?.cancel?.(); } catch (_) {}
+    throw new Error('provider_response_too_large');
+  }
 
   if (response.body && typeof response.body.getReader === 'function') {
     const reader = response.body.getReader();
@@ -94,7 +97,10 @@ async function odczytajOgraniczonyTekst(response, maxBytes = MAX_PROVIDER_RESPON
 
 async function odczytajOgraniczonyJson(response, maxBytes = MAX_PROVIDER_RESPONSE_BYTES) {
   const declaredLength = Number(response.headers?.get?.('content-length'));
-  if (Number.isFinite(declaredLength) && declaredLength > maxBytes) throw new Error('provider_response_too_large');
+  if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
+    try { await response.body?.cancel?.(); } catch (_) {}
+    throw new Error('provider_response_too_large');
+  }
 
   if (response.body && typeof response.body.getReader === 'function') {
     const reader = response.body.getReader();
