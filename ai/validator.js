@@ -686,12 +686,15 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
   });
   const evidenceQuotes = claims.map(claim => String(claim.evidence_quote || ''));
   const evidenceAuthorities = claims.map((claim, index) => {
+    const rank = { unknown: 0, general: 1, guide: 2, reference: 3, specialized: 4, official: 5 };
+    let best = 'unknown';
     for (const id of effectiveClaimSourceIds[index]) {
       const block = blockBySourceId.get(id);
       if (!block || !quoteExists(block.content, claim.evidence_quote)) continue;
-      return classifyAuthority({ url: block.url, provider: block.provider });
+      const authority = classifyAuthority({ url: block.url, provider: block.provider });
+      if ((rank[authority] || 0) > (rank[best] || 0)) best = authority;
     }
-    return 'unknown';
+    return best;
   });
   const claimSupportAudit = buildClaimSupportAudit({
     claims,
