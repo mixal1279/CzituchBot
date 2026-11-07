@@ -168,7 +168,6 @@ function klasyfikujKandydataIGDB(candidate, { requestedTitle, question } = {}) {
         forks: nazwyRelacji(candidate.forks),
         ports: nazwyRelacji(candidate.ports),
         bundles: nazwyRelacji(candidate.bundles),
-        similarGames: nazwyRelacji(candidate.similar_games),
       },
     },
   };
