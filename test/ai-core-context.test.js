@@ -35,3 +35,26 @@ test('franchise-scoped retrieval is not incorrectly narrowed to one game', () =>
   };
   assert.equal(sourceMatchesRequestContext({ title: 'Portal 2: Wheatley', content: 'Portal 2 lore' }, franchiseRouting), true);
 });
+
+
+test('franchise retrieval accepts sources about different entries in the same franchise', () => {
+  const routing = {
+    is_lore: true,
+    entity_type: 'franchise',
+    entity: 'The Witcher',
+    resolved_entity: { type: 'franchise', name: 'The Witcher', game: null },
+  };
+  assert.equal(sourceMatchesRequestContext({ title: 'The Witcher 3: Wild Hunt', content: 'Geralt in The Witcher 3' }, routing), true);
+  assert.equal(sourceMatchesRequestContext({ title: 'Cyberpunk 2077', content: 'Night City lore' }, routing), false);
+});
+
+test('franchise retrieval does not silently narrow to the first game', () => {
+  const routing = {
+    is_lore: true,
+    entity_type: 'franchise',
+    entity: 'Portal',
+    resolved_entity: { type: 'franchise', name: 'Portal', game: null },
+  };
+  assert.equal(sourceMatchesRequestContext({ title: 'Portal 2 story', content: 'Wheatley and GLaDOS' }, routing), true);
+  assert.equal(sourceMatchesRequestContext({ title: 'Portal story', content: 'Chell and GLaDOS' }, routing), true);
+});

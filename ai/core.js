@@ -236,6 +236,13 @@ function sourceMatchesRequestContext(source = {}, routing = {}) {
 
   // A source about the right game is not sufficient for a request about a
   // specific character. Require the character (or one of its aliases) itself.
+  const franchiseScoped = resolved.type === 'franchise' || routing.entity_type === 'franchise';
+  const franchiseName = resolved.name || (franchiseScoped ? routing.entity : '');
+  if (franchiseScoped && franchiseName) {
+    const franchiseAliases = aliasesFor(GAME_ALIASES, franchiseName);
+    return franchiseAliases.some(alias => containsAlias(haystack, alias));
+  }
+
   const characterScoped = resolved.type === 'character' || routing.entity_type === 'character';
   const characterName = resolved.name || (characterScoped ? routing.entity : '');
   const gameName = resolved.game || routing.game;
