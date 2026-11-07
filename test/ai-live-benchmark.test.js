@@ -376,7 +376,7 @@ test('secondary validator outage is reported as degradation, not a benchmark out
     generationAttempts: [{ provider: 'groq', model: 'openai/gpt-oss-120b', status: 'success' }],
     validatorResults: [
       { provider: 'gemini', model: 'gemini-3.5-flash-lite', status: 'rejected' },
-      { provider: 'xkiro', model: 'qwen/qwen3.5-397b-a17b:free', status: 'unavailable', technicalError: true, reason: 'timeout' },
+      { provider: 'xkiro', model: 'cohere/command-a-reasoning', status: 'unavailable', technicalError: true, reason: 'timeout' },
     ],
     timingTrace: [],
   }], benchmark.cases, selected);
