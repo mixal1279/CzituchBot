@@ -206,6 +206,8 @@ function buildClaimSupportAudit({ claims = [], evidenceEvaluations = [], evidenc
     return {
       claimIndex: index,
       claim: String(claim?.claim || '').slice(0, 500),
+      // Zachowujemy claim_en w audycie, aby diagnozować utratę nazw i błędne tłumaczenia.
+      claimEn: String(claim?.claim_en || '').slice(0, 500),
       sourceIds: Array.isArray(claim?.source_ids) ? claim.source_ids.slice(0, 5) : [],
       evidenceQuote: String(claim?.evidence_quote || '').slice(0, 500),
       evidenceContext: evidenceContext.slice(0, 1200),

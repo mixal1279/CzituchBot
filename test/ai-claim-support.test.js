@@ -51,6 +51,22 @@ test('claim-support audit distinguishes exact entailment, bounded-context partia
   });
 });
 
+test('claim-support audit retains claim_en for translation diagnostics', () => {
+  const audit = buildClaimSupportAudit({
+    claims: [{
+      claim: 'Astarion dołączył do drużyny.',
+      claim_en: 'He joined the party.',
+      source_ids: ['SOURCE 1'],
+      evidence_quote: 'He joined the party.',
+      supported: true,
+    }],
+    evidenceEvaluations: [{ ok: false, reason: 'claim_en pomija podmiot' }],
+    evidenceQuoteVerified: [true],
+    evidenceQuotes: ['He joined the party.'],
+  });
+  assert.equal(audit.records[0].claimEn, 'He joined the party.');
+});
+
 test('status epistemiczny można wykrywać wielokrotnie bez wycieku lastIndex regexu', () => {
   const claim = 'GLaDOS is Caroline.';
   const evidence = 'A popular fan theory suggests that GLaDOS is Caroline.';
