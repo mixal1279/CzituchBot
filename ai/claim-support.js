@@ -12,6 +12,7 @@ const HARD_OVERCLAIM_TYPES = new Set([
   'speculation_presented_as_fact',
   'interpretation_presented_as_fact',
   'canon_status_not_in_evidence',
+  'canon_status_conflict',
   'input_too_long',
 ]);
 
@@ -25,6 +26,28 @@ function normalizeText(value) {
     .replace(/\s+/g, ' ')
     .trim();
 }
+
+
+function czyMarkerNieJestZaprzeczony(tekst, indeks) {
+  const prefix = tekst.slice(Math.max(0, indeks - 48), indeks);
+  return /(?:\bnot\s+(?:a\s+)?|\bisn't\s+(?:a\s+)?|\bis\s+not\s+(?:a\s+)?|\bwasn't\s+(?:a\s+)?|\bwas\s+not\s+(?:a\s+)?|\bnever\s+(?:a\s+)?|\bno\s+longer\s+(?:a\s+)?|\bnot\s+(?:part\s+of|in)\s+|\bnie\s+(?:(?:jest|byl|byla|bylo|sa|stanowi|pozostaje)\s+)?|\bto\s+nie\s+(?:jest\s+)?|\bnie\s+nalezy\s+do\s+)$/u.test(prefix);
+}
+
+function znajdzStatusEpistemiczny(tekst, wzorzec) {
+  const wzorzecWszystkie = new RegExp(wzorzec.source, wzorzec.flags.includes('g') ? wzorzec.flags : wzorzec.flags + 'g');
+  let match;
+  while ((match = wzorzecWszystkie.exec(tekst))) {
+    const marker = match[0].toLocaleLowerCase('pl-PL');
+    const negatywnyPrefiks = czyMarkerNieJestZaprzeczony(tekst, match.index);
+    const jawnieNegatywny = /^(?:non[- ]canonical|niekanoniczn)/u.test(marker);
+    return { wystepuje: true, pozytywny: !(negatywnyPrefiks || jawnieNegatywny), marker };
+  }
+  return { wystepuje: false, pozytywny: null, marker: null };
+}
+
+const THEORY_STATUS_RE = /(?:fan theor(?:y|ies)|speculat\p{L}*|rumou?r\p{L}*|unconfirmed|hypothes\p{L}*|teori\p{L}*\s+(?:fanowsk\p{L}*|zaklad\p{L}*|mow\p{L}*|sugeruj\p{L}*|glos\p{L}*|twierdz\p{L}*)|spekulacj\p{L}*|plotk\p{L}*|niepotwierdzon\p{L}*|hipotez\p{L}*|wedlug fanow|fani uwazaja|niektorzy gracze uwazaja)/giu;
+const INTERPRETATION_STATUS_RE = /(?:interpretation\p{L}*|interpreted as|can be interpreted|fans interpret|interpretacj\p{L}*|interpretowan\p{L}*|mozna interpretowac|fani interpretuja|may symbolize|might symbolize|could symbolize|moze symbolizowac|moze oznaczac)/giu;
+const CANON_STATUS_RE = /(?:non[- ]canonical|niekanoniczn\p{L}*|canon(?:ical(?:ly)?|ically)?|kanon\p{L}*)/giu;
 
 function detectOverclaimTypes(claim, evidence, options = {}) {
   if (String(claim || '').length > 1000 || String(evidence || '').length > 2000) return ['input_too_long'];
@@ -47,21 +70,26 @@ function detectOverclaimTypes(claim, evidence, options = {}) {
   // Lore: a quote explicitly framed as a fan theory, hypothesis or rumour
   // cannot support the same proposition stated as an established event.
   // The answer must preserve the epistemic label instead of dropping it.
-  const theoryEvidence = /(?<![\p{L}\p{N}_])(?:fan theor(?:y|ies)|theor(?:y|ies)|speculat\p{L}*|rumou?r\p{L}*|unconfirmed|hypothes\p{L}*|teori\p{L}*|spekulacj\p{L}*|plotk\p{L}*|niepotwierdzon\p{L}*|hipotez\p{L}*|wedlug fanow|fani uwazaja|niektorzy gracze uwazaja)(?![\p{L}\p{N}_])/u.test(e);
-  const theoryLabelInClaim = /(?<![\p{L}\p{N}_])(?:fan theor(?:y|ies)|theor(?:y|ies)|speculat\p{L}*|rumou?r\p{L}*|unconfirmed|hypothes\p{L}*|teori\p{L}*|spekulacj\p{L}*|plotk\p{L}*|niepotwierdzon\p{L}*|hipotez\p{L}*|wedlug fanow|fani uwazaja)(?![\p{L}\p{N}_])/u.test(c);
+  const theoryEvidence = znajdzStatusEpistemiczny(e, THEORY_STATUS_RE).wystepuje;
+  const theoryLabelInClaim = znajdzStatusEpistemiczny(c, THEORY_STATUS_RE).wystepuje;
   if (theoryEvidence && !theoryLabelInClaim) types.push('speculation_presented_as_fact');
 
   // Preserve interpretation as interpretation. A symbolic/interpretive reading
   // is not a plot event merely because the same nouns appear in the quote.
-  const interpretationEvidence = /(?<![\p{L}\p{N}_])(?:interpretation\p{L}*|interpreted as|can be interpreted|fans interpret|interpretacj\p{L}*|interpretowan\p{L}*|mozna interpretowac|fani interpretuja|symboliz\p{L}*|moze oznaczac)(?![\p{L}\p{N}_])/u.test(e);
-  const interpretationLabelInClaim = /(?<![\p{L}\p{N}_])(?:interpretation\p{L}*|interpreted as|interpretacj\p{L}*|interpretowan\p{L}*|interpretacyj\p{L}*|symboliz\p{L}*|symboliczn\p{L}* interpretacj\p{L}*)(?![\p{L}\p{N}_])/u.test(c);
+  const interpretationEvidence = znajdzStatusEpistemiczny(e, INTERPRETATION_STATUS_RE).wystepuje;
+  const interpretationLabelInClaim = znajdzStatusEpistemiczny(c, INTERPRETATION_STATUS_RE).wystepuje;
   if (interpretationEvidence && !interpretationLabelInClaim) types.push('interpretation_presented_as_fact');
 
   // A claim about canonical/official status needs that status stated in its
   // own cited span. Ordinary plot evidence does not prove canonicity.
-  const canonStatusClaim = /(?<![\p{L}\p{N}_])(?:canon(?:ical(?:ly)?|ically)?|kanon\p{L}*|official canon|oficjaln\p{L}* kanon|potwierdzon\p{L}* przez tworc\p{L}*|confirmed by (?:the )?(?:developers|creators|writers))(?![\p{L}\p{N}_])/u.test(c);
-  const canonStatusEvidence = /(?<![\p{L}\p{N}_])(?:canon(?:ical(?:ly)?|ically)?|kanon\p{L}*|official canon|oficjaln\p{L}* kanon|potwierdzon\p{L}* przez tworc\p{L}*|confirmed by (?:the )?(?:developers|creators|writers))(?![\p{L}\p{N}_])/u.test(e);
-  if (canonStatusClaim && !canonStatusEvidence) types.push('canon_status_not_in_evidence');
+  const canonClaimStatus = znajdzStatusEpistemiczny(c, CANON_STATUS_RE);
+  const canonEvidenceStatus = znajdzStatusEpistemiczny(e, CANON_STATUS_RE);
+  if (canonClaimStatus.wystepuje && !canonEvidenceStatus.wystepuje) {
+    types.push('canon_status_not_in_evidence');
+  } else if (canonClaimStatus.wystepuje && canonEvidenceStatus.wystepuje
+    && canonClaimStatus.pozytywny !== canonEvidenceStatus.pozytywny) {
+    types.push('canon_status_conflict');
+  }
 
   const sourceHedged = /\b(?:may|might|could|possibly|potentially|suggests?|appears? to|limited evidence|small study|moze|mozliwe|mozna(?:\s+byc)?|da\s+sie|bywa|prawdopodobnie|sugeruje|wstepne dane|niewielkim badaniu)\b/u.test(e);
   const claimAbsolute = /\b(?:always|never|proves?|guarantees?|definitely|certainly|undoubtedly|all|every|none|must|zawsze|nigdy|dowodzi|udowodniono|gwarantuje|bez watpienia|na pewno|wszyscy|wszystkie|kazdy|kazda|zaden|zadna)\b/u.test(c);
