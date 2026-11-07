@@ -9,6 +9,7 @@ const {
 } = require('../ai/claim-support');
 const { extractClaimSupportAudit } = require('../scripts/ai-live-benchmark');
 const validator = require('../ai/validator');
+const claimValidation = require('../ai/claimValidation');
 
 test('claim-support audit distinguishes exact entailment, bounded-context partial support, and unsupported evidence', () => {
   const audit = buildClaimSupportAudit({
@@ -440,4 +441,11 @@ test('oversized optional context cannot bypass the bounded causal evidence check
     context: oversizedContext,
     allowContextForCausality: true,
   }).includes('correlation_to_causation'));
+});
+
+test('adjacent entity names use literal matching with Unicode-safe boundaries', () => {
+  assert.equal(claimValidation.czyNazwySasiaduja('Wheatley, Control', 'Wheatley', 'Control'), true);
+  assert.equal(claimValidation.czyNazwySasiaduja('SuperWheatley Control', 'Wheatley', 'Control'), false);
+  assert.equal(claimValidation.czyNazwySasiaduja('Wheatley Controller', 'Wheatley', 'Control'), false);
+  assert.equal(claimValidation.czyNazwySasiaduja('ąWheatley Control', 'Wheatley', 'Control'), false);
 });
