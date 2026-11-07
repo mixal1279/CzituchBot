@@ -669,6 +669,7 @@ async function ustawZweryfikowanaPamiecAI(userId, records) {
 
 const readline   = require('readline');
 const crypto     = require('crypto');
+const { wylosujBit } = require('./economy/random');
 
 // Nie logujemy nawet samej obecności kluczy API — ograniczamy ujawnianie konfiguracji providerów.
 
@@ -5481,7 +5482,7 @@ async function obslugaEkonomii(nick, message, wyslijFn, walutaNadpis = null) {
     if (kwota < EKO.gambleMin) return wyslijFn(`@${nick} Minimum to ${EKO.gambleMin}${waluta.symbol}.`);
     if (g.emeraldy < kwota)    return wyslijFn(`${await prefix()} @${nick} Nie masz tyle! Masz ${g.emeraldy}${waluta.symbol}.`);
 
-    const wygrana = Math.random() < 0.50;
+    const wygrana = wylosujBit() === 0;
     const wynikGamble = await stmt.gambleAtomowo({
       nick, kwota, wygrana, teraz,
       podatekStawka: EKO.podatek,
@@ -5554,7 +5555,7 @@ async function obslugaEkonomii(nick, message, wyslijFn, walutaNadpis = null) {
     const istniejace = await stmt.getDuel(cel, cel);
     if (istniejace && istniejace.do === nick.toLowerCase() && Date.now() - istniejace.ts < 60000) {
       // Cel już wyzwał – rozstrzygamy w pojedynczej transakcji Firestore.
-      const wygrany = Math.random() < 0.5 ? nick : cel;
+      const wygrany = wylosujBit() === 0 ? nick : cel;
       const przegrany = wygrany === nick ? cel : nick;
       const wynikDuelu = await stmt.rozstrzygnijDuelAtomowo({
         wyzywajacy: cel,
