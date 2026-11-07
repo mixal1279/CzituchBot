@@ -155,7 +155,7 @@ function czyNazwySasiaduja(tekst, pierwsza, druga) {
   const prawa = normalizujClaim(druga);
   if (!lewa || !prawa || lewa.length > 120 || prawa.length > 120) return false;
   const wzorzec = new RegExp(
-    `(?<![\\\\p{L}\\\\p{N}_])${ucieknijRegex(lewa)}\\\\s+${ucieknijRegex(prawa)}(?![\\\\p{L}\\\\p{N}_])`,
+    `(?<![\\p{L}\\p{N}_])${ucieknijRegex(lewa)}\\s+${ucieknijRegex(prawa)}(?![\\p{L}\\p{N}_])`,
     'u',
   );
   return wzorzec.test(normalizujClaim(tekst));
