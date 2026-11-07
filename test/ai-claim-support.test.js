@@ -271,3 +271,18 @@ test('canonical status must appear in the cited evidence span', () => {
     'This event is part of the official canon.',
   ), []);
 });
+
+
+test('a directly stated symbolic meaning is not misclassified as an unlabeled interpretation', () => {
+  assert.deepEqual(detectOverclaimTypes(
+    'Czerwony kolor symbolizuje niebezpieczeństwo.',
+    'The red color symbolizes danger.',
+  ), []);
+});
+
+test('ordinary official release wording is not confused with canonical status', () => {
+  assert.deepEqual(detectOverclaimTypes(
+    'To oficjalna wersja gry.',
+    'This is the official game release.',
+  ), []);
+});

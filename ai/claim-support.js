@@ -52,13 +52,13 @@ function detectOverclaimTypes(claim, evidence, options = {}) {
   // Preserve interpretation as interpretation. A symbolic/interpretive reading
   // is not a plot event merely because the same nouns appear in the quote.
   const interpretationEvidence = /(?<![\p{L}\p{N}_])(?:interpretation\p{L}*|interpreted as|can be interpreted|fans interpret|interpretacj\p{L}*|interpretowan\p{L}*|mozna interpretowac|fani interpretuja|symboliz\p{L}*|moze oznaczac)(?![\p{L}\p{N}_])/u.test(e);
-  const interpretationLabelInClaim = /(?<![\p{L}\p{N}_])(?:interpretation\p{L}*|interpreted as|interpretacj\p{L}*|interpretowan\p{L}*|interpretacyj\p{L}*|symboliczn\p{L}* interpretacj\p{L}*)(?![\p{L}\p{N}_])/u.test(c);
+  const interpretationLabelInClaim = /(?<![\p{L}\p{N}_])(?:interpretation\p{L}*|interpreted as|interpretacj\p{L}*|interpretowan\p{L}*|interpretacyj\p{L}*|symboliz\p{L}*|symboliczn\p{L}* interpretacj\p{L}*)(?![\p{L}\p{N}_])/u.test(c);
   if (interpretationEvidence && !interpretationLabelInClaim) types.push('interpretation_presented_as_fact');
 
   // A claim about canonical/official status needs that status stated in its
   // own cited span. Ordinary plot evidence does not prove canonicity.
-  const canonStatusClaim = /(?<![\p{L}\p{N}_])(?:canon(?:ical(?:ly)?|ically)?|kanon\p{L}*|oficjaln\p{L}*|official(?:ly)?|potwierdzon\p{L}* przez tworc\p{L}*|confirmed by (?:the )?(?:developers|creators|writers))(?![\p{L}\p{N}_])/u.test(c);
-  const canonStatusEvidence = /(?<![\p{L}\p{N}_])(?:canon(?:ical(?:ly)?|ically)?|kanon\p{L}*|oficjaln\p{L}*|official(?:ly)?|potwierdzon\p{L}* przez tworc\p{L}*|confirmed by (?:the )?(?:developers|creators|writers))(?![\p{L}\p{N}_])/u.test(e);
+  const canonStatusClaim = /(?<![\p{L}\p{N}_])(?:canon(?:ical(?:ly)?|ically)?|kanon\p{L}*|official canon|oficjaln\p{L}* kanon|potwierdzon\p{L}* przez tworc\p{L}*|confirmed by (?:the )?(?:developers|creators|writers))(?![\p{L}\p{N}_])/u.test(c);
+  const canonStatusEvidence = /(?<![\p{L}\p{N}_])(?:canon(?:ical(?:ly)?|ically)?|kanon\p{L}*|official canon|oficjaln\p{L}* kanon|potwierdzon\p{L}* przez tworc\p{L}*|confirmed by (?:the )?(?:developers|creators|writers))(?![\p{L}\p{N}_])/u.test(e);
   if (canonStatusClaim && !canonStatusEvidence) types.push('canon_status_not_in_evidence');
 
   const sourceHedged = /\b(?:may|might|could|possibly|potentially|suggests?|appears? to|limited evidence|small study|moze|mozliwe|mozna(?:\s+byc)?|da\s+sie|bywa|prawdopodobnie|sugeruje|wstepne dane|niewielkim badaniu)\b/u.test(e);
