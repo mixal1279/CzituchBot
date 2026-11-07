@@ -8350,7 +8350,9 @@ async function obslugaTwitch(nick, message, wyslijFn, config = TWITCH_CONFIG_BIL
   }
 
   const kanalNorm = kanal ? kanal.toLowerCase() : '';
-  const historiaKlucz = zbudujKluczHistorii('twitch', kanalNorm, tags?.['user-id'] || login);
+  const historiaKlucz = tags?.['user-id']
+    ? zbudujKluczHistorii('twitch', kanalNorm, tags['user-id'])
+    : null;
 
   // Komenda !sex — piekarniczy miernik dopasowania.
   if (kanal === 'billybulka' && /^!sex(?:\s|$)/i.test(message.trim())) {
@@ -8390,15 +8392,18 @@ async function obslugaTwitch(nick, message, wyslijFn, config = TWITCH_CONFIG_BIL
       }
 
       ostatnieUzycie[cooldownKey] = teraz;
-      if (!historiaRozmowy[historiaKlucz]) historiaRozmowy[historiaKlucz] = [];
+      // Bez Twitch user-id odpowiedź jest bezstanowa: nie zapisuj historii ani pamięci po loginie.
+      const historiaTwitch = historiaKlucz
+        ? (historiaRozmowy[historiaKlucz] ||= [])
+        : [];
 
       try {
         await wykonajAIWHistorii(
-          historiaRozmowy[historiaKlucz],
+          historiaTwitch,
           () => wykonajWKolejceAI(() => zapytajAI(
             nick,
             pytanie,
-            historiaRozmowy[historiaKlucz],
+            historiaTwitch,
             AI_SYSTEM_PROMPT_BILLY,
             wyslijFn,
             {
@@ -8410,6 +8415,7 @@ async function obslugaTwitch(nick, message, wyslijFn, config = TWITCH_CONFIG_BIL
                 time_range: KONFIGURACJA.tavilyBillybulkaTimeRange,
               },
               memoryUserId: historiaKlucz,
+              disableMemory: !historiaKlucz,
             }
           ))
         );
