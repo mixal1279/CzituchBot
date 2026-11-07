@@ -13,6 +13,7 @@ const HARD_OVERCLAIM_TYPES = new Set([
   'interpretation_presented_as_fact',
   'canon_status_not_in_evidence',
   'canon_status_conflict',
+  'canon_status_not_official_source',
   'input_too_long',
 ]);
 
@@ -96,6 +97,13 @@ function detectOverclaimTypes(claim, evidence, options = {}) {
     && canonClaimStatus.pozytywny !== canonEvidenceStatus.pozytywny) {
     types.push('canon_status_conflict');
   }
+  // Status kanoniczny jest twierdzeniem o oficjalnym stanie uniwersum.
+  // Wiki społecznościowa może opisywać kanon, ale sama nie jest źródłem
+  // pierwotnym potwierdzającym jego status.
+  if (canonClaimStatus.wystepuje && options.sourceAuthority
+    && options.sourceAuthority !== 'official') {
+    types.push('canon_status_not_official_source');
+  }
 
   const sourceHedged = /\b(?:may|might|could|possibly|potentially|suggests?|appears? to|limited evidence|small study|moze|mozliwe|mozna(?:\s+byc)?|da\s+sie|bywa|prawdopodobnie|sugeruje|wstepne dane|niewielkim badaniu)\b/u.test(e);
   const claimAbsolute = /\b(?:always|never|proves?|guarantees?|definitely|certainly|undoubtedly|all|every|none|must|zawsze|nigdy|dowodzi|udowodniono|gwarantuje|bez watpienia|na pewno|wszyscy|wszystkie|kazdy|kazda|zaden|zadna)\b/u.test(c);
@@ -146,7 +154,7 @@ function detectOverclaimTypes(claim, evidence, options = {}) {
   return [...new Set(types)];
 }
 
-function buildClaimSupportAudit({ claims = [], evidenceEvaluations = [], evidenceQuoteVerified = [], evidenceQuotes = [], evidenceContexts = [] } = {}) {
+function buildClaimSupportAudit({ claims = [], evidenceEvaluations = [], evidenceQuoteVerified = [], evidenceQuotes = [], evidenceContexts = [], evidenceAuthorities = [] } = {}) {
   const records = claims.map((claim, index) => {
     const evaluation = evidenceEvaluations[index] || { ok: false, reason: 'brak lokalnej oceny dowodu' };
     const quoteVerified = evidenceQuoteVerified[index] === true;
@@ -160,6 +168,7 @@ function buildClaimSupportAudit({ claims = [], evidenceEvaluations = [], evidenc
       // structural verifier already accepted that exact claim as source_context.
       // Never let neighbouring text rescue an exact-quote overclaim.
       allowContextForCausality: evaluation.ok === true && evaluation.mode === 'source_context',
+      sourceAuthority: evidenceAuthorities[index] || null,
     });
     const hardOverclaims = overclaimTypes.filter(type => HARD_OVERCLAIM_TYPES.has(type));
     const reason = String(evaluation.reason || claim?.reason || '').slice(0, 500);
