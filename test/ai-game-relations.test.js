@@ -142,3 +142,15 @@ test('a Complete Edition is accepted only when the requested title explicitly na
     question: 'Lore Wiedźmina 3 Complete Edition',
   }).ok, true);
 });
+
+
+test('a similar franchise-name prefix cannot substitute for an exact IGDB franchise relation', () => {
+  const result = klasyfikujKandydataIGDB({
+    id: 6,
+    name: 'Portal 2',
+    game_type: { name: 'Main Game' },
+    franchise: { name: 'Portal 2' },
+  }, { requestedTitle: 'Portal', question: 'Opowiedz o serii Portal' });
+  assert.equal(result.ok, false);
+  assert.equal(result.reason, 'franchise_relation_not_verified');
+});
