@@ -413,4 +413,20 @@ test('walidator wiąże status kanoniczny z autorytetem dokładnie cytowanego ź
   const official = sprawdz('https://www.naughtydog.com/blog/example');
   assert.equal(official.diagnostics.claimSupport.records[0].sourceAuthority, 'official');
   assert.ok(!official.diagnostics.claimSupport.records[0].overclaimTypes.includes('canon_status_not_official_source'));
+
+  const multiSourcePayload = {
+    ...payload,
+    claims: [{ ...payload.claims[0], source_ids: ['SOURCE 1', 'SOURCE 2'] }],
+  };
+  const mixed = validator.normalizujWynikWalidatora(
+    multiSourcePayload,
+    'test-model',
+    'gemini',
+    new Set(['SOURCE 1', 'SOURCE 2']),
+    '[SOURCE 1]\nURL: https://gamelore.fandom.com/wiki/Example\nTYTUŁ: Wiki\nTREŚĆ:\n' + claim
+      + '\n[SOURCE 2]\nURL: https://www.naughtydog.com/blog/example\nTYTUŁ: Oficjalne źródło\nTREŚĆ:\n' + claim,
+    claim,
+  );
+  assert.equal(mixed.diagnostics.claimSupport.records[0].sourceAuthority, 'official');
+  assert.ok(!mixed.diagnostics.claimSupport.records[0].overclaimTypes.includes('canon_status_not_official_source'));
 });
