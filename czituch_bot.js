@@ -119,7 +119,7 @@ const { planAIRequest, responseContract, RESPONSE_PROFILES, buildRetrievalQuerie
 const { resolveGameEntity, scoreExternalGameCandidate, wyodrebnijJawnyTytulGry, externalGameCandidateMatchesQuery } = require('./ai/entities');
 const { utworzCacheIGDB } = require('./ai/igdb-cache');
 const { klasyfikujKandydataIGDB } = require('./ai/game-relations');
-const { ucieknijRegex } = require('./ai/regex-utils');
+const { ucieknijRegex, utworzRegexPelnejNazwy } = require('./ai/regex-utils');
 const igdbSearchCache = utworzCacheIGDB({ maxEntries: 100, ttlMs: 30 * 60 * 1000, negativeTtlMs: 5 * 60 * 1000 });
 const { extractExplicitUserMemories, mergeMemoryRecords, buildVerifiedMemoryContext, pruneExpiredMemories } = require('./ai/memory');
 const { parseMemoryCommand, forgetMemories, describeMemories } = require('./ai/memory_manager');
@@ -5923,7 +5923,7 @@ async function pobierzPrawdziwyHoroskop(znakEn, znakPl) {
     // typu "Waga: ...tekst o Bliźniętach...".
     const wszystkieNazwyZnakow = [...new Set(Object.values(ZNAKI_ZODIAKU).map(z => z.pl))];
     const zawieraObcyZnak = wszystkieNazwyZnakow.some(nazwa => {
-      const regex = new RegExp('\\b' + ucieknijRegex(nazwa) + '\\b', 'i');
+      const regex = utworzRegexPelnejNazwy(nazwa);
       return regex.test(tekstPl);
     });
     if (zawieraObcyZnak) {
