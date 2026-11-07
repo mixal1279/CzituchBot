@@ -2,6 +2,8 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const { wylosujLiczbe, wylosujIndeks, wylosujBit } = require('../economy/random');
 
 test('secure binary draw accepts only the two values requested from crypto.randomInt', () => {
@@ -44,4 +46,10 @@ test('cryptographic integer draws reject invalid ranges and empty collections', 
   assert.throws(() => wylosujLiczbe(1.5, 3), RangeError);
   assert.throws(() => wylosujIndeks(0), RangeError);
   assert.throws(() => wylosujIndeks(-1), RangeError);
+});
+
+
+test('bot command handlers do not use Math.random for user-visible outcomes', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'czituch_bot.js'), 'utf8');
+  assert.doesNotMatch(source, /Math\\.random\\s*\\(/u);
 });
