@@ -367,6 +367,7 @@ test('status kanoniczny wymaga źródła pierwotnego, nie tylko wyspecjalizowane
   const communityWiki = buildClaimSupportAudit({ ...input, evidenceAuthorities: ['specialized'] });
   assert.equal(communityWiki.records[0].verdict, 'unsupported');
   assert.ok(communityWiki.records[0].overclaimTypes.includes('canon_status_not_official_source'));
+  assert.equal(communityWiki.records[0].sourceAuthority, 'specialized');
 
   const officialSource = buildClaimSupportAudit({ ...input, evidenceAuthorities: ['official'] });
   assert.equal(officialSource.records[0].verdict, 'entailed');
