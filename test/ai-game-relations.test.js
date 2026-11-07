@@ -62,16 +62,16 @@ test('DLC candidates require an explicit DLC/add-on request and a matching IGDB 
 });
 
 test('remake, reboot, remaster and spin-off are never silently conflated', () => {
-  const remake = { name: 'Example Remake', game_type: { name: 'Remake' } };
+  const remake = { name: 'Example 2', game_type: { name: 'Remake' } };
   assert.equal(klasyfikujKandydataIGDB(remake, {
-    requestedTitle: 'Example Remake', question: 'Lore Example Remake',
+    requestedTitle: 'Example 2', question: 'Lore Example 2',
   }).ok, false);
   assert.equal(klasyfikujKandydataIGDB(remake, {
-    requestedTitle: 'Example Remake', question: 'Lore remake Example Remake',
+    requestedTitle: 'Example 2', question: 'Lore remake Example 2',
   }).ok, true);
-  assert.equal(wariantZapytania('Lore reboot Example', 'Example'), 'reboot');
+  assert.equal(wariantZapytania('Lore reboot Example 2', 'Example 2'), 'reboot');
   assert.equal(klasyfikujKandydataIGDB(remake, {
-    requestedTitle: 'Example Remake', question: 'Lore reboot Example Remake',
+    requestedTitle: 'Example 2', question: 'Lore reboot Example 2',
   }).ok, false);
 });
 
@@ -124,4 +124,21 @@ test('a variant marker inside the explicitly resolved title must match IGDB type
     requestedTitle: 'Example Remake',
     question: 'Lore reboot Example Remake',
   }).ok, false);
+});
+
+
+test('a Complete Edition is accepted only when the requested title explicitly names it', () => {
+  const candidate = {
+    name: 'The Witcher 3: Wild Hunt - Complete Edition',
+    game_type: { name: 'Main Game' },
+    version_parent: { name: 'The Witcher 3: Wild Hunt' },
+  };
+  assert.equal(klasyfikujKandydataIGDB(candidate, {
+    requestedTitle: 'The Witcher 3: Wild Hunt',
+    question: 'Lore Wiedźmina 3',
+  }).ok, false);
+  assert.equal(klasyfikujKandydataIGDB(candidate, {
+    requestedTitle: 'The Witcher 3: Wild Hunt Complete Edition',
+    question: 'Lore Wiedźmina 3 Complete Edition',
+  }).ok, true);
 });

@@ -126,7 +126,7 @@ function klasyfikujKandydataIGDB(candidate, { requestedTitle, question } = {}) {
     if (!gameType.includes(requested === 'spinoff' ? 'spin off' : requested)) {
       return { ok: false, reason: 'requested_variant_type_not_verified' };
     }
-  } else if (gameType !== 'main game') {
+  } else if (hasAddonParent || hasVersionParent || gameType !== 'main game') {
     return { ok: false, reason: gameType === 'unknown' ? 'game_type_not_verified' : 'non_base_game_candidate' };
   }
 
