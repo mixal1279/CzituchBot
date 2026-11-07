@@ -1398,11 +1398,15 @@ function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
   const inneMozliwePodmioty = prefiksTegoSamegoZdania
     ? [
         ...wyodrebnijNazwyWlasne(prefiksTegoSamegoZdania),
-        // Nazwy bestii i typów przeciwników bywają zapisane małą literą.
-        // Alias z tego samego zdania również jest konkurencyjnym referentem zaimka.
         ...KNOWN_ENTITY_ALIAS_PATTERNS
           .map(alias => alias.canonical)
           .filter(nazwa => czyNazwaWlasnaWystepuje(nazwa, prefiksTegoSamegoZdania)),
+        // Nazwy stworzeń zapisane małą literą (np. „an enderman”) są również
+        // możliwymi referentami. W razie wątpliwości blokujemy automatyczne
+        // dopisanie podmiotu zamiast zgadywać, do kogo odnosi się zaimek.
+        ...[...prefiksTegoSamegoZdania.matchAll(/\b(?:a|an|the)\s+([\p{L}][\p{L}'’\-]{2,})/giu)]
+          .map(match => match[1])
+          .filter(nazwa => !czyNazwaWlasnaWystepuje(pierwszyPodmiot || '', nazwa)),
       ].filter((nazwa, index, lista) =>
         normalizujClaim(nazwa) !== normalizujClaim(pierwszyPodmiot || '')
         && lista.findIndex(inna => normalizujClaim(inna) === normalizujClaim(nazwa)) === index
