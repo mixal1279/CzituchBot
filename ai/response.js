@@ -41,14 +41,41 @@ function maskSentenceAbbreviations(text) {
     .replace(/(?<![\p{L}\p{N}])(?:r|ok|tys|mln|mld|godz|tzw|ang|pol|zob|wg|ur|zm|nr|str|ul|im|dr|prof|inż|mgr|św)\.(?=\s+[\p{Ll}\d(„"“])/giu, m => m.slice(0, -1) + '\u2024');
 }
 
+function czyZnakSlowa(tekst, indeks, kropka = false) {
+  if (indeks < 0 || indeks >= tekst.length) return false;
+  const kod = tekst.codePointAt(indeks);
+  const znak = String.fromCodePoint(kod);
+  return kropka ? /[\\p{L}\\p{N}_.]/u.test(znak) : /[\\p{L}\\p{N}_]/u.test(znak);
+}
+
+function czyPoprzedniZnakSlowa(tekst, indeks, kropka = false) {
+  if (indeks <= 0) return false;
+  let poczatek = indeks - 1;
+  const kod = tekst.charCodeAt(poczatek);
+  if (kod >= 0xDC00 && kod <= 0xDFFF && poczatek > 0) {
+    const poprzedni = tekst.charCodeAt(poczatek - 1);
+    if (poprzedni >= 0xD800 && poprzedni <= 0xDBFF) poczatek -= 1;
+  }
+  return czyZnakSlowa(tekst, poczatek, kropka);
+}
+
 function zawieraTokenTwardy(refs, token) {
   const referenceText = String(refs || '');
   const safeToken = String(token || '').slice(0, 120);
   if (!safeToken || referenceText.length > 12000) return false;
-  const escaped = safeToken.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  // Token kończący się literą (jednostka) może się odmieniać; kończący się cyfrą/% wymaga granicy.
-  const tail = /\p{L}$/u.test(safeToken) ? '' : '(?![\\p{L}\\p{N}_])';
-  return new RegExp('(?<![\\p{L}\\p{N}_.])' + escaped + tail, 'u').test(referenceText);
+
+  // Odpowiednik granic Unicode bez dynamicznego RegExp. indexOf nie interpretuje
+  // metaznaków tokenu i nie uruchamia backtrackingu na treści źródła.
+  const wymagaGranicyKoncowej = !/\\p{L}$/u.test(safeToken);
+  let pozycja = referenceText.indexOf(safeToken);
+  while (pozycja !== -1) {
+    const koniec = pozycja + safeToken.length;
+    const poczatekPoprawny = !czyPoprzedniZnakSlowa(referenceText, pozycja, true);
+    const koniecPoprawny = !wymagaGranicyKoncowej || !czyZnakSlowa(referenceText, koniec);
+    if (poczatekPoprawny && koniecPoprawny) return true;
+    pozycja = referenceText.indexOf(safeToken, pozycja + 1);
+  }
+  return false;
 }
 
 const KONTEKSTY_GIER_AI = [
