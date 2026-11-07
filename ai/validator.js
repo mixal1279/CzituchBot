@@ -645,9 +645,10 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
     Array.isArray(c.source_ids) ? c.source_ids.map(normalizujIdZrodla) : []
   );
 
-  // A claim has one evidence_quote, so the audit unit must be one claim + one cited source.
-  // Evaluate each cited source separately and bind the claim to the first cited source that
-  // independently verifies that exact quote. A different source must never lend support to it.
+  // Jeden claim ma jeden cytat, więc jego werdykt musi być związany z jednym źródłem.
+  // Każde wskazane źródło sprawdzamy osobno. Jeśli kilka samodzielnie potwierdza
+  // dokładny cytat i claim, wybieramy źródło o najwyższym autorytecie — bez
+  // łączenia treści z jednej domeny z autorytetem innej.
   const evidenceEvaluations = claims.map((claim, index) => {
     const sourceIds = effectiveClaimSourceIds[index];
     const evaluations = sourceIds.map(sourceId => ({
@@ -657,7 +658,16 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
         nameOracle,
       }),
     }));
-    const verified = evaluations.find(item => item.result.ok === true);
+    const authorityRank = { unknown: 0, general: 1, guide: 2, reference: 3, specialized: 4, official: 5 };
+    const verified = evaluations
+      .filter(item => item.result.ok === true)
+      .sort((a, b) => {
+        const blockA = parsedEvidenceBlocks.find(block => normalizujIdZrodla(block.sourceId) === a.sourceId);
+        const blockB = parsedEvidenceBlocks.find(block => normalizujIdZrodla(block.sourceId) === b.sourceId);
+        const authorityA = classifyAuthority({ url: blockA?.url, provider: blockA?.provider });
+        const authorityB = classifyAuthority({ url: blockB?.url, provider: blockB?.provider });
+        return (authorityRank[authorityB] || 0) - (authorityRank[authorityA] || 0);
+      })[0];
     if (verified) {
       effectiveClaimSourceIds[index] = [verified.sourceId];
       claim.source_ids = [verified.sourceId];
