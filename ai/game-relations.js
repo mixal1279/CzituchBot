@@ -15,12 +15,6 @@ const PATTERNS = Object.freeze({
   collection: /\b(?:kolekcj\p{L}*|collection|zestaw\s+gier)\b/iu,
 });
 
-const NON_BASE_TYPES = new Set([
-  'dlc', 'dlc addon', 'expansion', 'standalone expansion', 'bundle',
-  'remake', 'remaster', 'port', 'episode', 'season', 'mod', 'fork',
-  'expanded game', 'spin off', 'reboot', 'pack', 'update',
-]);
-
 function nazwaRelacji(value) {
   if (typeof value === 'string') return value.trim() || null;
   if (value && typeof value === 'object' && typeof value.name === 'string') return value.name.trim() || null;
@@ -94,6 +88,7 @@ function klasyfikujKandydataIGDB(candidate, { requestedTitle, question } = {}) {
   const parentGame = nazwaRelacji(candidate.parent_game);
   const versionParent = nazwaRelacji(candidate.version_parent);
   const versionTitle = nazwaRelacji(candidate.version_title);
+  const hasVersionTitle = Boolean(versionTitle);
   const requested = wariantZapytania(question, requestedTitle);
 
   // IGDB nie publikuje bezpośrednich pól sequel_of/prequel_of. Frakcja i data
@@ -141,7 +136,7 @@ function klasyfikujKandydataIGDB(candidate, { requestedTitle, question } = {}) {
     if (!gameType.includes(requested === 'spinoff' ? 'spin off' : requested)) {
       return { ok: false, reason: 'requested_variant_type_not_verified' };
     }
-  } else if (hasAddonParent || hasVersionParent || gameType !== 'main game') {
+  } else if (hasAddonParent || hasVersionParent || hasVersionTitle || gameType !== 'main game') {
     return { ok: false, reason: gameType === 'unknown' ? 'game_type_not_verified' : 'non_base_game_candidate' };
   }
 
