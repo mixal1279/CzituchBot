@@ -3,9 +3,47 @@
 const LIVE_BADGE_STYLES = new Set(['BADGE_STYLE_TYPE_LIVE_NOW']);
 const VIDEO_ID_RE = /^[a-zA-Z0-9_-]{11}$/;
 const MAX_VIDEO_CANDIDATES = 30;
+const MAX_LIVE_PAGE_BYTES = 512 * 1024;
+
+async function readLimitedPageText(response, maxBytes = MAX_LIVE_PAGE_BYTES) {
+  const declaredLength = Number(response?.headers?.get?.('content-length'));
+  if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
+    throw new Error('Strona YouTube /live przekracza limit rozmiaru.');
+  }
+
+  const body = response?.body;
+  if (body && typeof body.getReader === 'function') {
+    const reader = body.getReader();
+    const chunks = [];
+    let totalBytes = 0;
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        totalBytes += value?.byteLength || 0;
+        if (totalBytes > maxBytes) {
+          await reader.cancel();
+          throw new Error('Strona YouTube /live przekracza limit rozmiaru.');
+        }
+        chunks.push(Buffer.from(value));
+      }
+      return Buffer.concat(chunks, totalBytes).toString('utf8');
+    } catch (error) {
+      try { await reader.cancel(); } catch (_) {}
+      throw error;
+    }
+  }
+
+  const text = await response.text();
+  if (Buffer.byteLength(text, 'utf8') > maxBytes) {
+    throw new Error('Strona YouTube /live przekracza limit rozmiaru.');
+  }
+  return text;
+}
 
 function parseAssignedJson(html, variableName) {
   const source = String(html || '');
+  if (Buffer.byteLength(source, 'utf8') > MAX_LIVE_PAGE_BYTES) return null;
   const escapedName = variableName === 'ytInitialData' ? 'ytInitialData' : 'ytInitialPlayerResponse';
   const patterns = [
     new RegExp('(?:\\b(?:var|let|const)\\s+)?(?:window\\s*\\.\\s*)?' + escapedName + '\\s*=\\s*', 'g'),
@@ -165,6 +203,9 @@ function videoIdFromUrl(value) {
 
 function analizujStroneLive(html, finalUrl) {
   const source = String(html || '');
+  if (Buffer.byteLength(source, 'utf8') > MAX_LIVE_PAGE_BYTES) {
+    return { ids: [], diagnostyka: { znalezionoInitialData: false, znalezionoPlayerResponse: false, liczbaObiektow: 0, rendereryVideo: 0, sygnalyLive: 0, limitPrzeszukiwania: false, limitRozmiaruHtml: true, redirectVideoId: false } };
+  }
   const ids = new Set();
   const redirectedId = videoIdFromUrl(finalUrl);
   if (redirectedId) ids.add(redirectedId);
@@ -200,6 +241,7 @@ function extractLiveVideoId(html, finalUrl) {
   const redirected = videoIdFromUrl(finalUrl);
   if (redirected) return redirected;
   const source = String(html || '');
+  if (Buffer.byteLength(source, 'utf8') > MAX_LIVE_PAGE_BYTES) return null;
   const playerResponse = parseAssignedJson(source, 'ytInitialPlayerResponse');
   const playerVideoId = playerResponse?.videoDetails?.videoId;
   if (
@@ -239,7 +281,7 @@ async function discoverLiveVideoId(channelId, options) {
       },
     });
     if (!response.ok) throw new Error('Strona YouTube /live zwróciła HTTP ' + response.status + '.');
-    const html = await response.text();
+    const html = await readLimitedPageText(response);
     const analizaStrony = analizujStroneLive(html, response.url || url);
     pageCandidates = analizaStrony.ids;
     if (!pageCandidates.length) {

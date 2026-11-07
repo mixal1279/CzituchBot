@@ -251,7 +251,7 @@ function rzymskieNaArabskie(s) {
 function wyodrebnijLiczbyIDaty(value) {
   // Keep decimal separators until numeric extraction; normalizujClaim intentionally
   // removes punctuation and would turn 2.50 into two unrelated integers (2 and 50).
-  const raw = String(value || '');
+  const raw = String(value || '').slice(0, 12000);
   // Rozroznia separator tysiecy od dziesietnego:
   // 50,000 / 50.000 / 50 000 => 50000, ale 2,5 / 2.50 => 2.5.
   // Nie zmieniamy tekstu zrodlowego poza normalizacja samych tokenow liczbowych.
@@ -338,7 +338,7 @@ const UNIT_ALIASES = new Map([
   ['°c','celsius'], ['°f','fahrenheit'], ['zl','pln'], ['zł','pln'], ['pln','pln'], ['usd','usd'], ['eur','eur'], ['%','percent'],
 ]);
 function wyodrebnijJednostkoweWartosci(value) {
-  const text = String(value || '').toLocaleLowerCase('pl-PL').replace(/,/g, '.')
+  const text = String(value || '').slice(0, 12000).toLocaleLowerCase('pl-PL').replace(/,/g, '.')
     // Dekada nie jest iloscia lat: porownuje ja wyodrebnianie dat powyzej.
     .replace(/\b(?:19|20)\d{2}\s*s\b/gu, ' ')
     // „lata 2000.” / „w latach 2012” to data, nie „2000 lat”: alias „lata” dawal falszywa jednostke 2000:year.
@@ -365,7 +365,7 @@ function wyodrebnijJednostkoweWartosci(value) {
   return [...new Set(out)];
 }
 function wyodrebnijNazwyWlasne(value, options = {}) {
-  const raw = String(value || '');
+  const raw = String(value || '').slice(0, 12000);
   // Pomijamy czeste slowa opisowe na poczatku zdania, ale nie imiona.
   // Wczesniejsze wykluczenie Artur/Arthur odrzucalo poprawne nazwy wlasne.
   const genericFirstWords = new Set([
@@ -1035,6 +1035,10 @@ function usunEtykietyDowodow(text) {
 }
 
 function sprawdzPokrycieClaimamiOdpowiedzi(answer, claims) {
+  const claimList = Array.isArray(claims) ? claims : [];
+  if (String(answer || '').length > 12000 || claimList.length > 40 || claimList.some(item => String(item?.claim || '').length > 1000)) {
+    return { ok: false, totalSentences: 0, checkedSentences: 0, uncoveredSentenceIndexes: [], uncovered: ['input_too_long'] };
+  }
   const sourceSentences = usunEtykietyDowodow(answer).split(/(?<=[.!?])\s+|\n+/).map(x => x.trim()).filter(Boolean);
   const sentences = sourceSentences.flatMap((sentence, sourceSentenceIndex) => {
     // Wskazanie zrodla w nawiasie („(Zrodlo: opis lokalizacji…)”) to metadane,
@@ -1061,7 +1065,7 @@ function sprawdzPokrycieClaimamiOdpowiedzi(answer, claims) {
     }
     return [{ text: base, sourceSentenceIndex }];
   });
-  const claimRows = (Array.isArray(claims) ? claims : [])
+  const claimRows = claimList
     .map(c => ({
       tokens: tokenyPokrycia(c?.claim || ''),
       concepts: pojeciaCrossLanguage(c?.claim || ''),

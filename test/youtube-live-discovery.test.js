@@ -341,3 +341,17 @@ test('nie oznacza kanału jako offline, gdy fallback jest pominięty przez coold
   );
 });
 
+
+
+test('odrzuca HTML /live większy niż limit przed parsowaniem i weryfikacją kandydatów', async () => {
+  const { extractLiveVideoIds, discoverLiveVideoId } = require('../youtube-live-discovery');
+  const oversized = 'x'.repeat(512 * 1024 + 1);
+  assert.deepEqual(extractLiveVideoIds(oversized), []);
+  let verified = 0;
+  const result = await discoverLiveVideoId('UCANPTDOw4sbMwVhITet1Qbw', {
+    fetchImpl: async () => ({ ok: true, url: 'https://www.youtube.com/channel/UCANPTDOw4sbMwVhITet1Qbw/live', text: async () => oversized }),
+    verifyVideo: async () => { verified++; return true; },
+  });
+  assert.equal(result, null);
+  assert.equal(verified, 0);
+});

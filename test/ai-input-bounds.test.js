@@ -12,7 +12,7 @@ const { czyPytanieOLore } = require('../ai/lore');
 const { buildRetrievalQueries, detectResponseProfile } = require('../ai/planner');
 const { sprawdzSpojnoscLorePortal2 } = require('../ai/response');
 const { selectGameSpecificRetrievalDomains } = require('../ai/retrieval');
-const { czyDowodSemantyczniePokrywaClaim, spojnoscTlumaczeniaClaimu } = require('../ai/claimValidation');
+const { czyDowodSemantyczniePokrywaClaim, spojnoscTlumaczeniaClaimu, sprawdzPokrycieClaimamiOdpowiedzi } = require('../ai/claimValidation');
 
 test('entity and intent matchers reject oversized untrusted input', () => {
   const oversized = 'x'.repeat(20000);
@@ -37,4 +37,14 @@ test('response and retrieval guards reject oversized content before regex evalua
   const oversized = 'x'.repeat(20000);
   assert.equal(sprawdzSpojnoscLorePortal2(oversized, 'Portal 2 Wheatley przejął kontrolę').ok, false);
   assert.deepEqual(selectGameSpecificRetrievalDomains('Portal', oversized), []);
+});
+
+
+test('answer claim coverage rejects oversized answer and excessive claim arrays', () => {
+  assert.equal(sprawdzPokrycieClaimamiOdpowiedzi('A'.repeat(12001), []).ok, false);
+  assert.equal(sprawdzPokrycieClaimamiOdpowiedzi('A short answer.', Array.from({ length: 41 }, () => ({ claim: 'A claim.' }))).ok, false);
+  assert.deepEqual(
+    sprawdzPokrycieClaimamiOdpowiedzi('A short answer.', [{ claim: 'A'.repeat(1001) }]).uncovered,
+    ['input_too_long'],
+  );
 });
