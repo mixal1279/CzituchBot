@@ -39,3 +39,9 @@ test('njsscan workflow validates and uploads both machine-readable reports', () 
   assert.match(workflow, /name: njsscan-json-report/);
   assert.match(workflow, /sarif_file: results\.sarif/);
 });
+
+
+test('incomplete njsscan output is never uploaded to Code Scanning as SARIF', () => {
+  assert.match(workflow, /id: validate_njsscan/);
+  assert.match(workflow, /steps\\.njsscan\\.outcome == 'success' && steps\\.validate_njsscan\\.outcome == 'success'/);
+});
