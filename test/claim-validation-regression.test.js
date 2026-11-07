@@ -31,6 +31,17 @@ test('sentence-initial inflection of „głos” is not treated as a proper name
   assert.ok(names.some(name => /wheatley/i.test(name)));
 });
 
+test('claim_en ignores competing referents from earlier sentences', () => {
+  const quote = 'He was hostile at first, but agreed to join the party.';
+  const context = 'An enderman was seen near the portal. Astarion was wary of the group. ' + quote;
+  const result = spojnoscTlumaczeniaClaimu(
+    'Astarion był początkowo wrogi, ale zgodził się dołączyć do drużyny.',
+    'He was hostile at first, but agreed to join the party.',
+    { evidenceQuote: quote, evidenceContext: context },
+  );
+  assert.equal(result.ok, true, result.reason);
+});
+
 test('claim_en restores an explicit subject only from adjacent evidence context', () => {
   const quote = 'He was hostile at first, but agreed to join the party.';
   const context = 'Astarion was wary of the group. ' + quote;

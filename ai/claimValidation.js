@@ -3,7 +3,7 @@
 const { ENTITY_ALIAS_GROUPS, buildEntityAliasPatterns } = require('./entityAliases');
 const { slowaLiczbowe } = require('./polishNumbers');
 const { GAME_ALIASES } = require('./entities');
-const { findQuotePrefix } = require('./evidence');
+const { findQuotePrefix, findQuoteSentencePrefix } = require('./evidence');
 
 const NEGATION_RE = /(?<![\p{L}])(?:nie|nigdy|brak|bez|zaden|zadna|zadne|never|no|not|cannot|without|lack\s+of|absence\s+of|unable|neither|nor|fails?\s+to|\p{L}+n['\u2019]t)(?![\p{L}])/iu;
 // Ta sama lista bez gołego „no”: „no damage” to kwantyfikator zerowy, a nie zaprzeczenie czasownika.
@@ -1389,12 +1389,9 @@ function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
     return nazwaNorm && normalizujClaim(pl).startsWith(nazwaNorm + ' ');
   });
   const kontekstDowodu = String(options.evidenceContext || '');
-  const prefiksCytatu = options.evidenceQuote
-    ? findQuotePrefix(kontekstDowodu, options.evidenceQuote)
-    : null;
-  const prefiksTegoSamegoZdania = prefiksCytatu === null
-    ? ''
-    : (prefiksCytatu.split(/\bsentenceboundarytoken\b/u).at(-1) || '');
+  const prefiksTegoSamegoZdania = options.evidenceQuote
+    ? (findQuoteSentencePrefix(kontekstDowodu, options.evidenceQuote) || '')
+    : '';
   const inneMozliwePodmioty = prefiksTegoSamegoZdania
     ? [
         ...wyodrebnijNazwyWlasne(prefiksTegoSamegoZdania),

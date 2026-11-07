@@ -152,6 +152,19 @@ function findQuotePrefix(sourceContent, quote) {
   return offset >= 0 ? source.slice(0, offset) : null;
 }
 
+function findQuoteSentencePrefix(sourceContent, quote) {
+  const wantedQuote = normalizeQuoteVerificationText(quote);
+  if (!wantedQuote) return null;
+  for (const sentence of splitEvidenceSentences(sourceContent)) {
+    const normalized = normalizeQuoteVerificationText(sentence);
+    const offset = normalized.indexOf(wantedQuote);
+    if (offset >= 0) return normalized.slice(0, offset);
+  }
+  // Cytat może obejmować kilka zdań. W takim przypadku nie zgadujemy
+  // referenta zaimka na podstawie całego wcześniejszego kontekstu strony.
+  return null;
+}
+
 function quoteExists(sourceContent, quote) {
   const sourceSegments = String(sourceContent || '')
     // Split before punctuation normalization: otherwise source-side ellipses
@@ -472,4 +485,4 @@ function buildQuestionEvidenceContext(question, blocks, allowedSourceIds = null,
   }).join('\n\n');
 }
 
-module.exports = { escapeUntrustedEvidenceContent, normalizeEvidenceText, normalizeQuoteVerificationText, findQuotePrefix, parseEvidenceBlocks, quoteExists, splitEvidenceSentences, classifyClaimType, evidenceRelationSignals, rankEvidenceForClaim, ensureEvidenceSourceId, buildEvidenceCandidatesFromSources, buildEvidenceRepairContext, buildQuestionEvidenceContext, removeLeadingImageFilenameNoise, removeLeadingSourceMetadataNoise };
+module.exports = { escapeUntrustedEvidenceContent, normalizeEvidenceText, normalizeQuoteVerificationText, findQuotePrefix, findQuoteSentencePrefix, parseEvidenceBlocks, quoteExists, splitEvidenceSentences, classifyClaimType, evidenceRelationSignals, rankEvidenceForClaim, ensureEvidenceSourceId, buildEvidenceCandidatesFromSources, buildEvidenceRepairContext, buildQuestionEvidenceContext, removeLeadingImageFilenameNoise, removeLeadingSourceMetadataNoise };
