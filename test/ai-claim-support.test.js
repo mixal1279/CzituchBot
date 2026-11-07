@@ -8,6 +8,7 @@ const {
   summarizeClaimSupportAudits,
 } = require('../ai/claim-support');
 const { extractClaimSupportAudit } = require('../scripts/ai-live-benchmark');
+const validator = require('../ai/validator');
 
 test('claim-support audit distinguishes exact entailment, bounded-context partial support, and unsupported evidence', () => {
   const audit = buildClaimSupportAudit({
@@ -372,4 +373,44 @@ test('status kanoniczny wymaga źródła pierwotnego, nie tylko wyspecjalizowane
   const officialSource = buildClaimSupportAudit({ ...input, evidenceAuthorities: ['official'] });
   assert.equal(officialSource.records[0].verdict, 'entailed');
   assert.deepEqual(officialSource.records[0].overclaimTypes, []);
+});
+
+
+test('walidator wiąże status kanoniczny z autorytetem dokładnie cytowanego źródła', () => {
+  const claim = 'To wydarzenie jest kanoniczne.';
+  const payload = {
+    valid: true,
+    reason: 'claim poparty cytatem',
+    confidence: 0.99,
+    supported: true,
+    relevant: true,
+    complete: true,
+    hallucination: false,
+    unsupported_claims: [],
+    claims: [{
+      claim,
+      supported: true,
+      source_ids: ['SOURCE 1'],
+      evidence_quote: claim,
+      claim_en: '',
+      reason: 'dokładny cytat',
+    }],
+  };
+  const sprawdz = url => validator.normalizujWynikWalidatora(
+    payload,
+    'test-model',
+    'gemini',
+    new Set(['SOURCE 1']),
+    '[SOURCE 1]\nURL: ' + url + '\nTYTUŁ: Status wydarzenia\nTREŚĆ:\n' + claim,
+    claim,
+  );
+
+  const wiki = sprawdz('https://gamelore.fandom.com/wiki/Example');
+  assert.equal(wiki.diagnostics.claimSupport.records[0].sourceAuthority, 'specialized');
+  assert.ok(wiki.diagnostics.hardOverclaimClaimIndexes.includes(0));
+  assert.ok(wiki.diagnostics.claimSupport.records[0].overclaimTypes.includes('canon_status_not_official_source'));
+
+  const official = sprawdz('https://www.naughtydog.com/blog/example');
+  assert.equal(official.diagnostics.claimSupport.records[0].sourceAuthority, 'official');
+  assert.ok(!official.diagnostics.claimSupport.records[0].overclaimTypes.includes('canon_status_not_official_source'));
 });
