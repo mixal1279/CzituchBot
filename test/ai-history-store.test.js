@@ -66,8 +66,10 @@ test('Twitch AI passes its full platform-channel-user scope into persistent memo
   const end = source.indexOf('async function ', start + 1);
   assert.ok(start >= 0 && end > start, 'Twitch handler should exist');
   const handler = source.slice(start, end);
-  assert.match(handler, /zbudujKluczHistorii\('twitch', kanalNorm, tags\?\.\['user-id'\] \|\| login\)/);
+  assert.match(handler, /const historiaKlucz = tags\?\.\['user-id'\][\s\S]{0,160}\?\s*zbudujKluczHistorii\('twitch', kanalNorm, tags\['user-id'\]\)\s*:\s*null;/);
+  assert.doesNotMatch(handler, /zbudujKluczHistorii\('twitch',[^\n]*login/);
   assert.match(handler, /memoryUserId:\s*historiaKlucz/);
+  assert.match(handler, /disableMemory:\s*!historiaKlucz/);
 });
 
 test('history eviction keeps all entries within the configured limit', () => {
