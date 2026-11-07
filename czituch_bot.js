@@ -118,6 +118,7 @@ const { czyWymagaKlasyfikacjiSemantycznej, klasyfikujSemantycznie } = require('.
 const { planAIRequest, responseContract, RESPONSE_PROFILES, buildRetrievalQueries, czyPotrzebujeRewrite } = require('./ai/planner');
 const { resolveGameEntity, scoreExternalGameCandidate, wyodrebnijJawnyTytulGry, externalGameCandidateMatchesQuery } = require('./ai/entities');
 const { utworzCacheIGDB } = require('./ai/igdb-cache');
+const { klasyfikujKandydataIGDB } = require('./ai/game-relations');
 const igdbSearchCache = utworzCacheIGDB({ maxEntries: 100, ttlMs: 30 * 60 * 1000, negativeTtlMs: 5 * 60 * 1000 });
 const { extractExplicitUserMemories, mergeMemoryRecords, buildVerifiedMemoryContext, pruneExpiredMemories } = require('./ai/memory');
 const { parseMemoryCommand, forgetMemories, describeMemories } = require('./ai/memory_manager');
@@ -1189,7 +1190,7 @@ async function znajdzGreIGDB(pytanie, requestState = null) {
           'Content-Type': 'text/plain',
         },
         // IGDB zwraca wyniki uporządkowane wg podobieństwa; pobieramy maksymalnie 5 kandydatów.
-        body: `search "${igdbSearchTerm}"; fields name,genres.name; limit 5;`,
+        body: `search "${igdbSearchTerm}"; fields id,name,genres.name,game_type.name,franchise.name,franchises.name,collections.name,parent_game.name,version_parent.name,first_release_date,remakes.name,remasters.name,dlcs.name,expansions.name,standalone_expansions.name; limit 8;`,
       }, 6000);
       if (!res.ok) throw new Error(`IGDB HTTP ${res.status}`);
       const responseData = await res.json();
@@ -1197,21 +1198,38 @@ async function znajdzGreIGDB(pytanie, requestState = null) {
     });
     if (!Array.isArray(data) || !data.length) return null;
 
+    const jawnyTytul = Boolean(wyodrebnijJawnyTytulGry(pytanie));
     const kandydaci = data
-      .map(gra => ({ gra, score: scoreExternalGameCandidate(igdbSearchTerm, gra?.name) }))
+      .map(gra => ({
+        gra,
+        score: scoreExternalGameCandidate(igdbSearchTerm, gra?.name),
+        relacje: klasyfikujKandydataIGDB(gra, { requestedTitle: igdbSearchTerm, question: pytanie }),
+      }))
+      .filter(item => item.relacje.ok && item.score >= 0.72)
       .sort((a, b) => b.score - a.score);
     const najlepszy = kandydaci[0];
-    if (!najlepszy || najlepszy.score < 0.72) {
-      console.log(`[IGDB] Pomijam niepewne dopasowanie "${nazwaGry}" (score=${najlepszy?.score?.toFixed?.(2) || '0.00'})`);
-      return null;
-    }
-    const grounded = externalGameCandidateMatchesQuery(pytanie, najlepszy.gra.name);
-    if (!grounded.ok) {
-      console.log(`[IGDB] Odrzucam "${najlepszy.gra.name}" — brak potwierdzenia w oryginalnym pytaniu (rewrite="${nazwaGry}", score=${grounded.score.toFixed(2)})`);
+    if (!najlepszy) {
+      console.log(`[IGDB] Odrzucam kandydatów "${nazwaGry}" — brak zgodnej części, edycji lub relacji franczyzy.`);
       return null;
     }
     const gra = najlepszy.gra;
-    return { nazwa: gra.name, gatunki: (gra.genres || []).map(g => g.name).join(', '), confidence: Math.min(0.99, Math.min(najlepszy.score, grounded.score)), resolution: `igdb_verified:${grounded.via}` };
+    const relacje = najlepszy.relacje.entity;
+    const grounded = relacje.type === 'franchise'
+      ? { ok: true, score: najlepszy.score, via: 'igdb_franchise_relation' }
+      : (jawnyTytul
+        ? { ok: true, score: najlepszy.score, via: 'explicit_user_title' }
+        : externalGameCandidateMatchesQuery(pytanie, gra.name));
+    if (!grounded.ok) {
+      console.log(`[IGDB] Odrzucam "${gra.name}" — brak potwierdzenia tytułu w oryginalnym pytaniu.`);
+      return null;
+    }
+    return {
+      ...relacje,
+      nazwa: relacje.name,
+      gatunki: (gra.genres || []).map(g => g.name).join(', '),
+      confidence: Math.min(0.99, Math.min(najlepszy.score, grounded.score)),
+      resolution: `igdb_verified:${grounded.via}`,
+    };
   } catch (err) {
     console.error('[IGDB] Błąd:', sanitizujKomunikatBledu(err?.message));
     return null;
@@ -3177,26 +3195,34 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
   const verifiedMemory = await verifiedMemoryPromise;
   const verifiedMemoryContext = buildVerifiedMemoryContext(verifiedMemory);
   systemPrompt = `${systemPrompt}${verifiedMemoryContext ? `\n\n${verifiedMemoryContext}` : ''}`;
-  if (domeny?.resolvedGame && !routingAI.game) {
-    const nazwaGry = String(domeny.resolvedGame.nazwa || '').trim().slice(0, 120);
-    const pewnoscGry = Number(domeny.resolvedGame.confidence);
+  if (domeny?.resolvedGame && (!routingAI.game || domeny.resolvedGame.type === 'franchise')) {
+    const resolved = domeny.resolvedGame;
+    const nazwaGry = String(resolved.nazwa || resolved.name || '').trim().slice(0, 120);
+    const typEncji = resolved.type === 'franchise' ? 'franchise' : 'game';
+    const pewnoscGry = Number(resolved.confidence);
     if (nazwaGry) {
-      routingAI.game = nazwaGry;
-      routingAI.entity = routingAI.entity || nazwaGry;
-      routingAI.entity_type = routingAI.entity_type || 'game';
-      routingAI.resolved_entity = routingAI.resolved_entity || {
-        type: 'game',
+      routingAI.game = typEncji === 'franchise' ? null : nazwaGry;
+      routingAI.entity = nazwaGry;
+      routingAI.entity_type = typEncji;
+      routingAI.resolved_entity = {
+        type: typEncji,
         name: nazwaGry,
-        game: nazwaGry,
+        game: typEncji === 'franchise' ? null : nazwaGry,
+        franchise: resolved.franchise || (typEncji === 'franchise' ? nazwaGry : null),
+        collection: resolved.collection || null,
+        game_type: resolved.gameType || null,
+        parent_game: resolved.parentGame || null,
+        version_parent: resolved.versionParent || null,
+        first_release_date: resolved.firstReleaseDate || null,
         confidence: Number.isFinite(pewnoscGry) ? Math.max(0, Math.min(1, pewnoscGry)) : 0.75,
-        resolution: domeny.resolvedGame.resolution || 'igdb',
+        resolution: resolved.resolution || 'igdb',
       };
-      // Plan powstał przed równoległym rozpoznaniem IGDB — aktualizujemy go,
-      // aby walidator i końcowy prompt używały tej samej gry co retrieval.
-      answerPlan.game = nazwaGry;
-      answerPlan.entity = answerPlan.entity || routingAI.entity;
-      answerPlan.instruction += ` Kontekst gry rozpoznany dynamicznie: ${nazwaGry}. Nie łącz go z innymi seriami bez bezpośredniego dowodu.`;
-      systemPrompt += `\n\n[RESOLVED GAME CONTEXT]\nGra rozpoznana przez IGDB: ${nazwaGry}. Używaj tego tytułu do ograniczenia źródeł i nie przenoś faktów z innych gier.\n[/RESOLVED GAME CONTEXT]`;
+      answerPlan.game = typEncji === 'franchise' ? null : nazwaGry;
+      answerPlan.entity = nazwaGry;
+      answerPlan.instruction += typEncji === 'franchise'
+        ? ` Rozpoznany zakres to franczyza/seria "${nazwaGry}", nie pierwsza część. Uwzględniaj różne gry z tej serii i nie przypisuj wydarzeń do konkretnej części bez dowodu.`
+        : ` Kontekst gry rozpoznany dynamicznie: ${nazwaGry}. Nie łącz go z innymi seriami bez bezpośredniego dowodu.`;
+      systemPrompt += `\n\n[RESOLVED GAME CONTEXT]\nZakres encji: ${typEncji}. Tytuł/seria: ${nazwaGry}. Typ IGDB: ${resolved.gameType || 'nieustalony'}. Franczyza: ${resolved.franchise || 'nieustalona'}. Kolekcje: ${(resolved.collections || []).join(', ') || 'brak danych'}. Data pierwszego wydania (metadane identyfikacyjne IGDB, nie dowód fabularny): ${resolved.firstReleaseDate || 'brak danych'}. Używaj tych relacji wyłącznie do rozpoznawania zakresu gry. Nie traktuj metadanych IGDB jako źródła faktów fabularnych. Nie mieszaj remake'u, remastera, DLC ani wersji z grą podstawową.\n[/RESOLVED GAME CONTEXT]`;
     }
   }
 
