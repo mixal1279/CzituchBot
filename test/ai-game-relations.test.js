@@ -214,3 +214,20 @@ test('extended IGDB relation arrays are preserved without relabeling them as seq
     bundles: ['Example Bundle'],
   });
 });
+
+
+test('IGDB Fork is not silently treated as a reboot or spin-off', () => {
+  const candidate = { name: 'Example Fork', game_type: { name: 'Fork' } };
+  const reboot = klasyfikujKandydataIGDB(candidate, {
+    requestedTitle: 'Example Fork',
+    question: 'Lore reboot Example Fork',
+  });
+  const spinoff = klasyfikujKandydataIGDB(candidate, {
+    requestedTitle: 'Example Fork',
+    question: 'Lore spin-off Example Fork',
+  });
+  assert.equal(reboot.ok, false);
+  assert.equal(spinoff.ok, false);
+  assert.equal(reboot.reason, 'requested_variant_type_not_verified');
+  assert.equal(spinoff.reason, 'requested_variant_type_not_verified');
+});
