@@ -28,6 +28,28 @@ jobs:
           python -m pip install --upgrade pip setuptools
           python -m pip install njsscan==1.0.2
 
+      - name: Set Semgrep timeout for large source files
+        run: |
+          real_semgrep="$(command -v semgrep)"
+          test -x "$real_semgrep"
+          mkdir -p "$RUNNER_TEMP/njsscan-bin"
+          cat > "$RUNNER_TEMP/njsscan-bin/semgrep" <<'SH'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          args=("$@")
+          for i in "${!args[@]}"; do
+            if [[ "${args[$i]}" == "--" ]]; then
+              before=("${args[@]:0:i}")
+              after=("${args[@]:i+1}")
+              exec "$NJSSCAN_SEMGREP_BIN" "${before[@]}" --timeout 30 -- "${after[@]}"
+            fi
+          done
+          exec "$NJSSCAN_SEMGREP_BIN" "$@" --timeout 30
+          SH
+          chmod +x "$RUNNER_TEMP/njsscan-bin/semgrep"
+          echo "NJSSCAN_SEMGREP_BIN=$real_semgrep" >> "$GITHUB_ENV"
+          echo "$RUNNER_TEMP/njsscan-bin" >> "$GITHUB_PATH"
+
       - name: Run njsscan once and generate JSON + SARIF
         id: njsscan
         continue-on-error: true

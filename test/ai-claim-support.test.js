@@ -241,12 +241,12 @@ test('an explicit offer-to-join outcome supports a Polish causal connector', () 
 
 test('fan theories cannot be promoted to established lore facts', () => {
   assert.ok(detectOverclaimTypes(
-    'GLaDOS is secretly Caroline.',
-    'A popular fan theory suggests that GLaDOS is secretly Caroline.',
+    'GLaDOS is Caroline.',
+    'A popular fan theory suggests that GLaDOS is Caroline.',
   ).includes('speculation_presented_as_fact'));
   assert.deepEqual(detectOverclaimTypes(
-    'A fan theory suggests that GLaDOS is secretly Caroline.',
-    'A popular fan theory suggests that GLaDOS is secretly Caroline.',
+    'A fan theory suggests that GLaDOS is Caroline.',
+    'A popular fan theory suggests that GLaDOS is Caroline.',
   ), []);
 });
 

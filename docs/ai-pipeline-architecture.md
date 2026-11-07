@@ -74,3 +74,10 @@ Workflow generuje raport JSON i SARIF. Raport JSON jest walidowany przed zakońc
 ## Epistemic status of lore claims
 
 Lore claim support has additional hard-overclaim checks. If the cited span explicitly frames a proposition as a fan theory, hypothesis, rumour, or unconfirmed claim, the answer must preserve that label; otherwise the claim is rejected as speculation presented as fact. Interpretive readings must likewise remain labelled as interpretations. A claim that asserts canonical or official status must contain explicit status language in its own cited span; ordinary plot evidence is not sufficient to establish canonicity. These checks validate the wording present in the cited evidence, not the real-world authority of the publisher or developer. Source authenticity and official provenance still require separate source-level verification.
+
+
+## Regex input limits and static-analysis scope
+
+Regex-heavy AI helpers reject or bound untrusted input before matching: user questions are limited to 4,000 characters in routing/planning, normalized source/evidence text to 12,000 characters, claim/evidence comparison inputs to 1,000/2,000 characters, and dynamic citation tokens to 120 characters. Oversized claim-support input is a hard validation failure, not a truncated accepted claim. YouTube Channel IDs are validated as exactly 24 characters (UC plus 22 allowed characters) before any network request. Equality checks reported by njsscan as timing attacks compare public lexical tokens or entity aliases; they do not compare credentials, MACs, password hashes, or secret tokens and are annotated at the comparison site.
+
+The njsscan workflow uses Semgrep's explicit 30-second per-rule timeout for large source files. The JSON report remains authoritative for scan completeness: any scanner error/timeout fails validation, and JSON/SARIF artifacts are retained for review. A timeout is not treated as a false positive.
