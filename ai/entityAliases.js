@@ -106,7 +106,7 @@ function buildAliasPattern(names) {
     if (patternTokens.some(token => !token)) return null;
     alternatives.push(patternTokens.join('[\\s\\-]+'));
   }
-  const source = \`(?<![\\p{L}\\p{N}])(?:\${alternatives.join('|')})(?![\\p{L}\\p{N}])\`;
+  const source = '(?<![\\p{L}\\p{N}])(?:' + alternatives.join('|') + ')(?![\\p{L}\\p{N}])';
   if (source.length > 16_384) return null;
   return new RegExp(source, 'iu');
 }
