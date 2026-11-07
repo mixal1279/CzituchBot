@@ -5,7 +5,7 @@ const { scoreSource: scoreCoreSource, diversifySources: diversifyCoreSources } =
 const fs = require('fs');
 const { resolveGameEntity, normalizujEncje } = require('./entities');
 const { AI_MODELS } = require('./modelConfig');
-const { searchSecondaryProviders, formatSources } = require('./webRetrieval');
+const { searchSecondaryProviders, formatSources, odczytajOgraniczonyJson, odczytajOgraniczonyTekst } = require('./webRetrieval');
 const { sanitizeUntrustedText } = require('./untrustedText');
 const { createGroqCompletion, awaitWithAbortTimeout } = require('./provider-runtime');
 
@@ -933,10 +933,10 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, lookupFn, normalizeQu
               // JSON parsing consumes the response body asynchronously too; keep it
               // inside the same deadline. For HTTP errors, retain the text for diagnostics.
               if (response.ok) {
-                const bodyData = await response.json();
+                const bodyData = await odczytajOgraniczonyJson(response);
                 return { response, bodyData, bodyText: '' };
               }
-              const bodyText = await response.text();
+              const bodyText = await odczytajOgraniczonyTekst(response);
               return { response, bodyData: null, bodyText };
             })();
             const outcome = await awaitWithAbortTimeout(
