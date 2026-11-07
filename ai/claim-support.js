@@ -4,6 +4,7 @@
 // from answer completeness and factual gold scoring: it measures whether each
 // claim is supported by its own cited span and records why it was not.
 const { CAUSAL_RE, CAUSAL_EVIDENCE_RE } = require('./claimValidation');
+const MAX_CONTEXT_LENGTH = 2000;
 const HARD_OVERCLAIM_TYPES = new Set([
   'correlation_to_causation',
   'hedge_to_absolute',
@@ -60,7 +61,10 @@ function detectOverclaimTypes(claim, evidence, options = {}) {
   if (String(claim || '').length > 1000 || String(evidence || '').length > 2000) return ['input_too_long'];
   const c = normalizeText(claim);
   const e = normalizeText(evidence);
-  const context = normalizeText(options.context || '');
+  // Kontekst jest opcjonalnym rozszerzeniem dowodu, więc nie może omijać limitów wejścia.
+  // Zbyt długi kontekst pomijamy w całości — nie obcinamy go do fragmentu, który mógłby zmienić sens.
+  const contextInput = String(options.context || '');
+  const context = contextInput.length <= MAX_CONTEXT_LENGTH ? normalizeText(contextInput) : '';
   const types = [];
   if (!c || !e) return types;
 
