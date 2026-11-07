@@ -331,3 +331,22 @@ test('kanon i niekanoniczność muszą mieć zgodny status w cytowanym dowodzie'
     'The character appears in the final mission.',
   ).includes('canon_status_not_in_evidence'));
 });
+
+
+test('wykrywanie statusu pomija zanegowany marker, ale analizuje dalszą część cytatu', () => {
+  assert.ok(detectOverclaimTypes(
+    'GLaDOS is Caroline.',
+    'This is not a fan theory, but fans speculate that GLaDOS is Caroline.',
+  ).includes('speculation_presented_as_fact'));
+  assert.ok(detectOverclaimTypes(
+    'The ending means the protagonist is dead.',
+    'This is not an interpretation; it may symbolize the protagonist\\'s death.',
+  ).includes('interpretation_presented_as_fact'));
+});
+
+test('sformułowanie „theory suggests” zachowuje status hipotezy', () => {
+  assert.ok(detectOverclaimTypes(
+    'The facility was built by the founders.',
+    'A theory suggests that the facility was built by the founders.',
+  ).includes('speculation_presented_as_fact'));
+});
