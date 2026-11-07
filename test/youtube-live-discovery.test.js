@@ -355,3 +355,16 @@ test('odrzuca HTML /live większy niż limit przed parsowaniem i weryfikacją ka
   assert.equal(result, null);
   assert.equal(verified, 0);
 });
+
+
+test('pomija niepoprawne przypisanie i znajduje późniejsze poprawne ytInitialData', () => {
+  const html = 'var ytInitialData = null; window.ytInitialData = ' + JSON.stringify({
+    contents: { videoRenderer: liveRenderer(VIDEO_ID) },
+  }) + ';';
+  assert.equal(extractLiveVideoId(html), VIDEO_ID);
+});
+
+test('parser ignoruje nazwę podobną do ytInitialData bez operatora przypisania', () => {
+  const html = 'const ytInitialDataBackup = {"videoId":"' + VIDEO_ID + '"};';
+  assert.deepEqual(extractLiveVideoIds(html), []);
+});
