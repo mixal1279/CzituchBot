@@ -88,3 +88,11 @@ test('IGDB relation metadata preserves release date and collection links', () =>
   assert.equal(result.entity.firstReleaseDate, 1599696000);
   assert.deepEqual(result.entity.collections, ['Supergiant Collection']);
 });
+
+
+test('a character question about Portal retains the franchise scope', () => {
+  assert.equal(
+    wariantZapytania('Kim jest GLaDOS w grze Portal?', 'Portal'),
+    'franchise',
+  );
+});

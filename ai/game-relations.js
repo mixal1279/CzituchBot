@@ -52,7 +52,7 @@ function wariantZapytania(question, requestedTitle) {
   if (PATTERNS.remaster.test(intentText)) return 'remaster';
   if (PATTERNS.spinoff.test(intentText)) return 'spinoff';
   if (PATTERNS.version.test(intentText)) return 'version';
-  const deterministic = resolveGameEntity(question) || resolveGameEntity(requestedTitle);
+  const deterministic = resolveGameEntity('gra ' + title) || resolveGameEntity(requestedTitle) || resolveGameEntity(question);
   return deterministic?.type === 'franchise' ? 'franchise' : 'game';
 }
 
