@@ -78,6 +78,7 @@ jobs:
           PY
 
       - name: Validate njsscan JSON report
+        id: validate_njsscan
         if: always()
         run: |
           node <<'NODE'
@@ -115,7 +116,7 @@ jobs:
           retention-days: 30
 
       - name: Upload njsscan SARIF report
-        if: always()
+        if: steps.njsscan.outcome == 'success' && steps.validate_njsscan.outcome == 'success'
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: results.sarif
