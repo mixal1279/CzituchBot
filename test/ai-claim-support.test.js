@@ -286,3 +286,48 @@ test('ordinary official release wording is not confused with canonical status', 
     'This is the official game release.',
   ), []);
 });
+
+
+test('negacja teorii fanowskiej nie zmienia potwierdzonego faktu w spekulację', () => {
+  assert.deepEqual(detectOverclaimTypes(
+    'GLaDOS is Caroline.',
+    'This is not a fan theory: the developers confirmed that GLaDOS is Caroline.',
+  ), []);
+  assert.deepEqual(detectOverclaimTypes(
+    'GLaDOS jest Caroline.',
+    'To nie jest teoria fanowska; twórcy potwierdzili, że GLaDOS jest Caroline.',
+  ), []);
+});
+
+test('ogólne słowo theory nie jest automatycznie teorią fanowską', () => {
+  assert.deepEqual(detectOverclaimTypes(
+    'The theory of the game world is described here.',
+    'The theory of the game world explains the timeline.',
+  ), []);
+});
+
+test('modalna interpretacja nie może zostać zamieniona w kategoryczne znaczenie', () => {
+  assert.ok(detectOverclaimTypes(
+    'The red color symbolizes danger.',
+    'The red color may symbolize danger.',
+  ).includes('interpretation_presented_as_fact'));
+  assert.deepEqual(detectOverclaimTypes(
+    'One interpretation is that the red color symbolizes danger.',
+    'The red color may symbolize danger.',
+  ), []);
+});
+
+test('kanon i niekanoniczność muszą mieć zgodny status w cytowanym dowodzie', () => {
+  assert.ok(detectOverclaimTypes(
+    'To wydarzenie jest kanoniczne.',
+    'This event is non-canonical.',
+  ).includes('canon_status_conflict'));
+  assert.ok(detectOverclaimTypes(
+    'To wydarzenie nie jest kanoniczne.',
+    'This event is part of the official canon.',
+  ).includes('canon_status_conflict'));
+  assert.ok(detectOverclaimTypes(
+    'This event is non-canonical.',
+    'The character appears in the final mission.',
+  ).includes('canon_status_not_in_evidence'));
+});
