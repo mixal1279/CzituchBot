@@ -52,7 +52,7 @@ function znajdzStatusEpistemiczny(tekst, wzorzec) {
     : { wystepuje: false, aktywne: false, pozytywny: null, marker: null };
 }
 
-const THEORY_STATUS_RE = /(?:fan theor(?:y|ies)|theor(?:y|ies)\s+(?:suggest\\w*|propos\\w*|claim\\w*|argu\\w*|hold\\w*)|speculat\p{L}*|rumou?r\p{L}*|unconfirmed|hypothes\p{L}*|teori\p{L}*\s+(?:fanowsk\p{L}*|zaklad\p{L}*|mow\p{L}*|sugeruj\p{L}*|glos\p{L}*|twierdz\p{L}*)|spekulacj\p{L}*|plotk\p{L}*|niepotwierdzon\p{L}*|hipotez\p{L}*|wedlug fanow|fani uwazaja|niektorzy gracze uwazaja)/giu;
+const THEORY_STATUS_RE = /(?:fan theor(?:y|ies)|theor(?:y|ies)\s+(?:suggest\w*|propos\w*|claim\w*|argu\w*|hold\w*)|speculat\p{L}*|rumou?r\p{L}*|unconfirmed|hypothes\p{L}*|teori\p{L}*\s+(?:fanowsk\p{L}*|zaklad\p{L}*|mow\p{L}*|sugeruj\p{L}*|glos\p{L}*|twierdz\p{L}*)|spekulacj\p{L}*|plotk\p{L}*|niepotwierdzon\p{L}*|hipotez\p{L}*|wedlug fanow|fani uwazaja|niektorzy gracze uwazaja)/giu;
 const INTERPRETATION_STATUS_RE = /(?:interpretation\p{L}*|interpreted as|can be interpreted|fans interpret|interpretacj\p{L}*|interpretowan\p{L}*|mozna interpretowac|fani interpretuja|may symbolize|might symbolize|could symbolize|moze symbolizowac|moze oznaczac)/giu;
 const CANON_STATUS_RE = /(?:non[- ]canonical|niekanoniczn\p{L}*|canon(?:ical(?:ly)?|ically)?|kanon\p{L}*)/giu;
 
