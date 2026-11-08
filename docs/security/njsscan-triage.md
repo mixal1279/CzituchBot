@@ -9,33 +9,39 @@
 
 Raport bazowy miał dwa timeouty: `express_xss` i `node_ssrf` w `czituch_bot.js`. Po zwiększeniu limitu Semgrep do 300 sekund pełny skan zakończył się bez błędów. To usuwa problem wykonania skanera, ale samo w sobie nie jest dowodem braku podatności.
 
-## Triage `regex_dos` — 63 wskazania w raporcie bazowym
+## Aktualny raport njsscan — HEAD `c5a2508e0a8ba2bac2bb9aac9bf1a6e704c4c09b`
 
-Reguła njsscan sprawdza, czy wyrażenie regularne jest używane na danych wejściowych funkcji o sygnaturze dwóch lub większej liczby argumentów. Nie ocenia złożoności wzorca ani nie wymaga, aby funkcja była rzeczywistym handlerem HTTP. Dlatego obejmuje również zwykłe funkcje domenowe i testy.
+- Workflow run: `42417446984`; artifact JSON: `13591964827`.
+- Skaner: njsscan 1.0.2 (Semgrep); **58 findings, 0 błędów skanera**.
+- Wszystkie 58 dopasowań należą do reguły `regex_dos` (WARNING), w 15 plikach. Raport nie zawiera findings z `templates`.
+- JSON i SARIF zostały poprawnie wygenerowane, zwalidowane i przesłane do Code Scanning.
 
-W ręcznym przeglądzie wskazanych miejsc nie znaleziono dynamicznego konstruowania wzorca z surowego tekstu użytkownika ani wzorców z nieograniczonymi, zagnieżdżonymi kwantyfikatorami powodującymi wykładniczy backtracking. Poniżej podano uzasadnienie per plik; są to klasyfikacje ręczne, nie wyłączenia reguły.
+| Plik | Findings |
+|---|---:|
+| `ai/claimValidation.js` | 16 |
+| `ai/claim-support.js` | 9 |
+| `test/ai-golden-benchmark.test.js` | 6 |
+| `test/ai-routing.test.js` | 6 |
+| `czituch_bot.js` | 5 |
+| `ai/answer-plan.js` | 3 |
+| `test/ai.test.js` | 3 |
+| `ai/evidence.js` | 2 |
+| `ai/lore.js` | 2 |
+| `ai/core.js` | 1 |
+| `ai/entities.js` | 1 |
+| `ai/gameplay.js` | 1 |
+| `ai/planner.js` | 1 |
+| `ai/retrieval.js` | 1 |
+| `ai/validator.js` | 1 |
+| **Razem** | **58** |
 
-| Plik | Wskazania | Uzasadnienie |
-|---|---:|---|
-| `ai/answer-plan.js` | 3 | Pytanie jest obcinane do 4 000 znaków; `SLOT_PATTERNS` są stałymi wzorcami. |
-| `ai/claim-support.js` | 11 | Funkcja odrzuca claim powyżej 1 000 znaków i evidence powyżej 2 000; wszystkie używane wzorce są stałe. |
-| `ai/claimValidation.js` | 17 | Normalizacja claimu ogranicza tekst do 12 000 znaków; wzorce są stałe. Fragmenty dynamiczne używane w dopasowaniu nazw są escapowane i ograniczone długością. |
-| `ai/core.js` | 1 | Prosty prefiks `^gemini` na etykiecie providera; nie jest to wzorzec tworzony z danych użytkownika. |
-| `ai/entities.js` | 1 | Stały wzorzec sprawdza końcówkę tokenu; tekst wejściowy jest normalizowany z limitem 12 000 znaków. |
-| `ai/evidence.js` | 2 | Teksty claimu i cytatu są normalizowane z limitem 12 000 znaków; wzorce koncepcji i relacji są stałe. |
-| `ai/gameplay.js` | 1 | Pytanie powyżej 4 000 znaków jest odrzucane; wzorce intencji są stałe. |
-| `ai/lore.js` | 2 | Pytanie powyżej 4 000 znaków jest odrzucane; wzorce intencji i kontekstu są stałe. |
-| `ai/planner.js` | 1 | Pytanie powyżej 4 000 znaków jest odrzucane; wzorzec anafory jest stały. |
-| `ai/response.js` | 1 | Dynamiczny token ma limit 120 znaków i jest escapowany; tekst referencyjny ma limit 12 000 znaków. |
-| `ai/retrieval.js` | 1 | Kontekst ma limit 4 200 znaków; tablica wzorców domen jest stała. |
-| `ai/validator.js` | 1 | Claim jest normalizowany do maksymalnie 500 znaków przed kontrolą częściowej odpowiedzi. |
-| `czituch_bot.js` | 5 | Wskazane dopasowania używają stałych wzorców. Nie znaleziono handlerów Express, odczytów `req.query/body/params` ani odpowiedzi `res.send/write` w tym pliku. |
-| `youtube-live-discovery.js` | 1 | ID kanału jest sprawdzane jako string o dokładnej długości 24 przed stałym wzorcem. |
-| `test/ai-golden-benchmark.test.js` | 6 | Wzorce służą wyłącznie klasyfikacji kontrolowanych przypadków benchmarku. |
-| `test/ai-routing.test.js` | 6 | Wzorce służą wyłącznie testowej klasyfikacji pytań. |
-| `test/ai.test.js` | 3 | Wzorce występują wyłącznie w testowym helperze polityki. |
+### Interpretacja i ograniczenia
 
-**Wniosek:** wskazania `regex_dos` są false positives względem semantyki tej reguły dla przejrzanych miejsc: są to stałe wzorce na ograniczonych wejściach, nie wzorce kontrolowane przez użytkownika. Reguła pozostaje aktywna i pełny skan repozytorium jest nadal wymagany.
+`regex_dos` w njsscan jest regułą heurystyczną. W raporcie wskazuje użycia wyrażeń regularnych w funkcjach o wielu argumentach; samo dopasowanie nie dowodzi katastroficznego backtrackingu ani kontroli wzorca przez użytkownika. Wskazania obejmują m.in. stałe wzorce intencji, pętle nad stałymi tablicami regexów oraz testowe klasyfikatory.
+
+Przegląd kodu wykazał, że dynamiczne fragmenty regexów używane do dopasowania nazw są escapowane i ograniczane długością w helperach `ai/regex-utils.js` oraz w walidacji claimów. Wejścia głównych ścieżek pytań mają limity długości. Nie znaleziono w przejrzanych ścieżkach dynamicznego budowania wzorca z surowego tekstu użytkownika.
+
+**Nie wyłączamy reguły i nie ukrywamy alertów.** 58 wskazań pozostaje widoczne w Code Scanning jako ostrzeżenia do triage. Nie traktujemy ich automatycznie jako 58 potwierdzonych podatności ani jako 58 udowodnionych false positives. Każdy nowy wzorzec dynamiczny lub brak limitu wejścia wymaga osobnej oceny.
 
 ## Pozostałe reguły z raportu bazowego
 
