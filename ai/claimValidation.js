@@ -1382,7 +1382,7 @@ function czyTlumaczenieOdwracaRelacjeKorupcjiWheatleya(claimPl, claimEn) {
  * dwie encje. Zdania bierne i konstrukcje z niejednoznacznym szykiem pomijamy.
  */
 function wykryjPodmianePodmiotu(claimPl, claimEn) {
-  const aktywneCzasowniki = /^(?:takes?|took|controls?|controlled|captur(?:e|es|ed)|killed|kills|destroy(?:s|ed)|betray(?:s|ed)|rescu(?:e|es|ed)|attack(?:s|ed)|help(?:s|ed)|join(?:s|ed)|leaves?|left|gives?|gave|sends?|sent|przejal|przejela|przejelo|przejeli|przejmuje|kontroluje|schwytal|schwycila|porwal|porwala|zabil|zabila|zniszczyl|zniszczyla|zdradzil|zdradzila|uratowal|uratowala|zaatakowal|zaatakowala|pomogl|pomogla|dolaczyl|dolaczyla|opuscil|opuscila|wyslal|wyslala)\b/u;
+  const aktywneCzasowniki = /^(?:takes?|took|controls?|controlled|captur(?:e|es|ed)|killed|kills|destroy(?:s|ed)|betray(?:s|ed)|rescu(?:e|es|ed)|attack(?:s|ed)|help(?:s|ed)|join(?:s|ed)|leaves?|left|gives?|gave|sends?|sent|causes?|caused|triggers?|triggered|corrupts?|corrupted|forces?|forced|enables?|enabled|leads?|led|results?|resulted|skorumpowal|skorumpowala|korumpuje|spowodowal|spowodowala|spowodowalo|doprowadzil|doprowadzila|umozliwil|umozliwila|zmusil|zmusila|przejal|przejela|przejelo|przejeli|przejmuje|kontroluje|schwytal|schwycila|porwal|porwala|zabil|zabila|zniszczyl|zniszczyla|zdradzil|zdradzila|uratowal|uratowala|zaatakowal|zaatakowala|pomogl|pomogla|dolaczyl|dolaczyla|opuscil|opuscila|wyslal|wyslala)\b/u;
   const slowaPospolite = new Set([
     'the', 'a', 'an', 'this', 'that', 'these', 'those', 'in', 'on', 'after',
     'before', 'during', 'when', 'while', 'because', 'however', 'therefore',
