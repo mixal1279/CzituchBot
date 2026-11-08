@@ -4552,8 +4552,8 @@ Pytanie użytkownika: ${pytanie}`;
     }
   }
 
-  // Jedyny etap składający finalny payload. Nic nie jest dopisywane po tej funkcji,
-  // więc validator zawsze ocenia tekst bazowy, a odmowa nie dostaje sprzecznej atrybucji.
+  // Finalizacja ustala treść odpowiedzi po walidacji. Później można dodać wyłącznie
+  // metadane bibliograficzne ze źródeł przypisanych do zaakceptowanych claimów.
   const finalizeResponse = (tekst, status) => finalizeAIPipelineText(tekst, status, {
     rejectedMessage: 'Nie mam wystarczających danych, żeby odpowiedzieć na to pewnie.',
     inconclusiveMessage: 'Chwilowo nie mogę wiarygodnie potwierdzić tej informacji, więc nie będę zgadywać.',
