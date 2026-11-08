@@ -547,7 +547,7 @@ test('benchmark validator traces expose answer and source-bound claims only in l
       quoteVerified: true,
       supportVerified: true,
       supportReason: 'cytat występuje w źródle i bezpośrednio wspiera claim',
-      ignoredSentenceInitialNames: ['Wheatley'],
+      ignoredSentenceInitialNames: [],
     });
   } finally {
     if (original === undefined) delete process.env.AI_LIVE_BENCHMARK;

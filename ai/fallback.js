@@ -511,7 +511,7 @@ function shouldOpenQuotaCircuit(error) {
     && (/retry[- ]after/i.test(details) || Boolean(retryAfterHint(error)));
   if (retryableInFlightBudget) return false;
   return status === 402
-    || /(?:"status"\s*:\s*402|HTTP\s*402|payment required|insufficient (?:credits?|quota)|credit balance.{0,40}(?:deplet|exhaust|insufficient)|tokens? per day|\bTPD\b|daily (?:token|request|usage) quota|quota exceeded)/i.test(details);
+    || /(?:"status"\s*:\s*402|HTTP\s*402|payment required|insufficient (?:credits?|quota)|credit balance.{0,40}(?:deplet|exhaust|insufficient)|tokens? per day|\bTPD\b|daily (?:token|request|usage) quota|quota exceeded|daily[_ -]quota[_ -]exceeded|free[_ -]tokens[_ -]exhausted)/i.test(details);
 }
 
 function shouldRetryFailure(failure) {
