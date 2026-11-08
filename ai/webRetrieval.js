@@ -4,6 +4,7 @@ const { AI_MODELS } = require('./modelConfig');
 const { isIP, BlockList } = require('node:net');
 const { lookup: lookupDns } = require('node:dns/promises');
 const { sanitizeUntrustedText } = require('./untrustedText');
+const { awaitWithAbortTimeout } = require('./provider-runtime');
 
 function cleanText(value, max = 5000) {
   return String(value || '').replace(/\s+/g, ' ').trim().slice(0, max);
@@ -143,16 +144,14 @@ async function odczytajOgraniczonyJson(response, maxBytes = MAX_PROVIDER_RESPONS
 async function fetchJson(fetchFn, url, options, timeoutMs = 30000) {
   const boundedTimeoutMs = normalizeTimeoutMs(timeoutMs, 30000, 30000);
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), boundedTimeoutMs);
-  try {
+  const request = (async () => {
     // Stałe endpointy providerów nie powinny przekierowywać żądań na inne hosty.
     const response = await fetchFn(url, { ...options, redirect: 'error', signal: controller.signal }, boundedTimeoutMs);
     const data = await odczytajOgraniczonyJson(response);
     if (!response.ok) throw new Error(data?.error?.message || data?.error || `HTTP ${response.status}`);
     return data;
-  } finally {
-    clearTimeout(timer);
-  }
+  })();
+  return awaitWithAbortTimeout(request, boundedTimeoutMs, controller, 'web retrieval');
 }
 
 async function searchGeminiWeb({ apiKey, query, fetchFn = fetch, startIndex = 0, timeoutMs = 30000 }) {
