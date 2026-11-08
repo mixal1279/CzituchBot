@@ -1374,6 +1374,47 @@ function czyTlumaczenieOdwracaRelacjeKorupcjiWheatleya(claimPl, claimEn) {
   return /\bcontrol\w*[^.!?]{0,100}\b(?:which|that|and|because|since|as)\s+(?:he\s+|it\s+|this\s+|that\s+)?corrupt(?:s|ed|ing)\b/u.test(en);
 }
 
+
+/**
+ * Wykrywa zamianę podmiotu w prostych zdaniach czynnych.
+ * Reguła działa wyłącznie, gdy obie wersje zaczynają się od rozpoznanej encji,
+ * obie używają jawnego czasownika czynnego i obie wymieniają te same co najmniej
+ * dwie encje. Zdania bierne i konstrukcje z niejednoznacznym szykiem pomijamy.
+ */
+function wykryjPodmianePodmiotu(claimPl, claimEn) {
+  const aktywneCzasowniki = /^(?:takes?|took|controls?|controlled|captur(?:e|es|ed)|killed|kills|destroy(?:s|ed)|betray(?:s|ed)|rescu(?:e|es|ed)|attack(?:s|ed)|help(?:s|ed)|join(?:s|ed)|leaves?|left|gives?|gave|sends?|sent|przejal|przejela|przejelo|przejeli|przejmuje|kontroluje|schwytal|schwycila|porwal|porwala|zabil|zabila|zniszczyl|zniszczyla|zdradzil|zdradzila|uratowal|uratowala|zaatakowal|zaatakowala|pomogl|pomogla|dolaczyl|dolaczyla|opuscil|opuscila|wyslal|wyslala)\\b/u;
+  const znajdzPodmiot = tekst => {
+    const normalized = normalizujClaim(tekst);
+    const names = [...new Set(wyodrebnijNazwyWlasne(tekst))];
+    const candidates = names
+      .map(name => ({ name, value: normalizujClaim(name), index: normalized.indexOf(normalizujClaim(name)) }))
+      .filter(item => item.value && item.index >= 0)
+      .sort((a, b) => a.index - b.index);
+    for (const item of candidates) {
+      const prefix = normalized.slice(0, item.index).trim();
+      if (prefix && !/^(?:w grze|in the game|the character|postac|bohater)$/u.test(prefix)) continue;
+      const tail = normalized.slice(item.index + item.value.length).trim();
+      const verb = tail.match(aktywneCzasowniki);
+      if (verb) return { name: item.value, names: candidates.map(candidate => candidate.value), verb: verb[0] };
+    }
+    return null;
+  };
+
+  const pl = znajdzPodmiot(claimPl);
+  const en = znajdzPodmiot(claimEn);
+  if (!pl || !en || pl.name === en.name) return { ok: true };
+
+  const wspolneEncje = pl.names.filter(name => en.names.includes(name));
+  if (wspolneEncje.length < 2) return { ok: true };
+
+  return {
+    ok: false,
+    reason: 'tłumaczenie claimu zmienia podmiot działania',
+    polishSubject: pl.name,
+    englishSubject: en.name,
+  };
+}
+
 function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
   const pl = String(claimPl || '').trim();
   let en = String(claimEn || '').trim();
@@ -1555,6 +1596,10 @@ function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
   }
   if (czyTlumaczenieOdwracaRelacjeKorupcjiWheatleya(pl, en)) {
     return { ok: false, reason: 'tłumaczenie claimu odwraca relację między skorumpowaniem Wheatleya a przejęciem kontroli' };
+  }
+  const subjectConflict = wykryjPodmianePodmiotu(pl, en);
+  if (!subjectConflict.ok) {
+    return { ok: false, reason: subjectConflict.reason };
   }
   const semanticConflict = sprawdzSprzecznosciSemantyczne(pl, en);
   if (!semanticConflict.ok) return { ok: false, reason: 'tlumaczenie claimu zmienia zdarzenie lub relacje' };
