@@ -5,7 +5,7 @@ const { NIE_CZAS_GRY } = require('./patterns');
 const WEB_CATEGORIES = new Set(['weather', 'hltb', 'youtube', 'web_fact']);
 const { czyPytanieOLore } = require('./lore');
 const { czyPytanieOGameplay } = require('./gameplay');
-const { resolveGameEntity, resolveCompanyEntity, czyPytanieOFirmie } = require('./entities');
+const { resolveGameEntity, resolveCompanyEntity, czyPytanieOFirmie, wyodrebnijJawnyTytulGry } = require('./entities');
 
 const SOURCE_TYPES = { weather: 'weather_api', hltb: 'hltb', youtube: 'youtube_api', minecraft_recipe: 'local_minecraft_data', calculation: 'calculation' };
 
@@ -19,7 +19,14 @@ function classifyAIRequest(pytanie, policyCategory, recipeDetector = () => false
   const isHLTB = /(?<![\p{L}\p{N}_])(?:ile\s+(?:jest\s+)?(?:godzin|czasu)|ile\s+godzin\s+(?:ma|zajmuje)|ile\s+trwa|jak\s+d[łl]ugo(?:\s+trwa)?|czas(?:u)?\s+(?:gry|przejścia|przejscia|ukończenia|ukonczenia)|przejście\s+gry|przejscie\s+gry)(?![\p{L}\p{N}_])/iu.test(p)
     && !NIE_CZAS_GRY.test(p);
   const resolvedCompany = resolveCompanyEntity(text);
-  const resolvedGame = resolveGameEntity(text);
+  const knownGame = resolveGameEntity(text);
+  // Jawny tytuł z frazy „w grze X” jest kontekstem użytkownika, nie potwierdzeniem IGDB.
+  // Zachowujemy go do filtrowania źródeł także wtedy, gdy classifier lub IGDB nie działa.
+  const explicitTitle = knownGame ? null : wyodrebnijJawnyTytulGry(text);
+  const resolvedGame = knownGame || (explicitTitle ? {
+    type: 'game', name: explicitTitle, game: explicitTitle, confidence: 0.72,
+    matchedAlias: explicitTitle, resolution: 'explicit_unverified',
+  } : null);
   const resolved = resolvedCompany || resolvedGame;
   const hasKnownGame = Boolean(resolvedGame && (resolvedGame.type === 'game' || resolvedGame.type === 'franchise' || resolvedGame.game));
   const hasCompanyContext = czyPytanieOFirmie(text);
@@ -54,6 +61,7 @@ function classifyAIRequest(pytanie, policyCategory, recipeDetector = () => false
   else if (category === 'calculation') confidence = 0.99;
   else if (lore || gameplay) {
     if (resolved?.resolution === 'deterministic_ambiguous') confidence = Math.min(0.68, Number(resolved.confidence) || 0.68);
+    else if (resolved?.resolution === 'explicit_unverified') confidence = Math.min(0.72, Number(resolved.confidence) || 0.72);
     else confidence = resolved ? Math.max(0.86, resolved.confidence) : 0.80;
   } else if (category === 'conversation') confidence = 0.88;
 
