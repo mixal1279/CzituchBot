@@ -59,6 +59,7 @@ test('provider-wide quota scope blocks sibling models but endpoint scope stays i
   fallback.configureProviderQuotaPersistence(null);
   fallback.resetProviderQuotaCooldowns();
   assert.equal(fallback.shouldBlockProviderQuotaWide('groq:openai/gpt-oss-120b', 'Rate limit exceeded: 6000 TPM'), true);
+  assert.equal(fallback.shouldBlockProviderQuotaWide('groq:openai/gpt-oss-120b', 'Rate limit reached for model `openai/gpt-oss-120b` in organization `org_test` on tokens per minute (TPM)'), false);
   assert.equal(fallback.shouldBlockProviderQuotaWide('xkiro:qwen/model', { status: 429, code: 'free_tokens_exhausted' }), true);
   assert.equal(fallback.shouldBlockProviderQuotaWide('gemini:flash', { status: 429, message: 'model rate limit exceeded' }), false);
   assert.equal(fallback.shouldBlockProviderQuotaWide('gemini:flash', { status: 402, message: 'payment required' }), true);
