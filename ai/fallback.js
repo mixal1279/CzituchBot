@@ -505,6 +505,7 @@ function shouldOpenQuotaCircuit(error) {
     error?.type,
     metadata.limit_source,
     metadata.error_type,
+    metadata.provider_code,
   ].filter(Boolean).join(' ');
   const retryableInFlightBudget = /openrouter_in_flight_budget/i.test(details)
     && (/retry[- ]after/i.test(details) || Boolean(retryAfterHint(error)));
