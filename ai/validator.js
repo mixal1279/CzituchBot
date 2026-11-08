@@ -570,11 +570,11 @@ function sprawdzPokrycieCzesciPytania(question, claims) {
 
     const entities = [...new Set([
       ...wyodrebnijNazwyWlasne(part),
-      ...(String(part).match(/(?<![\\p{L}\\p{N}])[A-ZĄĆĘŁŃÓŚŹŻ][\\p{L}\\p{N}'’.-]*/gu) || [])
+      ...(String(part).match(/(?<![\p{L}\p{N}])[A-ZĄĆĘŁŃÓŚŹŻ][\p{L}\p{N}'’.-]*/gu) || [])
         .filter(name => !QUESTION_COVERAGE_STOPWORDS.has(normalizujClaim(name))),
     ])];
-    const identityQuestion = /\\b(?:kim jest|kto jest|who is|who was)\\b/u.test(normalizedPart);
-    const causalQuestion = /\\b(?:dlaczego|czemu|z jakiego powodu|why|how come|what caused)\\b/u.test(normalizedPart);
+    const identityQuestion = /\b(?:kim jest|kto jest|who is|who was)\b/u.test(normalizedPart);
+    const causalQuestion = /\b(?:dlaczego|czemu|z jakiego powodu|why|how come|what caused)\b/u.test(normalizedPart);
 
     const covered = verifiedClaims.some(claim => {
       const claimText = normalizujClaim(claim.claim);
@@ -585,7 +585,7 @@ function sprawdzPokrycieCzesciPytania(question, claims) {
         && entities.some(entity => claimText.includes(normalizujClaim(entity)));
 
       if (identityQuestion) {
-        return entityMatch && /\\b(?:jest|sa|byl|byla|is|are|was|were|character|postac|role|core|robot|scientist|personality)\\b/u.test(claimText);
+        return entityMatch && /\b(?:jest|sa|byl|byla|is|are|was|were|character|postac|role|core|robot|scientist|personality)\b/u.test(claimText);
       }
       if (causalQuestion) {
         return CAUSAL_RE.test(claimText) && (entityMatch || matched.length >= 1);
