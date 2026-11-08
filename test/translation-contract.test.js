@@ -69,3 +69,30 @@ test('copied quote that turns killing into capture keeps the specific diagnostic
   assert.match(result.reason, /nie odpowiada treści claimu/);
   assert.match(result.reason, /zab[oó]jstwo|schwytanie/);
 });
+
+
+test('translation cannot swap the acting entity with the affected entity', () => {
+  const result = spojnoscTlumaczeniaClaimu(
+    'Wheatley przejął kontrolę nad Aperture.',
+    'Aperture took control of Wheatley.',
+  );
+  assert.equal(result.ok, false, JSON.stringify(result));
+  assert.match(result.reason, /podmiot/i);
+});
+
+test('subject-role check allows a faithful active translation', () => {
+  const result = spojnoscTlumaczeniaClaimu(
+    'Wheatley przejął kontrolę nad Aperture.',
+    'Wheatley took control of Aperture.',
+  );
+  assert.equal(result.ok, true, result.reason);
+});
+
+test('subject-role check does not reject an equivalent passive-to-active translation', () => {
+  const result = spojnoscTlumaczeniaClaimu(
+    'Chell została schwytana przez Wheatleya.',
+    'Wheatley captured Chell.',
+  );
+  assert.equal(result.ok, true, result.reason);
+});
+
