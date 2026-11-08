@@ -176,8 +176,14 @@ function scoreSource(source, query, options = {}) {
   if (options.freshness === 'live' || options.freshness === 'recent') {
     const date = source.publishedAt || source.published_date || source.date;
     if (date) {
-      const ageDays = Math.max(0, (Date.now() - new Date(date).getTime()) / 86400000);
-      if (Number.isFinite(ageDays)) freshnessBonus = ageDays <= 7 ? 0.12 : ageDays <= 30 ? 0.06 : ageDays <= 90 ? 0 : -0.08;
+      const publishedAt = new Date(date).getTime();
+      const ageDays = (Date.now() - publishedAt) / 86400000;
+      // Data z przyszłości nie może zdobywać maksymalnego bonusu świeżości.
+      // Dopuszczamy wyłącznie niewielki rozjazd zegarów (do 24 h).
+      if (Number.isFinite(ageDays) && ageDays >= -1) {
+        const effectiveAgeDays = Math.max(0, ageDays);
+        freshnessBonus = effectiveAgeDays <= 7 ? 0.12 : effectiveAgeDays <= 30 ? 0.06 : effectiveAgeDays <= 90 ? 0 : -0.08;
+      }
     }
   }
 
