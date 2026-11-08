@@ -110,7 +110,7 @@ const verdictCache = createVerdictCache();
 const { createTavilySearch } = require('./ai/tavily');
 const { normalizujZapytanieTavily } = AI_POLICY;
 const { czyPytanieOLore, czyMaKontekstGry, dodajGameLoreDomenę, wytnijAtrybucjeGameLore, wytnijAtrybucjeGameLoreWszystkie, GAMELORE_DOMAIN } = require('./ai/lore');
-const { czyPytanieOGameplay, dodajGameFAQsDomenę, wytnijAtrybucjeGameFAQs, GAMEFAQS_DOMAIN } = require('./ai/gameplay');
+const { czyPytanieOGameplay, dodajGameFAQsDomenę, wytnijAtrybucjeGameFAQs, wytnijAtrybucjeGameFAQsWszystkie, GAMEFAQS_DOMAIN } = require('./ai/gameplay');
 const { przygotujHistorieDoModelu, opakujDaneReferencyjne } = AI_POLICY;
 const { classifyAIRequest } = require('./ai/router');
 const { obliczPytanie, formatujWynik } = require('./ai/calculator');
@@ -4578,14 +4578,20 @@ Pytanie użytkownika: ${pytanie}`;
   });
   odp = finalizeResponse(odp, aiState.finalStatus);
 
-  // Publikujemy atrybucję dla wszystkich źródeł GameLore faktycznie wskazanych
-  // przez zaakceptowane claimy, a nie tylko dla pierwszego wyniku wyszukiwania.
+  // Publikujemy linki do wszystkich źródeł specjalistycznych wskazanych
+  // przez zaakceptowane claimy. GameLore wymaga dodatkowo informacji o licencji.
   if (['accepted', 'soft_accepted'].includes(aiState.finalStatus) && zweryfikowaneZrodlaIds.size) {
     const atrybucjeGameLore = wytnijAtrybucjeGameLoreWszystkie(daneDoWalidacji, zweryfikowaneZrodlaIds);
-    if (atrybucjeGameLore.length) {
-      const etykietyZrodel = atrybucjeGameLore.map(zrodlo =>
+    const atrybucjeGameFAQs = wytnijAtrybucjeGameFAQsWszystkie(daneDoWalidacji, zweryfikowaneZrodlaIds);
+    const etykietyZrodel = [
+      ...atrybucjeGameLore.map(zrodlo =>
         'GameLore: ' + zrodlo.title + ' — ' + zrodlo.url + ' (CC BY-SA)'
-      );
+      ),
+      ...atrybucjeGameFAQs.map(zrodlo =>
+        'GameFAQs: ' + zrodlo.title + ' — ' + zrodlo.url
+      ),
+    ];
+    if (etykietyZrodel.length) {
       const etykietaZrodla = etykietyZrodel.join('; ');
       const limitOdpowiedzi = 1800;
       const limitTresci = limitOdpowiedzi - etykietaZrodla.length - 3;
@@ -4595,8 +4601,7 @@ Pytanie użytkownika: ${pytanie}`;
       if (odp && etykietaZrodla.length < limitOdpowiedzi - 120) {
         odp = odp + ' | ' + etykietaZrodla;
       } else if (etykietaZrodla.length < limitOdpowiedzi) {
-        // Przy bardzo wielu długich URL-ach zachowaj pełną atrybucję zamiast
-        // po cichu pomijać źródła; odpowiedź pozostaje krótka i niezgadująca.
+        // Zachowaj pełne linki źródłowe, gdy same zajmują większość limitu wiadomości.
         odp = etykietaZrodla;
       }
     }
