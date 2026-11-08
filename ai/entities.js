@@ -334,7 +334,10 @@ function resolveGameEntity(text) {
 function wyodrebnijJawnyTytulGry(text) {
   const value = String(text || '').trim();
   if (!value || value.length > 500) return null;
-  const pattern = /(?:^|[^\p{L}\p{N}_])[wW](?:[eE])?\s+(?:[tT][eE][jJ]\s+)?[gG][rR][zZ][eE]\s+(?!(?:[kK][iI][mM]|[kK][tT][oO]|[cC][oO]|[jJ][aA][kK]|[cC][zZ][yY]|[dD][lL][aA][cC][zZ][eE][gG][oO]|[cC][zZ][eE][mM][uU]|[gG][dD][zZ][iI][eE]|[kK][iI][eE][dD][yY]|[jJ][eE][sS][tT]|[bB][yY][łl]|[bB][yY][lL][aA]|[bB][yY][łl][oO])\b)(?:"([^"\n]{1,120})"|“([^”\n]{1,120})”|([\p{L}\p{N}][\p{L}\p{N}'’:&-]*(?:\s+(?:(?:[oO][fF]|[tT][hH][eE]|[aA][nN][dD]|&)\s+)?[\p{Lu}\p{N}][\p{L}\p{N}'’:&-]*){0,4}))/u;
+
+  // Jawny kontekst „w grze” pozwala przyjąć również tytuły zapisane małymi
+  // literami. Koniec tytułu wyznacza początek pytania, a nie wielkość liter.
+  const pattern = /(?:^|[^\p{L}\p{N}_])w(?:e)?\s+(?:tej\s+)?grze\s+(?!(?:kim\s+jest|kto\s+(?:to|jest)|co\s+(?:to|się)|czym\s+jest|jak\s+(?:przejść|pokonać|zdobyć|działa|wygląda)|czy\s+(?:warto|jest|można)|dlaczego|czemu|gdzie|kiedy|opisz|wyjaśnij|who\s+(?:is|was)|what\s+(?:is|happened)|why|how\s+(?:to|does|is)|where|when)\b)(?:"([^"\n]{1,120})"|“([^”\n]{1,120})”|([\p{L}\p{N}][^\n?!]{0,119}?))(?=\s+(?:kim\s+jest|kto\s+(?:to|jest)|co\s+(?:to|się)|czym\s+jest|jak\s+(?:przejść|pokonać|zdobyć|działa|wygląda)|czy\s+(?:warto|jest|można)|dlaczego\b|czemu\b|gdzie\b|kiedy\b|opisz\b|wyjaśnij\b|who\s+(?:is|was)|what\s+(?:is|happened)|why\b|how\s+(?:to|does|is)|where\b|when\b)|\s*[:,;—–-]\s*(?:kim|kto|co|czym|jak|czy|dlaczego|czemu|gdzie|kiedy|opisz|wyjaśnij|who|what|why|how|where|when)\b|[?!]\s*$|$)/iu;
   const prefixPattern = /^\s*(?!(?:kim|kto|co|jak|czy|dlaczego|czemu|gdzie|kiedy|opisz|wyjaśnij|who|what|why|how|when|where|is|does)\b)(?:"([^"\n]{1,120})"|“([^”\n]{1,120})”|([\p{L}\p{N}][\p{L}\p{N}'’:&-]*(?:\s+(?:(?:of|the|and|&)\s+)?[\p{Lu}\p{N}][\p{L}\p{N}'’:&-]*){0,4}))\s*:\s*(?:kim|kto|co|jak|czy|dlaczego|czemu|gdzie|kiedy|opisz|wyjaśnij|who|what|why|how|when|where|is|does)\b/u;
   const match = value.match(pattern) || value.match(prefixPattern);
   const title = (match?.[1] || match?.[2] || match?.[3] || '').replace(/\s+/g, ' ').replace(/[,:;.!?]+$/u, '').trim();
