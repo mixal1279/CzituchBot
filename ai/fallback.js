@@ -215,19 +215,24 @@ function geminiGenerationCooldownMsFromError(error) {
   const status = Number(error?.status ?? error?.statusCode ?? error?.response?.status ?? 0);
   // Gemini documents HTTP 402 as depleted Prepay credits; retrying cannot help
   // until billing is fixed, so suppress repeated calls for a longer interval.
-  if (status === 402 || /(?:HTTP\s*402|\b402\b|prepay credit balance.{0,30}(?:deplet|exhaust)|credit balance.{0,40}(?:deplet|exhaust|insufficient))/i.test(message)) {
+  if (status === 402 || /(?:HTTP\\s*402|\\b402\\b|prepay credit balance.{0,30}(?:deplet|exhaust)|credit balance.{0,40}(?:deplet|exhaust|insufficient))/i.test(message)) {
     return 24 * 60 * 60 * 1000;
   }
 
-  // Honor Retry-After when it is available (including the normalized string
-  // attached by retryAfterHint); otherwise distinguish daily quota from bursts.
-  const retryAfter = message.match(/retry[- ]after\s*[=:]\s*(\d+(?:\.\d+)?)\s*(?:s|sec(?:ond)?s?)?/i);
+  // Honor raw response headers before falling back to message-based hints.
+  const headerRetryAfter = retryAfterSecondsFromHeaders(error);
+  if (headerRetryAfter !== null) return boundedProviderCooldownMs(headerRetryAfter * 1000);
+  const retryAfter = message.match(/retry[- ]after\\s*[=:]\\s*(\\d+(?:\\.\\d+)?)\\s*(?:s|sec(?:ond)?s?)?/i);
   if (retryAfter) return boundedProviderCooldownMs(Number(retryAfter[1]) * 1000);
 
-  const dailyQuota = /(?:tokens?\s*(?:per|\/)\s*day|\bTPD\b|daily (?:token|usage|request) (?:allowance|quota|limit)|daily allowance exhausted)/i.test(message);
+  const metadata = error?.metadata && typeof error.metadata === 'object' ? error.metadata : {};
+  const quotaCode = [error?.code, error?.type, metadata.error_type, metadata.limit_source]
+    .filter(Boolean).join(' ');
+  const dailyQuota = /(?:tokens?\\s*(?:per|\\/)\\s*day|\\bTPD\\b|daily (?:token|usage|request) (?:allowance|quota|limit)|daily allowance exhausted|daily[_ -]quota[_ -]exceeded|free[_ -]tokens[_ -]exhausted)/i.test(message)
+    || /(?:daily_quota_exceeded|free_tokens_exhausted)/i.test(quotaCode);
   if (dailyQuota) return 24 * 60 * 60 * 1000;
 
-  if (status === 429 || /(?:HTTP\s*429|\b429\b|quota|rate.?limit|resource.?exhausted|limit:)/i.test(message)) return 90_000;
+  if (status === 429 || /(?:HTTP\\s*429|\\b429\\b|quota|rate.?limit|resource.?exhausted|limit:)/i.test(message)) return 90_000;
   return 0;
 }
 
@@ -324,8 +329,11 @@ function quotaCooldownMsFromError(error) {
   // exhausted. If the response did not provide an authoritative Retry-After,
   // suppress repeated calls instead of probing the same exhausted allowance
   // every minute. Burst/rate-limit 429s retain the short configurable cooldown.
-  const dailyQuota = /(?:tokens?\s*(?:per|\/)\s*day|\bTPD\b|daily (?:token|usage|request) (?:allowance|quota|limit)|daily allowance exhausted)/i.test(message)
-    || /(?:quota_exceeded|daily_quota_exceeded|free_tokens_exhausted)/i.test(String(error?.code || error?.type || ''));
+  const metadata = error?.metadata && typeof error.metadata === 'object' ? error.metadata : {};
+  const quotaCode = [error?.code, error?.type, metadata.error_type, metadata.limit_source]
+    .filter(Boolean).join(' ');
+  const dailyQuota = /(?:tokens?\\s*(?:per|\\/)\\s*day|\\bTPD\\b|daily (?:token|usage|request) (?:allowance|quota|limit)|daily allowance exhausted|daily[_ -]quota[_ -]exceeded|free[_ -]tokens[_ -]exhausted)/i.test(message)
+    || /(?:quota_exceeded|daily_quota_exceeded|free_tokens_exhausted)/i.test(quotaCode);
   if (dailyQuota && retryAfterMs === null) return 24 * 60 * 60 * 1000;
   if (retryAfterMs !== null) {
     // A valid provider Retry-After is authoritative for retryable responses.
