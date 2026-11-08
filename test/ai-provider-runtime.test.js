@@ -69,6 +69,34 @@ test('Groq schema-validation 400 retries once in JSON mode and remains subject t
   assert.equal(result.choices[0].message.content, '{"valid":true,"claims":[]}');
 });
 
+test('Groq schema fallback aborts transport on timeout when only a parent signal is supplied', async () => {
+  let observedSignal;
+  let calls = 0;
+  const groqClient = {
+    chat: { completions: { create(_payload, options) {
+      calls++;
+      observedSignal = options.signal;
+      return new Promise((resolve, reject) => {
+        options.signal.addEventListener('abort', () => {
+          reject(Object.assign(new Error('request aborted'), { name: 'AbortError' }));
+        }, { once: true });
+      });
+    } } },
+  };
+
+  await assert.rejects(
+    createGroqCompletionWithSchemaFallback(groqClient, {
+      model: 'test-model',
+      messages: [{ role: 'user', content: 'validate' }],
+      max_completion_tokens: 100,
+      response_format: { type: 'json_schema', json_schema: { strict: true } },
+    }, { signal: new AbortController().signal, timeoutMs: 20 }),
+    error => error.name === 'TimeoutError',
+  );
+  assert.equal(calls, 1, 'timeout must not start a concurrent JSON fallback request');
+  assert.equal(observedSignal.aborted, true, 'timeout must abort the underlying SDK transport');
+});
+
 test('hard timeout releases the pipeline when a provider ignores AbortSignal', async () => {
   const controller = new AbortController();
   const startedAt = Date.now();
