@@ -1752,8 +1752,7 @@ async function walidujOdpowiedzGeminiModel(model, persona, pytanie, odpowiedz, d
     if (requestState && validatorTimeoutMs === null) {
       return { status: 'unavailable', ok: false, technicalError: true, transient: true, skipped: true, provider: 'gemini', model, unsupported_claims: [], reason: 'Gemini validator pominięty: zbyt mały pozostały budżet czasu' };
     }
-    try {
-      // Ogranicz cały transport, łącznie z odczytem body; sam abort nie gwarantuje,
+    // Ogranicz cały transport, łącznie z odczytem body; sam abort nie gwarantuje,
       // że niestandardowy transport lub adapter zakończy oczekującą obietnicę.
       const { response, data } = await awaitWithAbortTimeout((async () => {
         const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
@@ -1877,7 +1876,6 @@ async function walidujOdpowiedzGeminiModel(model, persona, pytanie, odpowiedz, d
       }
       console.log(`[AI][${requestId}] ${model}: decyzja ok=${normalized.ok} supported=${normalized.supported} relevant=${normalized.relevant} complete=${normalized.complete} hallucination=${normalized.hallucination} unsupported=${normalized.unsupported_claims.length}`);
       return normalized;
-    }
   } catch (err) {
     const message = String(err?.message || '');
     const abortLike = err?.name === 'AbortError' || err?.name === 'TimeoutError' || /aborted|abort|cancelled|canceled|timed out|timeout/i.test(message);
