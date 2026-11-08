@@ -49,6 +49,12 @@ W przejrzanych miejscach nie znaleziono dynamicznego regexu budowanego z suroweg
 
 Ostrzeżenia njsscan `regex_dos` są szerokimi dopasowaniami semantycznymi na wywołaniach `.test()` w funkcjach z wieloma argumentami; obejmują też funkcje domenowe i testy, nie tylko handlery HTTP. Uzasadnienie raportu bazowego znajduje się w `docs/security/njsscan-triage.md`. Reguła pozostaje aktywna — nie jest ignorowana ani wyłączona.
 
+## Wynik skanu bieżącego HEAD
+
+Dla `c5a2508e0a8ba2bac2bb9aac9bf1a6e704c4c09b` njsscan 1.0.2 wygenerował 58 wskazań `regex_dos` w 15 plikach i 0 błędów skanera (workflow run `42417446984`). Nie ma findings z innych reguł ani z sekcji `templates`.
+
+Wskazania obejmują także stałe wzorce językowe, pętle nad tablicami wzorców i testowe klasyfikatory. To szerokie ostrzeżenie heurystyczne, a nie automatyczny dowód ReDoS. Nie wyłączono reguły ani nie dodano globalnego suppressiona. Szczegółowy rozkład plików znajduje się w `docs/security/njsscan-triage.md`.
+
 ## Testy regresyjne
 
 - `test/ai-regex-utils.test.js`: escapowanie metaznaków, limit długości, polskie granice Unicode, puste wejście.
