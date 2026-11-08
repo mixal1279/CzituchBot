@@ -61,6 +61,11 @@ W raporcie bazowym obie reguły timeoutowały na `czituch_bot.js`; nie wygenerow
 
 To uzasadnia, dlaczego timeout nie może być traktowany jako potwierdzona podatność, ale nie zastępuje ponownego pełnego skanu. Reguły nie są wyłączone, a workflow ma fail-closed dla błędów skanera i przesyła SARIF tylko po poprawnym zakończeniu walidacji.
 
-## Status po późniejszych poprawkach
+## Historyczne wyniki
 
-Raport z 83 findings dotyczy SHA `ef07ae3`, a nie bieżącego HEAD. Po nim usunięto logi obecności kluczy i wszystkie `Math.random()` z `czituch_bot.js`. Aktualny wynik liczbowy należy ustalić z raportu njsscan wygenerowanego dla najnowszego SHA; nie przenosić starych liczników na nowy kod.
+Wcześniejsze raporty (83 findings na SHA `ef07ae3`) opisują starsze commity i nie mogą być używane jako licznik bieżącego HEAD. Po ich wygenerowaniu usunięto logi obecności kluczy i zastąpiono użycia `Math.random()` w ekonomii przez `crypto.randomInt`.
+
+## Bieżący stan po audycie PR #131
+
+Raport z HEAD `c5a2508e0a8ba2bac2bb9aac9bf1a6e704c4c09b` zawiera 58 ostrzeżeń `regex_dos`, 0 błędów skanera i brak findings z innych reguł. Kolejny skan po zmianie workflow musi potwierdzić wynik dla nowego HEAD; nie zakładamy, że licznik pozostanie taki sam.
+
