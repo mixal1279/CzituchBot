@@ -119,7 +119,7 @@ test('atrybucja GameFAQs pochodzi wyłącznie ze zweryfikowanych SOURCE ID i pop
 test('główny pipeline publikuje atrybucję dopiero po walidacji claimów', () => {
   const source = fs.readFileSync(path.join(__dirname, '..', 'czituch_bot.js'), 'utf8');
   const finalizeIndex = source.indexOf('odp = finalizeResponse(odp, aiState.finalStatus);');
-  const attributionIndex = source.indexOf('wytnijAtrybucjeGameLore(daneDoWalidacji, zweryfikowaneZrodlaIds)');
+  const attributionIndex = source.indexOf('wytnijAtrybucjeGameLoreWszystkie(daneDoWalidacji, zweryfikowaneZrodlaIds)');
   assert.ok(finalizeIndex >= 0);
   assert.ok(attributionIndex > finalizeIndex);
   assert.ok(source.includes("claim?.supported === true"));
