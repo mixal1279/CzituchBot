@@ -28,6 +28,33 @@ test('provider quota cooldowns restore from and persist to the runtime state sto
   fallback.configureProviderQuotaPersistence(null);
 });
 
+test('persisted cooldowns reject malformed keys and implausible future expiries', async () => {
+  const now = Date.now();
+  const store = {
+    async read() {
+      return {
+        version: 1,
+        entries: [
+          ['gemini:flash', now + 8 * 24 * 60 * 60 * 1000],
+          ['unknown:flash', now + 60_000],
+          ['groq:*', now + 60_000],
+        ],
+      };
+    },
+    async write() {},
+    logger: { warn() {} },
+  };
+
+  fallback.configureProviderQuotaPersistence(null);
+  fallback.resetProviderQuotaCooldowns();
+  await fallback.configureProviderQuotaPersistence(store);
+  assert.equal(fallback.isProviderQuotaBlocked('gemini:flash'), false);
+  assert.equal(fallback.isProviderQuotaBlocked('unknown:flash'), false);
+  assert.equal(fallback.isProviderQuotaBlocked('groq:openai/gpt-oss-20b'), true);
+  fallback.configureProviderQuotaPersistence(null);
+  fallback.resetProviderQuotaCooldowns();
+});
+
 test('provider-wide quota scope blocks sibling models but endpoint scope stays isolated', () => {
   fallback.configureProviderQuotaPersistence(null);
   fallback.resetProviderQuotaCooldowns();
