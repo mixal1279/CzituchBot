@@ -376,8 +376,9 @@ function shouldBlockProviderQuotaWide(provider, error) {
   if (!endpoint) return false;
   const providerName = endpoint.slice(0, endpoint.indexOf(':'));
   const message = String(error?.message || error?.reason || error?.error || error || '');
-  const code = String(error?.code || error?.type || '').toLowerCase();
   const metadata = error?.metadata && typeof error.metadata === 'object' ? error.metadata : {};
+  const code = [error?.code, error?.type, metadata.error_type, metadata.provider_code]
+    .filter(Boolean).join(' ').toLowerCase();
   const limitSource = String(metadata.limit_source || error?.limit_source || '').toLowerCase();
   const httpStatus = Number(error?.status ?? error?.statusCode ?? error?.response?.status ?? 0);
   const paymentOrCreditExhaustion = httpStatus === 402
