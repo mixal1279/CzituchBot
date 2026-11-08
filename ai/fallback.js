@@ -265,7 +265,10 @@ function retryAfterSecondsFromHeaders(source, now = Date.now()) {
     const seconds = /^\d+(?:\.\d+)?$/.test(value)
       ? Number(value)
       : (Number.isFinite(parsedDate) ? Math.max(0, (parsedDate - now) / 1000) : NaN);
-    if (Number.isFinite(seconds)) return Math.max(0, seconds);
+    // Bardzo duże, ale poprawne wartości sekund mogą przepełnić Number do
+    // Infinity. Traktuj je jako maksymalny cooldown zamiast ignorować nagłówek.
+    if (seconds === Infinity) return MAX_PROVIDER_COOLDOWN_MS / 1000;
+    if (Number.isFinite(seconds)) return Math.min(MAX_PROVIDER_COOLDOWN_MS / 1000, Math.max(0, seconds));
   }
   return null;
 }
