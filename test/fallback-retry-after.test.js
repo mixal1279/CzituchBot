@@ -100,3 +100,21 @@ test('structured OpenRouter in-flight budget 402 remains retryable with Retry-Af
     headers: new Headers({ 'retry-after': '5' }),
   }), false);
 });
+
+test('Gemini cooldown reads Retry-After headers and structured daily quota metadata', () => {
+  assert.equal(geminiGenerationCooldownMsFromError({
+    status: 429,
+    message: 'rate limited',
+    response: { headers: new Headers({ 'retry-after': '7' }) },
+  }), 7000);
+  assert.equal(geminiGenerationCooldownMsFromError({
+    status: 429,
+    message: 'rate limited',
+    metadata: { error_type: 'daily_quota_exceeded' },
+  }), 24 * 60 * 60 * 1000);
+  assert.equal(quotaCooldownMsFromError({
+    status: 429,
+    message: 'rate limited',
+    metadata: { error_type: 'daily_quota_exceeded' },
+  }), 24 * 60 * 60 * 1000);
+});
