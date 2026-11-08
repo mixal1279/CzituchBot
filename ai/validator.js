@@ -9,6 +9,8 @@ const { parseEvidenceBlocks, quoteExists, rankEvidenceForClaim, buildEvidenceRep
 const { naprawKsztaltWynikuWalidatora } = require('./validator-shape');
 const { buildClaimSupportAudit, HARD_OVERCLAIM_TYPES } = require('./claim-support');
 
+const { decomposeQuestion } = require('./retrieval');
+
 // Kontrakt walidatora jest celowo mały: generator potrzebuje tylko jasnego
 // werdyktu i konkretnej informacji zwrotnej do jednego retry.
 const GEMINI_VALIDATOR_JSON_SCHEMA = {
@@ -544,6 +546,62 @@ function isAtomicPartialClaimText(value) {
   return true;
 }
 
+
+const QUESTION_COVERAGE_STOPWORDS = new Set([
+  'czy', 'jak', 'jaki', 'jaka', 'jakie', 'kto', 'kim', 'co', 'czym',
+  'dlaczego', 'czemu', 'kiedy', 'gdzie', 'ile', 'jest', 'sa', 'to',
+  'ten', 'ta', 'te', 'do', 'na', 'w', 'we', 'z', 'ze', 'o', 'od',
+  'po', 'dla', 'i', 'oraz', 'a', 'czyli', 'sie', 'mi', 'mnie',
+]);
+
+function sprawdzPokrycieCzesciPytania(question, claims) {
+  const parts = decomposeQuestion(question);
+  if (parts.length < 2) return { ok: true, totalParts: parts.length, coveredParts: parts.length, uncoveredParts: [] };
+
+  const verifiedClaims = (Array.isArray(claims) ? claims : [])
+    .filter(claim => claim?.supported === true && String(claim.claim || '').trim());
+  const uncoveredParts = [];
+
+  for (const part of parts) {
+    const normalizedPart = normalizujClaim(part);
+    const tokens = [...new Set(normalizedPart.split(' ')
+      .filter(token => token.length >= 4 && !QUESTION_COVERAGE_STOPWORDS.has(token)))];
+    if (!tokens.length) continue;
+
+    const entities = wyodrebnijNazwyWlasne(part);
+    const identityQuestion = /\\b(?:kim jest|kto jest|who is|who was)\\b/u.test(normalizedPart);
+    const causalQuestion = /\\b(?:dlaczego|czemu|z jakiego powodu|why|how come|what caused)\\b/u.test(normalizedPart);
+
+    const covered = verifiedClaims.some(claim => {
+      const claimText = normalizujClaim(claim.claim);
+      const claimTokens = new Set(claimText.split(' ').filter(Boolean));
+      const matched = tokens.filter(token => claimTokens.has(token));
+      const tokenRatio = matched.length / tokens.length;
+      const entityMatch = entities.length > 0
+        && entities.some(entity => claimText.includes(normalizujClaim(entity)));
+
+      if (identityQuestion) {
+        return entityMatch && /\\b(?:jest|sa|byl|byla|is|are|was|were|character|postac|role|core|robot|scientist|personality)\\b/u.test(claimText);
+      }
+      if (causalQuestion) {
+        return entityMatch && CAUSAL_RE.test(claimText);
+      }
+      // Dla pozostałych typów wymagamy znaczącego pokrycia słów treściowych;
+      // samo powtórzenie nazwy encji nie oznacza odpowiedzi na pytanie.
+      return tokenRatio >= 0.34 && (matched.length >= 2 || (entityMatch && matched.length >= 1));
+    });
+
+    if (!covered) uncoveredParts.push(String(part).slice(0, 240));
+  }
+
+  return {
+    ok: uncoveredParts.length === 0,
+    totalParts: parts.length,
+    coveredParts: parts.length - uncoveredParts.length,
+    uncoveredParts: uncoveredParts.slice(0, 3),
+  };
+}
+
 function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSourceIds = null, dane = '', answer = '', options = {}) {
   const shape = naprawKsztaltWynikuWalidatora(wynik);
   wynik = shape.wynik;
@@ -746,6 +804,12 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
   const unknownSourceClaim = unknownSourceClaimIndexes.length > 0;
   const unsupportedEvidenceClaim = unsupportedEvidenceClaimIndexes.length > 0;
   const answerCoverage = answer ? sprawdzPokrycieClaimamiOdpowiedzi(answer, claims) : { ok: true, uncovered: [], totalSentences: null, checkedSentences: null, uncoveredSentenceIndexes: [] };
+  // Pokrycie treści odpowiedzi nie gwarantuje, że odpowiedziano na każdą
+  // część pytania złożonego. Weryfikujemy każdą rozpoznaną klauzulę osobno.
+  const questionCoverage = sprawdzPokrycieCzesciPytania(
+    options.question || '',
+    claims.filter((claim, index) => evidenceEvaluations[index]?.ok === true && evidenceQuoteVerified[index] === true),
+  );
   // Odpowiedź, która wyłącznie ogranicza się do „źródła nie podają daty…”, nie jest
   // odpowiedzią na pytanie. Brama pokrycia zgłosiłaby wtedy „claims nie pokrywają
   // całej odpowiedzi”, co sugeruje problem z kompozycją, a problem leży w tym, że
@@ -816,6 +880,7 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
     && !tooManyClaims
     && !malformedClaims
     && answerCoverage.ok
+    && questionCoverage.ok
     && claimGranularityOk
     && evidenceContractOk
     && hardOverclaimClaimIndexes.length === 0
@@ -894,6 +959,7 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
     unsupported.length > 0
     || partialEligibleEvidenceFailureIndexes.length > 0
     || !answerCoverage.ok
+    || !questionCoverage.ok
     || !claimGranularityOk
   );
 
@@ -994,6 +1060,7 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
     unsupportedClaimCount: unsupportedFromClaims.length,
     modelUnsupportedClaimCount: wynik.unsupported_claims.filter(v => typeof v === 'string' && v.trim()).length,
     claimLanguageMismatchIndexes,
+    questionCoverage,
     answerCoverage: {
       ok: answerCoverage.ok,
       totalSentences: answerCoverage.totalSentences ?? null,
