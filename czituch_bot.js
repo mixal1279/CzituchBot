@@ -1752,17 +1752,21 @@ async function walidujOdpowiedzGeminiModel(model, persona, pytanie, odpowiedz, d
     if (requestState && validatorTimeoutMs === null) {
       return { status: 'unavailable', ok: false, technicalError: true, transient: true, skipped: true, provider: 'gemini', model, unsupported_claims: [], reason: 'Gemini validator pominięty: zbyt mały pozostały budżet czasu' };
     }
-    const timer = ustawTimeout(() => controller.abort(), validatorTimeoutMs);
     try {
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+      // Ogranicz cały transport, łącznie z odczytem body; sam abort nie gwarantuje,
+      // że niestandardowy transport lub adapter zakończy oczekującą obietnicę.
+      const { response, data } = await awaitWithAbortTimeout((async () => {
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': KONFIGURACJA.geminiKey },
         body: JSON.stringify({
           systemInstruction: { parts: [{ text: system }] },
           contents: [{ role: 'user', parts: [{ text: user }] }],
           generationConfig: buildGeminiValidatorGenerationConfig(model, GEMINI_VALIDATOR_JSON_SCHEMA),
         }), signal: controller.signal,
-      });
-      const data = await response.json().catch(() => ({}));
+        });
+        const data = await response.json().catch(() => ({}));
+        return { response, data };
+      })(), validatorTimeoutMs, controller, 'Gemini validator');
       if (!response.ok) {
         const error = new Error(data?.error?.message || `HTTP ${response.status}`);
         error.status = response.status;
@@ -1873,10 +1877,10 @@ async function walidujOdpowiedzGeminiModel(model, persona, pytanie, odpowiedz, d
       }
       console.log(`[AI][${requestId}] ${model}: decyzja ok=${normalized.ok} supported=${normalized.supported} relevant=${normalized.relevant} complete=${normalized.complete} hallucination=${normalized.hallucination} unsupported=${normalized.unsupported_claims.length}`);
       return normalized;
-    } finally { wyczyscTimeout(timer); }
+    }
   } catch (err) {
     const message = String(err?.message || '');
-    const abortLike = err?.name === 'AbortError' || /aborted|abort|cancelled|canceled/i.test(message);
+    const abortLike = err?.name === 'AbortError' || err?.name === 'TimeoutError' || /aborted|abort|cancelled|canceled|timed out|timeout/i.test(message);
     const status = Number(err?.status ?? err?.statusCode ?? 0);
     const quota = status === 402 || status === 429 || /quota|rate.?limit|resource.?exhausted|429|limit:/i.test(message);
     const transient = status !== 402 && (
