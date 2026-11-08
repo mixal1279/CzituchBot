@@ -588,7 +588,7 @@ function sprawdzPokrycieCzesciPytania(question, claims) {
         return entityMatch && /\\b(?:jest|sa|byl|byla|is|are|was|were|character|postac|role|core|robot|scientist|personality)\\b/u.test(claimText);
       }
       if (causalQuestion) {
-        return entityMatch && CAUSAL_RE.test(claimText);
+        return CAUSAL_RE.test(claimText) && (entityMatch || matched.length >= 1);
       }
       // Dla pozostałych typów wymagamy znaczącego pokrycia słów treściowych;
       // samo powtórzenie nazwy encji nie oznacza odpowiedzi na pytanie.
