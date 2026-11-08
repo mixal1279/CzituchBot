@@ -340,7 +340,7 @@ function markProviderQuota(provider, cooldownMs = Number(process.env.AI_PROVIDER
   const providerName = endpoint.slice(0, endpoint.indexOf(':'));
   const scope = options?.scope === 'provider' ? 'provider' : 'endpoint';
   const key = scope === 'provider' ? `${providerName}:*` : endpoint;
-  const duration = boundedProviderCooldownMs(cooldownMs);
+  const duration = boundedProviderCooldownMs(Number(cooldownMs) || 60_000);
   const until = Math.max(quotaBlockedUntil.get(key) || 0, Date.now() + duration);
   quotaBlockedUntil.set(key, until);
   void persistQuotaState();
