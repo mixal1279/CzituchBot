@@ -67,6 +67,9 @@ function classifyAIRequest(pytanie, policyCategory, recipeDetector = () => false
 
   if (resolved?.resolution === 'deterministic_ambiguous') {
     confidence = Math.min(confidence, 0.62);
+  } else if (resolved?.resolution === 'explicit_unverified') {
+    // Niezweryfikowany tytuł nie może odziedziczyć wysokiej pewności web_fact.
+    confidence = Math.min(confidence, 0.72);
   }
 
   // entity_type opisuje typ DOPASOWANEGO aliasu, nie encji raportowanej.
