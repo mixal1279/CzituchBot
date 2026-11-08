@@ -4583,14 +4583,14 @@ Pytanie użytkownika: ${pytanie}`;
   if (['accepted', 'soft_accepted'].includes(aiState.finalStatus) && zweryfikowaneZrodlaIds.size) {
     const atrybucjaGameLore = wytnijAtrybucjeGameLore(daneDoWalidacji, zweryfikowaneZrodlaIds);
     if (atrybucjaGameLore) {
-      const etykietaZrodla = \`GameLore: \${atrybucjaGameLore.title} — \${atrybucjaGameLore.url} (CC BY-SA)\`;
+      const etykietaZrodla = 'GameLore: ' + atrybucjaGameLore.title + ' — ' + atrybucjaGameLore.url + ' (CC BY-SA)';
       const limitOdpowiedzi = 1800;
       const limitTresci = limitOdpowiedzi - etykietaZrodla.length - 1;
       if (limitTresci > 120 && odp.length > limitTresci) {
         odp = ograniczDoPelnychZdanAI(odp, responseCfg.maxSentences, limitTresci, responseCfg.maxWords);
       }
       if (odp && etykietaZrodla.length < limitOdpowiedzi) {
-        odp = \`\${odp} | \${etykietaZrodla}\`;
+        odp = odp + ' | ' + etykietaZrodla;
       }
     }
   }
