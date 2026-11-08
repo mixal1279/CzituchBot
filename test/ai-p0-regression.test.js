@@ -144,6 +144,32 @@ function mockDistinctTavilyResponse(count = 6) {
   };
 }
 
+test('P0-B query rewrite hard timeout releases a provider that ignores AbortSignal', async () => {
+  let observedSignal;
+  let tavilyCalls = 0;
+  const search = createTavilySearch({
+    apiKey: 'test-key',
+    groq: { chat: { completions: { create: async (_payload, requestOptions) => {
+      observedSignal = requestOptions.signal;
+      return new Promise(() => {});
+    } } } },
+    fetchZTimeout: async () => { tavilyCalls++; throw new Error('Tavily should not run after the deadline'); },
+    normalizeQuery: value => String(value || '').trim(),
+    logger: { log() {}, warn() {}, error() {} },
+    cacheFile: '/tmp/czituchbot-p0b-rewrite-timeout.json',
+  });
+  let timer;
+  const startedAt = Date.now();
+  const result = await Promise.race([
+    search('Portal 2 rewrite timeout regression test', { remainingMs: 30, returnMeta: true }),
+    new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('query rewrite exceeded hard deadline')), 500); }),
+  ]).finally(() => clearTimeout(timer));
+  assert.ok(result);
+  assert.equal(observedSignal.aborted, true, 'hard timeout must abort the Groq transport');
+  assert.equal(tavilyCalls, 0, 'expired retrieval budget must not start Tavily Search');
+  assert.ok(Date.now() - startedAt < 400);
+});
+
 test('P0-B query rewrite uses createGroqCompletion transport options and reasoning headroom', async () => {
   let capturedPayload;
   let capturedOptions;
