@@ -129,6 +129,16 @@ function configuredMaxFallbackSteps(value = process.env.AI_MAX_FALLBACK_STEPS) {
   return Number.isFinite(parsed) ? Math.max(0, Math.floor(parsed)) : GENERATION_FALLBACK_CHAIN.length;
 }
 
+const MAX_PROVIDER_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
+
+function boundedProviderCooldownMs(value, fallback = 60_000) {
+  const duration = Number(value);
+  if (!Number.isFinite(duration)) {
+    return duration === Infinity ? MAX_PROVIDER_COOLDOWN_MS : fallback;
+  }
+  return Math.min(MAX_PROVIDER_COOLDOWN_MS, Math.max(1_000, duration));
+}
+
 const quotaBlockedUntil = new Map();
 let quotaPersistence = null;
 let quotaPersistenceQueue = Promise.resolve();
@@ -204,7 +214,7 @@ function geminiGenerationCooldownMsFromError(error) {
   // Honor Retry-After when it is available (including the normalized string
   // attached by retryAfterHint); otherwise distinguish daily quota from bursts.
   const retryAfter = message.match(/retry[- ]after\s*[=:]\s*(\d+(?:\.\d+)?)\s*(?:s|sec(?:ond)?s?)?/i);
-  if (retryAfter) return Math.max(1_000, Math.ceil(Number(retryAfter[1]) * 1000));
+  if (retryAfter) return boundedProviderCooldownMs(Number(retryAfter[1]) * 1000);
 
   const dailyQuota = /(?:tokens?\s*(?:per|\/)\s*day|\bTPD\b|daily (?:token|usage|request) (?:allowance|quota|limit)|daily allowance exhausted)/i.test(message);
   if (dailyQuota) return 24 * 60 * 60 * 1000;
@@ -304,9 +314,9 @@ function quotaCooldownMsFromError(error) {
   if (retryAfterMs !== null) {
     // A valid provider Retry-After is authoritative for retryable responses.
     // Do not silently extend a short wait to the local 60s default.
-    return Math.max(1_000, Math.ceil(retryAfterMs));
+    return boundedProviderCooldownMs(retryAfterMs);
   }
-  return isOverload ? 60_000 : configured;
+  return boundedProviderCooldownMs(isOverload ? 60_000 : configured);
 }
 
 function normalizeProviderEndpoint(provider) {
@@ -330,7 +340,7 @@ function markProviderQuota(provider, cooldownMs = Number(process.env.AI_PROVIDER
   const providerName = endpoint.slice(0, endpoint.indexOf(':'));
   const scope = options?.scope === 'provider' ? 'provider' : 'endpoint';
   const key = scope === 'provider' ? `${providerName}:*` : endpoint;
-  const duration = Math.max(1_000, Number(cooldownMs) || 60_000);
+  const duration = boundedProviderCooldownMs(cooldownMs);
   const until = Math.max(quotaBlockedUntil.get(key) || 0, Date.now() + duration);
   quotaBlockedUntil.set(key, until);
   void persistQuotaState();
