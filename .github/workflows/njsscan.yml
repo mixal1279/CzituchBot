@@ -111,7 +111,7 @@ jobs:
             `- Scanner errors: ${errors.length}`,
             ...counts.map(([name, value]) => `- ${name}: ${value}`),
           ];
-          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary.join('\\n') + '\\n');
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary.join('\n') + '\n');
           if (errors.length) {
             const summary = errors.map(error => `${error.type || 'error'}`).join(', ');
             throw new Error(`njsscan analysis incomplete: ${errors.length} scanner error(s): ${summary}`);
