@@ -104,8 +104,7 @@ function detectOverclaimTypes(claim, evidence, options = {}) {
   // Status kanoniczny jest twierdzeniem o oficjalnym stanie uniwersum.
   // Wiki społecznościowa może opisywać kanon, ale sama nie jest źródłem
   // pierwotnym potwierdzającym jego status.
-  if (canonClaimStatus.wystepuje && options.sourceAuthority
-    && options.sourceAuthority !== 'official') {
+  if (canonClaimStatus.wystepuje && options.sourceAuthority !== 'official') {
     types.push('canon_status_not_official_source');
   }
 
