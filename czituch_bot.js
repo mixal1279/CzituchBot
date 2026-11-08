@@ -4130,6 +4130,7 @@ Pytanie użytkownika: ${pytanie}`;
   // przy statusie soft_accepted. Trzymamy ją poza blokiem walidacji, bo
   // finalizacja odpowiedzi jest poza nim.
   let odpowiedzCzesciowa = null;
+  let zweryfikowaneZrodlaIds = new Set();
   if (maWalidowac) {
     aiState.validationPass = 1;
     aiState.recordTiming('validator_start', { pass: 1, answerChars: odp.length });
@@ -4508,6 +4509,15 @@ Pytanie użytkownika: ${pytanie}`;
         console.warn(`[AI][${requestId}] soft-accepted partial answer rejected by core-intent gate: ${coreMissing.join(', ')}`);
       }
     }
+    if (['accepted', 'soft_accepted'].includes(walidacja.status) && Array.isArray(walidacja.claims)) {
+      zweryfikowaneZrodlaIds = new Set(
+        walidacja.claims
+          .filter(claim => claim?.supported === true && Array.isArray(claim.source_ids))
+          .flatMap(claim => claim.source_ids)
+          .map(String)
+          .filter(sourceId => /^SOURCE \d+$/.test(sourceId))
+      );
+    }
     const validationDecision = decideValidation(walidacja.status, { allowRetry: false });
     aiState.finalStatus = validationDecision.finalStatus;
     odp = finalizeAIPipelineText(odp, validationDecision.finalStatus, {
@@ -4567,6 +4577,23 @@ Pytanie użytkownika: ${pytanie}`;
     },
   });
   odp = finalizeResponse(odp, aiState.finalStatus);
+
+  // Atrybucję publikujemy wyłącznie dla źródeł wskazanych przez zaakceptowane claimy.
+  // Dodajemy ją po sanitizacji odpowiedzi, która celowo usuwa linki z treści modelu.
+  if (['accepted', 'soft_accepted'].includes(aiState.finalStatus) && zweryfikowaneZrodlaIds.size) {
+    const atrybucjaGameLore = wytnijAtrybucjeGameLore(daneDoWalidacji, zweryfikowaneZrodlaIds);
+    if (atrybucjaGameLore) {
+      const etykietaZrodla = \`GameLore: \${atrybucjaGameLore.title} — \${atrybucjaGameLore.url} (CC BY-SA)\`;
+      const limitOdpowiedzi = 1800;
+      const limitTresci = limitOdpowiedzi - etykietaZrodla.length - 1;
+      if (limitTresci > 120 && odp.length > limitTresci) {
+        odp = ograniczDoPelnychZdanAI(odp, responseCfg.maxSentences, limitTresci, responseCfg.maxWords);
+      }
+      if (odp && etykietaZrodla.length < limitOdpowiedzi) {
+        odp = \`\${odp}\n\${etykietaZrodla}\`;
+      }
+    }
+  }
 
   AI_METRYKI[aiState.finalStatus] = (AI_METRYKI[aiState.finalStatus] || 0) + 1;
   // Odpowiedź, którą pipeline wyrzucił w zamian za odmowę. Sam pipeline nie
