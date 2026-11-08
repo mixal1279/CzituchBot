@@ -71,6 +71,29 @@ test('lore evidence is isolated to the requested game and character', () => {
   assert.equal(assessEvidence([foreign, matching], 'Kim jest Dragonborn?', routing).sources.length, 1);
 });
 
+test('character-scoped lore rejects sequel sources from another game installment', () => {
+  const routing = {
+    is_lore: true,
+    is_gameplay: false,
+    entity: 'Dragonborn',
+    entity_type: 'character',
+    game: 'Skyrim',
+    resolved_entity: { type: 'character', name: 'Dragonborn', game: 'Skyrim' },
+  };
+  const sequel = {
+    title: 'Skyrim II - Dragonborn',
+    url: 'https://example.com/skyrim-ii/dragonborn',
+    content: 'The Dragonborn appears in Skyrim II.',
+  };
+  const requestedInstallment = {
+    title: 'Dragonborn - Skyrim',
+    url: 'https://example.com/skyrim/dragonborn',
+    content: 'The Dragonborn is a hero of Skyrim.',
+  };
+  assert.equal(sourceMatchesRequestContext(sequel, routing), false);
+  assert.equal(sourceMatchesRequestContext(requestedInstallment, routing), true);
+});
+
 test('a character-scoped lore request rejects sources that mention only the game', () => {
   const routing = {
     is_lore: true,
