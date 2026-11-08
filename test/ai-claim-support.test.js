@@ -23,7 +23,7 @@ test('walidator wykrywa pominiętą część pytania złożonego', () => {
 
   const complete = validator.sprawdzPokrycieCzesciPytania(question, [
     { claim: 'Wheatley is a personality core.', supported: true },
-    { claim: 'Wheatley took control because the sudden influx of power corrupted him.', supported: true },
+    { claim: 'Wheatley przejął kontrolę, ponieważ nagły przypływ mocy go skorumpował.', supported: true },
   ]);
   assert.equal(complete.ok, true);
   assert.equal(complete.coveredParts, 2);
