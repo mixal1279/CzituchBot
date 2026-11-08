@@ -4203,7 +4203,11 @@ Pytanie użytkownika: ${pytanie}`;
             : await uzupelnijDanePoValidatorze(walidacja.unsupported_claims || [])));
       const unsupported = (walidacja.unsupported_claims || []).slice(0, 4);
       const reason = String(walidacja.reason || 'validator nie potwierdził odpowiedzi').trim().slice(0, 500);
+      const claimTranslationRepairFeedback = AI_VALIDATOR.zbudujFeedbackTlumaczeniaClaimow(
+        walidacja.diagnostics?.claimSupport?.records,
+      );
       const feedback = [
+        ...(claimTranslationRepairFeedback ? [claimTranslationRepairFeedback] : []),
         'Twoja poprzednia odpowiedź nie przeszła walidacji.',
         `PYTANIE ORYGINALNE — odpowiedz dokładnie na nie: ${String(pytanie || '').slice(0, 1500)}`,
         `POPRZEDNIA ODPOWIEDŹ DO POPRAWY: ${String(odp || '').slice(0, 4000) || '[brak treści]'}`,
