@@ -85,16 +85,17 @@ function dodajGameLoreDomenę(domeny) {
   return lista;
 }
 
-function wytnijAtrybucjeGameLore(tekst, dozwoloneSourceIds = null) {
+function wytnijAtrybucjeGameLoreWszystkie(tekst, dozwoloneSourceIds = null) {
   const t = String(tekst || '').slice(0, 120000);
   const dozwolone = dozwoloneSourceIds instanceof Set
     ? dozwoloneSourceIds
     : Array.isArray(dozwoloneSourceIds)
       ? new Set(dozwoloneSourceIds.map(String))
       : null;
+  const wyniki = [];
+  const widzianeUrl = new Set();
 
-  // Korzystamy z parsera dowodów, który ignoruje markery SOURCE osadzone
-  // wewnątrz niezaufanej treści strony.
+  // Parser ignoruje markery SOURCE osadzone wewnątrz niezaufanej treści strony.
   for (const source of parseEvidenceBlocks(t)) {
     if (dozwolone && !dozwolone.has(source.sourceId)) continue;
     if (!source.url) continue;
@@ -102,19 +103,26 @@ function wytnijAtrybucjeGameLore(tekst, dozwoloneSourceIds = null) {
     try {
       const parsed = new URL(source.url);
       if (parsed.protocol !== 'https:' || parsed.hostname.toLowerCase() !== GAMELORE_DOMAIN) continue;
-      const title = String(source.title || 'artykuł').replace(/[\r\n]+/g, ' ').trim().slice(0, 200);
-      return {
+      const url = parsed.toString();
+      if (widzianeUrl.has(url)) continue;
+      widzianeUrl.add(url);
+      const title = String(source.title || 'artykuł').replace(/[\r\n]+/g, ' ').trim().slice(0, 160);
+      wyniki.push({
         sourceId: source.sourceId,
         name: GAMELORE_NAME,
         title: title || 'artykuł',
-        url: parsed.toString(),
+        url,
         license: 'CC BY-SA',
-      };
+      });
     } catch (_) {
       continue;
     }
   }
-  return null;
+  return wyniki;
+}
+
+function wytnijAtrybucjeGameLore(tekst, dozwoloneSourceIds = null) {
+  return wytnijAtrybucjeGameLoreWszystkie(tekst, dozwoloneSourceIds)[0] || null;
 }
 
 module.exports = {
@@ -124,4 +132,5 @@ module.exports = {
   czyMaKontekstGry,
   dodajGameLoreDomenę,
   wytnijAtrybucjeGameLore,
+  wytnijAtrybucjeGameLoreWszystkie,
 };
