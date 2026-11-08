@@ -13,6 +13,7 @@ const {
 } = require('../ai/lore');
 const { czyPoprawnyWpisCacheTavily, createTavilySearch } = require('../ai/tavily');
 const { buildAnswerPlan } = require('../ai/answer-plan');
+const { sourceMatchesRequestContext } = require('../ai/core');
 
 const benchmark = JSON.parse(fs.readFileSync(
   path.join(__dirname, 'ai-lore-benchmark.json'),
@@ -226,4 +227,37 @@ test('advanced Tavily retrieval requests bounded Markdown and prefers full page 
   assert.equal(requestBody.max_results, 3);
   assert.match(result.text, /RAW_PAGE_EVIDENCE_MARKER/);
   assert.doesNotMatch(result.text, /SNIPPET_ONLY_MARKER/);
+});
+
+
+test('explicit unknown lowercase game title remains an unverified entity for strict evidence scoping', () => {
+  const routing = classifyAIRequest(
+    'w grze aetherfall: kim jest Neryth?',
+    policy,
+    () => false,
+  );
+  assert.equal(routing.is_lore, true);
+  assert.equal(routing.needs_web, true);
+  assert.equal(routing.entity, 'aetherfall');
+  assert.equal(routing.game, 'aetherfall');
+  assert.equal(routing.entity_type, 'game');
+  assert.equal(routing.resolved_entity.resolution, 'explicit_unverified');
+  assert.equal(routing.confidence_policy, 'retrieve_and_guard');
+
+  assert.equal(sourceMatchesRequestContext({
+    title: 'Neryth — Aetherfall Wiki',
+    content: 'Neryth is a character in Aetherfall.',
+    url: 'https://example.com/aetherfall/neryth',
+  }, routing), true);
+  assert.equal(sourceMatchesRequestContext({
+    title: 'Neryth — Elden Ring Wiki',
+    content: 'Neryth is a character in Elden Ring.',
+    url: 'https://example.com/elden-ring/neryth',
+  }, routing), false);
+});
+
+test('an ambiguous unknown title without explicit game wording is not promoted to a game entity', () => {
+  const routing = classifyAIRequest('Kim jest Neryth?', policy, () => false);
+  assert.equal(routing.resolved_entity, null);
+  assert.equal(routing.game, null);
 });
