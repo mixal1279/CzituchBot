@@ -1,6 +1,7 @@
 'use strict';
 
 const { resolveGameEntity } = require('./entities');
+const { parseEvidenceBlocks } = require('./evidence');
 const GAMEFAQS_DOMAIN = 'gamefaqs.gamespot.com';
 const GAMEFAQS_NAME = 'GameFAQs';
 
@@ -36,14 +37,41 @@ function dodajGameFAQsDomenę(domeny) {
   return Array.isArray(domeny) ? [...domeny] : [];
 }
 
-function wytnijAtrybucjeGameFAQs(tekst) {
-  const t = String(tekst || '');
-  const match = t.match(/\[SOURCE\s+\d+\][\s\S]*?HOST:\s*gamefaqs\.gamespot\.com[\s\S]*?URL:\s*(https?:\/\/[^\s\n]+)/i);
-  if (!match) return null;
-  const blok = match[0];
-  const title = blok.match(/TYTUŁ:\s*([^\n]+)/i)?.[1]?.trim() || 'poradnik';
-  const url = blok.match(/URL:\s*(https?:\/\/[^\s\n]+)/i)?.[1]?.trim() || null;
-  return url ? { name: GAMEFAQS_NAME, title, url } : null;
+function wytnijAtrybucjeGameFAQsWszystkie(tekst, dozwoloneSourceIds = null) {
+  const t = String(tekst || '').slice(0, 120000);
+  const dozwolone = dozwoloneSourceIds instanceof Set
+    ? dozwoloneSourceIds
+    : Array.isArray(dozwoloneSourceIds)
+      ? new Set(dozwoloneSourceIds.map(String))
+      : null;
+  const wyniki = [];
+  const widzianeUrl = new Set();
+
+  for (const source of parseEvidenceBlocks(t)) {
+    if (dozwolone && !dozwolone.has(source.sourceId)) continue;
+    if (!source.url) continue;
+    try {
+      const parsed = new URL(source.url);
+      if (parsed.protocol !== 'https:' || parsed.hostname.toLowerCase() !== GAMEFAQS_DOMAIN) continue;
+      const url = parsed.toString();
+      if (widzianeUrl.has(url)) continue;
+      widzianeUrl.add(url);
+      const title = String(source.title || 'poradnik').replace(/[\r\n]+/g, ' ').trim().slice(0, 160);
+      wyniki.push({
+        sourceId: source.sourceId,
+        name: GAMEFAQS_NAME,
+        title: title || 'poradnik',
+        url,
+      });
+    } catch (_) {
+      continue;
+    }
+  }
+  return wyniki;
 }
 
-module.exports = { GAMEFAQS_DOMAIN, GAMEFAQS_NAME, czyPytanieOGameplay, dodajGameFAQsDomenę, wytnijAtrybucjeGameFAQs };
+function wytnijAtrybucjeGameFAQs(tekst, dozwoloneSourceIds = null) {
+  return wytnijAtrybucjeGameFAQsWszystkie(tekst, dozwoloneSourceIds)[0] || null;
+}
+
+module.exports = { GAMEFAQS_DOMAIN, GAMEFAQS_NAME, czyPytanieOGameplay, dodajGameFAQsDomenę, wytnijAtrybucjeGameFAQs, wytnijAtrybucjeGameFAQsWszystkie };
