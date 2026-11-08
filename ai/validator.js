@@ -568,7 +568,11 @@ function sprawdzPokrycieCzesciPytania(question, claims) {
       .filter(token => token.length >= 4 && !QUESTION_COVERAGE_STOPWORDS.has(token)))];
     if (!tokens.length) continue;
 
-    const entities = wyodrebnijNazwyWlasne(part);
+    const entities = [...new Set([
+      ...wyodrebnijNazwyWlasne(part),
+      ...(String(part).match(/(?<![\\p{L}\\p{N}])[A-ZĄĆĘŁŃÓŚŹŻ][\\p{L}\\p{N}'’.-]*/gu) || [])
+        .filter(name => !QUESTION_COVERAGE_STOPWORDS.has(normalizujClaim(name))),
+    ])];
     const identityQuestion = /\\b(?:kim jest|kto jest|who is|who was)\\b/u.test(normalizedPart);
     const causalQuestion = /\\b(?:dlaczego|czemu|z jakiego powodu|why|how come|what caused)\\b/u.test(normalizedPart);
 
