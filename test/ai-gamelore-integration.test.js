@@ -48,8 +48,8 @@ test('atrybucja odrzuca podszywający się host i niezabezpieczony URL', () => {
   const makeEvidence = (host, url) => [
     '[SOURCE 1]',
     'TYTUŁ: Test',
-    \`HOST: \${host}\`,
-    \`URL: \${url}\`,
+    'HOST: ' + host,
+    'URL: ' + url,
     'TREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>',
     'Treść.',
     '<<<END_UNTRUSTED_SOURCE_CONTENT>>>',
