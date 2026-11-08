@@ -322,6 +322,21 @@ test('Retry-After supports seconds and HTTP-date headers', () => {
   assert.equal(retryAfterHint({ headers: new Headers() }, now), '');
 });
 
+test('Retry-After falls back to response headers when error headers are empty', () => {
+  const now = Date.parse('2026-10-19T12:00:00Z');
+  const error = {
+    headers: new Headers(),
+    response: { headers: new Headers({ 'retry-after': '9' }) },
+  };
+  assert.equal(retryAfterHint(error, now), 'Retry-After=9s');
+  assert.equal(quotaCooldownMsFromError({ ...error, status: 429, message: 'rate limited' }), 9000);
+});
+
+test('Retry-After header lookup is case-insensitive for plain header objects', () => {
+  const now = Date.parse('2026-10-19T12:00:00Z');
+  assert.equal(retryAfterHint({ response: { headers: { 'ReTrY-AfTeR': '6' } } }, now), 'Retry-After=6s');
+});
+
 test('quota cooldown respects Retry-After and never goes below the configured backoff', () => {
   const previous = process.env.AI_PROVIDER_QUOTA_COOLDOWN_MS;
   process.env.AI_PROVIDER_QUOTA_COOLDOWN_MS = '5000';
