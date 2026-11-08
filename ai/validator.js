@@ -1160,6 +1160,7 @@ module.exports = {
   wytnijJsonWalidatora,
   czyWartoDrugaOpinieWalidatora,
   normalizujWynikWalidatora,
+  sprawdzPokrycieCzesciPytania,
   wyodrebnijIdentyfikatoryZrodel,
   resolveClaimSourceIds,
   sprawdzTwardeFaktyOdpowiedzi,
