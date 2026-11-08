@@ -207,7 +207,8 @@ function czyZnacznikCzesci(token) {
 
 function czyZrodloDotyczyInnejCzesciGry(source, gameName, routing) {
   const entityType = routing.resolved_entity?.type || routing.entity_type;
-  if (entityType !== 'game') return false;
+  // Część gry ogranicza również retrieval postaci przypisanej do konkretnej odsłony.
+  if (entityType !== 'game' && entityType !== 'character') return false;
   const requested = normalize(gameName);
   if (!requested) return false;
   const requestedLastToken = requested.split(' ').pop();
