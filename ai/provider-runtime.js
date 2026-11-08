@@ -223,7 +223,7 @@ function createGroqCompletion(groqClient, payload, { signal } = {}) {
 function awaitWithAbortTimeout(promise, timeoutMs, controller, label = 'provider request') {
   const timeout = Number(timeoutMs);
   if (!Number.isFinite(timeout) || timeout <= 0) {
-    const error = new Error(\`${label} has no remaining timeout budget\`);
+    const error = new Error(`${label} has no remaining timeout budget`);
     error.name = 'TimeoutError';
     return Promise.reject(error);
   }
@@ -232,7 +232,7 @@ function awaitWithAbortTimeout(promise, timeoutMs, controller, label = 'provider
   const signal = controller?.signal;
   const deadline = new Promise((_, reject) => {
     timer = setTimeout(() => {
-      const error = new Error(\`${label} timed out after ${Math.floor(timeout)}ms\`);
+      const error = new Error(`${label} timed out after ${Math.floor(timeout)}ms`);
       error.name = 'TimeoutError';
       // Najpierw rozstrzygnij timeout, potem przerwij transport.
       reject(error);
@@ -242,7 +242,7 @@ function awaitWithAbortTimeout(promise, timeoutMs, controller, label = 'provider
   const aborted = new Promise((_, reject) => {
     if (!signal) return;
     onAbort = () => {
-      const error = new Error(\`${label} aborted\`);
+      const error = new Error(`${label} aborted`);
       error.name = 'AbortError';
       if (signal.reason !== undefined) error.cause = signal.reason;
       reject(error);
