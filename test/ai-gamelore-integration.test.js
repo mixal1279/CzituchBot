@@ -6,6 +6,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { wyodrebnijJawnyTytulGry } = require('../ai/entities');
 const { wytnijAtrybucjeGameLore, wytnijAtrybucjeGameLoreWszystkie } = require('../ai/lore');
+const { wytnijAtrybucjeGameFAQsWszystkie } = require('../ai/gameplay');
 
 test('jawny tytuł gry po „w grze” nie wymaga wielkich liter', () => {
   assert.equal(wyodrebnijJawnyTytulGry('W grze stardew valley kim jest Abigail?'), 'stardew valley');
@@ -89,6 +90,32 @@ test('atrybucja odrzuca podszywający się host i niezabezpieczony URL', () => {
   );
 });
 
+test('atrybucja GameFAQs pochodzi wyłącznie ze zweryfikowanych SOURCE ID i poprawnego HTTPS hosta', () => {
+  const evidence = [
+    '[SOURCE 1]',
+    'TYTUŁ: Walkthrough',
+    'HOST: gamefaqs.gamespot.com',
+    'URL: https://gamefaqs.gamespot.com/pc/123-game/faqs/12345',
+    'TREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>',
+    'Opis przejścia.',
+    '<<<END_UNTRUSTED_SOURCE_CONTENT>>>',
+    '[SOURCE 2]',
+    'TYTUŁ: Podrobiony host',
+    'HOST: gamefaqs.gamespot.com.evil.test',
+    'URL: https://gamefaqs.gamespot.com.evil.test/faqs/1',
+    'TREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>',
+    'Treść.',
+    '<<<END_UNTRUSTED_SOURCE_CONTENT>>>',
+  ].join('\n');
+  assert.deepEqual(wytnijAtrybucjeGameFAQsWszystkie(evidence, new Set(['SOURCE 1'])), [{
+    sourceId: 'SOURCE 1',
+    name: 'GameFAQs',
+    title: 'Walkthrough',
+    url: 'https://gamefaqs.gamespot.com/pc/123-game/faqs/12345',
+  }]);
+  assert.deepEqual(wytnijAtrybucjeGameFAQsWszystkie(evidence, new Set(['SOURCE 2'])), []);
+});
+
 test('główny pipeline publikuje atrybucję dopiero po walidacji claimów', () => {
   const source = fs.readFileSync(path.join(__dirname, '..', 'czituch_bot.js'), 'utf8');
   const finalizeIndex = source.indexOf('odp = finalizeResponse(odp, aiState.finalStatus);');
@@ -96,4 +123,5 @@ test('główny pipeline publikuje atrybucję dopiero po walidacji claimów', () 
   assert.ok(finalizeIndex >= 0);
   assert.ok(attributionIndex > finalizeIndex);
   assert.ok(source.includes("claim?.supported === true"));
+  assert.ok(source.includes('wytnijAtrybucjeGameFAQsWszystkie(daneDoWalidacji, zweryfikowaneZrodlaIds)'));
 });
