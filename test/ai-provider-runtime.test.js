@@ -109,6 +109,19 @@ test('hard timeout releases the pipeline when a provider ignores AbortSignal', a
   assert.ok(Date.now() - startedAt < 250, 'pipeline should not wait for the provider’s own timeout');
 });
 
+test('parent abort releases the pipeline when a provider ignores AbortSignal', async () => {
+  const controller = new AbortController();
+  const startedAt = Date.now();
+  const neverSettles = new Promise(() => {});
+  const pending = awaitWithAbortTimeout(neverSettles, 1000, controller, 'test provider');
+  controller.abort(new Error('request cancelled'));
+  await assert.rejects(
+    pending,
+    error => error.name === 'AbortError' && /test provider aborted/.test(error.message),
+  );
+  assert.ok(Date.now() - startedAt < 250, 'parent abort should not wait for the local timeout');
+});
+
 test('unavailable-validator repair requires evidence, one attempt, and enough remaining time', () => {
   assert.equal(INITIAL_VALIDATOR_REPAIR_RESERVE_MS, 10500);
   assert.equal(shouldAttemptUnavailableRepair({ remainingMs: 18000, hasEvidence: true, alreadyAttempted: false }), true);
