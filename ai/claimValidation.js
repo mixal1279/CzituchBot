@@ -1387,7 +1387,7 @@ function wykryjPodmianePodmiotu(claimPl, claimEn) {
     'the', 'a', 'an', 'this', 'that', 'these', 'those', 'in', 'on', 'after',
     'before', 'during', 'when', 'while', 'because', 'however', 'therefore',
     'w', 'na', 'po', 'przed', 'podczas', 'gdy', 'kiedy', 'poniewaz',
-    'postac', 'bohater', 'gracz', 'gra', 'wheatley', 'aperture',
+    'postac', 'bohater', 'gracz', 'gra',
   ]);
   const znajdzPodmiot = tekst => {
     const normalized = normalizujClaim(tekst);
