@@ -1089,7 +1089,7 @@ async function wybierzDomenyDlaPytania(pytanie, domyslnieMinecraft = false, requ
   const znanaGra = resolveGameEntity(pytanie);
   const maPewnaGre = Boolean(
     znanaGra
-    && znanaGra.resolution !== 'deterministic_ambiguous'
+    && !['deterministic_ambiguous', 'explicit_unverified'].includes(znanaGra.resolution)
     && (znanaGra.game || znanaGra.type === 'game')
   );
   let probowanoDynamicznegoRozpoznania = false;
@@ -3199,7 +3199,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
   const verifiedMemory = await verifiedMemoryPromise;
   const verifiedMemoryContext = buildVerifiedMemoryContext(verifiedMemory);
   systemPrompt = `${systemPrompt}${verifiedMemoryContext ? `\n\n${verifiedMemoryContext}` : ''}`;
-  if (domeny?.resolvedGame && (!routingAI.game || domeny.resolvedGame.type === 'franchise')) {
+  if (domeny?.resolvedGame && (!routingAI.game || routingAI.resolved_entity?.resolution === 'explicit_unverified' || domeny.resolvedGame.type === 'franchise')) {
     const resolved = domeny.resolvedGame;
     const nazwaGry = String(resolved.nazwa || resolved.name || '').trim().slice(0, 120);
     const typEncji = resolved.type === 'franchise' ? 'franchise' : 'game';
