@@ -96,3 +96,21 @@ test('subject-role check does not reject an equivalent passive-to-active transla
   assert.equal(result.ok, true, result.reason);
 });
 
+
+test('causal translation cannot swap the cause and affected entity', () => {
+  const result = spojnoscTlumaczeniaClaimu(
+    'Aperture spowodowało upadek GLaDOS.',
+    'GLaDOS caused Aperture to fall.',
+  );
+  assert.equal(result.ok, false, JSON.stringify(result));
+  assert.match(result.reason, /podmiot/i);
+});
+
+test('causal translation preserves the same acting entity', () => {
+  const result = spojnoscTlumaczeniaClaimu(
+    'Aperture spowodowało upadek GLaDOS.',
+    'Aperture caused GLaDOS to fall.',
+  );
+  assert.equal(result.ok, true, result.reason);
+});
+
