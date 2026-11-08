@@ -42,6 +42,24 @@ test('Tavily Search rejects oversized provider bodies before JSON parsing', asyn
   assert.equal(result.error, 'provider_response_too_large');
 });
 
+test('secondary retrieval hard timeout releases a fetch that ignores AbortSignal', async () => {
+  let observedSignal;
+  const startedAt = Date.now();
+  const result = await searchExa({
+    apiKey: 'test-exa-key',
+    query: 'timeout regression',
+    timeoutMs: 20,
+    fetchFn: async (_url, options) => {
+      observedSignal = options.signal;
+      return new Promise(() => {});
+    },
+  });
+  assert.equal(result.status, 'error');
+  assert.match(result.error, /timed out after 20ms/);
+  assert.equal(observedSignal.aborted, true);
+  assert.ok(Date.now() - startedAt < 300, 'retrieval must not wait for a hung fetch implementation');
+});
+
 test('retrieval source contract is normalized', () => {
   const source = normalizeSource({
     provider: 'exa',
