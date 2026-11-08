@@ -160,3 +160,25 @@ test('game-scoped retrieval rejects sequel-only sources for a specific base-game
     content: 'Aetherfall 2 introduces a new protagonist.',
   }, franchise), true);
 });
+
+test('future-dated source metadata cannot receive a freshness bonus', () => {
+  const query = 'Portal 2 Wheatley story';
+  const source = {
+    url: 'https://example.org/portal-2',
+    title: 'Portal 2 Wheatley story',
+    content: 'Portal 2 Wheatley story and its characters.',
+  };
+  const baseline = scoreSource(source, query, { freshness: 'recent' });
+  const farFuture = scoreSource({
+    ...source,
+    publishedAt: new Date(Date.now() + 10 * 86400000).toISOString(),
+  }, query, { freshness: 'recent' });
+  const nearFuture = scoreSource({
+    ...source,
+    publishedAt: new Date(Date.now() + 12 * 3600000).toISOString(),
+  }, query, { freshness: 'recent' });
+
+  assert.equal(farFuture.coreScore, baseline.coreScore);
+  assert.ok(nearFuture.coreScore >= baseline.coreScore);
+  assert.ok(nearFuture.coreScore - baseline.coreScore <= 0.0001);
+});
