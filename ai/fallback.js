@@ -182,8 +182,16 @@ function configureProviderQuotaPersistence(store) {
       for (const item of saved.entries) {
         if (!Array.isArray(item) || item.length !== 2) continue;
         const [key, until] = item;
-        if (typeof key === 'string' && Number.isFinite(Number(until)) && Number(until) > now) {
-          quotaBlockedUntil.set(key, Math.max(quotaBlockedUntil.get(key) || 0, Number(until)));
+        const normalizedKey = typeof key === 'string' ? normalizeProviderEndpoint(key) : '';
+        const validProviderScope = typeof key === 'string' && /^(?:groq|gemini|xkiro|openrouter):\\*$/.test(key);
+        const expiresAt = Number(until);
+        // Odrzuć uszkodzone lub nieznane wpisy oraz daty wykraczające poza
+        // maksymalny cooldown. Nie przedłużaj ich przy każdym restarcie.
+        if ((normalizedKey === key || validProviderScope)
+          && Number.isFinite(expiresAt)
+          && expiresAt > now
+          && expiresAt <= now + MAX_PROVIDER_COOLDOWN_MS) {
+          quotaBlockedUntil.set(key, Math.max(quotaBlockedUntil.get(key) || 0, expiresAt));
         }
       }
       return true;
