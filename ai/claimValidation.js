@@ -1382,7 +1382,7 @@ function czyTlumaczenieOdwracaRelacjeKorupcjiWheatleya(claimPl, claimEn) {
  * dwie encje. Zdania bierne i konstrukcje z niejednoznacznym szykiem pomijamy.
  */
 function wykryjPodmianePodmiotu(claimPl, claimEn) {
-  const aktywneCzasowniki = /^(?:takes?|took|controls?|controlled|captur(?:e|es|ed)|killed|kills|destroy(?:s|ed)|betray(?:s|ed)|rescu(?:e|es|ed)|attack(?:s|ed)|help(?:s|ed)|join(?:s|ed)|leaves?|left|gives?|gave|sends?|sent|przejal|przejela|przejelo|przejeli|przejmuje|kontroluje|schwytal|schwycila|porwal|porwala|zabil|zabila|zniszczyl|zniszczyla|zdradzil|zdradzila|uratowal|uratowala|zaatakowal|zaatakowala|pomogl|pomogla|dolaczyl|dolaczyla|opuscil|opuscila|wyslal|wyslala)\\b/u;
+  const aktywneCzasowniki = /^(?:takes?|took|controls?|controlled|captur(?:e|es|ed)|killed|kills|destroy(?:s|ed)|betray(?:s|ed)|rescu(?:e|es|ed)|attack(?:s|ed)|help(?:s|ed)|join(?:s|ed)|leaves?|left|gives?|gave|sends?|sent|przejal|przejela|przejelo|przejeli|przejmuje|kontroluje|schwytal|schwycila|porwal|porwala|zabil|zabila|zniszczyl|zniszczyla|zdradzil|zdradzila|uratowal|uratowala|zaatakowal|zaatakowala|pomogl|pomogla|dolaczyl|dolaczyla|opuscil|opuscila|wyslal|wyslala)\b/u;
   const slowaPospolite = new Set([
     'the', 'a', 'an', 'this', 'that', 'these', 'those', 'in', 'on', 'after',
     'before', 'during', 'when', 'while', 'because', 'however', 'therefore',
@@ -1391,17 +1391,17 @@ function wykryjPodmianePodmiotu(claimPl, claimEn) {
   ]);
   const znajdzPodmiot = tekst => {
     const normalized = normalizujClaim(tekst);
-    const prefixMatch = normalized.match(/^(?:(?:w grze|in the game|the character|postac|bohater)\\s+)?/u);
+    const prefixMatch = normalized.match(/^(?:(?:w grze|in the game|the character|postac|bohater)\s+)?/u);
     const offset = prefixMatch ? prefixMatch[0].length : 0;
     const tail = normalized.slice(offset);
-    const first = tail.match(/^([\\p{L}][\\p{L}\\p{N}'’.-]*)\\s+/u);
+    const first = tail.match(/^([\p{L}][\p{L}\p{N}'’.-]*)\s+/u);
     if (!first || slowaPospolite.has(first[1])) return null;
     const verb = tail.slice(first[0].length).match(aktywneCzasowniki);
     if (!verb) return null;
 
     // Zbieramy wielkimi literami zapisane nazwy z obu wersji, niezależnie
     // od heurystyk wyodrębniania nazw na początku zdania.
-    const names = [...new Set([...String(tekst).matchAll(/(?<![\\p{L}\\p{N}_])[A-ZĄĆĘŁŃÓŚŹŻ][\\p{L}\\p{N}'’.-]*/gu)]
+    const names = [...new Set([...String(tekst).matchAll(/(?<![\p{L}\p{N}_])[A-ZĄĆĘŁŃÓŚŹŻ][\p{L}\p{N}'’.-]*/gu)]
       .map(match => normalizujClaim(match[0]))
       .filter(name => name.length >= 3 && !slowaPospolite.has(name)))];
     return { name: normalizujClaim(first[1]), names, verb: verb[0] };
