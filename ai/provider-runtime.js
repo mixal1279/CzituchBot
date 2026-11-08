@@ -331,31 +331,41 @@ async function createGroqCompletionWithSchemaFallback(groqClient, payload, {
 } = {}) {
   const startedAt = Date.now();
   const originalPayload = { ...payload };
-  const activeController = controller || {
-    signal,
-    abort() { try { signal?.throwIfAborted?.(); } catch (_) {} },
+  // Zawsze używaj własnego kontrolera, aby timeout mógł przerwać transport,
+  // także gdy wywołujący podał wyłącznie AbortSignal.
+  const activeController = controller || new AbortController();
+  const parentSignal = signal || controller?.signal;
+  const abortFromParent = () => {
+    try { activeController.abort(parentSignal?.reason); } catch (_) {}
   };
+  if (parentSignal?.aborted) abortFromParent();
+  else parentSignal?.addEventListener('abort', abortFromParent, { once: true });
+  const activeSignal = activeController.signal;
   try {
-    return await awaitWithAbortTimeout(
-      createGroqCompletion(groqClient, { ...originalPayload }, { signal }),
-      timeoutMs,
-      activeController,
-      'Groq validator',
-    );
-  } catch (error) {
-    if (!isGroqSchemaValidationError(error) || signal?.aborted || activeController.signal?.aborted) throw error;
-    const remaining = Math.max(0, Number(timeoutMs) - (Date.now() - startedAt));
-    const retryTimeout = Math.min(Number(fallbackTimeoutMs) || 1200, remaining);
-    if (retryTimeout < 250) throw error;
-    return await awaitWithAbortTimeout(
-      createGroqCompletion(groqClient, {
-        ...originalPayload,
-        response_format: { type: 'json_object' },
-      }, { signal }),
-      retryTimeout,
-      activeController,
-      'Groq validator JSON fallback',
-    );
+    try {
+      return await awaitWithAbortTimeout(
+        createGroqCompletion(groqClient, { ...originalPayload }, { signal: activeSignal }),
+        timeoutMs,
+        activeController,
+        'Groq validator',
+      );
+    } catch (error) {
+      if (!isGroqSchemaValidationError(error) || activeSignal.aborted) throw error;
+      const remaining = Math.max(0, Number(timeoutMs) - (Date.now() - startedAt));
+      const retryTimeout = Math.min(Number(fallbackTimeoutMs) || 1200, remaining);
+      if (retryTimeout < 250) throw error;
+      return await awaitWithAbortTimeout(
+        createGroqCompletion(groqClient, {
+          ...originalPayload,
+          response_format: { type: 'json_object' },
+        }, { signal: activeSignal }),
+        retryTimeout,
+        activeController,
+        'Groq validator JSON fallback',
+      );
+    }
+  } finally {
+    parentSignal?.removeEventListener('abort', abortFromParent);
   }
 }
 
