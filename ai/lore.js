@@ -84,14 +84,42 @@ function dodajGameLoreDomenę(domeny) {
   return lista;
 }
 
-function wytnijAtrybucjeGameLore(tekst) {
-  const t = String(tekst || '');
-  const match = t.match(/\[SOURCE\s+\d+\][\s\S]*?HOST:\s*gamelore\.fandom\.com[\s\S]*?URL:\s*(https?:\/\/[^\s\n]+)/i);
-  if (!match) return null;
-  const blok = match[0];
-  const title = blok.match(/TYTUŁ:\s*([^\n]+)/i)?.[1]?.trim() || 'artykuł';
-  const url = blok.match(/URL:\s*(https?:\/\/[^\s\n]+)/i)?.[1]?.trim() || null;
-  return url ? { name: GAMELORE_NAME, title, url, license: 'CC BY-SA' } : null;
+function wytnijAtrybucjeGameLore(tekst, dozwoloneSourceIds = null) {
+  const t = String(tekst || '').slice(0, 120000);
+  const dozwolone = dozwoloneSourceIds instanceof Set
+    ? dozwoloneSourceIds
+    : Array.isArray(dozwoloneSourceIds)
+      ? new Set(dozwoloneSourceIds.map(String))
+      : null;
+  const naglowki = [...t.matchAll(/^\[SOURCE (\d+)\]\s*$/gim)];
+
+  for (let i = 0; i < naglowki.length; i++) {
+    const naglowek = naglowki[i];
+    const sourceId = \`SOURCE \${Number(naglowek[1])}\`;
+    if (dozwolone && !dozwolone.has(sourceId)) continue;
+
+    const start = naglowek.index + naglowek[0].length;
+    const koniec = i + 1 < naglowki.length ? naglowki[i + 1].index : t.length;
+    const blok = t.slice(start, koniec);
+    const koniecMetadanych = blok.search(/TREŚĆ:/i);
+    const metadane = koniecMetadanych >= 0 ? blok.slice(0, koniecMetadanych) : blok;
+    const host = metadane.match(/^HOST:\s*([^\r\n]+)/im)?.[1]?.trim().toLowerCase();
+    if (host !== GAMELORE_DOMAIN) continue;
+
+    const title = metadane.match(/^TYTUŁ:\s*([^\r\n]+)/im)?.[1]?.trim().slice(0, 200) || 'artykuł';
+    const rawUrl = metadane.match(/^URL:\s*(https?:\/\/[^\s\r\n]+)/im)?.[1]?.trim();
+    if (!rawUrl) continue;
+
+    try {
+      const parsed = new URL(rawUrl);
+      // Nie publikujemy linków z hosta podszywającego się pod GameLore.
+      if (parsed.protocol !== 'https:' || parsed.hostname.toLowerCase() !== GAMELORE_DOMAIN) continue;
+      return { sourceId, name: GAMELORE_NAME, title, url: parsed.toString(), license: 'CC BY-SA' };
+    } catch (_) {
+      continue;
+    }
+  }
+  return null;
 }
 
 module.exports = {
