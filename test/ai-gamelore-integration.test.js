@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const { wyodrebnijJawnyTytulGry } = require('../ai/entities');
-const { wytnijAtrybucjeGameLore } = require('../ai/lore');
+const { wytnijAtrybucjeGameLore, wytnijAtrybucjeGameLoreWszystkie } = require('../ai/lore');
 
 test('jawny tytuł gry po „w grze” nie wymaga wielkich liter', () => {
   assert.equal(wyodrebnijJawnyTytulGry('W grze stardew valley kim jest Abigail?'), 'stardew valley');
@@ -42,6 +42,30 @@ test('atrybucja GameLore wybiera dokładnie wskazane SOURCE ID', () => {
     url: 'https://gamelore.fandom.com/wiki/Abigail',
     license: 'CC BY-SA',
   });
+});
+
+test('atrybucja obejmuje wszystkie zaakceptowane źródła GameLore bez duplikatów', () => {
+  const block = (id, slug, title) => [
+    '[SOURCE ' + id + ']',
+    'TYTUŁ: ' + title,
+    'HOST: gamelore.fandom.com',
+    'URL: https://gamelore.fandom.com/wiki/' + slug,
+    'TREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>',
+    'Treść wiki.',
+    '<<<END_UNTRUSTED_SOURCE_CONTENT>>>',
+  ].join('\n');
+  const evidence = [
+    block(1, 'Abigail', 'Abigail'),
+    block(2, 'Sebastian', 'Sebastian'),
+    block(3, 'Abigail', 'Abigail — duplikat'),
+  ].join('\n');
+  const results = wytnijAtrybucjeGameLoreWszystkie(evidence, new Set(['SOURCE 1', 'SOURCE 2', 'SOURCE 3']));
+  assert.equal(results.length, 2);
+  assert.deepEqual(results.map(item => item.url), [
+    'https://gamelore.fandom.com/wiki/Abigail',
+    'https://gamelore.fandom.com/wiki/Sebastian',
+  ]);
+  assert.equal(wytnijAtrybucjeGameLore(evidence, new Set(['SOURCE 2'])).sourceId, 'SOURCE 2');
 });
 
 test('atrybucja odrzuca podszywający się host i niezabezpieczony URL', () => {
