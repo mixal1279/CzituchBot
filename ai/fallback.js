@@ -371,15 +371,17 @@ function shouldBlockProviderQuotaWide(provider, error) {
   // organization/project/account limits do. Provider-specific daily free-tier
   // codes are treated as shared only when the provider explicitly identifies
   // the allowance as account/key/project scoped.
-  const explicitAccountScope = /(?:organization|account|project|api.?key|subscription|billing).{0,50}(?:quota|rate.?limit|limit|exhaust|deplet)|(?:quota|rate.?limit|limit|exhaust|deplet).{0,50}(?:organization|account|project|api.?key|subscription|billing)/i.test(message)
-    || /^(?:account|key|project|organization|subscription)$/.test(limitSource);
-  const dailySharedCode = providerName === 'xkiro'
-    && /^(?:quota_exceeded|daily_quota_exceeded|free_tokens_exhausted)$/.test(code);
   // Groq raportuje także limity przypisane do konkretnego modelu
   // (np. "Rate limit reached for model ... TPM"). Taki błąd blokuje
   // tylko endpoint; nie może wyłączać modeli siostrzanych.
   const modelScopedGroqLimit = providerName === 'groq'
-    && /\bfor model\s+[`'"]?[^ `'"]+[`'"]?/i.test(message);
+    && /\bfor model\s+[\x60'"]?[^ \x60'"]+[\x60'"]?/i.test(message);
+  const explicitAccountScope = !modelScopedGroqLimit && (
+    /(?:organization|account|project|api.?key|subscription|billing).{0,50}(?:quota|rate.?limit|limit|exhaust|deplet)|(?:quota|rate.?limit|limit|exhaust|deplet).{0,50}(?:organization|account|project|api.?key|subscription|billing)/i.test(message)
+    || /^(?:account|key|project|organization|subscription)$/.test(limitSource)
+  );
+  const dailySharedCode = providerName === 'xkiro'
+    && /^(?:quota_exceeded|daily_quota_exceeded|free_tokens_exhausted)$/.test(code);
   const sharedTokenWindow = providerName === 'groq'
     && !modelScopedGroqLimit
     && /tokens?\s*(?:per|\/)\s*(?:minute|day)|\bTP[MD]\b/i.test(message);
