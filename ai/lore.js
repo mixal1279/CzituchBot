@@ -95,7 +95,7 @@ function wytnijAtrybucjeGameLore(tekst, dozwoloneSourceIds = null) {
 
   for (let i = 0; i < naglowki.length; i++) {
     const naglowek = naglowki[i];
-    const sourceId = \`SOURCE \${Number(naglowek[1])}\`;
+    const sourceId = 'SOURCE ' + Number(naglowek[1]);
     if (dozwolone && !dozwolone.has(sourceId)) continue;
 
     const start = naglowek.index + naglowek[0].length;
