@@ -34,22 +34,23 @@ test('njsscan workflow fails closed when scanner errors are present', () => {
 });
 
 test('njsscan fails the job when the scanner process itself fails', () => {
-  assert.match(workflow, /NJSSCAN_OUTCOME: \\$\\{\\{\\s*steps\\.njsscan\\.outcome\\s*\\}\\}/);
+  assert.match(workflow, /NJSSCAN_OUTCOME: \$\{\{\s*steps\.njsscan\.outcome\s*\}\}/);
   assert.match(workflow, /NJSSCAN_OUTCOME !== 'success'/);
   assert.match(workflow, /did not complete successfully/);
 });
 
 test('njsscan uses Node 24 compatible maintained actions', () => {
-  assert.match(workflow, /actions\\/checkout@v7/);
-  assert.match(workflow, /actions\\/setup-python@v7/);
-  assert.match(workflow, /actions\\/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9/);
-  assert.match(workflow, /github\\/codeql-action\\/upload-sarif@v4/);
+  assert.match(workflow, /actions\/checkout@v7/);
+  assert.match(workflow, /actions\/setup-python@v7/);
+  assert.match(workflow, /actions\/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9/);
+  assert.match(workflow, /github\/codeql-action\/upload-sarif@v4/);
 });
 
 test('njsscan publishes per-rule counts in the Actions summary', () => {
   assert.match(workflow, /GITHUB_STEP_SUMMARY/);
-  assert.match(workflow, /counts\\.map/);
+  assert.match(workflow, /counts\.map/);
 });
+
 
 test('njsscan workflow validates and uploads both machine-readable reports', () => {
   assert.match(workflow, /JSON\.parse\(fs\.readFileSync\(file, 'utf8'\)\)/);
