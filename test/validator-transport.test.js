@@ -144,6 +144,25 @@ test('Gemini GenerateContent uses the documented systemInstruction and REST resp
   assert.equal(Object.hasOwn(call.body.generationConfig, 'responseFormat'), false);
 });
 
+test('Gemini wall-clock timeout kończy transport i odczyt body nawet gdy fetch ignoruje AbortSignal', async () => {
+  hooks.KONFIGURACJA.geminiKey = 'test-gemini-key';
+  let capturedSignal;
+  mockFetch(async (_url, options) => {
+    capturedSignal = options.signal;
+    return new Promise(() => {});
+  });
+
+  const started = Date.now();
+  const result = await hooks.walidujOdpowiedzGeminiModel(
+    'gemini-3.5-flash-lite', 'generic', QUESTION, ANSWER, EVIDENCE, [], 'test-gemini-timeout-race',
+  );
+
+  assert.equal(result.status, 'unavailable');
+  assert.equal(result.timeoutAbort, true);
+  assert.equal(capturedSignal.aborted, true);
+  assert.ok(Date.now() - started < 4500, 'Gemini transport must settle at its 3.5s timeout instead of waiting forever');
+});
+
 test('Gemini zachowuje promptFeedback, gdy prompt jest zablokowany i nie ma kandydatów', async () => {
   hooks.KONFIGURACJA.geminiKey = 'test-gemini-key';
   mockFetch(async () => jsonResponse({
