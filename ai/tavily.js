@@ -800,23 +800,25 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, lookupFn, normalizeQu
           logger.warn?.('[Tavily] rewrite pominięty — budżet modelu/czasu requestu wyczerpany');
         } else {
           const rewriteController = new AbortController();
-          const rewriteTimer = setTimeout(() => rewriteController.abort(), rewriteTimeoutMs);
           let rewrite = null;
           try {
-            rewrite = await createGroqCompletion(groq, {
-              model: AI_MODELS.queryRewrite, max_completion_tokens: 220, reasoning_effort: 'low',
-              include_reasoning: false, temperature: 0,
-              messages: [
-                { role: 'system', content: 'Przepisz pytanie na jedno kompletne zapytanie do wyszukiwarki. Zachowaj WSZYSTKIE istotne elementy pytania, nazwy własne, relacje i części składowe. Nie odpowiadaj. Nie usuwaj drugiej ani kolejnych części pytania. Maksymalnie 35 słów. Tylko samo zapytanie.' },
-                { role: 'user', content: original },
-              ],
-            }, { signal: rewriteController.signal });
+            rewrite = await awaitWithAbortTimeout(
+              createGroqCompletion(groq, {
+                model: AI_MODELS.queryRewrite, max_completion_tokens: 220, reasoning_effort: 'low',
+                include_reasoning: false, temperature: 0,
+                messages: [
+                  { role: 'system', content: 'Przepisz pytanie na jedno kompletne zapytanie do wyszukiwarki. Zachowaj WSZYSTKIE istotne elementy pytania, nazwy własne, relacje i części składowe. Nie odpowiadaj. Nie usuwaj drugiej ani kolejnych części pytania. Maksymalnie 35 słów. Tylko samo zapytanie.' },
+                  { role: 'user', content: original },
+                ],
+              }, { signal: rewriteController.signal }),
+              rewriteTimeoutMs,
+              rewriteController,
+              'Tavily query rewrite',
+            );
           } catch (error) {
             // Query rewriting is an optimization; provider failure must not prevent
             // the original question from reaching Tavily Search.
             logger.warn?.(`[Tavily] rewrite nieudany — używam oryginalnego pytania: ${error?.message || error}`);
-          } finally {
-            clearTimeout(rewriteTimer);
           }
           const rewritten = normalizeQuery(rewrite?.choices?.[0]?.message?.content);
           if (rewritten && rewritten.length >= 30 && rewritten.length >= Math.min(original.length * 0.28, 80)) searchQuery = rewritten;
