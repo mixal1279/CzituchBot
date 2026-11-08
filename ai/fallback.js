@@ -375,7 +375,13 @@ function shouldBlockProviderQuotaWide(provider, error) {
     || /^(?:account|key|project|organization|subscription)$/.test(limitSource);
   const dailySharedCode = providerName === 'xkiro'
     && /^(?:quota_exceeded|daily_quota_exceeded|free_tokens_exhausted)$/.test(code);
+  // Groq raportuje także limity przypisane do konkretnego modelu
+  // (np. "Rate limit reached for model ... TPM"). Taki błąd blokuje
+  // tylko endpoint; nie może wyłączać modeli siostrzanych.
+  const modelScopedGroqLimit = providerName === 'groq'
+    && /\bfor model\s+[`'"]?[^ `'"]+[`'"]?/i.test(message);
   const sharedTokenWindow = providerName === 'groq'
+    && !modelScopedGroqLimit
     && /tokens?\s*(?:per|\/)\s*(?:minute|day)|\bTP[MD]\b/i.test(message);
   const providerSharedDaily = providerName === 'gemini'
     && /(?:project|account).{0,40}(?:daily|quota|limit)|(?:daily|quota|limit).{0,40}(?:project|account)/i.test(message);
