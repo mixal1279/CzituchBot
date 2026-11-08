@@ -201,6 +201,21 @@ test('fallback selection excludes failed and repeated providers', () => {
   assert.ok(!selected.includes('openrouter:default'));
 });
 
+test('provider cooldown clamps oversized Retry-After values and never creates an infinite block', () => {
+  const maxCooldownMs = 7 * 24 * 60 * 60 * 1000;
+  const hugeRetryAfter = '9'.repeat(400);
+  assert.equal(
+    quotaCooldownMsFromError({ status: 429, message: `HTTP 429 Retry-After=${hugeRetryAfter}s` }),
+    maxCooldownMs,
+  );
+
+  resetProviderQuotaCooldowns();
+  markProviderQuota('groq:openai/gpt-oss-20b', Infinity);
+  assert.equal(isProviderQuotaBlocked('groq:openai/gpt-oss-20b'), true);
+  assert.equal(isProviderQuotaBlocked('groq:openai/gpt-oss-20b', Date.now() + maxCooldownMs + 1_000), false);
+  resetProviderQuotaCooldowns();
+});
+
 test('quota circuit blocks only the exhausted endpoint and expires', () => {
   resetProviderQuotaCooldowns();
   const blocked = markProviderQuota('groq:openai/gpt-oss-120b', 10_000);
