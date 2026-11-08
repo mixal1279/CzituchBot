@@ -1,6 +1,7 @@
 'use strict';
 
 const { resolveGameEntity } = require('./entities');
+const { parseEvidenceBlocks } = require('./evidence');
 const GAMELORE_DOMAIN = 'gamelore.fandom.com';
 const GAMELORE_NAME = 'GameLore Wiki';
 
@@ -91,30 +92,24 @@ function wytnijAtrybucjeGameLore(tekst, dozwoloneSourceIds = null) {
     : Array.isArray(dozwoloneSourceIds)
       ? new Set(dozwoloneSourceIds.map(String))
       : null;
-  const naglowki = [...t.matchAll(/^\[SOURCE (\d+)\]\s*$/gim)];
 
-  for (let i = 0; i < naglowki.length; i++) {
-    const naglowek = naglowki[i];
-    const sourceId = 'SOURCE ' + Number(naglowek[1]);
-    if (dozwolone && !dozwolone.has(sourceId)) continue;
-
-    const start = naglowek.index + naglowek[0].length;
-    const koniec = i + 1 < naglowki.length ? naglowki[i + 1].index : t.length;
-    const blok = t.slice(start, koniec);
-    const koniecMetadanych = blok.search(/TREŚĆ:/i);
-    const metadane = koniecMetadanych >= 0 ? blok.slice(0, koniecMetadanych) : blok;
-    const host = metadane.match(/^HOST:\s*([^\r\n]+)/im)?.[1]?.trim().toLowerCase();
-    if (host !== GAMELORE_DOMAIN) continue;
-
-    const title = metadane.match(/^TYTUŁ:\s*([^\r\n]+)/im)?.[1]?.trim().slice(0, 200) || 'artykuł';
-    const rawUrl = metadane.match(/^URL:\s*(https?:\/\/[^\s\r\n]+)/im)?.[1]?.trim();
-    if (!rawUrl) continue;
+  // Korzystamy z parsera dowodów, który ignoruje markery SOURCE osadzone
+  // wewnątrz niezaufanej treści strony.
+  for (const source of parseEvidenceBlocks(t)) {
+    if (dozwolone && !dozwolone.has(source.sourceId)) continue;
+    if (!source.url) continue;
 
     try {
-      const parsed = new URL(rawUrl);
-      // Nie publikujemy linków z hosta podszywającego się pod GameLore.
+      const parsed = new URL(source.url);
       if (parsed.protocol !== 'https:' || parsed.hostname.toLowerCase() !== GAMELORE_DOMAIN) continue;
-      return { sourceId, name: GAMELORE_NAME, title, url: parsed.toString(), license: 'CC BY-SA' };
+      const title = String(source.title || 'artykuł').replace(/[\r\n]+/g, ' ').trim().slice(0, 200);
+      return {
+        sourceId: source.sourceId,
+        name: GAMELORE_NAME,
+        title: title || 'artykuł',
+        url: parsed.toString(),
+        license: 'CC BY-SA',
+      };
     } catch (_) {
       continue;
     }
