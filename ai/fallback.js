@@ -183,7 +183,7 @@ function configureProviderQuotaPersistence(store) {
         if (!Array.isArray(item) || item.length !== 2) continue;
         const [key, until] = item;
         const normalizedKey = typeof key === 'string' ? normalizeProviderEndpoint(key) : '';
-        const validProviderScope = typeof key === 'string' && /^(?:groq|gemini|xkiro|openrouter):\\*$/.test(key);
+        const validProviderScope = typeof key === 'string' && /^(?:groq|gemini|xkiro|openrouter):\*$/.test(key);
         const expiresAt = Number(until);
         // Odrzuć uszkodzone lub nieznane wpisy oraz daty wykraczające poza
         // maksymalny cooldown. Nie przedłużaj ich przy każdym restarcie.
