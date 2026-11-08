@@ -223,23 +223,37 @@ function createGroqCompletion(groqClient, payload, { signal } = {}) {
 function awaitWithAbortTimeout(promise, timeoutMs, controller, label = 'provider request') {
   const timeout = Number(timeoutMs);
   if (!Number.isFinite(timeout) || timeout <= 0) {
-    const error = new Error(`${label} has no remaining timeout budget`);
+    const error = new Error(\`${label} has no remaining timeout budget\`);
     error.name = 'TimeoutError';
     return Promise.reject(error);
   }
   let timer;
+  let onAbort;
+  const signal = controller?.signal;
   const deadline = new Promise((_, reject) => {
     timer = setTimeout(() => {
-      const error = new Error(`${label} timed out after ${Math.floor(timeout)}ms`);
+      const error = new Error(\`${label} timed out after ${Math.floor(timeout)}ms\`);
       error.name = 'TimeoutError';
-      // Ustal wynik timeoutu przed abortem transportu. SDK może odrzucić
-      // własny promise natychmiast po abort(), ale nie może nadpisać
-      // przyczyny zakończenia pipeline'u jako AbortError.
+      // Najpierw rozstrzygnij timeout, potem przerwij transport.
       reject(error);
       try { controller?.abort(); } catch (_) {}
     }, Math.max(1, Math.floor(timeout)));
   });
-  return Promise.race([Promise.resolve(promise), deadline]).finally(() => clearTimeout(timer));
+  const aborted = new Promise((_, reject) => {
+    if (!signal) return;
+    onAbort = () => {
+      const error = new Error(\`${label} aborted\`);
+      error.name = 'AbortError';
+      if (signal.reason !== undefined) error.cause = signal.reason;
+      reject(error);
+    };
+    if (signal.aborted) onAbort();
+    else signal.addEventListener('abort', onAbort, { once: true });
+  });
+  return Promise.race([Promise.resolve(promise), deadline, aborted]).finally(() => {
+    clearTimeout(timer);
+    if (onAbort) signal.removeEventListener('abort', onAbort);
+  });
 }
 
 /**
