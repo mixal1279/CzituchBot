@@ -125,7 +125,7 @@ const VALIDATOR_JSON_SCHEMA = {
 function zbudujFeedbackTlumaczeniaClaimow(records, limit = 4) {
   const lista = Array.isArray(records) ? records : [];
   const problemy = lista
-    .filter(record => /claim_en|tlumaczenie claimu|nazw wlasnych|brak angielskiego tlumaczenia/i.test(String(record?.reason || '')))
+    .filter(record => /claim_en|t[lł]umaczenie claimu|nazw w[lł]asnych|brak angielskiego t[lł]umaczenia/i.test(String(record?.reason || '')))
     .slice(0, Math.max(0, Math.min(4, Number.isFinite(Number(limit)) ? Math.floor(Number(limit)) : 4)))
     .map(record => ({
       claimIndex: Number.isInteger(record?.claimIndex) ? record.claimIndex : null,
