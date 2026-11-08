@@ -420,6 +420,23 @@ test('status kanoniczny wymaga źródła pierwotnego, nie tylko wyspecjalizowane
 });
 
 
+test('unknown source authority cannot establish canonical status', () => {
+  const claim = 'This event is canonical.';
+  const evidence = 'This event is part of the official canon.';
+
+  for (const sourceAuthority of [undefined, null, 'unknown', 'general', 'guide', 'reference', 'specialized']) {
+    assert.ok(
+      detectOverclaimTypes(claim, evidence, { sourceAuthority }).includes('canon_status_not_official_source'),
+      String(sourceAuthority),
+    );
+  }
+
+  assert.deepEqual(
+    detectOverclaimTypes(claim, evidence, { sourceAuthority: 'official' }),
+    [],
+  );
+});
+
 test('walidator wiąże status kanoniczny z autorytetem dokładnie cytowanego źródła', () => {
   const claim = 'To wydarzenie jest kanoniczne.';
   const payload = {
