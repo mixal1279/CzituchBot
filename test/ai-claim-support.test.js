@@ -11,6 +11,25 @@ const { extractClaimSupportAudit } = require('../scripts/ai-live-benchmark');
 const validator = require('../ai/validator');
 const claimValidation = require('../ai/claimValidation');
 
+test('walidator wykrywa pominiętą część pytania złożonego', () => {
+  const question = 'Kim jest Wheatley i dlaczego przejął kontrolę?';
+  const identityOnly = validator.sprawdzPokrycieCzesciPytania(question, [
+    { claim: 'Wheatley is a personality core.', supported: true },
+  ]);
+  assert.equal(identityOnly.ok, false);
+  assert.equal(identityOnly.totalParts, 2);
+  assert.equal(identityOnly.coveredParts, 1);
+  assert.match(identityOnly.uncoveredParts[0], /dlaczego|Wheatley/i);
+
+  const complete = validator.sprawdzPokrycieCzesciPytania(question, [
+    { claim: 'Wheatley is a personality core.', supported: true },
+    { claim: 'Wheatley took control because the sudden influx of power corrupted him.', supported: true },
+  ]);
+  assert.equal(complete.ok, true);
+  assert.equal(complete.coveredParts, 2);
+});
+
+
 test('claim-support audit distinguishes exact entailment, bounded-context partial support, and unsupported evidence', () => {
   const audit = buildClaimSupportAudit({
     claims: [
