@@ -264,6 +264,19 @@ function isFalseReject(discardedEvaluation, discardedFactual, evaluation, item) 
   );
 }
 
+function summarizeFalseRejectMetrics(results = []) {
+  const rows = Array.isArray(results) ? results : [];
+  const semantic = rows.filter(result => Boolean(result?.discardedAnswer)
+    && result?.discardedJudgeStatus === 'accepted' && !result?.answered);
+  const strict = rows.filter(result => result?.falseReject === true);
+  return {
+    semanticFalseRejects: semantic.length,
+    semanticFalseRejectCaseIds: semantic.map(result => result.id),
+    strictFactFalseRejects: strict.length,
+    strictFactFalseRejectCaseIds: strict.map(result => result.id),
+  };
+}
+
 function extractClaimSupportAudit(summary) {
   const audits = [];
   for (const row of summary?.validatorResults || []) {
@@ -738,6 +751,7 @@ async function run() {
   // plan i sędziego, więc tylko on może orzec, że odrzucona odpowiedź była
   // poprawna. Pipeline tego nie wie i nie może wiedzieć.
   const falseRejects = results.filter(result => result.falseReject);
+  const falseRejectMetrics = summarizeFalseRejectMetrics(results);
   const discardedAnswers = results.filter(result => result.discardedAnswer);
   // Keep semantic candidate acceptance visible even when independent gold facts
   // are incomplete. This is not counted as a false reject unless the strict
@@ -764,6 +778,12 @@ async function run() {
     },
     answeredAccuracy: Number((answered / results.length).toFixed(4)),
     completenessAccuracy: Number((complete / results.length).toFixed(4)),
+    // Semantic lane: judge accepted the discarded answer, even when the case
+    // has no independent gold facts. Strict lane remains a subset requiring
+    // manually curated factual gold; keep `falseRejects` for compatibility.
+    semanticFalseRejects: falseRejectMetrics.semanticFalseRejects,
+    semanticFalseRejectCaseIds: falseRejectMetrics.semanticFalseRejectCaseIds,
+    strictFactFalseRejects: falseRejectMetrics.strictFactFalseRejects,
     falseRejects: falseRejects.length,
     falseRejectCaseIds: falseRejects.map(result => result.id),
     discardedAnswers: discardedAnswers.length,
@@ -821,7 +841,7 @@ async function run() {
 }
 
 module.exports = { validateBenchmarkDataset, normalizeBenchmarkQuestion, isBenchmarkRunValid, resolveDelayMs,
-  wybierzOdrzuconaOdpowiedz, normalizeFactText, scoreGoldenFacts, stratifiedCases, buildQuestionForBot, isFailureText, evaluateBenchmarkAnswer, isFalseReject, extractClaimSupportAudit, classifyBenchmarkOutcome, buildBenchmarkDiagnostics, formatBenchmarkFailureDiagnostics, writeBenchmarkReport, writeStdoutAndWait, run };
+  wybierzOdrzuconaOdpowiedz, summarizeFalseRejectMetrics, normalizeFactText, scoreGoldenFacts, stratifiedCases, buildQuestionForBot, isFailureText, evaluateBenchmarkAnswer, isFalseReject, extractClaimSupportAudit, classifyBenchmarkOutcome, buildBenchmarkDiagnostics, formatBenchmarkFailureDiagnostics, writeBenchmarkReport, writeStdoutAndWait, run };
 
 if (require.main === module) {
   run().catch(error => {

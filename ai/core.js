@@ -123,12 +123,33 @@ function sourceKey(source = {}) {
   return canonical || normalize(source.title);
 }
 
+function cleanWikiMarkup(value) {
+  let text = String(value || '');
+  // Usuwamy elementy nawigacyjne MediaWiki i surowe znaczniki infoboxów,
+  // które nie są treścią dowodową, a potrafią zanieczyścić ranking/negację.
+  text = text
+    .replace(/\{\s*"title"\s*:[\s\S]{0,4000}?\}\s*(?:\]\s*)?\}/giu, ' ')
+    .replace(/\[(?:Jump to navigation|Jump to search|Przejdź do nawigacji|Przejdź do wyszukiwania)\]\([^)]*\)/giu, ' ')
+    .replace(/\b(?:Jump to navigation|Jump to search|Przejdź do nawigacji|Przejdź do wyszukiwania)\b/giu, ' ')
+    .replace(/\{\s*"(?:title|rows|field|label)"\s*:/giu, ' ')
+    .replace(/\b(?:mw-head|searchInput|mw-content-text|toc)\b/giu, ' ')
+    .replace(/<\/?(?:div|span|table|tbody|thead|tr|td|th|ul|ol|li|nav|sup|ref|figure|figcaption|p|h[1-6])\b[^>]*>/giu, ' ')
+    .replace(/\[\[(?:Category|Kategoria):[^\]]+\]\]/giu, ' ')
+    .replace(/\[\[[^\]|]+\|([^\]]+)\]\]/gu, '$1')
+    .replace(/\[\[([^\]]+)\]\]/gu, '$1')
+    .replace(/\{\{[^{}]{0,500}\}\}/gu, ' ')
+    .replace(/&(?:nbsp|amp|quot|apos|lt|gt);/giu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return text.slice(0, 12000);
+}
+
 function normalizeSource(source = {}, index = 0) {
   // Gemini grounding snippets are model-output spans tied to a URL, not page text.
   // webRetrieval deliberately marks them with content: ''; preserve that sentinel
   // instead of promoting the snippet into evidence during core normalization.
   const metadataOnlyGemini = /^gemini/i.test(String(source.provider || '')) && source.content === '';
-  const content = String(metadataOnlyGemini ? '' : (source.content || source.raw_content || source.snippet || '')).slice(0, 12000).replace(/\s+/g, ' ').trim();
+  const content = cleanWikiMarkup(metadataOnlyGemini ? '' : (source.content || source.raw_content || source.snippet || ''));
   const title = String(source.title || '').slice(0, 300).replace(/\s+/g, ' ').trim();
   return {
     ...source,
@@ -227,8 +248,15 @@ function czyZrodloDotyczyInnejCzesciGry(source, gameName, routing) {
 }
 
 function sourceMatchesRequestContext(source = {}, routing = {}) {
-  if (!routing?.is_lore && !routing?.is_gameplay) return true;
   const resolved = routing.resolved_entity || {};
+  const characterScoped = resolved.type === 'character' || routing.entity_type === 'character';
+  const gameNameForScope = resolved.game || routing.game;
+  // Pytania web_fact o konkretnej postaci w znanej grze też wymagają
+  // dopasowania encji. Nie ograniczamy tego filtra do lore/gameplay: router
+  // często klasyfikuje pytanie „co stało się z X?” jako zwykły fakt.
+  const needsEntityScope = Boolean((routing.is_lore || routing.is_gameplay)
+    || (characterScoped && gameNameForScope));
+  if (!needsEntityScope) return true;
   const haystack = [source.title, source.content, source.url].filter(Boolean).join(' ');
   const aliasesFor = (entries, name) => {
     const wanted = normalize(name);
@@ -248,7 +276,6 @@ function sourceMatchesRequestContext(source = {}, routing = {}) {
     return franchiseAliases.some(alias => containsAlias(haystack, alias));
   }
 
-  const characterScoped = resolved.type === 'character' || routing.entity_type === 'character';
   const characterName = resolved.name || (characterScoped ? routing.entity : '');
   const gameName = resolved.game || routing.game;
   if (gameName && czyZrodloDotyczyInnejCzesciGry(source, gameName, routing)) return false;
@@ -273,6 +300,41 @@ function sourceMatchesRequestContext(source = {}, routing = {}) {
     return gameAliases.some(alias => containsAlias(haystack, alias));
   }
   return true;
+}
+
+// Tavily nie udostępnia parametru języka w Search API. Stosujemy więc
+// ostrożny filtr po pobraniu: odrzucamy wyłącznie źródła z mocnym sygnałem
+// języka trzeciego (np. portugalski), nie angielskie źródła używane normalnie
+// do odpowiedzi na polskie pytania.
+function wykryjJezykTekstu(value) {
+  const text = normalize(value).slice(0, 12000);
+  if (!text) return { language: 'unknown', confidence: 0 };
+  const słowa = {
+    pl: ['jest', 'oraz', 'ktory', 'gra', 'grze', 'postac', 'zostal', 'byla', 'nie', 'sie', 'kim', 'kto', 'co', 'w', 'z', 'dla', 'czy', 'jak'],
+    en: ['the', 'and', 'is', 'are', 'was', 'were', 'with', 'from', 'this', 'that', 'character', 'game'],
+    pt: ['uma', 'um', 'das', 'dos', 'não', 'nao', 'para', 'com', 'jogador', 'padrão', 'padrao', 'são', 'sao'],
+    es: ['una', 'uno', 'los', 'las', 'para', 'con', 'jugador', 'juego', 'está', 'esta'],
+    de: ['der', 'die', 'das', 'und', 'ist', 'sind', 'spieler', 'spiel', 'nicht'],
+    fr: ['une', 'des', 'les', 'avec', 'pour', 'joueur', 'jeu', 'est', 'sont'],
+  };
+  const scores = Object.entries(słowa).map(([language, terms]) => ({
+    language,
+    score: terms.reduce((sum, term) => sum + (new RegExp(`(?:^| )${term}(?: |$)`, 'u').test(text) ? 1 : 0), 0),
+  })).sort((a, b) => b.score - a.score);
+  const best = scores[0];
+  const second = scores[1]?.score || 0;
+  return { language: best.score >= 3 && best.score - second >= 2 ? best.language : 'unknown', confidence: best.score - second };
+}
+
+function sourceLanguageCompatible(source, question, routing = {}) {
+  const questionLanguage = String(routing.language || wykryjJezykTekstu(question).language).toLowerCase().split(/[-_]/u)[0];
+  if (questionLanguage !== 'pl') return true;
+  const sourceText = [source.title, source.content].filter(Boolean).join(' ');
+  const detected = wykryjJezykTekstu(sourceText);
+  // Angielski jest akceptowany jako język źródłowy dla polskiego pytania.
+  // Blokujemy tylko mocno rozpoznany język trzeci, który powodował fałszywe
+  // konflikty PL↔PT w walidatorze.
+  return detected.language === 'unknown' || detected.language === 'pl' || detected.language === 'en';
 }
 
 function similarity(a, b) {
@@ -359,7 +421,9 @@ function czyStreszczenieModelu(source) {
 function assessEvidence(results = [], question, routing = {}) {
   const normalized = (Array.isArray(results) ? results : [])
     .filter(Boolean)
+    .map((source, index) => normalizeSource(source, index))
     .filter(source => sourceMatchesRequestContext(source, routing))
+    .filter(source => sourceLanguageCompatible(source, question, routing))
     .map((s, index) => scoreSource(s, question, {
       index,
       // Score against both the resolved character/item and its parent game.
@@ -468,5 +532,8 @@ module.exports = {
   buildRetrievalPlan,
   assessEvidence,
   sourceMatchesRequestContext,
+  cleanWikiMarkup,
+  wykryjJezykTekstu,
+  sourceLanguageCompatible,
   decideEvidencePolicy,
 };

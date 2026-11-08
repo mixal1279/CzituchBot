@@ -6,7 +6,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { normalizeFactText, scoreGoldenFacts } = require('../ai/benchmark-scorer');
-const { validateBenchmarkDataset, normalizeBenchmarkQuestion, buildQuestionForBot, evaluateBenchmarkAnswer, classifyBenchmarkOutcome, isBenchmarkRunValid, buildBenchmarkDiagnostics, formatBenchmarkFailureDiagnostics, stratifiedCases, isFailureText, writeBenchmarkReport, writeStdoutAndWait, wybierzOdrzuconaOdpowiedz, isFalseReject } = require('../scripts/ai-live-benchmark');
+const { validateBenchmarkDataset, normalizeBenchmarkQuestion, buildQuestionForBot, evaluateBenchmarkAnswer, classifyBenchmarkOutcome, isBenchmarkRunValid, buildBenchmarkDiagnostics, formatBenchmarkFailureDiagnostics, stratifiedCases, isFailureText, summarizeFalseRejectMetrics, writeBenchmarkReport, writeStdoutAndWait, wybierzOdrzuconaOdpowiedz, isFalseReject } = require('../scripts/ai-live-benchmark');
 
 
 test('curated benchmark contains unique questions and balanced categories with independent gold coverage', () => {
@@ -538,6 +538,18 @@ test('odrzucona odpowiedź pochodzi z ostatniego werdyktu walidatora, nie z pier
 });
 
 
+
+test('false-reject metrics expose semantic candidates separately from strict gold-confirmed cases', () => {
+  const metrics = summarizeFalseRejectMetrics([
+    { id: 'semantic-only', answered: false, discardedAnswer: 'answer', discardedJudgeStatus: 'accepted', falseReject: false },
+    { id: 'strict', answered: false, discardedAnswer: 'answer', discardedJudgeStatus: 'accepted', falseReject: true },
+    { id: 'not-accepted', answered: false, discardedAnswer: 'answer', discardedJudgeStatus: 'rejected', falseReject: false },
+  ]);
+  assert.equal(metrics.semanticFalseRejects, 2);
+  assert.deepEqual(metrics.semanticFalseRejectCaseIds, ['semantic-only', 'strict']);
+  assert.equal(metrics.strictFactFalseRejects, 1);
+  assert.deepEqual(metrics.strictFactFalseRejectCaseIds, ['strict']);
+});
 
 test('Tavily HTTP failures expose status and mark benchmark quality non-comparable', () => {
   const benchmark = JSON.parse(fs.readFileSync(path.join(__dirname, 'ai-benchmark.json'), 'utf8'));

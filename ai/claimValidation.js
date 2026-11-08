@@ -2,7 +2,7 @@
 
 const { ENTITY_ALIAS_GROUPS, buildEntityAliasPatterns } = require('./entityAliases');
 const { slowaLiczbowe } = require('./polishNumbers');
-const { GAME_ALIASES } = require('./entities');
+const { GAME_ALIASES, CHARACTER_ALIASES } = require('./entities');
 const { findQuotePrefix, findQuoteSentencePrefix } = require('./evidence');
 
 const NEGATION_RE = /(?<![\p{L}])(?:nie|nigdy|brak|bez|zaden|zadna|zadne|never|no|not|cannot|without|lack\s+of|absence\s+of|unable|neither|nor|fails?\s+to|\p{L}+n['\u2019]t)(?![\p{L}])/iu;
@@ -54,9 +54,9 @@ const CROSS_LANGUAGE_CONCEPTS = [
   ['lokalizacja', /found|find\w*|locat\w*|location\w*|znalezc\w*|znajduj\w*|lokaliz\w*|lezy|polozen\w*/i],
   ['wydanie', /release\w*|launch\w*|publish\w*|premier\w*|wydan\w*|ukaz\w*|debiut\w*/i],
   ['podroz', /travel\w*|arriv\w*|visit\w*|reach\w*|journey\w*|get there|follow\w*\s+(?:the\s+)?(?:road|route|path)|head\w*\s+to|udaj\w*\s+si[ee]|dotrze\w*|dotrz\w*|pod[aa][zz]\w*|szlak\w*|odwiedz\w*|przybyw\w*/i],
-  ['rodzina', /family|families|wife|daughter|son|missing\s+(?:wife|daughter|son|family)|rodzin\w*|zaginion\w*|zona|corka|syn\w*/i],
+  ['rodzina', /(?<![\p{L}])(?:family|families|wife|daughter|son|missing\s+(?:wife|daughter|son|family)|rodzin\w*|zaginion\w*|zona|corka|syn\w*)(?![\p{L}])/iu],
   ['wymiana_informacji', /in\s+exchange\s+for|in\s+return\s+for|exchange\w*|w\s+zamian\s+za|w\s+zamian\w*|wzajemn\w*/i],
-  ['poscig', /chas\w*|pursu\w*|hunt(?:ed|ing|s)\b|flee\w*|escap\w*|uciek\w*|uciec\b|gonil\w*|scig\w*|ucieczk\w*/i],
+  ['poscig', /chas\w*|pursu\w*|hunt(?:ed|ing|s)\b|flee\w*|escap\w*|uciek\w*|uciec\b|gonil\w*|scig\w*|ucieczk\w*|uciecz\w*/i],
   ['schronienie', /shelter\w*|refuge\w*|seek\w*\s+shelter|schron\w*|azyl\w*/i],
   ['informacja', /information\w*|informacj\w*|wiadomos\w*/i],
   ['ogien', /fire\w*|flame\w*|ogn\w*|plomien\w*/i],
@@ -141,7 +141,7 @@ const KNOWN_ENTITY_ALIAS_PATTERNS = [
 // Aliasy z tabeli danych (ai/entityAliases.js) laczymy z legacy regexami.
 // Nie pomijamy grupy tylko dlatego, ze jej kanoniczna nazwa juz istnieje:
 // starszy regex moze nie obslugiwac odmiany polskiej (np. „Krwawym Baronem”).
-for (const entry of buildEntityAliasPatterns(ENTITY_ALIAS_GROUPS)) {
+for (const entry of buildEntityAliasPatterns([...ENTITY_ALIAS_GROUPS, ...GAME_ALIASES.filter(entry => !String(entry.name || '').includes(' ')), ...CHARACTER_ALIASES.filter(entry => !String(entry.name || '').includes(' '))].map(entry => ({ canonical: entry.canonical || entry.name, names: entry.names || [entry.name, ...(entry.aliases || [])] })))) {
   const existing = KNOWN_ENTITY_ALIAS_PATTERNS.find(item => item.canonical === entry.canonical);
   if (!existing) {
     KNOWN_ENTITY_ALIAS_PATTERNS.push(entry);
@@ -456,7 +456,8 @@ function wyodrebnijNazwyWlasne(value, options = {}) {
     // odrozni rzeczownika pospolitego od imienia i slowo musi byc na liscie.
     'materialy', 'dostepne', 'dostepnych', 'danych', 'jedynym', 'jedyna', 'jedynie', 'ponadto', 'dodatkowo', 'aby', 'jesli', 'relacja', 'relacji', 'relacje', 'poznanie', 'poznania', 'statki', 'statek', 'statku', 'statkiem',
     // Odmiany rzeczownika „głos” nie mogą być mylone z nazwą własną w claimach o aktorach.
-    'glos', 'glosu', 'glosowi', 'glosie', 'glosami', 'glosow'
+    'glos', 'glosu', 'glosowi', 'glosie', 'glosami', 'glosow',
+    'pelni', 'zarowno', 'sredni', 'srednia', 'srednie', 'sredniego', 'sredniej', 'pozeracz', 'swiata', 'wprowadzona', 'wprowadzony', 'wprowadzone', 'wprowadzenie'
   ].map(normalizujClaim));
   const candidates = [];
   const aliasSpans = [];
@@ -467,6 +468,19 @@ function wyodrebnijNazwyWlasne(value, options = {}) {
       aliasSpans.push({ start, end: start + match[0].length });
       candidates.push({ token: alias.canonical, offset: start });
     }
+  }
+  // Nazwa w nawiasie bezpośrednio po rozpoznanej encji jest zwykle jej
+  // aliasem/objaśnieniem (np. Wheatley (Intelligence Dampening Sphere)),
+  // a nie zbiorem trzech niezależnych encji do osobnego potwierdzania.
+  const aliasParentheticalSpans = [];
+  for (const match of raw.matchAll(/\(([^()]{1,120})\)/gu)) {
+    const start = Number(match.index || 0);
+    const prefix = raw.slice(Math.max(0, start - 140), start);
+    const belongsToKnownEntity = KNOWN_ENTITY_ALIAS_PATTERNS.some(alias => {
+      const found = [...prefix.matchAll(new RegExp(alias.pattern.source, 'giu'))];
+      return found.length > 0 && !/[.!?;]/u.test(prefix.slice(found[found.length - 1].index + found[found.length - 1][0].length));
+    });
+    if (belongsToKnownEntity) aliasParentheticalSpans.push({ start, end: start + match[0].length });
   }
   // Tytul gry powtorzony w claimie to kontekst pytania, nie fakt do potwierdzenia w cytacie
   // (patrz TYTULY_GIER). Zwalniamy go z wymogu obecnosci w dowodzie tylko na zadanie wywolujacego;
@@ -504,6 +518,7 @@ function wyodrebnijNazwyWlasne(value, options = {}) {
       const token = match[0];
       const tokenOffset = Number(match.index || 0);
       if (aliasSpans.some(span => tokenOffset >= span.start && tokenOffset < span.end)) continue;
+      if (aliasParentheticalSpans.some(span => (Number(sentenceMatch.index || 0) + String(sentenceMatch[1] || '').length + tokenOffset) >= span.start && (Number(sentenceMatch.index || 0) + String(sentenceMatch[1] || '').length + tokenOffset) < span.end)) continue;
       const absoluteTokenOffset = sentenceOffset + tokenOffset;
       if (titleSpans.some(span => absoluteTokenOffset >= span.start && absoluteTokenOffset < span.end)) continue;
       const before = sentence.slice(0, tokenOffset);
@@ -527,7 +542,7 @@ function wyodrebnijNazwyWlasne(value, options = {}) {
           && /^\s+$/u.test(sentence.slice(tokenOffset + token.length, Number(next.index || 0)));
         const hasMidSentenceOccurrence = capitalizedInMiddle.has(normalizedToken);
         const tokenVariants = new Set([normalizedToken, ...wariantyNazwyDoDopasowania(token).map(normalizujTokenWyroczni)]);
-        const isInNameOracle = [...tokenVariants].some(variant => options.nameOracle.has(variant));
+        const isInNameOracle = options.nameOracle instanceof Set && [...tokenVariants].some(variant => options.nameOracle.has(variant));
         if (!(isKnownAlias || hasInternalCapitalOrDigit || hasCapitalizedNextToken || hasMidSentenceOccurrence || isInNameOracle)) {
           // Swiadomy kompromis: wymyslona nazwa wystepujaca wylacznie na poczatku claimu
           // i nieobecna w zrodlach moze zostac pominieta. Inne kontrole pozostaja aktywne;
@@ -786,13 +801,23 @@ function sprawdzTwardeKonflikty(evidence, claim, options = {}) {
   // negates the explanation, not event X. A document-level negation scan used
   // to reject a positive claim about X because an unrelated subordinate clause
   // contained “never”. Keep the hard gate for negation of the actual event.
-  const evidenceForNegation = wybierzKlausuleDowoduDlaClaimu(e, c).replace(
+  // Negacja musi pochodzić z cytatu stanowiącego dowód, a nie z sąsiedniego
+  // tekstu strony. Pełny kontekst nadal służy pozostałym kontrolom.
+  const polaritySource = String(options.evidenceQuote || '').trim()
+    || wybierzKlausuleDowoduDlaClaimu(e, c);
+  const evidenceForNegation = polaritySource.replace(
     /\b(?:although|though|while)\s+(?:it|this|that)\s+(?:was|is|has been)\s+never\s+explained\b[,;:]?\s*/giu,
     ' ',
   );
-  const evidenceNegated = wyodrebnijMarkery(evidenceForNegation, NEGATION_RE);
+  // Portugalskie „no” jest zrostem przyimka „em” z rodzajnikiem,
+  // a nie negacją. Usuwamy je tylko wtedy, gdy fragment ma wyraźne
+  // sygnały portugalskiego; angielskie „no siblings/no damage” pozostaje negacją.
+  const evidenceForPolarity = /(?:\b(?:é|uma|um|das|dos|para|com|não|nas|nos|pela|pelo|que|jogador|padrão)\b)/iu.test(evidenceForNegation)
+    ? evidenceForNegation.replace(/(?<![\p{L}])no(?![\p{L}])/giu, ' ')
+    : evidenceForNegation;
+  const evidenceNegated = wyodrebnijMarkery(evidenceForPolarity, NEGATION_RE);
   const claimNegated = wyodrebnijMarkery(c, NEGATION_RE);
-  if (!options.ignoreNegation && !options.allowDistributedEvidence && claimNegated !== evidenceNegated) {
+  if (!options.ignoreNegation && !options.allowDistributedEvidence && !czyOgraniczenieDowodowe(c) && claimNegated !== evidenceNegated) {
     // „take no damage” (kwantyfikator zerowy, bez zadnego innego zaprzeczenia w dowodzie) potwierdza pozytywny
     // claim o redukcji („zmniejsza obrazenia”). Kazde inne rozjechanie negacji nadal jest twardym konfliktem.
     const zerowyKwantyfikator = !claimNegated && evidenceNegated
@@ -972,7 +997,6 @@ function zgodnoscStrukturalna(evidence, claim, options = {}) {
   const entityCoverage = claimEntities.length
     ? claimEntities.filter(entity => czyNazwaWlasnaWystepuje(entity, normalizedEvidence)).length / claimEntities.length
     : 1;
-
   // Akceptujemy sensowna parafraze, ale tylko po przejsciu twardych
   // konfliktow/liczb/jednostek. To naprawia false rejecti bez otwierania
   // walidatora na dowolne podobienstwo tekstowe.
@@ -1052,11 +1076,16 @@ function tokenyPokrywajaSie(a, b) {
 }
 function czyOgraniczenieDowodowe(sentence) {
   const text = normalizujClaim(sentence);
-  const limitation = /\b(?:nie\s+(?:potwierdz\w*|podaj\w*|precyz\w*|okresl\w*|wskaz\w*|zawier\w*|znalazl\w*|znaleziono)|brak\s+(?:dokladn\w*\s+)?(?:dat\w*|moment\w*|czas\w*|potwierdzon\w*\s+(?:przyczyn\w*|powod\w*)))\b/u.test(text);
-  // „metod\w*” i „sposob\w*”: zastrzezenie o braku dodatkowych metod w zrodlach („Zrodla nie podaja
-  // dodatkowych metod zdobycia…”) jest tak samo zakresem zrodla jak brak daty, a nie faktem o swiecie.
-  const scopedTopic = /\b(?:dat\w*|moment\w*|czas\w*|rok\w*|przyczyn\w*|powod\w*|metod\w*|sposob\w*)\b/u.test(text);
   const sourceMention = /\b(?:zrodla?\w*|materialy|dane|sources?|evidence)\b/u.test(text);
+  // Twierdzenia o tym, czego materiały nie opisują, są oceną zakresu
+  // retrieval, a nie negacją zdarzenia w świecie (np. „źródła nie podają,
+  // co stało się z Vesemirem w grze”). Nie wolno klasyfikować ich jako
+  // sprzeczności tylko dlatego, że cytat zawiera inną negację.
+  const metaAbsence = sourceMention && /\b(?:nie\s+(?:podaj\w*|opisuj\w*|wspomin\w*|wyjasni\w*|okresl\w*|potwierdz\w*)|brak\s+(?:informacj\w*|danych|wzmian\w*))\b/u.test(text)
+    && /\b(?:co\s+stal\w*|los\w*|wydarz\w*|informacj\w*|szczegol\w*|przyczyn\w*|powod\w*|dat\w*|moment\w*|czas\w*|metod\w*|sposob\w*)\b/u.test(text);
+  if (metaAbsence) return true;
+  const limitation = /\b(?:nie\s+(?:potwierdz\w*|podaj\w*|precyz\w*|okresl\w*|wskaz\w*|zawier\w*|znalazl\w*|znaleziono)|brak\s+(?:dokladn\w*\s+)?(?:dat\w*|moment\w*|czas\w*|potwierdzon\w*\s+(?:przyczyn\w*|powod\w*)))\b/u.test(text);
+  const scopedTopic = /\b(?:dat\w*|moment\w*|czas\w*|rok\w*|przyczyn\w*|powod\w*|metod\w*|sposob\w*)\b/u.test(text);
   const inheritedSourceScope = /^\s*(?:ale|jednak)?\s*nie\b/u.test(text);
   return limitation && scopedTopic && (sourceMention || inheritedSourceScope);
 }
