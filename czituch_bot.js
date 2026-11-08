@@ -3628,9 +3628,9 @@ Pytanie użytkownika: ${pytanie}`;
     const prompt = messages.user;
     const controller = new AbortController();
     const timeoutMs = timeoutDlaGeneracji();
-    const timer = ustawTimeout(() => controller.abort(), timeoutMs);
     try {
-      const response = await fetch(buildGeminiGenerateContentUrl(AI_MODELS.generatorGemini), {
+      const { response, data } = await awaitWithAbortTimeout((async () => {
+        const response = await fetch(buildGeminiGenerateContentUrl(AI_MODELS.generatorGemini), {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': KONFIGURACJA.geminiKey },
         body: JSON.stringify({
           systemInstruction: { parts: [{ text: overrideSystemPrompt }] },
@@ -3640,8 +3640,10 @@ Pytanie użytkownika: ${pytanie}`;
           ],
           generationConfig: { maxOutputTokens: Math.max(300, Math.min(Number(maxTok) || 700, 1200)) },
         }), signal: controller.signal,
-      });
-      const data = await response.json().catch(() => ({}));
+        });
+        const data = await response.json().catch(() => ({}));
+        return { response, data };
+      })(), timeoutMs, controller, 'Gemini generation');
       if (!response.ok) {
         const retryAfter = retryAfterHint(response);
         const message = data?.error?.message || 'provider returned an error';
@@ -3663,7 +3665,7 @@ Pytanie użytkownika: ${pytanie}`;
       const cooldownMs = geminiGenerationCooldownMsFromError(err);
       if (cooldownMs > 0) ustawGeminiGenerationCooldown(AI_MODELS.generatorGemini, cooldownMs);
       return wynikPusty('gemini', AI_MODELS.generatorGemini, sanitizujKomunikatBledu(err.message));
-    } finally { wyczyscTimeout(timer); }
+    }
   }
 
   async function zapytajGeminiLiteFallback(maxTok = 700, overrideSystemPrompt = systemPrompt, powod = 'Gemini 3.8 Flash') {
@@ -3674,9 +3676,9 @@ Pytanie użytkownika: ${pytanie}`;
     const prompt = messages.user;
     const controller = new AbortController();
     const timeoutMs = timeoutDlaGeneracji();
-    const timer = ustawTimeout(() => controller.abort(), timeoutMs);
     try {
-      const response = await fetch(buildGeminiGenerateContentUrl(AI_MODELS.generatorGeminiLite), {
+      const { response, data } = await awaitWithAbortTimeout((async () => {
+        const response = await fetch(buildGeminiGenerateContentUrl(AI_MODELS.generatorGeminiLite), {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': KONFIGURACJA.geminiKey },
         body: JSON.stringify({
           systemInstruction: { parts: [{ text: overrideSystemPrompt }] },
@@ -3686,8 +3688,10 @@ Pytanie użytkownika: ${pytanie}`;
           ],
           generationConfig: { maxOutputTokens: Math.max(300, Math.min(Number(maxTok) || 700, 1200)), thinkingConfig: { thinkingLevel: 'minimal' } },
         }), signal: controller.signal,
-      });
-      const data = await response.json().catch(() => ({}));
+        });
+        const data = await response.json().catch(() => ({}));
+        return { response, data };
+      })(), timeoutMs, controller, 'Gemini Lite generation');
       if (!response.ok) {
         const retryAfter = retryAfterHint(response);
         const message = data?.error?.message || 'provider returned an error';
@@ -3709,7 +3713,7 @@ Pytanie użytkownika: ${pytanie}`;
       const cooldownMs = geminiGenerationCooldownMsFromError(err);
       if (cooldownMs > 0) ustawGeminiGenerationCooldown(AI_MODELS.generatorGeminiLite, cooldownMs);
       return wynikPusty('gemini', AI_MODELS.generatorGeminiLite, sanitizujKomunikatBledu(err.message));
-    } finally { wyczyscTimeout(timer); }
+    }
   }
 
   async function zapytajOpenRouterFallback(maxTok = 700, overrideSystemPrompt = systemPrompt, powod = 'Gemini') {
@@ -3719,15 +3723,17 @@ Pytanie użytkownika: ${pytanie}`;
     const prompt = messages[messages.length - 1]?.content || pytanie;
     const controller = new AbortController();
     const timeoutMs = timeoutDlaGeneracji();
-    const timer = ustawTimeout(() => controller.abort(), timeoutMs);
     try {
-      const response = await fetch(`${KONFIGURACJA.openrouterBaseUrl}/chat/completions`, {
+      const { response, data } = await awaitWithAbortTimeout((async () => {
+        const response = await fetch(`${KONFIGURACJA.openrouterBaseUrl}/chat/completions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${KONFIGURACJA.openrouterKey}`, 'HTTP-Referer': 'https://czituchbot.pl', 'X-Title': 'CzituchBot' },
         body: JSON.stringify({ model: KONFIGURACJA.openrouterGeneratorModel, messages, temperature: Math.min(Number(temperature) || 0.2, 0.4), max_tokens: Math.max(300, Math.min(Number(maxTok) || 700, 1200)) }),
         signal: controller.signal,
-      });
-      const data = await response.json().catch(() => ({}));
+        });
+        const data = await response.json().catch(() => ({}));
+        return { response, data };
+      })(), timeoutMs, controller, 'OpenRouter generation');
       const retryAfter = retryAfterHint(response);
       if (!response.ok) {
         throw new Error(openRouterErrorMessage(response.status, data, retryAfter));
@@ -3753,7 +3759,7 @@ Pytanie użytkownika: ${pytanie}`;
     } catch (err) {
       console.error(`[OpenRouter] Fallback nieudany (${powod}):`, sanitizujKomunikatBledu(err.message));
       return wynikPusty('openrouter', KONFIGURACJA.openrouterGeneratorModel, formatProviderError('openrouter', KONFIGURACJA.openrouterGeneratorModel, err));
-    } finally { wyczyscTimeout(timer); }
+    }
   }
 
   // xKiro jako dodatkowy fallback po Groq 20B (OpenAI-compatible gateway).
