@@ -314,6 +314,7 @@ test('canonical status must appear in the cited evidence span', () => {
   assert.deepEqual(detectOverclaimTypes(
     'To wydarzenie jest kanoniczne.',
     'This event is part of the official canon.',
+    { sourceAuthority: 'official' },
   ), []);
 });
 
