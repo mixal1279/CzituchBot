@@ -491,3 +491,28 @@ test('shared Groq TPM/TPD quota blocks sibling model fallbacks, model-specific q
   assert.equal(shouldBlockProviderQuotaWide('groq:openai/gpt-oss-120b', 'model-specific quota exceeded'), false);
   assert.equal(shouldBlockProviderQuotaWide('openrouter:default', 'TPM quota exceeded'), false);
 });
+
+test('oversized Retry-After header is capped instead of being ignored', () => {
+  const maxCooldownMs = 7 * 24 * 60 * 60 * 1000;
+  const hugeSeconds = '9'.repeat(400);
+  assert.equal(
+    quotaCooldownMsFromError({
+      status: 429,
+      message: 'rate limited',
+      headers: new Headers({ 'retry-after': hugeSeconds }),
+    }),
+    maxCooldownMs,
+  );
+});
+
+test('malformed Retry-After header falls back to a valid response header', () => {
+  const now = Date.parse('2026-10-19T12:00:00Z');
+  const error = {
+    status: 429,
+    message: 'rate limited',
+    headers: new Headers({ 'retry-after': 'not-a-date' }),
+    response: { headers: new Headers({ 'retry-after': '8' }) },
+  };
+  assert.equal(retryAfterHint(error, now), 'Retry-After=8s');
+  assert.equal(quotaCooldownMsFromError(error), 8000);
+});
