@@ -246,20 +246,33 @@ function openRouterErrorMessage(httpStatus, data, retryAfter = '') {
   return parts.join('; ');
 }
 
-function retryAfterHint(source, now = Date.now()) {
-  const headers = source?.headers || source?.response?.headers || source;
-  let raw = null;
-  try { raw = headers?.get?.('retry-after') ?? headers?.get?.('Retry-After') ?? null; } catch (_) {}
-  if (raw == null && headers && typeof headers === 'object') {
-    raw = headers['retry-after'] ?? headers['Retry-After'] ?? headers.retryAfter ?? null;
+function retryAfterSecondsFromHeaders(source, now = Date.now()) {
+  const candidates = [source?.headers, source?.response?.headers, source];
+  for (const headers of candidates) {
+    if (!headers) continue;
+    let raw = null;
+    try {
+      raw = headers.get?.('retry-after') ?? headers.get?.('Retry-After') ?? null;
+    } catch (_) {}
+    if (raw == null && typeof headers === 'object') {
+      const key = Object.keys(headers).find(name => name.toLowerCase() === 'retry-after');
+      if (key) raw = headers[key];
+      else raw = headers.retryAfter ?? null;
+    }
+    if (raw == null || String(raw).trim() === '') continue;
+    const value = String(raw).trim();
+    const parsedDate = Date.parse(value);
+    const seconds = /^\d+(?:\.\d+)?$/.test(value)
+      ? Number(value)
+      : (Number.isFinite(parsedDate) ? Math.max(0, (parsedDate - now) / 1000) : NaN);
+    if (Number.isFinite(seconds)) return Math.max(0, seconds);
   }
-  if (raw == null || String(raw).trim() === '') return '';
-  const value = String(raw).trim();
-  const parsedDate = Date.parse(value);
-  const seconds = /^\d+(?:\.\d+)?$/.test(value)
-    ? Number(value)
-    : (Number.isFinite(parsedDate) ? Math.max(0, (parsedDate - now) / 1000) : NaN);
-  return Number.isFinite(seconds) ? `Retry-After=${Math.max(0, seconds)}s` : '';
+  return null;
+}
+
+function retryAfterHint(source, now = Date.now()) {
+  const seconds = retryAfterSecondsFromHeaders(source, now);
+  return seconds === null ? '' : `Retry-After=${seconds}s`;
 }
 
 function quotaCooldownMsFromError(error) {
@@ -271,21 +284,13 @@ function quotaCooldownMsFromError(error) {
   let retryAfterMs = null;
   let hasRetryAfterHeader = false;
 
-  // First, honor any Retry-After coming from headers on the error/response object.
-  try {
-    const headers = error?.headers || error?.response?.headers || error;
-    let rawHeader = null;
-    if (headers) {
-      if (typeof headers.get === 'function') rawHeader = headers.get('retry-after') ?? headers.get('Retry-After') ?? null;
-      else if (typeof headers === 'object') rawHeader = headers['retry-after'] ?? headers['Retry-After'] ?? headers.retryAfter ?? null;
-    }
-    if (rawHeader != null && String(rawHeader).trim() !== '') {
-      const v = String(rawHeader).trim();
-      const parsedDate = Date.parse(v);
-      const seconds = /^\d+(?:\.\d+)?$/.test(v) ? Number(v) : (Number.isFinite(parsedDate) ? Math.max(0, (parsedDate - Date.now()) / 1000) : NaN);
-      if (Number.isFinite(seconds)) { retryAfterMs = Math.max(0, seconds * 1000); hasRetryAfterHeader = true; }
-    }
-  } catch (_) {}
+  // Sprawdź osobno nagłówki błędu i odpowiedzi: puste error.headers nie
+  // mogą zasłonić poprawnego response.headers.
+  const headerSeconds = retryAfterSecondsFromHeaders(error);
+  if (headerSeconds !== null) {
+    retryAfterMs = headerSeconds * 1000;
+    hasRetryAfterHeader = true;
+  }
 
   // Message-based 'retry-after' tokens (some providers embed this in text)
   const retryAfterMatch = message.match(/retry[- ]after\s*[=:]\s*(\d+(?:\.\d+)?)\s*(?:s|sec(?:ond)?s?)?/i);
