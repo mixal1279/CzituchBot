@@ -4590,7 +4590,7 @@ Pytanie użytkownika: ${pytanie}`;
         odp = ograniczDoPelnychZdanAI(odp, responseCfg.maxSentences, limitTresci, responseCfg.maxWords);
       }
       if (odp && etykietaZrodla.length < limitOdpowiedzi) {
-        odp = \`\${odp}\n\${etykietaZrodla}\`;
+        odp = \`\${odp} | \${etykietaZrodla}\`;
       }
     }
   }
