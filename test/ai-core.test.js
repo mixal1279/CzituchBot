@@ -80,7 +80,7 @@ test('Gemini grounding snippet is not promoted to webpage evidence by core norma
 
 test('core evidence assessment detects weak single-source evidence', () => {
   const evidence = assessEvidence(
-    [{ url:'https://example.org/a', title:'Portal 2', content:'Portal 2 is a game.' }],
+    [{ url:'https://example.org/a', title:'Portal 2', content:'Portal 2 is a game featuring Wheatley and GLaDOS.' }],
     'Dlaczego Wheatley przejął kontrolę nad GLaDOS w Portal 2?',
     { is_lore:true, game:'Portal 2' },
   );
