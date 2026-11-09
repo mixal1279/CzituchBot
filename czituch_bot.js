@@ -711,10 +711,10 @@ const KONFIGURACJA = {
   groqKey: process.env.GROQ_API_KEY,
   groqBaseUrl: normalizeGroqBaseUrl(process.env.GROQ_BASE_URL),
 
-  // ---- xKiro (fallback po Groq 20B) ----
+  // ---- Cohere przez xKiro (główny walidator) ----
   xkiroKey: typeof process.env.XKIRO_API_KEY === 'string' ? process.env.XKIRO_API_KEY.replace(/[\r\n]/g, '').trim() : process.env.XKIRO_API_KEY,
   xkiroBaseUrl: String(process.env.XKIRO_BASE_URL || 'https://api.xkiro.com/v1').replace(/\/+$/, ''),
-  xkiroModel: process.env.XKIRO_MODEL || 'qwen/qwen3.5-397b-a17b:free',
+  xkiroModel: process.env.XKIRO_MODEL || 'cohere/command-a-reasoning',
 
   // ---- ITAD ----
   itadKey: process.env.ITAD_API_KEY,
@@ -2442,7 +2442,7 @@ const AI_GEMINI_VALIDATOR_MODEL = process.env.AI_GEMINI_VALIDATOR_MODEL || 'gemi
 
 async function walidujOdpowiedzAI(persona, pytanie, odpowiedz, dane, historiaRozmowy = [], requestId = '-', requestState = null, requestMeta = null) {
   odpowiedz = usunEtykietyEvidenceCandidate(odpowiedz);
-  const cacheKey = dane ? verdictCache.key({ question: pytanie, answer: odpowiedz, evidence: dane, model: AI_GEMINI_VALIDATOR_MODEL }) : null;
+  const cacheKey = dane ? verdictCache.key({ question: pytanie, answer: odpowiedz, evidence: dane, model: [KONFIGURACJA.xkiroModel, AI_GEMINI_VALIDATOR_MODEL, AI_MODELS.validator, KONFIGURACJA.openrouterValidatorModel].join('|') }) : null;
   const cached = cacheKey ? verdictCache.get(cacheKey) : null;
   if (cached) {
     console.log(`[AI][${requestId}] validator: werdykt z cache (${cached.status}) — bez wywołania modelu`);
@@ -2522,6 +2522,71 @@ async function walidujOdpowiedzAIBezCache(persona, pytanie, odpowiedz, dane, his
     recordSkippedValidator('gemini', AI_GEMINI_VALIDATOR_MODEL, 'Gemini validator pominięty: budżet czasu validatora wyczerpany');
     return { status: 'unavailable', ok: false, technicalError: true, provider: 'gemini', model: null, unsupported_claims: [], reason: 'budżet czasu validatora wyczerpany' };
   }
+  // Cohere Command A Reasoning przez xKiro jest głównym walidatorem.
+  // Pozostali dostawcy są uruchamiani wyłącznie jako fallback po błędzie technicznym
+  // lub po odrzuceniu, które kwalifikuje się do drugiej opinii.
+  if (!KONFIGURACJA.xkiroKey) {
+    recordSkippedValidator('xkiro', KONFIGURACJA.xkiroModel, 'xKiro validator pominięty: brak klucza API');
+  } else if (validatorBreakerIsOpen('xkiro')) {
+    recordSkippedValidator('xkiro', KONFIGURACJA.xkiroModel, 'xKiro validator pominięty: circuit breaker aktywny');
+    console.warn(`[AI][${requestId}] xKiro validator pominięty przed rezerwacją slotu: circuit breaker aktywny`);
+  } else {
+    const xkiroRemainingMs = requestState
+      ? (typeof requestState.remainingMs === 'function' ? requestState.remainingMs() : requestState.maxCzasMs - (Date.now() - requestState.startedAt))
+      : 6000;
+    const configuredXkiroTimeout = Number(process.env.AI_XKIRO_VALIDATOR_TIMEOUT_MS);
+    const xkiroMaxTimeoutMs = Math.max(6000, Number.isFinite(configuredXkiroTimeout) && configuredXkiroTimeout > 0 ? configuredXkiroTimeout : 9000);
+    const xkiroTimeoutMs = computeValidatorTimeout(xkiroRemainingMs, {
+      maxTimeoutMs: xkiroMaxTimeoutMs,
+      reserveMs: computeValidatorReserveMs(xkiroRemainingMs, requestState?.validatory + 1, requestState?.maxValidatorow, requestState?.validationPass === 1 ? INITIAL_VALIDATOR_REPAIR_RESERVE_MS : 0),
+      minTimeoutMs: 6000,
+    });
+    if (xkiroTimeoutMs === null) {
+      const reason = 'xKiro validator pominięty: mniej niż 6 s użytecznego budżetu po rezerwie';
+      recordSkippedValidator('xkiro', KONFIGURACJA.xkiroModel, reason);
+      console.warn(`[AI][${requestId}] ${reason}; remaining=${xkiroRemainingMs}ms`);
+    } else if (!zarezerwujSlotWalidatora(requestState, 'validator:xkiro')) {
+      const reason = 'budżet validatora/modeli wyczerpany przed xKiro';
+      recordSkippedValidator('xkiro', KONFIGURACJA.xkiroModel, reason);
+      return lastRejected || { ...(last || {}), status: 'unavailable', ok: false, technicalError: true, unsupported_claims: [], reason };
+    } else {
+      const validatorStartedAt = Date.now();
+      const remainingBefore = requestState?.remainingMs?.() ?? null;
+      requestState?.recordTiming?.('validator_provider_start', { provider: 'xkiro', model: KONFIGURACJA.xkiroModel, remainingBefore });
+      const xkiroResult = await walidujOdpowiedzXKiro(persona, pytanie, odpowiedz, dane, requestId, requestState, requestMeta, requestState ? xkiroTimeoutMs : null);
+      recordValidatorTransportResult('xkiro', xkiroResult, requestId);
+      recordValidatorMetric('xkiro', xkiroResult.model || KONFIGURACJA.xkiroModel, remainingBefore, xkiroTimeoutMs, validatorStartedAt, xkiroResult);
+      const validatorElapsedMs = Date.now() - validatorStartedAt;
+      const remainingAfter = requestState?.remainingMs?.() ?? null;
+      requestState?.recordTiming?.('validator_provider_end', { provider: 'xkiro', model: xkiroResult.model || KONFIGURACJA.xkiroModel, status: xkiroResult.status, validatorElapsedMs, remainingBefore, remainingAfter, reason: String(xkiroResult.reason || '').slice(0, 180) });
+      if (requestState) requestState.validatorResults.push({
+        model: xkiroResult.model || KONFIGURACJA.xkiroModel,
+        provider: 'xkiro',
+        status: xkiroResult.status,
+        elapsedMs: validatorElapsedMs,
+        remainingMsBefore: remainingBefore,
+        remainingMsAfter: remainingAfter,
+        complete: xkiroResult.complete === true,
+        confidence: Number.isFinite(xkiroResult.confidence) ? xkiroResult.confidence : null,
+        claimCoverage: Array.isArray(xkiroResult.claims) && xkiroResult.claims.length
+          ? xkiroResult.claims.filter(c => c.supported === true).length / xkiroResult.claims.length
+          : null,
+        reason: typeof xkiroResult.reason === 'string' ? xkiroResult.reason.slice(0, 300) : null,
+        technicalError: xkiroResult.technicalError === true, timeoutAbort: xkiroResult.timeoutAbort === true,
+        quota: xkiroResult.quota === true, skipped: xkiroResult.skipped === true,
+        statusCode: Number.isFinite(Number(xkiroResult.statusCode)) && xkiroResult.statusCode != null ? Number(xkiroResult.statusCode) : null,
+        validationDiagnostics: xkiroResult.diagnostics || null,
+      });
+      if (xkiroResult.status === 'accepted' || xkiroResult.status === 'soft_accepted') return xkiroResult;
+      if (xkiroResult.status === 'rejected') {
+        if (!czyWartoDrugaOpinieWalidatora(xkiroResult)) return xkiroResult;
+        lastRejected = xkiroResult;
+        requestState?.recordTiming?.('validator_second_opinion', { rejectedProvider: xkiroResult.provider || 'xkiro', reason: String(xkiroResult.reason || '').slice(0, 180) });
+      }
+      last = xkiroResult;
+    }
+  }
+
   // Jeden stabilny model wystarcza do prostego JSON fact-checkera i nie
   // zużywa potrójnie darmowego limitu Gemini przy każdym pytaniu.
   const models = KONFIGURACJA.geminiKey
@@ -2679,70 +2744,6 @@ async function walidujOdpowiedzAIBezCache(persona, pytanie, odpowiedz, dane, his
     recordSkippedValidator('groq', AI_MODELS.validator, process.env.AI_VALIDATOR_GROQ === '0' ? 'Groq validator pominięty: wyłączony konfiguracją' : 'Groq validator pominięty: brak klienta lub klucza API');
   }
 
-  // xKiro is the preferred independent validator before OpenRouter when
-  // configured. Keep a minimum six-second attempt budget so a call is not
-  // launched with a timeout too short to produce a useful verdict.
-  if (!KONFIGURACJA.xkiroKey) {
-    recordSkippedValidator('xkiro', KONFIGURACJA.xkiroModel, 'xKiro validator pominięty: brak klucza API');
-  } else if (validatorBreakerIsOpen('xkiro')) {
-    recordSkippedValidator('xkiro', KONFIGURACJA.xkiroModel, 'xKiro validator pominięty: circuit breaker aktywny');
-    console.warn(`[AI][${requestId}] xKiro validator pominięty przed rezerwacją slotu: circuit breaker aktywny`);
-  } else {
-    const xkiroRemainingMs = requestState
-      ? (typeof requestState.remainingMs === 'function' ? requestState.remainingMs() : requestState.maxCzasMs - (Date.now() - requestState.startedAt))
-      : 6000;
-    const configuredXkiroTimeout = Number(process.env.AI_XKIRO_VALIDATOR_TIMEOUT_MS);
-    const xkiroMaxTimeoutMs = Math.max(6000, Number.isFinite(configuredXkiroTimeout) && configuredXkiroTimeout > 0 ? configuredXkiroTimeout : 6000);
-    const xkiroTimeoutMs = computeValidatorTimeout(xkiroRemainingMs, {
-      maxTimeoutMs: xkiroMaxTimeoutMs,
-      reserveMs: computeValidatorReserveMs(xkiroRemainingMs, requestState?.validatory + 1, requestState?.maxValidatorow, requestState?.validationPass === 1 ? INITIAL_VALIDATOR_REPAIR_RESERVE_MS : 0),
-      minTimeoutMs: 6000,
-    });
-    if (xkiroTimeoutMs === null) {
-      const reason = 'xKiro validator pominięty: mniej niż 6 s użytecznego budżetu po rezerwie';
-      recordSkippedValidator('xkiro', KONFIGURACJA.xkiroModel, reason);
-      console.warn(`[AI][${requestId}] ${reason}; remaining=${xkiroRemainingMs}ms`);
-    } else if (!zarezerwujSlotWalidatora(requestState, 'validator:xkiro')) {
-      const reason = 'budżet validatora/modeli wyczerpany przed xKiro';
-      recordSkippedValidator('xkiro', KONFIGURACJA.xkiroModel, reason);
-      return lastRejected || { ...(last || {}), status: 'unavailable', ok: false, technicalError: true, unsupported_claims: [], reason };
-    } else {
-      const validatorStartedAt = Date.now();
-      const remainingBefore = requestState?.remainingMs?.() ?? null;
-      requestState?.recordTiming?.('validator_provider_start', { provider: 'xkiro', model: KONFIGURACJA.xkiroModel, remainingBefore });
-      const xkiroResult = await walidujOdpowiedzXKiro(persona, pytanie, odpowiedz, dane, requestId, requestState, requestMeta, requestState ? xkiroTimeoutMs : null);
-      recordValidatorTransportResult('xkiro', xkiroResult, requestId);
-      recordValidatorMetric('xkiro', xkiroResult.model || KONFIGURACJA.xkiroModel, remainingBefore, xkiroTimeoutMs, validatorStartedAt, xkiroResult);
-      const validatorElapsedMs = Date.now() - validatorStartedAt;
-      const remainingAfter = requestState?.remainingMs?.() ?? null;
-      requestState?.recordTiming?.('validator_provider_end', { provider: 'xkiro', model: xkiroResult.model || KONFIGURACJA.xkiroModel, status: xkiroResult.status, validatorElapsedMs, remainingBefore, remainingAfter, reason: String(xkiroResult.reason || '').slice(0, 180) });
-      if (requestState) requestState.validatorResults.push({
-        model: xkiroResult.model || KONFIGURACJA.xkiroModel,
-        provider: 'xkiro',
-        status: xkiroResult.status,
-        elapsedMs: validatorElapsedMs,
-        remainingMsBefore: remainingBefore,
-        remainingMsAfter: remainingAfter,
-        complete: xkiroResult.complete === true,
-        confidence: Number.isFinite(xkiroResult.confidence) ? xkiroResult.confidence : null,
-        claimCoverage: Array.isArray(xkiroResult.claims) && xkiroResult.claims.length
-          ? xkiroResult.claims.filter(c => c.supported === true).length / xkiroResult.claims.length
-          : null,
-        reason: typeof xkiroResult.reason === 'string' ? xkiroResult.reason.slice(0, 300) : null,
-        technicalError: xkiroResult.technicalError === true, timeoutAbort: xkiroResult.timeoutAbort === true,
-        quota: xkiroResult.quota === true, skipped: xkiroResult.skipped === true,
-        statusCode: Number.isFinite(Number(xkiroResult.statusCode)) && xkiroResult.statusCode != null ? Number(xkiroResult.statusCode) : null,
-        validationDiagnostics: xkiroResult.diagnostics || null,
-      });
-      if (xkiroResult.status === 'accepted' || xkiroResult.status === 'soft_accepted') return xkiroResult;
-      if (xkiroResult.status === 'rejected') {
-        if (!czyWartoDrugaOpinieWalidatora(xkiroResult)) return xkiroResult;
-        lastRejected = xkiroResult;
-        requestState?.recordTiming?.('validator_second_opinion', { rejectedProvider: xkiroResult.provider || 'xkiro', reason: String(xkiroResult.reason || '').slice(0, 180) });
-      }
-      last = xkiroResult;
-    }
-  }
   if (validatorBreakerIsOpen('openrouter')) {
     const reason = 'OpenRouter validator pominięty: circuit breaker aktywny';
     recordSkippedValidator('openrouter', KONFIGURACJA.openrouterValidatorModel, reason);
