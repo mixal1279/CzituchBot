@@ -301,8 +301,7 @@ test('live diagnostics report validator unavailability per call and detect outag
   // Licznik dotyczy WYWOŁAŃ walidatora, nie końca requestu.
   assert.equal(diagnostics.validatorUnavailable, 2);
   assert.equal(diagnostics.requestsUnavailable, 0);
-  // Awaria Gemini w każdym wywołaniu musi być widoczna, inaczej benchmark
-  // raportuje providerOutage=false i uznaje pomiar za ważny.
+  // Awaria Cohere w każdym wywołaniu musi unieważnić porównanie jakości.
   assert.equal(diagnostics.providerOutage, true);
   assert.deepEqual(diagnostics.outageProviders, ['xkiro']);
   // Provider, który odpowiedział, nie jest awarią.
@@ -368,6 +367,16 @@ test('quality comparability is true when primary and fallback calls are healthy'
   }], benchmark.cases, selected);
   assert.equal(noValidatorCalls.qualityComparable, false);
   assert.ok(noValidatorCalls.qualityDegradationReasons.includes('no_validator_calls'));
+
+  const fallbackOnly = buildBenchmarkDiagnostics([{
+    finalStatus: 'accepted',
+    generationAttempts: [{ provider: 'groq', model: 'openai/gpt-oss-120b', status: 'success' }],
+    validatorResults: [{ provider: 'gemini', model: 'gemini-3.5-flash-lite', status: 'accepted' }],
+    timingTrace: [],
+  }], benchmark.cases, selected);
+  assert.equal(fallbackOnly.qualityComparable, false);
+  assert.ok(fallbackOnly.qualityDegradationReasons.includes('no_primary_validator_calls'));
+  assert.ok(fallbackOnly.qualityDegradationReasons.includes('primary_validator_verdicts_below_case_count'));
 });
 
 test('secondary validator outage is reported as degradation, not a benchmark outage', () => {
