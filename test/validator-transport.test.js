@@ -64,7 +64,7 @@ const REJECTED_VERDICT = {
 const originalFetch = global.fetch;
 const oldConfig = {};
 function saveConfig() {
-  for (const key of ['geminiKey', 'openrouterKey', 'xkiroKey', 'xkiroModel', 'xkiroBaseUrl']) oldConfig[key] = hooks.KONFIGURACJA[key];
+  for (const key of ['geminiKey', 'openrouterKey', 'xkiroKey', 'xkiroModel', 'xkiroValidatorModel', 'xkiroBaseUrl']) oldConfig[key] = hooks.KONFIGURACJA[key];
 }
 function restoreConfig() {
   for (const [key, value] of Object.entries(oldConfig)) hooks.KONFIGURACJA[key] = value;
@@ -282,7 +282,7 @@ test('OpenRouter wysyła strict json_schema, wymaga obsługi parametrów i honor
 test('xKiro wysyła limit 1600 i json_object oraz honoruje własny endpoint', async () => {
   hooks.KONFIGURACJA.xkiroKey = 'test-xkiro-key';
   hooks.KONFIGURACJA.xkiroBaseUrl = 'https://xkiro.example/custom/v1';
-  hooks.KONFIGURACJA.xkiroModel = 'cohere/command-a-reasoning';
+  hooks.KONFIGURACJA.xkiroValidatorModel = 'cohere/command-a-reasoning';
   let call;
   mockFetch(async (url, options) => {
     call = { url, options, body: JSON.parse(options.body) };
@@ -303,7 +303,7 @@ test('xKiro wysyła limit 1600 i json_object oraz honoruje własny endpoint', as
 
 test('xKiro validator preserves daily free-token exhaustion details when setting 429 cooldown', async () => {
   hooks.KONFIGURACJA.xkiroKey = 'test-xkiro-key';
-  hooks.KONFIGURACJA.xkiroModel = 'cohere/command-a-reasoning';
+  hooks.KONFIGURACJA.xkiroValidatorModel = 'cohere/command-a-reasoning';
   let calls = 0;
   mockFetch(async () => {
     calls++;
@@ -336,7 +336,7 @@ test('xKiro validator preserves daily free-token exhaustion details when setting
 
 test('xKiro validator wall-clock timeout settles at the enforced six-second floor even if fetch ignores AbortSignal', async () => {
   hooks.KONFIGURACJA.xkiroKey = 'test-xkiro-key';
-  hooks.KONFIGURACJA.xkiroModel = 'cohere/command-a-reasoning';
+  hooks.KONFIGURACJA.xkiroValidatorModel = 'cohere/command-a-reasoning';
   const previousTimeout = process.env.AI_XKIRO_VALIDATOR_TIMEOUT_MS;
   process.env.AI_XKIRO_VALIDATOR_TIMEOUT_MS = '30';
   let capturedSignal;
@@ -392,7 +392,7 @@ test('Cohere przez xKiro jest pierwszym walidatorem, a Gemini i Groq pozostają 
   hooks.KONFIGURACJA.geminiKey = 'test-gemini-key';
   hooks.KONFIGURACJA.openrouterKey = '';
   hooks.KONFIGURACJA.xkiroKey = 'test-xkiro-key';
-  hooks.KONFIGURACJA.xkiroModel = 'cohere/command-a-reasoning';
+  hooks.KONFIGURACJA.xkiroValidatorModel = 'cohere/command-a-reasoning';
   hooks.KONFIGURACJA.xkiroBaseUrl = 'https://xkiro.example/v1';
   const order = [];
   mockFetch(async (url) => {
@@ -465,7 +465,7 @@ test('niepoprawny cytat kończy walidację bez drugiej opinii, bo wymaga naprawy
 test('po deterministycznym odrzuceniu cytatu pipeline nie zużywa budżetu na kolejne opinie', async () => {
   hooks.KONFIGURACJA.geminiKey = 'test-gemini-key';
   hooks.KONFIGURACJA.xkiroKey = 'test-xkiro-key';
-  hooks.KONFIGURACJA.xkiroModel = 'cohere/command-a-reasoning';
+  hooks.KONFIGURACJA.xkiroValidatorModel = 'cohere/command-a-reasoning';
   hooks.KONFIGURACJA.openrouterKey = 'test-openrouter-key';
   const order = [];
   const badQuoteVerdict = {
@@ -728,7 +728,7 @@ test('xKiro i OpenRouter honorują 402/429 cooldown i Retry-After bez kolejnych 
       resetProviderQuotaCooldowns();
       hooks.KONFIGURACJA.xkiroKey = provider === 'xkiro' ? 'test-xkiro-key' : '';
       hooks.KONFIGURACJA.openrouterKey = provider === 'openrouter' ? 'test-openrouter-key' : '';
-      hooks.KONFIGURACJA.xkiroModel = 'cohere/command-a-reasoning';
+      hooks.KONFIGURACJA.xkiroValidatorModel = 'cohere/command-a-reasoning';
       hooks.KONFIGURACJA.openrouterValidatorModel = 'openai/gpt-oss-20b';
       let calls = 0;
       mockFetch(async () => {
@@ -807,7 +807,7 @@ test('HTTP circuit breakery xKiro i OpenRouter otwierają się po dwóch mockowa
     hooks.resetValidatorBreakers();
     if (provider === 'xkiro') {
       hooks.KONFIGURACJA.xkiroKey = 'test-xkiro-key';
-      hooks.KONFIGURACJA.xkiroModel = 'cohere/command-a-reasoning';
+      hooks.KONFIGURACJA.xkiroValidatorModel = 'cohere/command-a-reasoning';
     } else {
       hooks.KONFIGURACJA.openrouterKey = 'test-openrouter-key';
     }
@@ -867,7 +867,7 @@ test('OpenRouter validator timeout covers a body read that ignores AbortSignal',
 
 test('xKiro is attempted below the former 14.5s hard threshold when the calculated budget permits it', async () => {
   hooks.KONFIGURACJA.xkiroKey = 'test-xkiro-key';
-  hooks.KONFIGURACJA.xkiroModel = 'cohere/command-a-reasoning';
+  hooks.KONFIGURACJA.xkiroValidatorModel = 'cohere/command-a-reasoning';
   let calls = 0;
   mockFetch(async () => {
     calls++;
@@ -894,7 +894,7 @@ test('xKiro is attempted below the former 14.5s hard threshold when the calculat
 test('xKiro auth failures open a provider-scoped cooldown and are not retried on each request', async () => {
   resetProviderQuotaCooldowns();
   hooks.KONFIGURACJA.xkiroKey = 'test-xkiro-key';
-  hooks.KONFIGURACJA.xkiroModel = 'cohere/command-a-reasoning';
+  hooks.KONFIGURACJA.xkiroValidatorModel = 'cohere/command-a-reasoning';
   let calls = 0;
   mockFetch(async () => {
     calls += 1;
