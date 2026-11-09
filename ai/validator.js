@@ -4,7 +4,7 @@
 const { assessEvidence, classifyAuthority } = require('./core');
 
 const { sprawdzTwardeFaktyOdpowiedzi } = require('./response');
-const { czyDowodSemantyczniePokrywaClaim, czyRelacjaPrzyczynowaPokrywaClaim, zgodnoscStrukturalna, sprawdzTwardeKonflikty, sprawdzSprzecznosciSemantyczne, sprawdzPokrycieClaimamiOdpowiedzi, spojnoscTlumaczeniaClaimu, zbudujWyroczniaNazw, wyodrebnijNazwyWlasne, czyNazwaWlasnaWystepuje, wyglądaNaAngielski, normalizujClaim, CAUSAL_RE, CAUSAL_EVIDENCE_RE, czyOgraniczenieDowodowe } = require('./claimValidation');
+const { czyDowodSemantyczniePokrywaClaim, czyRelacjaPrzyczynowaPokrywaClaim, zgodnoscStrukturalna, sprawdzTwardeKonflikty, sprawdzSprzecznosciSemantyczne, sprawdzPokrycieClaimamiOdpowiedzi, spojnoscTlumaczeniaClaimu, zbudujWyroczniaNazw, wyodrebnijNazwyWlasne, czyNazwaWlasnaWystepuje, wyglądaNaAngielski, normalizujClaim, CAUSAL_RE, CAUSAL_EVIDENCE_RE, czyOgraniczenieDowodowe, czyCzesciowaOdpowiedzMaKotwiceEncji } = require('./claimValidation');
 const { parseEvidenceBlocks, quoteExists, rankEvidenceForClaim, buildEvidenceRepairContext } = require('./evidence');
 const { naprawKsztaltWynikuWalidatora } = require('./validator-shape');
 const { buildClaimSupportAudit, HARD_OVERCLAIM_TYPES } = require('./claim-support');
@@ -970,6 +970,10 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
   const partialFormat = partialAnswerCandidate
     ? sprawdzKompletnoscOdpowiedzi(partialAnswerCandidate)
     : { ok: false };
+  const partialEntityAnchorOk = czyCzesciowaOdpowiedzMaKotwiceEncji(
+    options.question || '',
+    partialBody,
+  );
   // Partial acceptance is allowed for quote-binding/quote-length defects or
   // answer coverage/granularity failures only when no hard semantic evidence
   // mismatch is present. Entity, negation, numeric, temporal, action, and causal
@@ -1005,7 +1009,8 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
     && !tooManyClaims
     && !malformedClaims
     && partialHardFacts.ok
-    && partialFormat.ok;
+    && partialFormat.ok
+    && partialEntityAnchorOk;
 
   // Model może zwrócić sprzeczny werdykt: valid=false, ale jednocześnie
   // nie wskazać żadnego niepotwierdzonego twierdzenia i wszystkie claims
@@ -1072,6 +1077,7 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
     retrievedEvidenceHasCausalSignal,
     ignoredValidatorClaimsForLimitation: limitationOnlyAccepted ? claims.length : 0,
     partialAccepted,
+    partialEntityAnchorOk,
     partialClaimCount: verifiedPartialClaims.length,
     modelValid: validFromModel === true,
     claimCoverage,
