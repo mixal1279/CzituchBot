@@ -474,9 +474,8 @@ function buildBenchmarkDiagnostics(results, allCases = benchmark.cases, selected
   );
   const goldCases = allCases.filter(item => item.expected?.factual?.independentGold === true);
   const selectedGoldCases = selectedCases.filter(item => item.expected?.factual?.independentGold === true);
-  // Only primary roles make the run invalid: Groq is the generation primary,
-  // Gemini is the primary validator. Failures of secondary/fallback providers
-  // are reported as degraded capability, not mistaken for a broken benchmark.
+  // Only primary roles make the run invalid: Groq generates and Cohere through
+  // xKiro validates. Gemini, Groq-validator and OpenRouter are fallbacks.
   const generationAttempts = results.flatMap(result =>
     (result.generationAttempts || [])
       .filter(attempt => attempt.skipped !== true && attempt.provider)
@@ -500,13 +499,17 @@ function buildBenchmarkDiagnostics(results, allCases = benchmark.cases, selected
   const failedValidatorProviders = failedProvidersInRole(validatorAttempts);
   const failedOutageProviders = [...new Set([
     ...failedGenerationProviders.filter(provider => provider === 'groq'),
-    ...failedValidatorProviders.filter(provider => provider === 'gemini'),
+    ...failedValidatorProviders.filter(provider => provider === 'xkiro'),
   ])].sort();
   const degradedProviders = [...new Set([
     ...failedGenerationProviders.filter(provider => provider !== 'groq').map(provider => `${provider}:generation`),
-    ...failedValidatorProviders.filter(provider => provider !== 'gemini').map(provider => `${provider}:validator`),
+    ...failedValidatorProviders.filter(provider => provider !== 'xkiro').map(provider => `${provider}:validator`),
   ])].sort();
   const validatorCalls = validatorRows.filter(row => row.skipped !== true).length;
+  const xkiroValidatorRows = validatorRows.filter(row => String(row.provider || '').toLowerCase() === 'xkiro');
+  const xkiroValidatorCalls = xkiroValidatorRows.filter(row => row.skipped !== true).length;
+  const xkiroValidatorVerdictCalls = xkiroValidatorRows.filter(row => row.skipped !== true && row.safetyBlocked !== true
+    && row.status !== 'unavailable' && row.status !== 'error').length;
   const validatorSafetyBlocks = validatorRows.filter(row => row.safetyBlocked === true && row.skipped !== true).length;
   const validatorVerdictCalls = validatorRows.filter(row => row.skipped !== true && row.safetyBlocked !== true
     && row.status !== 'unavailable' && row.status !== 'error').length;
@@ -518,6 +521,9 @@ function buildBenchmarkDiagnostics(results, allCases = benchmark.cases, selected
   if (validatorCalls === 0) qualityDegradationReasons.push('no_validator_calls');
   else if (validatorSafetyBlocks > 0 && validatorVerdictCalls === 0) qualityDegradationReasons.push('all_validator_calls_safety_blocked');
   else if (validatorCalls < results.length) qualityDegradationReasons.push('validator_calls_below_case_count');
+  if (xkiroValidatorCalls === 0) qualityDegradationReasons.push('no_primary_validator_calls');
+  else if (xkiroValidatorCalls < results.length) qualityDegradationReasons.push('primary_validator_calls_below_case_count');
+  if (xkiroValidatorVerdictCalls < results.length) qualityDegradationReasons.push('primary_validator_verdicts_below_case_count');
   if (validatorUnavailableRate > 0.25) qualityDegradationReasons.push('validator_unavailable_rate_above_25_percent');
   if (degradedProviders.length > 0) qualityDegradationReasons.push('fallback_provider_degradation');
   if (generationProviderFailures.length > 0) qualityDegradationReasons.push('generation_provider_errors');
@@ -547,6 +553,8 @@ function buildBenchmarkDiagnostics(results, allCases = benchmark.cases, selected
     requestsUnavailable: results.filter(result => result.finalStatus === 'unavailable').length,
     validatorCalls,
     validatorVerdictCalls,
+    xkiroValidatorCalls,
+    xkiroValidatorVerdictCalls,
     validatorUnavailableRate: Number(validatorUnavailableRate.toFixed(3)),
     qualityComparable,
     qualityDegradationReasons,
