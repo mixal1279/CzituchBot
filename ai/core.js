@@ -247,15 +247,34 @@ function czyZrodloDotyczyInnejCzesciGry(source, gameName, routing) {
   return czyZnacznikCzesci(marker);
 }
 
-function sourceMatchesRequestContext(source = {}, routing = {}) {
+function sourceMatchesRequestContext(source = {}, routing = {}, question = '') {
   const resolved = routing.resolved_entity || {};
-  const characterScoped = resolved.type === 'character' || routing.entity_type === 'character';
-  const gameNameForScope = resolved.game || routing.game;
-  // Pytania web_fact o konkretnej postaci w znanej grze też wymagają
-  // dopasowania encji. Nie ograniczamy tego filtra do lore/gameplay: router
-  // często klasyfikuje pytanie „co stało się z X?” jako zwykły fakt.
-  const needsEntityScope = Boolean((routing.is_lore || routing.is_gameplay)
-    || (characterScoped && gameNameForScope));
+  const routeEntity = String(routing.entity || resolved.name || '').trim();
+  const routeEntityIsGame = GAME_ALIASES.some(entry =>
+    [entry.name, ...(entry.aliases || [])].some(alias => containsAlias(routeEntity, alias))
+  );
+  // Router potrafi ustawić entity_type=character, ale jako entity zwrócić
+  // sam tytuł gry. W takim przypadku postacie wyciągamy bezpośrednio z pytania,
+  // zamiast traktować nazwę gry jako nazwę bohatera.
+  const questionCharacters = CHARACTER_ALIASES.filter(entry =>
+    [entry.name, ...(entry.aliases || [])].some(alias => containsAlias(question, alias))
+  );
+  const explicitCharacter = resolved.type === 'character'
+    ? resolved.name
+    : (routing.entity_type === 'character' && !routeEntityIsGame ? routeEntity : '');
+  const requestedCharacters = [...new Set([
+    ...questionCharacters.map(entry => entry.name),
+    ...(explicitCharacter ? [explicitCharacter] : []),
+  ])];
+  const characterScoped = requestedCharacters.length > 0;
+  const gameNameForScope = resolved.game
+    || (resolved.type === 'game' ? resolved.name : '')
+    || routing.game
+    || questionCharacters[0]?.game;
+  // Pytania web_fact o konkretnych postaciach też wymagają dopasowania encji.
+  // Nie ograniczamy tego filtra do lore/gameplay: router często klasyfikuje
+  // pytanie „co stało się z X?” jako zwykły fakt.
+  const needsEntityScope = Boolean(routing.is_lore || routing.is_gameplay || characterScoped || gameNameForScope);
   if (!needsEntityScope) return true;
   const haystack = [source.title, source.content, source.url].filter(Boolean).join(' ');
   const aliasesFor = (entries, name) => {
@@ -268,7 +287,8 @@ function sourceMatchesRequestContext(source = {}, routing = {}) {
   };
 
   // A source about the right game is not sufficient for a request about a
-  // specific character. Require the character (or one of its aliases) itself.
+  // specific character. For relationship questions, every named character
+  // must be present in the same source.
   const franchiseScoped = resolved.type === 'franchise' || routing.entity_type === 'franchise';
   const franchiseName = resolved.name || (franchiseScoped ? routing.entity : '');
   if (franchiseScoped && franchiseName) {
@@ -276,13 +296,14 @@ function sourceMatchesRequestContext(source = {}, routing = {}) {
     return franchiseAliases.some(alias => containsAlias(haystack, alias));
   }
 
-  const characterName = resolved.name || (characterScoped ? routing.entity : '');
-  const gameName = resolved.game || routing.game;
+  const gameName = gameNameForScope;
   if (gameName && czyZrodloDotyczyInnejCzesciGry(source, gameName, routing)) return false;
-  if (characterScoped && characterName) {
-    const characterAliases = aliasesFor(CHARACTER_ALIASES, characterName);
-    const matchesCharacter = characterAliases.some(alias => containsAlias(haystack, alias));
-    if (!matchesCharacter) return false;
+  if (characterScoped) {
+    const matchesAllCharacters = requestedCharacters.every(characterName => {
+      const characterAliases = aliasesFor(CHARACTER_ALIASES, characterName);
+      return characterAliases.some(alias => containsAlias(haystack, alias));
+    });
+    if (!matchesAllCharacters) return false;
 
     // Sama nazwa postaci nie identyfikuje uniwersum (np. Alex, Chris, Jack).
     // Gdy znany jest kontekst gry, źródło musi potwierdzać jednocześnie postać
@@ -293,7 +314,6 @@ function sourceMatchesRequestContext(source = {}, routing = {}) {
     }
     return true;
   }
-
 
   if (gameName) {
     const gameAliases = aliasesFor(GAME_ALIASES, gameName);
@@ -439,7 +459,7 @@ function assessEvidence(results = [], question, routing = {}) {
   const normalized = (Array.isArray(results) ? results : [])
     .filter(Boolean)
     .map((source, index) => normalizeSource(source, index))
-    .filter(source => sourceMatchesRequestContext(source, routing))
+    .filter(source => sourceMatchesRequestContext(source, routing, question))
     .filter(source => sourceLanguageCompatible(source, question, routing))
     .map((s, index) => scoreSource(s, question, {
       index,
