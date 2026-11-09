@@ -126,3 +126,33 @@ test('częściowa odpowiedź o postaci musi zachować nazwę postaci z pytania',
     true,
   );
 });
+
+
+test('filtr źródeł odzyskuje postać z pytania, gdy router zwrócił tytuł gry jako entity', () => {
+  const routing = {
+    intent: 'web_fact',
+    entity_type: 'character',
+    entity: 'The Witcher 3: Wild Hunt',
+    game: 'The Witcher 3: Wild Hunt',
+    resolved_entity: { type: 'game', name: 'The Witcher 3: Wild Hunt' },
+  };
+  const question = 'W grze The Witcher 3: Co stało się z Vesemir?';
+  assert.equal(sourceMatchesRequestContext({
+    title: 'Vesemir Explained - Netflix Season 2',
+    content: 'Vesemir appears in the Netflix series The Witcher.',
+  }, routing, question), false);
+  assert.equal(sourceMatchesRequestContext({
+    title: 'Vesemir | The Witcher 3',
+    content: 'Vesemir appears in The Witcher 3: Wild Hunt.',
+  }, routing, question), true);
+
+  const relationshipQuestion = 'W grze The Witcher 3: Jaka jest relacja między Geraltem a Ciri?';
+  assert.equal(sourceMatchesRequestContext({
+    title: 'Geralt | The Witcher 3',
+    content: 'Geralt appears in The Witcher 3: Wild Hunt.',
+  }, routing, relationshipQuestion), false);
+  assert.equal(sourceMatchesRequestContext({
+    title: 'Geralt and Ciri | The Witcher 3',
+    content: 'Geralt and Ciri have a father-daughter relationship in The Witcher 3: Wild Hunt.',
+  }, routing, relationshipQuestion), true);
+});
