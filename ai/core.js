@@ -256,9 +256,18 @@ function sourceMatchesRequestContext(source = {}, routing = {}, question = '') {
   // Router potrafi ustawić entity_type=character, ale jako entity zwrócić
   // sam tytuł gry. W takim przypadku postacie wyciągamy bezpośrednio z pytania,
   // zamiast traktować nazwę gry jako nazwę bohatera.
-  const questionCharacters = CHARACTER_ALIASES.filter(entry =>
-    [entry.name, ...(entry.aliases || [])].some(alias => containsAlias(question, alias))
+  const hasCharacterScopeSignal = Boolean(
+    routing.game
+    || resolved.game
+    || resolved.type === 'game'
+    || resolved.type === 'character'
+    || routing.entity_type === 'character'
   );
+  const questionCharacters = hasCharacterScopeSignal
+    ? CHARACTER_ALIASES.filter(entry =>
+      [entry.name, ...(entry.aliases || [])].some(alias => containsAlias(question, alias))
+    )
+    : [];
   const explicitCharacter = resolved.type === 'character'
     ? resolved.name
     : (routing.entity_type === 'character' && !routeEntityIsGame ? routeEntity : '');
