@@ -257,14 +257,16 @@ test('live diagnostics distinguish validator failures from generation failures a
     modelCalls: 3,
     generationAttempts: [{ provider: 'gemini', model: 'gemini-3.8-flash', status: 'error', failure: 'timeout' }],
     validatorResults: [
+      { provider: 'xkiro', model: 'cohere/command-a-reasoning', status: 'accepted' },
       { provider: 'gemini', model: 'gemini-3.8-flash', status: 'rejected' },
       { provider: 'groq', model: 'openai/gpt-oss-20b', status: 'unavailable', technicalError: true, reason: 'timeout' },
     ],
     timingTrace: [{ stage: 'validator_second_opinion' }, { stage: 'tavily_http_end', durationMs: 1200, ok: true }, { stage: 'generation_cycle_start', elapsedMs: 24200 }],
   }], benchmark.cases, selected);
 
-  assert.equal(diagnostics.validatorCalls, 2);
-  assert.deepEqual(diagnostics.validatorProviderCalls, { gemini: 1, groq: 1 });
+  assert.equal(diagnostics.validatorCalls, 3);
+  assert.deepEqual(diagnostics.validatorProviderCalls, { xkiro: 1, gemini: 1, groq: 1 });
+  assert.equal(diagnostics.xkiroValidatorVerdictCalls, 1);
   assert.equal(diagnostics.validatorStatusCounts.rejected, 1);
   assert.equal(diagnostics.validatorStatusCounts.unavailable, 1);
   assert.equal(diagnostics.validatorTransportFailures.length, 1);
@@ -283,14 +285,14 @@ test('live diagnostics distinguish validator failures from generation failures a
 test('live diagnostics report validator unavailability per call and detect outages of any provider', () => {
   const benchmark = JSON.parse(fs.readFileSync(path.join(__dirname, 'ai-benchmark.json'), 'utf8'));
   const selected = stratifiedCases(benchmark.cases, 5, 113);
-  // Gemini niedostępne w każdym wywołaniu: to awaria providera, a nie wynik kodu.
+  // Cohere/xKiro niedostępne w każdym wywołaniu: to awaria głównego walidatora.
   const diagnostics = buildBenchmarkDiagnostics([{
     finalStatus: 'rejected',
     modelCalls: 3,
     generationAttempts: [{ provider: 'groq', model: 'openai/gpt-oss-120b', status: 'success' }],
     validatorResults: [
-      { provider: 'gemini', model: 'gemini-3.5-flash-lite', status: 'unavailable', technicalError: true, reason: 'timeout' },
-      { provider: 'gemini', model: 'gemini-3.5-flash-lite', status: 'unavailable', technicalError: true, reason: 'timeout' },
+      { provider: 'xkiro', model: 'cohere/command-a-reasoning', status: 'unavailable', technicalError: true, reason: 'timeout' },
+      { provider: 'xkiro', model: 'cohere/command-a-reasoning', status: 'unavailable', technicalError: true, reason: 'timeout' },
       { provider: 'groq', model: 'openai/gpt-oss-20b', status: 'rejected' },
     ],
     timingTrace: [],
@@ -302,7 +304,7 @@ test('live diagnostics report validator unavailability per call and detect outag
   // Awaria Gemini w każdym wywołaniu musi być widoczna, inaczej benchmark
   // raportuje providerOutage=false i uznaje pomiar za ważny.
   assert.equal(diagnostics.providerOutage, true);
-  assert.deepEqual(diagnostics.outageProviders, ['gemini']);
+  assert.deepEqual(diagnostics.outageProviders, ['xkiro']);
   // Provider, który odpowiedział, nie jest awarią.
   assert.equal(diagnostics.outageProviders.includes('groq'), false);
 });
@@ -349,7 +351,7 @@ test('quality comparability is true when primary and fallback calls are healthy'
   const diagnostics = buildBenchmarkDiagnostics([{
     finalStatus: 'accepted',
     generationAttempts: [{ provider: 'groq', model: 'openai/gpt-oss-120b', status: 'success' }],
-    validatorResults: [{ provider: 'gemini', model: 'gemini-3.5-flash-lite', status: 'accepted' }],
+    validatorResults: [{ provider: 'xkiro', model: 'cohere/command-a-reasoning', status: 'accepted' }],
     timingTrace: [],
   }], benchmark.cases, selected);
 
@@ -375,15 +377,15 @@ test('secondary validator outage is reported as degradation, not a benchmark out
     finalStatus: 'rejected',
     generationAttempts: [{ provider: 'groq', model: 'openai/gpt-oss-120b', status: 'success' }],
     validatorResults: [
-      { provider: 'gemini', model: 'gemini-3.5-flash-lite', status: 'rejected' },
-      { provider: 'xkiro', model: 'cohere/command-a-reasoning', status: 'unavailable', technicalError: true, reason: 'timeout' },
+      { provider: 'xkiro', model: 'cohere/command-a-reasoning', status: 'rejected' },
+      { provider: 'gemini', model: 'gemini-3.5-flash-lite', status: 'unavailable', technicalError: true, reason: 'timeout' },
     ],
     timingTrace: [],
   }], benchmark.cases, selected);
 
   assert.equal(diagnostics.providerOutage, false);
   assert.deepEqual(diagnostics.outageProviders, []);
-  assert.deepEqual(diagnostics.degradedProviders, ['xkiro:validator']);
+  assert.deepEqual(diagnostics.degradedProviders, ['gemini:validator']);
   assert.equal(diagnostics.qualityComparable, false);
   assert.equal(diagnostics.validatorUnavailableRate, 0.5);
   assert.ok(diagnostics.qualityDegradationReasons.includes('validator_unavailable_rate_above_25_percent'));
@@ -617,6 +619,7 @@ test('Gemini safety blocks are not classified as provider transport outages', ()
     finalStatus: 'accepted',
     generationAttempts: [{ provider: 'groq', model: 'openai/gpt-oss-120b', status: 'success' }],
     validatorResults: [
+      { provider: 'xkiro', model: 'cohere/command-a-reasoning', status: 'accepted' },
       { provider: 'gemini', model: 'gemini-3.5-flash-lite', status: 'unavailable', safetyBlocked: true, technicalError: false, reason: 'finishReason=PROHIBITED_CONTENT' },
       { provider: 'groq', model: 'openai/gpt-oss-20b', status: 'accepted' },
     ],
