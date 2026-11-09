@@ -6,6 +6,7 @@ const {
   wyodrebnijNazwyWlasne,
   sprawdzTwardeKonflikty,
   czyOgraniczenieDowodowe,
+  spojnoscTlumaczeniaClaimu,
 } = require('../ai/claimValidation');
 const { sourceMatchesRequestContext, wykryjJezykTekstu, sourceLanguageCompatible, normalizeSource } = require('../ai/core');
 
@@ -61,4 +62,49 @@ test('normalizacja źródła usuwa nawigację MediaWiki i surowe znaczniki infob
   });
   assert.doesNotMatch(source.content, /Jump to navigation|searchInput|\"rows\"|\"title\"/i);
   assert.match(source.content, /Alex é uma das nove skins/);
+});
+
+test('ograniczenie epistemiczne modelu nie jest konfliktem negacji ze źródłem', () => {
+  const claims = [
+    'Model stwierdza, że nie posiada wystarczających danych, aby określić lokalizację Wielkiego Miecza.',
+    'Nie posiadam wystarczających danych, aby określić, gdzie znajduje się Wielki Miecz.',
+    'Dostępne dane referencyjne nie zawierają informacji o lokalizacji Wielkiego Miecza.',
+  ];
+  for (const claim of claims) {
+    assert.equal(czyOgraniczenieDowodowe(claim), true, claim);
+    assert.equal(
+      sprawdzTwardeKonflikty('Elden Ring map fragments guide – Where to find map fragments in each region', claim).ok,
+      true,
+      claim,
+    );
+  }
+  assert.equal(czyOgraniczenieDowodowe('Wielki Miecz nie znajduje się w Caelid.'), false);
+});
+
+test('detektor języka rozpoznaje krótkie polskie pytanie z diakrytykami i blokuje źródło portugalskie', () => {
+  const question = 'W grze Minecraft: Czym różni się Steve od Alex?';
+  const pt = 'Alex é uma das nove skins padrão de jogador no Minecraft, e a segunda a ser introduzida.';
+  assert.equal(wykryjJezykTekstu(question).language, 'pl');
+  assert.equal(sourceLanguageCompatible({ title: 'Alex', content: pt }, question), false);
+  assert.equal(sourceLanguageCompatible({ title: 'Alex', content: pt }, question, { language: 'unknown' }), false);
+  assert.equal(sourceLanguageCompatible({ title: 'Alex', content: 'Alex is one of the nine default player skins in Minecraft.' }, question), true);
+});
+
+test('tłumaczenie „the character” może odziedziczyć jednoznaczną postać z poprzedniego zdania źródła', () => {
+  const claimPl = 'Steve pojawił się w 2009 roku w Zombie Town.';
+  const claimEn = 'The character originated from Zombie Town, an unreleased game developed by Notch in 2009.';
+  const quote = 'O personagem surgiu de Zombie Town, um jogo inédito desenvolvido por Notch em 2009';
+  const context = '**Steve** é uma das nove skins padrão de jogador no Minecraft e a primeira a ser introduzida. O personagem surgiu de Zombie Town, um jogo inédito desenvolvido por Notch em 2009.';
+  const result = spojnoscTlumaczeniaClaimu(claimPl, claimEn, {
+    evidenceQuote: quote,
+    evidenceContext: context,
+  });
+  assert.equal(result.ok, true, JSON.stringify(result));
+
+  const ambiguousContext = 'Steve e Alex são skins padrão de jogador no Minecraft. O personagem surgiu de Zombie Town, um jogo inédito desenvolvido por Notch em 2009.';
+  const ambiguous = spojnoscTlumaczeniaClaimu(claimPl, claimEn, {
+    evidenceQuote: quote,
+    evidenceContext: ambiguousContext,
+  });
+  assert.equal(ambiguous.ok, false);
 });
