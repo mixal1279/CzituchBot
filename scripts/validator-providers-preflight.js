@@ -15,7 +15,7 @@ const { buildGeminiCountTokensBody } = require('../ai/gemini-count-tokens');
 
 const PROD_TIMEOUT_BY_PROVIDER = Object.freeze({
   Gemini: 12000,
-  xKiro: Math.max(6000, Number(process.env.AI_XKIRO_VALIDATOR_TIMEOUT_MS) || 6000),
+  xKiro: Math.max(6000, Number(process.env.AI_XKIRO_VALIDATOR_TIMEOUT_MS) || 9000),
   OpenRouter: Math.max(4000, Number(process.env.AI_OPENROUTER_VALIDATOR_TIMEOUT_MS) || 6000),
   Groq: 3000,
 });
@@ -24,7 +24,7 @@ const PROBE_TIMEOUT_MS = Number(process.env.PREFLIGHT_TIMEOUT_MS) || 20000;
 const GEMINI_KEY = String(process.env.GEMINI_API_KEY || '').replace(/[\r\n]/g, '').trim();
 const GEMINI_MODEL = process.env.AI_GEMINI_VALIDATOR_MODEL || 'gemini-3.5-flash-lite';
 const XKIRO_KEY = String(process.env.XKIRO_API_KEY || '').replace(/[\r\n]/g, '').trim();
-const XKIRO_MODEL = process.env.XKIRO_MODEL || 'cohere/command-a-reasoning';
+const XKIRO_VALIDATOR_MODEL = process.env.XKIRO_VALIDATOR_MODEL || 'cohere/command-a-reasoning';
 const XKIRO_BASE = process.env.XKIRO_BASE_URL || 'https://api.xkiro.com/v1';
 const OPENROUTER_KEY = String(process.env.OPENROUTER_API_KEY || '').trim();
 const OPENROUTER_MODEL = process.env.OPENROUTER_VALIDATOR_MODEL || process.env.AI_VALIDATOR_MODEL || 'openai/gpt-oss-20b';
@@ -95,10 +95,10 @@ function geminiProbe(payload, maxTokens) {
 
 function xkiroProbe(payload, maxTokens) {
   return {
-    provider: 'xKiro', model: XKIRO_MODEL, variant: `${payload.label} · max_tokens=${maxTokens}`,
+    provider: 'xKiro', model: XKIRO_VALIDATOR_MODEL, variant: `${payload.label} · max_tokens=${maxTokens}`,
     url: `${XKIRO_BASE}/chat/completions`,
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${XKIRO_KEY}` },
-    body: { model: XKIRO_MODEL, messages: payload.messages, temperature: 0, max_tokens: maxTokens, reasoning_effort: 'none', response_format: { type: 'json_object' } },
+    body: { model: XKIRO_VALIDATOR_MODEL, messages: payload.messages, temperature: 0, max_tokens: maxTokens, response_format: { type: 'json_object' } },
   };
 }
 function openrouterProbe(payload, maxTokens) {
@@ -122,9 +122,8 @@ function groqProbe(payload, maxTokens) {
 if (GEMINI_KEY) probes.push(geminiProbe(SMALL, 900), geminiProbe(REAL, 1600));
 else console.log('[preflight] Gemini: pominięty (brak GEMINI_API_KEY)');
 
-// xKiro is a secondary fallback with a hard 6 s production deadline. One
-// representative probe is enough; repeated slow probes waste CI time and
-// cannot improve the production latency of this free-tier endpoint.
+// xKiro/Cohere is the primary validator. Probe the exact configured validator
+// model, not XKIRO_MODEL (which belongs to the generation matrix).
 if (XKIRO_KEY) probes.push(xkiroProbe(REAL, 900));
 else console.log('[preflight] xKiro: pominięty (brak XKIRO_API_KEY)');
 
@@ -157,9 +156,9 @@ async function checkXKiroModelCatalog() {
     }
     const data = await response.json();
     const models = Array.isArray(data?.data) ? data.data : [];
-    const configured = models.find(model => model?.id === XKIRO_MODEL);
+    const configured = models.find(model => model?.id === XKIRO_VALIDATOR_MODEL);
     if (!configured) {
-      console.log(`::warning title=xKiro model catalog::Configured model ${XKIRO_MODEL} is not present in the live chat catalog`);
+      console.log(`::warning title=xKiro model catalog::Configured model ${XKIRO_VALIDATOR_MODEL} is not present in the live chat catalog`);
       console.log(`[preflight] xKiro model catalog: NOT FOUND · ${XKIRO_MODEL} · ${models.length} chat models returned`);
       return;
     }
@@ -322,13 +321,15 @@ async function run(probe) {
   }
 
   const bad = results.filter(r => r.verdict !== 'OK');
-  const blockingFailures = bad.filter(isBlockingPreflightFailure);
+  // Awaria głównego walidatora unieważnia benchmark; nie traktujemy jej jak
+  // opcjonalnej degradacji fallbacku.
+  const blockingFailures = bad.filter(r => isBlockingPreflightFailure(r) || r.provider === 'xKiro');
   const degradedProviders = bad.filter(r => !isBlockingPreflightFailure(r));
   for (const r of degradedProviders) {
     console.log(`::warning title=Provider zdegradowany::${r.provider} ma przejściowy problem z dostępnością lub czasem odpowiedzi; benchmark diagnostyczny będzie kontynuowany, ale wynik jakości może zostać oznaczony jako nieważny.`);
   }
   const missingRequiredProviders = [];
-  if (!GEMINI_KEY) missingRequiredProviders.push('Gemini (GEMINI_API_KEY — primary validator)');
+  if (!XKIRO_KEY) missingRequiredProviders.push('xKiro/Cohere (XKIRO_API_KEY — primary validator)');
   if (!GROQ_KEY) missingRequiredProviders.push('Groq (GROQ_API_KEY — primary generator)');
   for (const provider of missingRequiredProviders) {
     console.error(`::error title=Preflight wymagane dane::Brak ${provider}`);
