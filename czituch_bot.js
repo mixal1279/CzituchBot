@@ -2515,9 +2515,12 @@ async function walidujOdpowiedzAIBezCache(persona, pytanie, odpowiedz, dane, his
       reason: entry.reason,
     });
   };
+  let last = null;
+  let lastRejected = null;
   if (budzetValidatoraPrzekroczony()) {
-    recordSkippedValidator('gemini', AI_GEMINI_VALIDATOR_MODEL, 'Gemini validator pominięty: budżet czasu validatora wyczerpany');
-    return { status: 'unavailable', ok: false, technicalError: true, provider: 'gemini', model: null, unsupported_claims: [], reason: 'budżet czasu validatora wyczerpany' };
+    const reason = 'Cohere/xKiro validator pominięty: budżet czasu validatora wyczerpany';
+    recordSkippedValidator('xkiro', KONFIGURACJA.xkiroValidatorModel, reason);
+    return { status: 'unavailable', ok: false, technicalError: true, provider: 'xkiro', model: KONFIGURACJA.xkiroValidatorModel, unsupported_claims: [], reason };
   }
   // Cohere Command A Reasoning przez xKiro jest głównym walidatorem.
   // Pozostali dostawcy są uruchamiani wyłącznie jako fallback po błędzie technicznym
@@ -2533,12 +2536,14 @@ async function walidujOdpowiedzAIBezCache(persona, pytanie, odpowiedz, dane, his
       : 6000;
     const configuredXkiroTimeout = Number(process.env.AI_XKIRO_VALIDATOR_TIMEOUT_MS);
     const xkiroMaxTimeoutMs = Math.max(6000, Number.isFinite(configuredXkiroTimeout) && configuredXkiroTimeout > 0 ? configuredXkiroTimeout : 9000);
-    const xkiroTimeoutMs = computeValidatorTimeout(xkiroRemainingMs, {
-      maxTimeoutMs: xkiroMaxTimeoutMs,
-      reserveMs: computeValidatorReserveMs(xkiroRemainingMs, requestState?.validatory + 1, requestState?.maxValidatorow, requestState?.validationPass === 1 ? INITIAL_VALIDATOR_REPAIR_RESERVE_MS : 0),
-      minTimeoutMs: 6000,
-    });
-    if (xkiroTimeoutMs === null) {
+    const xkiroTimeoutMs = requestState
+      ? computeValidatorTimeout(xkiroRemainingMs, {
+          maxTimeoutMs: xkiroMaxTimeoutMs,
+          reserveMs: computeValidatorReserveMs(xkiroRemainingMs, requestState.validatory + 1, requestState.maxValidatorow, requestState.validationPass === 1 ? INITIAL_VALIDATOR_REPAIR_RESERVE_MS : 0),
+          minTimeoutMs: 6000,
+        })
+      : xkiroMaxTimeoutMs;
+    if (requestState && xkiroTimeoutMs === null) {
       const reason = 'xKiro validator pominięty: mniej niż 6 s użytecznego budżetu po rezerwie';
       recordSkippedValidator('xkiro', KONFIGURACJA.xkiroValidatorModel, reason);
       console.warn(`[AI][${requestId}] ${reason}; remaining=${xkiroRemainingMs}ms`);
@@ -2604,8 +2609,6 @@ async function walidujOdpowiedzAIBezCache(persona, pytanie, odpowiedz, dane, his
     recordSkippedValidator('gemini', AI_GEMINI_VALIDATOR_MODEL, reason);
     console.warn(`[AI][${requestId}] ${reason} — używam fallbacku`);
   }
-  let last = null;
-  let lastRejected = null;
   for (let i = 0; i < models.length; i++) {
     const remainingMs = requestState
       ? (typeof requestState.remainingMs === 'function' ? requestState.remainingMs() : requestState.maxCzasMs - (Date.now() - requestState.startedAt))
