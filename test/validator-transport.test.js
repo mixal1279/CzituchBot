@@ -411,6 +411,22 @@ test('Cohere przez xKiro działa także bez kontekstu requestu', async () => {
   assert.equal(result.status, 'accepted');
 });
 
+test('brak slotu Cohere nie powoduje ReferenceError i zapisuje pominięcie', async () => {
+  hooks.KONFIGURACJA.xkiroKey = 'test-xkiro-key';
+  hooks.KONFIGURACJA.xkiroValidatorModel = 'cohere/command-a-reasoning';
+  const requestState = createAIRequestContext({ maxCzasMs: 60000, maxValidators: 4, maxModelCalls: 12 });
+  requestState.reserveValidatorModel = () => false;
+
+  const result = await hooks.walidujOdpowiedzAIBezCache(
+    'generic', QUESTION, ANSWER, EVIDENCE, [], 'test-xkiro-no-slot', requestState,
+  );
+
+  assert.equal(result.status, 'unavailable');
+  assert.match(result.reason, /budżet validatora\/modeli wyczerpany przed xKiro/);
+  assert.equal(requestState.validatorResults[0].provider, 'xkiro');
+  assert.equal(requestState.validatorResults[0].skipped, true);
+});
+
 test('Cohere przez xKiro jest pierwszym walidatorem, a Gemini i Groq pozostają fallbackami', async () => {
   hooks.KONFIGURACJA.geminiKey = 'test-gemini-key';
   hooks.KONFIGURACJA.openrouterKey = '';
