@@ -307,13 +307,27 @@ function sourceMatchesRequestContext(source = {}, routing = {}) {
 // języka trzeciego (np. portugalski), nie angielskie źródła używane normalnie
 // do odpowiedzi na polskie pytania.
 function wykryjJezykTekstu(value) {
-  const text = normalize(value).slice(0, 12000);
+  const original = String(value || '').slice(0, 12000);
+  const text = normalize(original);
   if (!text) return { language: 'unknown', confidence: 0 };
+
+  // Polskie pytania krótkie („Czym różni się X od Y?”) często nie osiągają
+  // progu słownikowego po normalizacji. Rozpoznajemy je po polskich znakach
+  // oraz co najmniej jednym charakterystycznym słowie funkcyjnym; sam polski
+  // znak w nazwie własnej (np. „Łódź”) nie wystarcza.
+  const polskieZnaki = /[ąćęłńóśźż]/iu.test(original);
+  const polskieMarkery = new Set([
+    'sie', 'czy', 'jak', 'kto', 'co', 'czym', 'gdzie', 'dlaczego', 'czemu',
+    'jest', 'grze', 'zostal', 'zostala', 'oraz', 'ktory', 'ktora', 'ktore',
+  ]);
+  const markerCount = text.split(' ').filter(token => polskieMarkery.has(token)).length;
+  if (polskieZnaki && markerCount >= 1) return { language: 'pl', confidence: 1 };
+
   const słowa = {
-    pl: ['jest', 'oraz', 'ktory', 'gra', 'grze', 'postac', 'zostal', 'byla', 'nie', 'sie', 'kim', 'kto', 'co', 'w', 'z', 'dla', 'czy', 'jak'],
+    pl: ['jest', 'oraz', 'ktory', 'ktora', 'ktore', 'gra', 'grze', 'postac', 'zostal', 'byla', 'nie', 'sie', 'kim', 'kto', 'co', 'czym', 'od', 'w', 'z', 'dla', 'czy', 'jak', 'gdzie', 'dlaczego', 'czemu'],
     en: ['the', 'and', 'is', 'are', 'was', 'were', 'with', 'from', 'this', 'that', 'character', 'game'],
-    pt: ['uma', 'um', 'das', 'dos', 'não', 'nao', 'para', 'com', 'jogador', 'padrão', 'padrao', 'são', 'sao'],
-    es: ['una', 'uno', 'los', 'las', 'para', 'con', 'jugador', 'juego', 'está', 'esta'],
+    pt: ['uma', 'um', 'das', 'dos', 'nao', 'para', 'com', 'jogador', 'padrao', 'sao'],
+    es: ['una', 'uno', 'los', 'las', 'para', 'con', 'jugador', 'juego', 'esta'],
     de: ['der', 'die', 'das', 'und', 'ist', 'sind', 'spieler', 'spiel', 'nicht'],
     fr: ['une', 'des', 'les', 'avec', 'pour', 'joueur', 'jeu', 'est', 'sont'],
   };
@@ -327,7 +341,10 @@ function wykryjJezykTekstu(value) {
 }
 
 function sourceLanguageCompatible(source, question, routing = {}) {
-  const questionLanguage = String(routing.language || wykryjJezykTekstu(question).language).toLowerCase().split(/[-_]/u)[0];
+  const declaredLanguage = String(routing.language || '').toLowerCase().split(/[-_]/u)[0];
+  const questionLanguage = declaredLanguage && declaredLanguage !== 'unknown'
+    ? declaredLanguage
+    : wykryjJezykTekstu(question).language;
   if (questionLanguage !== 'pl') return true;
   const sourceText = [source.title, source.content].filter(Boolean).join(' ');
   const detected = wykryjJezykTekstu(sourceText);
