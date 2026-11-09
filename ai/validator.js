@@ -173,7 +173,7 @@ function czyWartoDrugaOpinieWalidatora(result) {
   );
   if (localRepairRequired) return false;
 
-  return /evidence_quote|evidence not verified|evidence_not_verified|cytat|source.?id|claims_missing|malformed_claims|answer_not_covered_by_claims|claim_en|nazw własnych|nazw wlasnych|claimy nie pokrywają|claimy nie pokrywaja/i.test(reasons);
+  return /evidence_quote|evidence not verified|evidence_not_verified|cytat|source.?id|claims_missing|malformed_claims|answer_not_covered_by_claims|claim_en|nazw własnych|nazw wlasnych|claimy nie pokrywają|claimy nie pokrywaja|not fully supported|not sufficiently supported|insufficient evidence|lack of evidence|nie jest w pełni poparte|nie ma wystarczających dowodów|brak wystarczających dowodów|zbyt szerokie uogólnienie/i.test(reasons);
 }
 
 function sprawdzKompletnoscOdpowiedzi(odpowiedz) {
