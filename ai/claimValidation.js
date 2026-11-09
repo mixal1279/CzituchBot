@@ -1801,7 +1801,9 @@ function czyCzesciowaOdpowiedzMaKotwiceEncji(question, answer) {
   // zachować jej nazwę. Samo „jest także rewolucjonistą” nie odpowiada
   // na „Kim jest Johnny Silverhand?”, nawet jeśli cytat potwierdza cechę.
   if (!postacieZPytania.length) return true;
-  return postacieZPytania.some(entry => czyNazwaWlasnaWystepuje(entry.name, tresc));
+  return postacieZPytania.some(entry =>
+    [entry.name, ...(entry.aliases || [])].some(alias => czyNazwaWlasnaWystepuje(alias, tresc))
+  );
 }
 
 module.exports = { KNOWN_ENTITY_ALIAS_PATTERNS, pojeciaCrossLanguage, CAUSAL_RE, CAUSAL_EVIDENCE_RE, wyglądaNaAngielski, wygladaNaAngielski, spojnoscTlumaczeniaClaimu, czyTlumaczenieOdwracaRelacjeKorupcjiWheatleya, czyOgraniczenieDowodowe, normalizujClaim, tokenyClaim, liczbyDoPorownania, czyRelacjaPrzyczynowaPokrywaClaim, wyodrebnijLiczbyIDaty, wyodrebnijJednostkoweWartosci, wyodrebnijNazwyWlasne, zbudujWyroczniaNazw, zgodnoscStrukturalna, sprawdzTwardeKonflikty, sprawdzSprzecznosciSemantyczne, dopasowanieSemantyczne, sprawdzPokrycieClaimamiOdpowiedzi, czyDowodSemantyczniePokrywaClaim, tokenyPokrywajaSie, czyNazwaWlasnaWystepuje, czyNazwySasiaduja, czyCzesciowaOdpowiedzMaKotwiceEncji, usunEtykietyDowodow };
