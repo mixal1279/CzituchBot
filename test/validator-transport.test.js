@@ -295,6 +295,7 @@ test('xKiro wysyła limit 1600 i json_object oraz honoruje własny endpoint', as
   const result = await hooks.walidujOdpowiedzXKiro('generic', QUESTION, ANSWER, EVIDENCE, 'test-xk');
   assert.equal(call.url, 'https://xkiro.example/custom/v1/chat/completions');
   assert.equal(call.body.max_tokens, 1600);
+  assert.equal(Object.hasOwn(call.body, 'reasoning_effort'), false);
   assert.deepEqual(call.body.response_format, { type: 'json_object' });
   assert.equal(result.status, 'unavailable');
   assert.equal(result.truncatedJson, true);
