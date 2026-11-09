@@ -124,7 +124,7 @@ else console.log('[preflight] Gemini: pominięty (brak GEMINI_API_KEY)');
 
 // xKiro/Cohere is the primary validator. Probe the exact configured validator
 // model, not XKIRO_MODEL (which belongs to the generation matrix).
-if (XKIRO_KEY) probes.push(xkiroProbe(REAL, 900));
+if (XKIRO_KEY) probes.push(xkiroProbe(REAL, 1600));
 else console.log('[preflight] xKiro: pominięty (brak XKIRO_API_KEY)');
 
 if (OPENROUTER_KEY) {
