@@ -2303,12 +2303,11 @@ async function walidujOdpowiedzXKiro(persona, pytanie, odpowiedz, dane, requestI
   const remainingMs = requestState
     ? (typeof requestState.remainingMs === 'function' ? requestState.remainingMs() : requestState.maxCzasMs - (Date.now() - requestState.startedAt))
     : 6000;
-  // Cohere jest pierwszym wyborem; po jego awarii pozostaje czas na Gemini,
-  // Groq i ewentualnie OpenRouter. Budżet próby musi uwzględniać dalszy fallback.
+  // Cohere jest głównym walidatorem; domyślny limit wynosi 9 s, z zachowaniem
+  // minimum 6 s. Pozostały budżet musi nadal uwzględniać fallbacki.
   const configuredTimeoutMs = Number(process.env.AI_XKIRO_VALIDATOR_TIMEOUT_MS);
-  // xKiro needs at least six seconds to return a useful verdict. The outer
-  // preflight uses the same floor; keep this transport-level deadline aligned
-  // so it cannot silently launch a 1.2s/4.5s attempt after passing preflight.
+  // Cohere potrzebuje co najmniej sześciu sekund na użyteczny werdykt.
+  // Preflight i transport korzystają z tego samego minimum oraz domyślnych 9 s.
   const xkiroMaxTimeoutMs = Math.max(
     6000,
     Number.isFinite(configuredTimeoutMs) && configuredTimeoutMs > 0 ? configuredTimeoutMs : 9000,
@@ -2337,7 +2336,6 @@ async function walidujOdpowiedzXKiro(persona, pytanie, odpowiedz, dane, requestI
           messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
           temperature: 0,
           max_tokens: AI_VALIDATOR_MAX_TOKENS_XKIRO,
-          reasoning_effort: 'none',
           response_format: { type: 'json_object' },
         }),
         signal: controller.signal,
