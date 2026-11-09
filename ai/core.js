@@ -274,7 +274,7 @@ function sourceMatchesRequestContext(source = {}, routing = {}, question = '') {
   // Pytania web_fact o konkretnych postaciach też wymagają dopasowania encji.
   // Nie ograniczamy tego filtra do lore/gameplay: router często klasyfikuje
   // pytanie „co stało się z X?” jako zwykły fakt.
-  const needsEntityScope = Boolean(routing.is_lore || routing.is_gameplay || characterScoped || gameNameForScope);
+  const needsEntityScope = Boolean(routing.is_lore || routing.is_gameplay || characterScoped);
   if (!needsEntityScope) return true;
   const haystack = [source.title, source.content, source.url].filter(Boolean).join(' ');
   const aliasesFor = (entries, name) => {
