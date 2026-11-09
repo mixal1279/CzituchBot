@@ -42,7 +42,7 @@ jobs:
       AI_ALLOW_PARTIAL_ANSWERS: "1"
       AI_BENCHMARK_LIMIT: "10"
       AI_BENCHMARK_DELAY_MS: "5000"
-      AI_XKIRO_VALIDATOR_TIMEOUT_MS: "6000"
+      AI_XKIRO_VALIDATOR_TIMEOUT_MS: "9000"
       AI_OPENROUTER_VALIDATOR_TIMEOUT_MS: "6000"
       AI_BENCHMARK_SEED: ${{ inputs.seed || '0' }}
       AI_BENCHMARK_REQUIRE_PERFECT: "1"
@@ -56,7 +56,9 @@ jobs:
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       EXA_API_KEY: ${{ secrets.EXA_API_KEY }}
       XKIRO_API_KEY: ${{ secrets.XKIRO_API_KEY }}
+      # Generator zmienia się w macierzy; walidator pozostaje Cohere.
       XKIRO_MODEL: ${{ matrix.model }}
+      XKIRO_VALIDATOR_MODEL: cohere/command-a-reasoning
       OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
 
     steps:
