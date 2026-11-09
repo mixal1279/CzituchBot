@@ -14,7 +14,7 @@ test('regexy zachowują ograniczony czas wykonania na wejściach w granicach lim
     windowsHide: true,
   });
 
-  assert.equal(wynik.error?.code, 'ETIMEDOUT', false, 'test obciążeniowy przekroczył twardy limit czasu');
+  assert.notEqual(wynik.error?.code, 'ETIMEDOUT', 'test obciążeniowy przekroczył twardy limit czasu');
   assert.equal(wynik.status, 0, wynik.stderr || 'proces testowy zakończył się błędem');
 
   const pomiary = JSON.parse(wynik.stdout);
