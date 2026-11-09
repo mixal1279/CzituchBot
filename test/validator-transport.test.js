@@ -64,7 +64,7 @@ const REJECTED_VERDICT = {
 const originalFetch = global.fetch;
 const oldConfig = {};
 function saveConfig() {
-  for (const key of ['geminiKey', 'openrouterKey', 'xkiroKey']) oldConfig[key] = hooks.KONFIGURACJA[key];
+  for (const key of ['geminiKey', 'openrouterKey', 'xkiroKey', 'xkiroModel', 'xkiroBaseUrl']) oldConfig[key] = hooks.KONFIGURACJA[key];
 }
 function restoreConfig() {
   for (const [key, value] of Object.entries(oldConfig)) hooks.KONFIGURACJA[key] = value;
@@ -388,13 +388,19 @@ test('Groq zwraca rejected dla negatywnego werdyktu i unavailable dla uszkodzone
   assert.equal(unavailable.status, 'unavailable');
 });
 
-test('kolejność walidatorów to Gemini, Groq, potem dalsze fallbacki; brak prawdziwych żądań sieciowych', async () => {
+test('Cohere przez xKiro jest pierwszym walidatorem, a Gemini i Groq pozostają fallbackami', async () => {
   hooks.KONFIGURACJA.geminiKey = 'test-gemini-key';
   hooks.KONFIGURACJA.openrouterKey = '';
-  hooks.KONFIGURACJA.xkiroKey = '';
+  hooks.KONFIGURACJA.xkiroKey = 'test-xkiro-key';
+  hooks.KONFIGURACJA.xkiroModel = 'cohere/command-a-reasoning';
+  hooks.KONFIGURACJA.xkiroBaseUrl = 'https://xkiro.example/v1';
   const order = [];
   mockFetch(async (url) => {
     const parsedUrl = new URL(url);
+    if (parsedUrl.hostname === 'xkiro.example') {
+      order.push('xkiro');
+      return jsonResponse({ choices: [{ finish_reason: 'stop', message: { content: 'not JSON' } }] });
+    }
     if (parsedUrl.hostname === 'generativelanguage.googleapis.com') {
       order.push('gemini');
       return jsonResponse({
@@ -410,10 +416,10 @@ test('kolejność walidatorów to Gemini, Groq, potem dalsze fallbacki; brak pra
   const requestState = createAIRequestContext({ maxCzasMs: 40000, maxValidators: 4, maxModelCalls: 12 });
   const result = await hooks.walidujOdpowiedzAIBezCache('generic', QUESTION, ANSWER, EVIDENCE, [], 'test-order', requestState, { entity: 'Portal 2' });
 
-  assert.deepEqual(order, ['gemini', 'groq']);
+  assert.deepEqual(order, ['xkiro', 'gemini', 'groq']);
   assert.equal(groqCalls.length, 1);
   assert.equal(result.status, 'accepted');
-  assert.deepEqual(requestState.validatorResults.map(row => row.provider), ['gemini', 'groq']);
+  assert.deepEqual(requestState.validatorResults.map(row => row.provider), ['xkiro', 'gemini', 'groq']);
   assert.ok(requestState.timingTrace.some(row => row.stage === 'validator_provider_start' && row.provider === 'groq'));
   assert.ok(requestState.timingTrace.some(row => row.stage === 'validator_provider_end' && row.provider === 'groq'));
 });
