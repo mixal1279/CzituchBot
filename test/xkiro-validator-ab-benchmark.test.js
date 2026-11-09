@@ -3,7 +3,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { CASES, parseJson, metrics } = require('../scripts/xkiro-validator-ab-benchmark');
 
-test('xKiro A/B dataset has balanced supported and unsupported cases', () => {
+test('xKiro A/B dataset covers supported and unsupported cases', () => {
   assert.equal(CASES.length, 12);
   assert.equal(CASES.filter(row => row[1] === true).length, 7);
   assert.equal(CASES.filter(row => row[1] === false).length, 5);
