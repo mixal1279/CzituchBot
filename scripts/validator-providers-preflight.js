@@ -159,7 +159,7 @@ async function checkXKiroModelCatalog() {
     const configured = models.find(model => model?.id === XKIRO_VALIDATOR_MODEL);
     if (!configured) {
       console.log(`::warning title=xKiro model catalog::Configured model ${XKIRO_VALIDATOR_MODEL} is not present in the live chat catalog`);
-      console.log(`[preflight] xKiro model catalog: NOT FOUND · ${XKIRO_MODEL} · ${models.length} chat models returned`);
+      console.log(`[preflight] xKiro model catalog: NOT FOUND · ${XKIRO_VALIDATOR_MODEL} · ${models.length} chat models returned`);
       return;
     }
     console.log(`[preflight] xKiro model catalog: FOUND · ${configured.id} · tier=${configured.access_tier || 'unknown'} · max_output_tokens=${configured.max_output_tokens ?? 'unknown'}`);
