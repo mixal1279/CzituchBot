@@ -5,8 +5,8 @@ const { CASES, parseJson, metrics } = require('../scripts/xkiro-validator-ab-ben
 
 test('xKiro A/B dataset covers supported and unsupported cases', () => {
   assert.equal(CASES.length, 12);
-  assert.equal(CASES.filter(row => row[1] === true).length, 7);
-  assert.equal(CASES.filter(row => row[1] === false).length, 5);
+  assert.equal(CASES.filter(row => row[1] === true).length, 6);
+  assert.equal(CASES.filter(row => row[1] === false).length, 6);
 });
 
 test('validator response parser accepts JSON and rejects malformed output', () => {
