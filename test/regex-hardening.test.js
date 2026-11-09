@@ -7,6 +7,7 @@ const { buildAliasPattern, buildEntityAliasPatterns } = require('../ai/entityAli
 
 test('normalizacja linków markdown zachowuje etykietę i nie wymaga zagnieżdżonego regexu', () => {
   assert.equal(normalizeEvidenceText('Zobacz [Portal 2](https://example.com/portal-2).'), 'zobacz portal 2');
+  assert.equal(normalizeEvidenceText('Zobacz [Portal 2](https://example.com/a(b)c).'), 'zobacz portal 2');
   assert.equal(normalizeEvidenceText('![obraz](https://example.com/a.png)'), '');
 });
 
