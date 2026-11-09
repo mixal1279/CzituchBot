@@ -1,9 +1,75 @@
 'use strict';
 
+function usunLinkiMarkdown(value) {
+  const tekst = String(value || '');
+  let wynik = '';
+  let indeks = 0;
+
+  // Jedno przejście po tekście: nawiasy w adresie URL są obsługiwane
+  // przez licznik głębokości, bez rekurencyjnego lub zagnieżdżonego regexu.
+  while (indeks < tekst.length) {
+    const obraz = tekst[indeks] === '!' && tekst[indeks + 1] === '[';
+    const poczatekNawiasu = obraz ? indeks + 1 : indeks;
+    if (tekst[poczatekNawiasu] !== '[') {
+      wynik += tekst[indeks];
+      indeks++;
+      continue;
+    }
+
+    let glebokosc = 1;
+    let koniecEtykiety = poczatekNawiasu + 1;
+    while (koniecEtykiety < tekst.length && glebokosc > 0) {
+      if (tekst[koniecEtykiety] === '\\') {
+        koniecEtykiety += 2;
+        continue;
+      }
+      if (tekst[koniecEtykiety] === '[') glebokosc++;
+      if (tekst[koniecEtykiety] === ']') glebokosc--;
+      koniecEtykiety++;
+    }
+
+    if (glebokosc !== 0) {
+      wynik += tekst.slice(indeks);
+      break;
+    }
+
+    const koniecEtykietyBezNawiasu = koniecEtykiety - 1;
+    if (tekst[koniecEtykiety] !== '(') {
+      wynik += tekst.slice(indeks, koniecEtykiety);
+      indeks = koniecEtykiety;
+      continue;
+    }
+
+    glebokosc = 1;
+    let koniecAdresu = koniecEtykiety + 1;
+    while (koniecAdresu < tekst.length && glebokosc > 0) {
+      if (tekst[koniecAdresu] === '\\') {
+        koniecAdresu += 2;
+        continue;
+      }
+      if (tekst[koniecAdresu] === '(') glebokosc++;
+      if (tekst[koniecAdresu] === ')') glebokosc--;
+      koniecAdresu++;
+    }
+
+    if (glebokosc !== 0) {
+      wynik += tekst.slice(indeks);
+      break;
+    }
+
+    if (obraz) {
+      wynik += ' ';
+    } else {
+      wynik += tekst.slice(poczatekNawiasu + 1, koniecEtykietyBezNawiasu);
+    }
+    indeks = koniecAdresu;
+  }
+
+  return wynik;
+}
+
 function normalizeEvidenceText(value) {
-  return String(value || '').slice(0, 12000)
-    .replace(/!\[[^\]]*\]\([^)]*\)/gu, ' ')
-    .replace(/\[([^\]\n]+)\]\([^\n)]*\)/gu, '$1')
+  return usunLinkiMarkdown(String(value || '').slice(0, 12000))
     .toLocaleLowerCase('pl-PL')
     .replace(/ł/g, 'l')
     .normalize('NFD')
