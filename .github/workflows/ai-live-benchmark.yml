@@ -29,10 +29,10 @@ jobs:
       matrix:
         include:
           - id: cohere-command-a-reasoning
-            label: Cohere Command A Reasoning
+            label: Generator — Cohere Command A Reasoning
             model: cohere/command-a-reasoning
           - id: mistral-small-4
-            label: Mistral Small 4
+            label: Generator — Mistral Small 4
             model: mistralai/mistral-small-2603
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -129,7 +129,7 @@ jobs:
             const r = JSON.parse(fs.readFileSync("ai-live-benchmark.json", "utf8"));
             const d = r.diagnostics || {};
             const lines = [
-              "## AI live benchmark — " + process.env.XKIRO_MODEL,
+              "## AI live benchmark — generator: " + process.env.XKIRO_MODEL,
               r.valid === false ? "**WYNIK NIEWAŻNY / NIEPORÓWNYWALNY: " + [...(d.outageProviders || []).map(x => "outage=" + x), ...(d.qualityDegradationReasons || [])].join(", ").replace(/^$/, "niewystarczająca dostępność providerów") + ".**" : "",
               "- przypadków: " + r.total + " (ziarno " + (r.seed || 0) + ")",
               "- odpowiedzi: " + r.answeredAccuracy + ", kompletność: " + r.completenessAccuracy + ", factual: " + r.factualAccuracy,
