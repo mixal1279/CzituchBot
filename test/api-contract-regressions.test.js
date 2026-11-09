@@ -104,7 +104,7 @@ test('validator provider preflight covers Gemini, xKiro, OpenRouter and Groq pro
   assert.match(source, /OpenRouter:\s*Math\.max\(4000, Number\(process\.env\.AI_OPENROUTER_VALIDATOR_TIMEOUT_MS\) \|\| 6000\)/);
   assert.match(source, /Groq:\s*3000/);
   assert.match(source, /function geminiProbe\(/);
-  assert.match(source, /const XKIRO_VALIDATOR_MODEL = process\\.env\\.XKIRO_VALIDATOR_MODEL \\|\\| 'cohere\\/command-a-reasoning'/);
+  assert.match(source, /const XKIRO_VALIDATOR_MODEL = process\.env\.XKIRO_VALIDATOR_MODEL \|\| 'cohere\/command-a-reasoning'/);
   assert.match(source, /model: XKIRO_VALIDATOR_MODEL/);
   assert.match(source, /buildGeminiValidatorGenerationConfig/);
   assert.match(source, /XKIRO_KEY\) missingRequiredProviders\.push/);
