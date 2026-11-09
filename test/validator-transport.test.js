@@ -458,7 +458,7 @@ test('niepoprawny cytat kończy walidację bez drugiej opinii, bo wymaga naprawy
   assert.deepEqual(order, ['gemini']);
   assert.equal(groqCalls.length, 0);
   assert.equal(result.status, 'rejected');
-  assert.deepEqual(requestState.validatorResults.map(row => row.provider), ['gemini']);
+  assert.deepEqual(requestState.validatorResults.map(row => row.provider), ['xkiro', 'gemini']);
   assert.ok(!requestState.timingTrace.some(row => row.stage === 'validator_second_opinion'));
 });
 
@@ -483,7 +483,7 @@ test('po deterministycznym odrzuceniu cytatu pipeline nie zużywa budżetu na ko
       return jsonResponse({ candidates: [{ content: { parts: [{ text: JSON.stringify(badQuoteVerdict) }] } }] });
     }
     order.push(url.includes('xkiro') ? 'xkiro' : 'openrouter');
-    throw new Error('slow third opinion should not be called after Groq rejection');
+    throw new Error('fallback provider should not be called after deterministic Cohere/Gemini rejection');
   });
   mockGroq(() => {
     order.push('groq');
@@ -494,8 +494,8 @@ test('po deterministycznym odrzuceniu cytatu pipeline nie zużywa budżetu na ko
     'generic', QUESTION, ANSWER, EVIDENCE, [], 'test-stop-after-groq-rejection', requestState, { entity: 'Portal 2' },
   );
   assert.equal(result.status, 'rejected');
-  assert.deepEqual(order, ['gemini']);
-  assert.deepEqual(requestState.validatorResults.map(row => row.provider), ['gemini']);
+  assert.deepEqual(order, ['xkiro', 'gemini']);
+  assert.deepEqual(requestState.validatorResults.map(row => row.provider), ['xkiro', 'gemini']);
 });
 
 test('circuit breaker dla Groq, xKiro, OpenRouter i Gemini otwiera się po dwóch timeoutach i resetuje po sukcesie', () => {
