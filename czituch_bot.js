@@ -714,7 +714,9 @@ const KONFIGURACJA = {
   // ---- Cohere przez xKiro (główny walidator) ----
   xkiroKey: typeof process.env.XKIRO_API_KEY === 'string' ? process.env.XKIRO_API_KEY.replace(/[\r\n]/g, '').trim() : process.env.XKIRO_API_KEY,
   xkiroBaseUrl: String(process.env.XKIRO_BASE_URL || 'https://api.xkiro.com/v1').replace(/\/+$/, ''),
-  xkiroModel: process.env.XKIRO_MODEL || 'cohere/command-a-reasoning',
+  // Model xKiro dla generowania pozostaje niezależny od walidatora.
+  xkiroModel: process.env.XKIRO_MODEL || 'qwen/qwen3.5-397b-a17b:free',
+  xkiroValidatorModel: process.env.XKIRO_VALIDATOR_MODEL || 'cohere/command-a-reasoning',
 
   // ---- ITAD ----
   itadKey: process.env.ITAD_API_KEY,
@@ -2288,7 +2290,7 @@ async function walidujOdpowiedzGroq(persona, pytanie, odpowiedz, dane, requestId
 }
 
 async function walidujOdpowiedzXKiro(persona, pytanie, odpowiedz, dane, requestId = '-', requestState = null, requestMeta = null, timeoutOverrideMs = null) {
-  const model = KONFIGURACJA.xkiroModel;
+  const model = KONFIGURACJA.xkiroValidatorModel;
   if (!KONFIGURACJA.xkiroKey || !dane) {
     return { status: 'unavailable', ok: false, technicalError: true, provider: 'xkiro', model, unsupported_claims: [], reason: 'brak XKIRO_API_KEY lub danych referencyjnych' };
   }
@@ -2439,7 +2441,7 @@ const AI_GEMINI_VALIDATOR_MODEL = process.env.AI_GEMINI_VALIDATOR_MODEL || 'gemi
 
 async function walidujOdpowiedzAI(persona, pytanie, odpowiedz, dane, historiaRozmowy = [], requestId = '-', requestState = null, requestMeta = null) {
   odpowiedz = usunEtykietyEvidenceCandidate(odpowiedz);
-  const cacheKey = dane ? verdictCache.key({ question: pytanie, answer: odpowiedz, evidence: dane, model: [KONFIGURACJA.xkiroModel, AI_GEMINI_VALIDATOR_MODEL, AI_MODELS.validator, KONFIGURACJA.openrouterValidatorModel].join('|') }) : null;
+  const cacheKey = dane ? verdictCache.key({ question: pytanie, answer: odpowiedz, evidence: dane, model: [KONFIGURACJA.xkiroValidatorModel, AI_GEMINI_VALIDATOR_MODEL, AI_MODELS.validator, KONFIGURACJA.openrouterValidatorModel].join('|') }) : null;
   const cached = cacheKey ? verdictCache.get(cacheKey) : null;
   if (cached) {
     console.log(`[AI][${requestId}] validator: werdykt z cache (${cached.status}) — bez wywołania modelu`);
@@ -2523,9 +2525,9 @@ async function walidujOdpowiedzAIBezCache(persona, pytanie, odpowiedz, dane, his
   // Pozostali dostawcy są uruchamiani wyłącznie jako fallback po błędzie technicznym
   // lub po odrzuceniu, które kwalifikuje się do drugiej opinii.
   if (!KONFIGURACJA.xkiroKey) {
-    recordSkippedValidator('xkiro', KONFIGURACJA.xkiroModel, 'xKiro validator pominięty: brak klucza API');
+    recordSkippedValidator('xkiro', KONFIGURACJA.xkiroValidatorModel, 'xKiro validator pominięty: brak klucza API');
   } else if (validatorBreakerIsOpen('xkiro')) {
-    recordSkippedValidator('xkiro', KONFIGURACJA.xkiroModel, 'xKiro validator pominięty: circuit breaker aktywny');
+    recordSkippedValidator('xkiro', KONFIGURACJA.xkiroValidatorModel, 'xKiro validator pominięty: circuit breaker aktywny');
     console.warn(`[AI][${requestId}] xKiro validator pominięty przed rezerwacją slotu: circuit breaker aktywny`);
   } else {
     const xkiroRemainingMs = requestState
@@ -2540,24 +2542,24 @@ async function walidujOdpowiedzAIBezCache(persona, pytanie, odpowiedz, dane, his
     });
     if (xkiroTimeoutMs === null) {
       const reason = 'xKiro validator pominięty: mniej niż 6 s użytecznego budżetu po rezerwie';
-      recordSkippedValidator('xkiro', KONFIGURACJA.xkiroModel, reason);
+      recordSkippedValidator('xkiro', KONFIGURACJA.xkiroValidatorModel, reason);
       console.warn(`[AI][${requestId}] ${reason}; remaining=${xkiroRemainingMs}ms`);
     } else if (!zarezerwujSlotWalidatora(requestState, 'validator:xkiro')) {
       const reason = 'budżet validatora/modeli wyczerpany przed xKiro';
-      recordSkippedValidator('xkiro', KONFIGURACJA.xkiroModel, reason);
+      recordSkippedValidator('xkiro', KONFIGURACJA.xkiroValidatorModel, reason);
       return lastRejected || { ...(last || {}), status: 'unavailable', ok: false, technicalError: true, unsupported_claims: [], reason };
     } else {
       const validatorStartedAt = Date.now();
       const remainingBefore = requestState?.remainingMs?.() ?? null;
-      requestState?.recordTiming?.('validator_provider_start', { provider: 'xkiro', model: KONFIGURACJA.xkiroModel, remainingBefore });
+      requestState?.recordTiming?.('validator_provider_start', { provider: 'xkiro', model: KONFIGURACJA.xkiroValidatorModel, remainingBefore });
       const xkiroResult = await walidujOdpowiedzXKiro(persona, pytanie, odpowiedz, dane, requestId, requestState, requestMeta, requestState ? xkiroTimeoutMs : null);
       recordValidatorTransportResult('xkiro', xkiroResult, requestId);
-      recordValidatorMetric('xkiro', xkiroResult.model || KONFIGURACJA.xkiroModel, remainingBefore, xkiroTimeoutMs, validatorStartedAt, xkiroResult);
+      recordValidatorMetric('xkiro', xkiroResult.model || KONFIGURACJA.xkiroValidatorModel, remainingBefore, xkiroTimeoutMs, validatorStartedAt, xkiroResult);
       const validatorElapsedMs = Date.now() - validatorStartedAt;
       const remainingAfter = requestState?.remainingMs?.() ?? null;
-      requestState?.recordTiming?.('validator_provider_end', { provider: 'xkiro', model: xkiroResult.model || KONFIGURACJA.xkiroModel, status: xkiroResult.status, validatorElapsedMs, remainingBefore, remainingAfter, reason: String(xkiroResult.reason || '').slice(0, 180) });
+      requestState?.recordTiming?.('validator_provider_end', { provider: 'xkiro', model: xkiroResult.model || KONFIGURACJA.xkiroValidatorModel, status: xkiroResult.status, validatorElapsedMs, remainingBefore, remainingAfter, reason: String(xkiroResult.reason || '').slice(0, 180) });
       if (requestState) requestState.validatorResults.push({
-        model: xkiroResult.model || KONFIGURACJA.xkiroModel,
+        model: xkiroResult.model || KONFIGURACJA.xkiroValidatorModel,
         provider: 'xkiro',
         status: xkiroResult.status,
         elapsedMs: validatorElapsedMs,
