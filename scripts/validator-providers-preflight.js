@@ -324,7 +324,7 @@ async function run(probe) {
   // Awaria głównego walidatora unieważnia benchmark; nie traktujemy jej jak
   // opcjonalnej degradacji fallbacku.
   const blockingFailures = bad.filter(r => isBlockingPreflightFailure(r) || r.provider === 'xKiro');
-  const degradedProviders = bad.filter(r => !isBlockingPreflightFailure(r));
+  const degradedProviders = bad.filter(r => !blockingFailures.includes(r));
   for (const r of degradedProviders) {
     console.log(`::warning title=Provider zdegradowany::${r.provider} ma przejściowy problem z dostępnością lub czasem odpowiedzi; benchmark diagnostyczny będzie kontynuowany, ale wynik jakości może zostać oznaczony jako nieważny.`);
   }
