@@ -1032,7 +1032,7 @@ function zakresTavilyDlaPytania(pytanie, domyslny = null) {
 // domyslnieMinecraft=true -> jeśli nie wykryto innej gry ORAZ pytanie faktycznie dotyczy MC, defaultuj do minecraft.wiki.
 // NIE defaultuje do MC dla pytań niezwiązanych z Minecraftem (np. sport, filmy itp.).
 function domenyDlaPytania(pytanie, domyslnieMinecraft = false) {
-  const p = String(pytanie || '').toLowerCase();
+  const p = String(pytanie || '').slice(0, 4000).toLowerCase();
   if (/billybulka|bu[łl]k[ai]\b/.test(p)) return ['twitchtracker.com', 'twitch.tv', 'tiktok.com', 'instagram.com'];
   if (/portal(?:\s*2)?|wheatley|glados|aperture\s+science|chell\b/.test(p)) return ['theportalwiki.com', 'combineoverwiki.net', 'ign.com', 'gamespot.com', 'fandom.com'];
   if (/cyberpunk|rel[i]?c|johnny\s+silverhand|night\s*city|mikoshi/.test(p)) return ['cyberpunk.net', 'ign.com', 'gamespot.com', 'pcgamer.com', 'fandom.com'];
