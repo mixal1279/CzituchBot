@@ -100,17 +100,19 @@ test('primary generation honors AI_GENERATOR_MODEL and checks quota cooldown bef
 test('validator provider preflight covers Gemini, xKiro, OpenRouter and Groq production budgets', () => {
   const source = read('scripts/validator-providers-preflight.js');
   assert.match(source, /Gemini:\s*12000/);
-  assert.match(source, /xKiro:\s*Math\.max\(6000, Number\(process\.env\.AI_XKIRO_VALIDATOR_TIMEOUT_MS\) \|\| 6000\)/);
+  assert.match(source, /xKiro:\s*Math\.max\(6000, Number\(process\.env\.AI_XKIRO_VALIDATOR_TIMEOUT_MS\) \|\| 9000\)/);
   assert.match(source, /OpenRouter:\s*Math\.max\(4000, Number\(process\.env\.AI_OPENROUTER_VALIDATOR_TIMEOUT_MS\) \|\| 6000\)/);
   assert.match(source, /Groq:\s*3000/);
   assert.match(source, /function geminiProbe\(/);
+  assert.match(source, /const XKIRO_VALIDATOR_MODEL = process\\.env\\.XKIRO_VALIDATOR_MODEL \\|\\| 'cohere\\/command-a-reasoning'/);
+  assert.match(source, /model: XKIRO_VALIDATOR_MODEL/);
   assert.match(source, /buildGeminiValidatorGenerationConfig/);
-  assert.match(source, /GEMINI_KEY\) missingRequiredProviders\.push/);
+  assert.match(source, /XKIRO_KEY\) missingRequiredProviders\.push/);
   assert.match(source, /GROQ_KEY\) missingRequiredProviders\.push/);
-  assert.match(source, /const blockingFailures = bad\.filter\(isBlockingPreflightFailure\)/);
+  assert.match(source, /const blockingFailures = bad\.filter\(r => isBlockingPreflightFailure\(r\) \|\| r\.provider === 'xKiro'\)/);
   assert.match(source, /blockingFailures\.length > 0 \|\| missingRequiredProviders\.length > 0/);
-  assert.match(source, /degradedProviders = bad\.filter/);
-  assert.match(source, /if \(XKIRO_KEY\) probes\.push\(xkiroProbe\(REAL, 900\)\)/);
+  assert.match(source, /degradedProviders = bad\.filter\(r => !blockingFailures\.includes\(r\)\)/);
+  assert.match(source, /if \(XKIRO_KEY\) probes\.push\(xkiroProbe\(REAL, 1600\)\)/);
   assert.doesNotMatch(source, /PROD_TIMEOUT_MS\s*=\s*9000/);
   assert.match(source, /result\.ms > productionTimeoutMs/);
   assert.doesNotMatch(source, /PROD_TIMEOUT_MS\s*=\s*9000/);
