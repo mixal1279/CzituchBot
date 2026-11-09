@@ -1076,14 +1076,24 @@ function tokenyPokrywajaSie(a, b) {
 }
 function czyOgraniczenieDowodowe(sentence) {
   const text = normalizujClaim(sentence);
-  const sourceMention = /\b(?:zrodla?\w*|materialy|dane|sources?|evidence)\b/u.test(text);
+  const sourceMention = /\b(?:zrodla?\w*|material\w*|dane\w*|sources?|evidence|informacj\w*)\b/u.test(text);
   // Twierdzenia o tym, czego materiały nie opisują, są oceną zakresu
-  // retrieval, a nie negacją zdarzenia w świecie (np. „źródła nie podają,
-  // co stało się z Vesemirem w grze”). Nie wolno klasyfikować ich jako
-  // sprzeczności tylko dlatego, że cytat zawiera inną negację.
-  const metaAbsence = sourceMention && /\b(?:nie\s+(?:podaj\w*|opisuj\w*|wspomin\w*|wyjasni\w*|okresl\w*|potwierdz\w*)|brak\s+(?:informacj\w*|danych|wzmian\w*))\b/u.test(text)
-    && /\b(?:co\s+stal\w*|los\w*|wydarz\w*|informacj\w*|szczegol\w*|przyczyn\w*|powod\w*|dat\w*|moment\w*|czas\w*|metod\w*|sposob\w*)\b/u.test(text);
+  // retrieval, a nie negacją zdarzenia w świecie. Nie wolno klasyfikować ich
+  // jako sprzeczności tylko dlatego, że cytat zawiera inną negację.
+  const metaAbsence = sourceMention && /\b(?:nie\s+(?:podaj\w*|opisuj\w*|wspomin\w*|wyjasni\w*|okresl\w*|potwierdz\w*|zawier\w*)|brak\s+(?:informacj\w*|danych|wzmian\w*))\b/u.test(text)
+    && /\b(?:co\s+stal\w*|los\w*|wydarz\w*|informacj\w*|szczegol\w*|przyczyn\w*|powod\w*|dat\w*|moment\w*|czas\w*|metod\w*|sposob\w*|lokalizacj\w*)\b/u.test(text);
   if (metaAbsence) return true;
+
+  // Oświadczenie epistemiczne modelu/użytkownika („nie posiadam wystarczających
+  // danych”) również opisuje ograniczenie aktualnego retrieval, a nie negację
+  // faktu ze świata. Rozpoznajemy je niezależnie od tego, czy zdanie wymienia
+  // nazwę źródła.
+  const epistemicAbsence = /\b(?:model|bot|odpowiedz|dostepne dane|dane referencyjne|zebrane materialy|dostepne zrodla)\b/u.test(text)
+    && /\bnie\s+(?:posiad\w*|ma|mam|mamy|zawier\w*|dostarcz\w*|pozwal\w*|wskaz\w*|okresl\w*|potwierdz\w*)\b/u.test(text)
+    && /\b(?:dane\w*|informacj\w*|dowod\w*|lokalizacj\w*|moment\w*|czas\w*|szczegol\w*|przyczyn\w*|powod\w*)\b/u.test(text);
+  const firstPersonAbsence = /\bnie\s+(?:posiad\w*|mam|mamy)\s+(?:wystarczajac\w*\s+)?(?:dane\w*|informacj\w*|dowod\w*)\b/u.test(text);
+  if (epistemicAbsence || firstPersonAbsence) return true;
+
   const limitation = /\b(?:nie\s+(?:potwierdz\w*|podaj\w*|precyz\w*|okresl\w*|wskaz\w*|zawier\w*|znalazl\w*|znaleziono)|brak\s+(?:dokladn\w*\s+)?(?:dat\w*|moment\w*|czas\w*|potwierdzon\w*\s+(?:przyczyn\w*|powod\w*)))\b/u.test(text);
   const scopedTopic = /\b(?:dat\w*|moment\w*|czas\w*|rok\w*|przyczyn\w*|powod\w*|metod\w*|sposob\w*)\b/u.test(text);
   const inheritedSourceScope = /^\s*(?:ale|jednak)?\s*nie\b/u.test(text);
@@ -1747,16 +1757,33 @@ function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
     // Reuse quoteExists' punctuation/whitespace normalization; raw indexOf()
     // rejected valid quotes when extraction normalized spacing or punctuation.
     const quotePrefix = evidenceQuote ? findQuotePrefix(evidenceContext, evidenceQuote) : null;
-    const anaphoricEn = ['who ', 'which ', 'that ', 'he ', 'she ', 'it ', 'they ', 'his ', 'her ', 'their ', 'its ']
-      .some(prefix => enNormalized.startsWith(prefix));
-    // Only the sentence containing the quote may supply the omitted subject.
-    const sameSentencePrefix = quotePrefix !== null
-      ? (quotePrefix.split(/\bsentenceboundarytoken\b/u).at(-1) || '')
-      : '';
+    const genericCharacterReference = /^(?:the|this|that)\s+(?:character|figure|person)\b/u.test(enNormalized);
+    const anaphoricEn = genericCharacterReference
+      || ['who ', 'which ', 'that ', 'he ', 'she ', 'it ', 'they ', 'his ', 'her ', 'their ', 'its ']
+        .some(prefix => enNormalized.startsWith(prefix));
+    // Zwykły rzeczownik anaforyczny („the character”) może odwoływać się do
+    // postaci nazwanej w bezpośrednio poprzednim zdaniu tego samego źródła.
+    // Dopuszczamy to tylko przy jednym rozpoznanym referencie postaci; nie
+    // przenosimy podmiotu przez niejednoznaczny akapit ani między postaciami.
+    const quoteSegments = quotePrefix !== null
+      ? quotePrefix.split(/\bsentenceboundarytoken\b/u)
+      : [];
+    const sameSentencePrefix = quoteSegments.at(-1) || '';
+    const previousSentencePrefix = quoteSegments.at(-2) || '';
     const normalizedPrefix = ' ' + sameSentencePrefix + ' ';
+    const sameSentenceBound = missingFromTranslation.every(name =>
+      normalizedPrefix.includes(' ' + normalizujClaim(name) + ' ')
+    );
+    const previousCharacterNames = genericCharacterReference
+      ? CHARACTER_ALIASES
+        .filter(entry => czyNazwaWlasnaWystepuje(entry.name, previousSentencePrefix))
+        .map(entry => normalizujClaim(entry.name))
+      : [];
+    const uniquePreviousCharacter = previousCharacterNames.length === 1
+      && missingFromTranslation.every(name => normalizujClaim(name) === previousCharacterNames[0]);
     const missingEntitiesBound = quotePrefix !== null
       && anaphoricEn
-      && missingFromTranslation.every(name => normalizedPrefix.includes(' ' + normalizujClaim(name) + ' '));
+      && (sameSentenceBound || uniquePreviousCharacter);
     if (!missingEntitiesBound) {
       return { ok: false, reason: 'tłumaczenie claimu gubi nazwy własne: ' + missingFromTranslation.slice(0, 3).join(', ') };
     }
