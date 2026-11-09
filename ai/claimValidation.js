@@ -1791,4 +1791,17 @@ function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
   return { ok: true };
 }
 
-module.exports = { KNOWN_ENTITY_ALIAS_PATTERNS, pojeciaCrossLanguage, CAUSAL_RE, CAUSAL_EVIDENCE_RE, wyglądaNaAngielski, wygladaNaAngielski, spojnoscTlumaczeniaClaimu, czyTlumaczenieOdwracaRelacjeKorupcjiWheatleya, czyOgraniczenieDowodowe, normalizujClaim, tokenyClaim, liczbyDoPorownania, czyRelacjaPrzyczynowaPokrywaClaim, wyodrebnijLiczbyIDaty, wyodrebnijJednostkoweWartosci, wyodrebnijNazwyWlasne, zbudujWyroczniaNazw, zgodnoscStrukturalna, sprawdzTwardeKonflikty, sprawdzSprzecznosciSemantyczne, dopasowanieSemantyczne, sprawdzPokrycieClaimamiOdpowiedzi, czyDowodSemantyczniePokrywaClaim, tokenyPokrywajaSie, czyNazwaWlasnaWystepuje, czyNazwySasiaduja, usunEtykietyDowodow };
+function czyCzesciowaOdpowiedzMaKotwiceEncji(question, answer) {
+  const pytanie = String(question || '');
+  const tresc = String(answer || '');
+  const postacieZPytania = CHARACTER_ALIASES.filter(entry =>
+    [entry.name, ...(entry.aliases || [])].some(alias => czyNazwaWlasnaWystepuje(alias, pytanie))
+  );
+  // Gdy pytanie dotyczy rozpoznanej postaci, częściowa odpowiedź musi
+  // zachować jej nazwę. Samo „jest także rewolucjonistą” nie odpowiada
+  // na „Kim jest Johnny Silverhand?”, nawet jeśli cytat potwierdza cechę.
+  if (!postacieZPytania.length) return true;
+  return postacieZPytania.some(entry => czyNazwaWlasnaWystepuje(entry.name, tresc));
+}
+
+module.exports = { KNOWN_ENTITY_ALIAS_PATTERNS, pojeciaCrossLanguage, CAUSAL_RE, CAUSAL_EVIDENCE_RE, wyglądaNaAngielski, wygladaNaAngielski, spojnoscTlumaczeniaClaimu, czyTlumaczenieOdwracaRelacjeKorupcjiWheatleya, czyOgraniczenieDowodowe, normalizujClaim, tokenyClaim, liczbyDoPorownania, czyRelacjaPrzyczynowaPokrywaClaim, wyodrebnijLiczbyIDaty, wyodrebnijJednostkoweWartosci, wyodrebnijNazwyWlasne, zbudujWyroczniaNazw, zgodnoscStrukturalna, sprawdzTwardeKonflikty, sprawdzSprzecznosciSemantyczne, dopasowanieSemantyczne, sprawdzPokrycieClaimamiOdpowiedzi, czyDowodSemantyczniePokrywaClaim, tokenyPokrywajaSie, czyNazwaWlasnaWystepuje, czyNazwySasiaduja, czyCzesciowaOdpowiedzMaKotwiceEncji, usunEtykietyDowodow };
