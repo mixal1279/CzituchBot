@@ -15,7 +15,7 @@ Wszystkie ustawienia są opcjonalne, chyba że dana integracja jest wymagana prz
 | `AI_GEMINI_VALIDATOR_MODEL` | `gemini-3.5-flash-lite` | Model Gemini do walidacji; można go zmieniać na potrzeby porównania benchmarków. |
 | `OPENROUTER_VALIDATOR_MODEL` | wartość `AI_VALIDATOR_MODEL` | Osobny model walidatora OpenRouter. |
 | `OPENROUTER_GENERATOR_MODEL` | wartość `AI_GENERATOR_MODEL` | Osobny model generatora OpenRouter. |
-| `XKIRO_MODEL` | `cohere/command-a-reasoning` | Model walidatora xKiro i generatora w łańcuchu fallbacków, jeśli `XKIRO_API_KEY` jest skonfigurowany. |
+| `XKIRO_MODEL` | `qwen/qwen3.5-397b-a17b:free` | Model xKiro używany w łańcuchu fallbacków generatora. |\n| `XKIRO_VALIDATOR_MODEL` | `cohere/command-a-reasoning` | Główny model walidatora claimów przez xKiro. |
 | `AI_VALIDATOR_GROQ` | włączona | Ustaw `0`, aby wyłączyć ścieżkę walidatora Groq. |
 
 ## Limity i cache
@@ -32,7 +32,7 @@ Plan odpowiedzi ma osobne wymagania dotyczące kompletności. Gdy pytanie zawier
 | `AI_GEMINI_EXTRACT=1` | wyłączona | Używa Gemini Grounding wyłącznie do znalezienia adresów, a treść pobiera przez Tavily Extract. Bez tej opcji segmenty odpowiedzi Gemini nie są traktowane jako tekst strony ani dowód; wymagane jest inne źródło treści, np. Exa. |
 | `AI_QUALITY_ALL_PROFILES=1` | wyłączona | Uruchamia bramkę jakości także dla profili `simple`, `comparison` i `technical`; może zwiększyć liczbę odrzuceń. |
 | `AI_GROQ_VALIDATOR_MAX_EVIDENCE_CHARS` | `12000` (minimum `8000`) | Ogranicza długość dowodów przekazywanych do walidatora Groq. |
-| `AI_XKIRO_VALIDATOR_TIMEOUT_MS` | `6000` | Maksymalny budżet pojedynczego wywołania walidatora xKiro; produkcyjna próba nie jest uruchamiana z budżetem krótszym niż 6 s. |
+| `AI_XKIRO_VALIDATOR_TIMEOUT_MS` | `9000` | Maksymalny budżet pojedynczego wywołania walidatora xKiro; produkcyjna próba nie jest uruchamiana z budżetem krótszym niż 6 s. |
 | `AI_OPENROUTER_VALIDATOR_TIMEOUT_MS` | `6000` | Maksymalny budżet pojedynczego wywołania walidatora OpenRouter; wartość jest używana zarówno w orkiestratorze, jak i wrapperze transportowym. |
 | `AI_PROVIDER_QUOTA_COOLDOWN_MS` | `60000` ms | Domyślny czas przerwy po wykryciu limitu dla pary dostawca/model; aliasy `xkiro:default` i `openrouter:default` rozwiązują się do skonfigurowanego modelu. Nagłówek `Retry-After` (sekundy lub data HTTP) ma pierwszeństwo. Workflow CI ustawia `1800000` ms na czas live benchmarku. |
 | `AI_MAX_FALLBACK_STEPS` | długość łańcucha fallbacków (`6`) | Maksymalna liczba prób fallbacku po odfiltrowaniu niedostępnych endpointów; `0` wyłącza dodatkowe próby. |
