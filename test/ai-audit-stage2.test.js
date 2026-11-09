@@ -7,6 +7,7 @@ const {
   sprawdzTwardeKonflikty,
   czyOgraniczenieDowodowe,
   spojnoscTlumaczeniaClaimu,
+  czyCzesciowaOdpowiedzMaKotwiceEncji,
 } = require('../ai/claimValidation');
 const { sourceMatchesRequestContext, wykryjJezykTekstu, sourceLanguageCompatible, normalizeSource } = require('../ai/core');
 
@@ -107,4 +108,21 @@ test('tłumaczenie „the character” może odziedziczyć jednoznaczną postać
     evidenceContext: ambiguousContext,
   });
   assert.equal(ambiguous.ok, false);
+});
+
+
+test('częściowa odpowiedź o postaci musi zachować nazwę postaci z pytania', () => {
+  const question = 'Kim jest Johnny Silverhand w Cyberpunk 2077?';
+  assert.equal(
+    czyCzesciowaOdpowiedzMaKotwiceEncji(question, 'Jest także rewolucjonistą i ikoną Night City.'),
+    false,
+  );
+  assert.equal(
+    czyCzesciowaOdpowiedzMaKotwiceEncji(question, 'Johnny Silverhand jest rewolucjonistą i ikoną Night City.'),
+    true,
+  );
+  assert.equal(
+    czyCzesciowaOdpowiedzMaKotwiceEncji('Czy warto zagrać w tę grę?', 'To dobra gra RPG.'),
+    true,
+  );
 });
