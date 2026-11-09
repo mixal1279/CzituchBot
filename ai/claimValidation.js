@@ -1076,7 +1076,7 @@ function tokenyPokrywajaSie(a, b) {
 }
 function czyOgraniczenieDowodowe(sentence) {
   const text = normalizujClaim(sentence);
-  const sourceMention = /\b(?:zrodla?\w*|material\w*|dane\w*|sources?|evidence|informacj\w*)\b/u.test(text);
+  const sourceMention = /\b(?:zrodla?\w*|material\w*|dan\w*|sources?|evidence|informacj\w*)\b/u.test(text);
   // Twierdzenia o tym, czego materiały nie opisują, są oceną zakresu
   // retrieval, a nie negacją zdarzenia w świecie. Nie wolno klasyfikować ich
   // jako sprzeczności tylko dlatego, że cytat zawiera inną negację.
@@ -1090,8 +1090,8 @@ function czyOgraniczenieDowodowe(sentence) {
   // nazwę źródła.
   const epistemicAbsence = /\b(?:model|bot|odpowiedz|dostepne dane|dane referencyjne|zebrane materialy|dostepne zrodla)\b/u.test(text)
     && /\bnie\s+(?:posiad\w*|ma|mam|mamy|zawier\w*|dostarcz\w*|pozwal\w*|wskaz\w*|okresl\w*|potwierdz\w*)\b/u.test(text)
-    && /\b(?:dane\w*|informacj\w*|dowod\w*|lokalizacj\w*|moment\w*|czas\w*|szczegol\w*|przyczyn\w*|powod\w*)\b/u.test(text);
-  const firstPersonAbsence = /\bnie\s+(?:posiad\w*|mam|mamy)\s+(?:wystarczajac\w*\s+)?(?:dane\w*|informacj\w*|dowod\w*)\b/u.test(text);
+    && /\b(?:dan\w*|informacj\w*|dowod\w*|lokalizacj\w*|moment\w*|czas\w*|szczegol\w*|przyczyn\w*|powod\w*)\b/u.test(text);
+  const firstPersonAbsence = /\bnie\s+(?:posiad\w*|mam|mamy)\s+(?:wystarczajac\w*\s+)?(?:dan\w*|informacj\w*|dowod\w*)\b/u.test(text);
   if (epistemicAbsence || firstPersonAbsence) return true;
 
   const limitation = /\b(?:nie\s+(?:potwierdz\w*|podaj\w*|precyz\w*|okresl\w*|wskaz\w*|zawier\w*|znalazl\w*|znaleziono)|brak\s+(?:dokladn\w*\s+)?(?:dat\w*|moment\w*|czas\w*|potwierdzon\w*\s+(?:przyczyn\w*|powod\w*)))\b/u.test(text);
