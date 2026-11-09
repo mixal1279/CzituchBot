@@ -389,6 +389,28 @@ test('Groq zwraca rejected dla negatywnego werdyktu i unavailable dla uszkodzone
   assert.equal(unavailable.status, 'unavailable');
 });
 
+test('Cohere przez xKiro działa także bez kontekstu requestu', async () => {
+  hooks.KONFIGURACJA.xkiroKey = 'test-xkiro-key';
+  hooks.KONFIGURACJA.xkiroValidatorModel = 'cohere/command-a-reasoning';
+  hooks.KONFIGURACJA.xkiroBaseUrl = 'https://xkiro.example/v1';
+  let calls = 0;
+  mockFetch(async (url, options) => {
+    calls++;
+    assert.equal(new URL(url).hostname, 'xkiro.example');
+    const payload = JSON.parse(options.body);
+    assert.equal(payload.model, 'cohere/command-a-reasoning');
+    return jsonResponse({
+      choices: [{ finish_reason: 'stop', message: { content: JSON.stringify(VALID_VERDICT) } }],
+    });
+  });
+
+  const result = await hooks.walidujOdpowiedzAIBezCache('generic', QUESTION, ANSWER, EVIDENCE, [], 'test-xkiro-no-context');
+
+  assert.equal(calls, 1);
+  assert.equal(result.provider, 'xkiro');
+  assert.equal(result.status, 'accepted');
+});
+
 test('Cohere przez xKiro jest pierwszym walidatorem, a Gemini i Groq pozostają fallbackami', async () => {
   hooks.KONFIGURACJA.geminiKey = 'test-gemini-key';
   hooks.KONFIGURACJA.openrouterKey = '';
