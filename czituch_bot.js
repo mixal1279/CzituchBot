@@ -2301,18 +2301,15 @@ async function walidujOdpowiedzXKiro(persona, pytanie, odpowiedz, dane, requestI
   const remainingMs = requestState
     ? (typeof requestState.remainingMs === 'function' ? requestState.remainingMs() : requestState.maxCzasMs - (Date.now() - requestState.startedAt))
     : 6000;
-  // OpenRouter remains the next fallback after xKiro, so xKiro must always
-  // leave enough time for that final validator. The validator counter alone
-  // does not mean xKiro is the last provider in the fallback chain.
-  // xKiro ma wysoką latencję; minimalny czas sensownej próby to 6 s.
-  // Nie pomijamy go, jeśli pełna próba mieści się w rezerwie budżetu requestu.
+  // Cohere jest pierwszym wyborem; po jego awarii pozostaje czas na Gemini,
+  // Groq i ewentualnie OpenRouter. Budżet próby musi uwzględniać dalszy fallback.
   const configuredTimeoutMs = Number(process.env.AI_XKIRO_VALIDATOR_TIMEOUT_MS);
   // xKiro needs at least six seconds to return a useful verdict. The outer
   // preflight uses the same floor; keep this transport-level deadline aligned
   // so it cannot silently launch a 1.2s/4.5s attempt after passing preflight.
   const xkiroMaxTimeoutMs = Math.max(
     6000,
-    Number.isFinite(configuredTimeoutMs) && configuredTimeoutMs > 0 ? configuredTimeoutMs : 6000,
+    Number.isFinite(configuredTimeoutMs) && configuredTimeoutMs > 0 ? configuredTimeoutMs : 9000,
   );
   const computedTimeoutMs = requestState
     ? computeValidatorTimeout(remainingMs, {
