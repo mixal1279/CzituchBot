@@ -145,6 +145,7 @@ jobs:
               "- odrzucone odpowiedzi zaakceptowane przez judge: " + (r.discardedJudgeAcceptedCount || 0) + " (" + ((r.discardedJudgeAcceptedCaseIds || []).join(", ") || "brak") + "), z poprawnymi gold facts: " + (r.discardedJudgeAcceptedFactualPassedCount || 0),
               "- blokady bezpieczeństwa Gemini: " + (d.validatorSafetyBlocks || 0),
               "- wywołania walidatora: " + d.validatorCalls + ", pominięte: " + (d.validatorSkipped || 0) + ", niedostępne: " + d.validatorUnavailable,
+              "- Cohere primary: wywołania=" + (d.xkiroValidatorCalls || 0) + ", werdykty=" + (d.xkiroValidatorVerdictCalls || 0),
               "- klasy wyników: " + Object.entries(d.outcomeCounts || {}).map(([k, v]) => k + "=" + v).join(", "),
               "",
               "| przypadek | odpowiedź | judge | status końcowy |",
