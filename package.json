@@ -9,7 +9,6 @@
     "test": "node --test test/*.test.js",
     "ai:benchmark:live": "AI_LIVE_BENCHMARK=1 node scripts/ai-live-benchmark.js",
     "benchmark:offline": "node scripts/ai-offline-benchmark.js",
-    "ai:benchmark:xkiro-ab": "node scripts/xkiro-validator-ab-benchmark.js"
   },
   "dependencies": {
     "@google-cloud/firestore": "^8.6.0",
