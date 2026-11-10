@@ -1,12 +1,13 @@
 'use strict';
 
-const { scoreSource: scoreCoreSource, diversifySources: diversifyCoreSources, buildRetrievalPlan: buildCoreRetrievalPlan, reciprocalRankFusion } = require('./core');
+const { scoreSource: scoreCoreSource, diversifySources: diversifyCoreSources, buildRetrievalPlan: buildCoreRetrievalPlan, reciprocalRankFusion, assessEvidence } = require('./core');
 
 const fs = require('fs');
 const { resolveGameEntity, normalizujEncje } = require('./entities');
 const { AI_MODELS } = require('./modelConfig');
 const { searchSecondaryProviders, formatSources, odczytajOgraniczonyJson, odczytajOgraniczonyTekst } = require('./webRetrieval');
 const { sanitizeUntrustedText } = require('./untrustedText');
+const { parseEvidenceBlocks } = require('./evidence');
 const { createGroqCompletion, awaitWithAbortTimeout } = require('./provider-runtime');
 
 
@@ -523,6 +524,53 @@ function rerankujWynikiTavily(results, sourceQuestion, requestedDomains = [], op
   }
 
   return selected.map(({_coreScore,_rerankScore,_semanticScore,_rrfScore,_matchedQueryCount,_host,_key,_index,...result}) => result);
+}
+
+function fuseTavilyEvidenceTexts(texts, question, routing = {}, options = {}) {
+  const inputs = Array.isArray(texts) ? texts : [texts];
+  const blocks = inputs
+    .filter(value => typeof value === 'string' && value.trim())
+    .flatMap(value => parseEvidenceBlocks(value))
+    .filter(source => source.url && source.content);
+
+  if (!blocks.length) {
+    return {
+      text: '',
+      sources: [],
+      evidenceStatus: 'weak',
+      retrievalTrace: {
+        queryCount: 0, candidateCount: 0, rankings: [], fusion: [],
+        selectedSourceKeys: [], semanticRerankingApplied: false,
+      },
+    };
+  }
+
+  const semanticScores = options.semanticScores instanceof Map
+    ? options.semanticScores
+    : options.semanticScores && typeof options.semanticScores === 'object'
+      ? options.semanticScores : undefined;
+  const evidence = assessEvidence(blocks.map(source => ({
+    ...source,
+    provider: source.provider || 'tavily',
+    snippet: source.content,
+  })), question, routing, {
+    maxSources: options.maxSources,
+    minIndependent: options.minIndependent,
+    semanticScores,
+  });
+  const text = formatSources(evidence.sources.map(source => ({
+    ...source,
+    provider: source.provider || 'tavily',
+    snippet: source.content,
+    content: source.content,
+  })));
+
+  return {
+    text,
+    sources: evidence.sources,
+    evidenceStatus: evidence.status,
+    retrievalTrace: evidence.retrievalTrace,
+  };
 }
 
 function ocenaZrodlaLokalnie(url, requestedDomains = []) {
@@ -1235,6 +1283,7 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, lookupFn, normalizeQu
 
 module.exports = {
   createTavilySearch,
+  fuseTavilyEvidenceTexts,
   czyPoprawnyWpisCacheTavily,
   hostnamePasujeDoDomenyTavily,
   czyZablokowanyHostTavily,
