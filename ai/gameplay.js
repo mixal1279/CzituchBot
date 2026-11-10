@@ -31,10 +31,11 @@ function extractHostname(value) {
 }
 
 function dodajGameFAQsDomenę(domeny) {
-  // Preserve the caller's explicit domain preferences. Do not inject a global
-  // union of guide sites into every gameplay query; retrieval ranking handles
-  // fallback sources after the first search.
-  return Array.isArray(domeny) ? [...domeny] : [];
+  // GameFAQs ma być rzeczywistą domeną pierwszego wyszukiwania gameplay.
+  // Ścisłe allowlisty kanałów są nakładane później i nadal mają pierwszeństwo.
+  const wybrane = Array.isArray(domeny) ? [...domeny] : [];
+  if (!wybrane.some(domena => extractHostname(domena) === GAMEFAQS_DOMAIN)) wybrane.push(GAMEFAQS_DOMAIN);
+  return wybrane;
 }
 
 function wytnijAtrybucjeGameFAQsWszystkie(tekst, dozwoloneSourceIds = null) {
