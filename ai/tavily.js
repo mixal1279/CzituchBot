@@ -564,12 +564,22 @@ function fuseTavilyEvidenceTexts(texts, question, routing = {}, options = {}) {
     snippet: source.content,
     content: source.content,
   })));
+  const providerCounts = blocks.reduce((counts, source) => {
+    const provider = String(source.provider || 'tavily').toLowerCase().slice(0, 32);
+    counts[provider] = (counts[provider] || 0) + 1;
+    return counts;
+  }, {});
 
   return {
     text,
     sources: evidence.sources,
     evidenceStatus: evidence.status,
-    retrievalTrace: evidence.retrievalTrace,
+    retrievalTrace: {
+      ...evidence.retrievalTrace,
+      providerCounts,
+      selectedProviders: evidence.sources.map(source => String(source.provider || 'tavily').slice(0, 32)),
+      selectedHostCount: evidence.independentHosts,
+    },
   };
 }
 
