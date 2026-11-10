@@ -149,3 +149,56 @@ test('provider response bodies are bounded and redirects are disabled', async ()
   assert.equal(result.status, 'error');
   assert.equal(result.error, 'provider_response_too_large');
 });
+
+
+test('Exa uses bounded search settings, domain allowlist and page text as evidence', async () => {
+  let requestUrl;
+  let requestOptions;
+  const result = await searchExa({
+    apiKey: 'test-key',
+    query: 'Portal 2 Wheatley',
+    domains: ['theportalwiki.com'],
+    timeoutMs: 2500,
+    fetchFn: async (url, options) => {
+      requestUrl = url;
+      requestOptions = options;
+      return new Response(JSON.stringify({ results: [
+        {
+          title: 'Wheatley',
+          url: 'https://theportalwiki.com/wiki/Wheatley',
+          score: 0.91,
+          highlights: ['Highlight is not full page evidence.'],
+          text: 'Wheatley is a personality core in Portal 2. '.repeat(4),
+        },
+        {
+          title: 'Snippet only',
+          url: 'https://theportalwiki.com/wiki/Snippet',
+          highlights: ['This must not become evidence.'],
+        },
+      ] }), { status: 200, headers: { 'content-type': 'application/json' } });
+    },
+  });
+  assert.equal(requestUrl, 'https://api.exa.ai/search');
+  assert.equal(requestOptions.method, 'POST');
+  assert.equal(requestOptions.redirect, 'error');
+  assert.equal(requestOptions.headers['x-api-key'], 'test-key');
+  const body = JSON.parse(requestOptions.body);
+  assert.equal(body.numResults, 6);
+  assert.deepEqual(body.includeDomains, ['theportalwiki.com']);
+  assert.equal(result.status, 'ok');
+  assert.equal(result.sources.length, 1);
+  assert.match(result.sources[0].content, /personality core/);
+  assert.doesNotMatch(result.sources[0].content, /Highlight is not full page evidence/);
+});
+
+test('Exa nie wykonuje requestu bez klucza API lub zapytania', async () => {
+  let calls = 0;
+  for (const args of [{ apiKey: '', query: 'Portal 2' }, { apiKey: 'test-key', query: '' }]) {
+    const result = await searchExa({
+      ...args,
+      fetchFn: async () => { calls += 1; throw new Error('request nie powinien wystąpić'); },
+    });
+    assert.equal(result.status, 'disabled');
+  }
+  assert.equal(calls, 0);
+});
