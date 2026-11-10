@@ -453,7 +453,7 @@ function buildRetrievalPlan(question, routing = {}, options = {}) {
         : /\b(?:gdzie|where|lokalizac|location)\b/iu.test(q)
           ? 'location story'
           : 'story plot lore';
-    add(\`\${characterNames.join(' ')} \${game || entity} \${topic}\`, 'character');
+    add(characterNames.join(' ') + ' ' + (game || entity) + ' ' + topic, 'character');
   } else if (entity) {
     add(\`\${entity} \${q}\`);
   }
