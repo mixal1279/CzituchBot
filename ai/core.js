@@ -399,7 +399,7 @@ function similarity(a, b) {
 function diversifySources(scored, options = {}) {
   const max = Math.max(1, Number(options.maxSources) || 6);
   const minIndependent = Math.max(1, Number(options.minIndependent) || 2);
-  const candidates = [...scored].sort((a,b) => b.coreScore - a.coreScore);
+  const candidates = [...scored].sort((a,b) => (b.rankScore ?? b.coreScore) - (a.rankScore ?? a.coreScore));
   const chosen = [];
   const hosts = new Set();
 
@@ -528,21 +528,21 @@ function assessEvidence(results = [], question, routing = {}, options = {}) {
   const normalized = baseScored.map(source => {
     const rawRrf = fusionByKey.get(source.key) || 0;
     const rrfScore = maxFusion > 0 ? rawRrf / maxFusion : 0;
-    const blendedScore = source.semanticScore === null
+    const rankScore = source.semanticScore === null
       ? source.coreScore * 0.7 + rrfScore * 0.3
       : source.coreScore * 0.6 + rrfScore * 0.25 + source.semanticScore * 0.15;
     return {
       ...source,
       lexicalScore: source.coreScore,
       rrfScore: Number(rrfScore.toFixed(4)),
-      coreScore: Number(blendedScore.toFixed(4)),
+      rankScore: Number(rankScore.toFixed(4)),
       matchedQueryCount: rankings.filter(ranking => ranking.includes(source.key)).length,
     };
   });
 
   const unique = [];
   const seen = new Set();
-  for (const item of normalized.sort((a,b) => b.coreScore - a.coreScore || a.key.localeCompare(b.key))) {
+  for (const item of normalized.sort((a,b) => b.rankScore - a.rankScore || a.key.localeCompare(b.key))) {
     if (seen.has(item.key)) continue;
     seen.add(item.key);
     unique.push(item);
