@@ -117,7 +117,7 @@ test('retrieval provenance sanitizes provider labels from evidence headers', () 
     'TREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>',
     'Wheatley Portal 2 GLaDOS transfer core.',
     '<<<END_UNTRUSTED_SOURCE_CONTENT>>>',
-  ].join('\\n');
+  ].join('\n');
   const fused = fuseTavilyEvidenceTexts([block], 'Wheatley Portal 2', {
     intent: 'web_fact', is_lore: true, game: 'Portal 2',
   });
