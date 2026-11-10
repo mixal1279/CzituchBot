@@ -146,9 +146,9 @@ test('OpenRouter and xKiro validator deadlines use the shared production budget 
   assert.match(bot, /maxTimeoutMs:\s*xkiroMaxTimeoutMs/);
 });
 
-test('live benchmark preflights validator providers before starting the full gold sample', () => {
+test('live benchmark preflights validator providers before starting the stratified ten-case sample', () => {
   const workflow = read('.github/workflows/ai-live-benchmark.yml');
-  assert.match(workflow, /AI_BENCHMARK_LIMIT:\s*"17"/);
+  assert.match(workflow, /AI_BENCHMARK_LIMIT:\s*"10"/);
   assert.match(workflow, /AI_REQUEST_TIMEOUT_MS:\s*"85000"/);
   assert.match(workflow, /AI_XKIRO_GENERATOR_TIMEOUT_MS:\s*"30000"/);
   assert.match(workflow, /AI_XKIRO_GENERATOR_MAX_TOKENS:\s*"700"/);
@@ -158,7 +158,7 @@ test('live benchmark preflights validator providers before starting the full gol
   assert.match(workflow, /node scripts\/validator-providers-preflight\.js/);
   assert.ok(workflow.indexOf('Syntax check live benchmark modules') < workflow.indexOf('Preflight Tavily'));
   assert.match(workflow, /find ai -maxdepth 1 -type f -name '\*\.js' -print0/);
-  assert.ok(workflow.indexOf('Preflight validator providers') < workflow.indexOf('Run 17-case live benchmark'));
+  assert.ok(workflow.indexOf('Preflight validator providers') < workflow.indexOf('Run 10-case live benchmark'));
 });
 
 test('live benchmark is manual-only so pushes do not spend API quota', () => {
