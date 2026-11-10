@@ -1673,7 +1673,7 @@ Zwróć WYŁĄCZNIE jeden poprawny obiekt JSON bez markdownu i komentarza, z pol
 
 function dodatniaLiczbaEnv(envName, fallback) {
   const raw = String(process.env[envName] || '').trim();
-  if (!/^\\d+$/.test(raw)) return fallback;
+  if (!/^\d+$/.test(raw)) return fallback;
   const value = Number(raw);
   return Number.isSafeInteger(value) && value > 0 ? value : fallback;
 }
@@ -2340,7 +2340,7 @@ async function walidujOdpowiedzXKiro(persona, pytanie, odpowiedz, dane, requestI
         }),
         signal: controller.signal,
       });
-      const data = await response.json().catch(() => ({}));
+      const data = await response.json().catch(() => ({ __invalidJson: true }));
       return { response, data };
     })(), timeoutMs, controller, 'xKiro validator');
     if (!response.ok) {
@@ -2379,6 +2379,20 @@ async function walidujOdpowiedzXKiro(persona, pytanie, odpowiedz, dane, requestI
       });
       return { status: 'unavailable', ok: false, technicalError: true, transient, quota, statusCode: status || null, provider: 'xkiro', model: data?.model || model, unsupported_claims: [], reason: quota ? `xKiro limit/credit error (HTTP ${status})` : `xKiro HTTP error (${status})`, error: diagnostic, diagnostic };
     }
+    if (data?.__invalidJson) {
+      const diagnostic = formatProviderError('xkiro', model, null, {
+        status: response.status,
+        invalid_json_body: true,
+      });
+      console.warn(`[AI][${requestId}] xKiro validator INVALID_HTTP_JSON: ${diagnostic}`);
+      return {
+        status: 'unavailable', ok: false, technicalError: true,
+        provider: 'xkiro', model, unsupported_claims: [],
+        failureKind: 'invalid_json_body',
+        reason: 'xKiro validator zwrócił niepoprawny JSON w odpowiedzi HTTP',
+        error: diagnostic, diagnostic,
+      };
+    }
     const choice = data?.choices?.[0] || {};
     const rawContent = choice?.message?.content;
     const content = Array.isArray(rawContent)
@@ -2392,7 +2406,7 @@ async function walidujOdpowiedzXKiro(persona, pytanie, odpowiedz, dane, requestI
       });
       const truncatedJson = choice?.finish_reason === 'length';
       console.warn(`[AI][${requestId}] xKiro validator ${truncatedJson ? 'UCIĘTY_JSON' : 'EMPTY_CONTENT'}: ${diagnostic}`);
-      return { status: 'unavailable', ok: false, technicalError: true, provider: 'xkiro', model: data?.model || model, unsupported_claims: [], reason: truncatedJson ? 'xKiro validator zwrócił UCIĘTY JSON (finish_reason=length)' : 'xKiro validator zwrócił pusty content', truncatedJson, error: diagnostic, diagnostic };
+      return { status: 'unavailable', ok: false, technicalError: true, provider: 'xkiro', model: data?.model || model, unsupported_claims: [], reason: truncatedJson ? 'xKiro validator zwrócił UCIĘTY JSON (finish_reason=length)' : 'xKiro validator zwrócił pusty content', failureKind: truncatedJson ? 'truncated_json' : 'empty_response', truncatedJson, error: diagnostic, diagnostic };
     }
     const parsed = wytnijJsonWalidatora(content);
     if (!parsed) {
@@ -2403,7 +2417,7 @@ async function walidujOdpowiedzXKiro(persona, pytanie, odpowiedz, dane, requestI
       });
       const truncatedJson = choice?.finish_reason === 'length';
       console.warn(`[AI][${requestId}] xKiro validator ${truncatedJson ? 'UCIĘTY_JSON' : 'INVALID_JSON'}: ${diagnostic}`);
-      return { status: 'unavailable', ok: false, technicalError: true, provider: 'xkiro', model: data?.model || model, unsupported_claims: [], reason: truncatedJson ? 'xKiro validator zwrócił UCIĘTY JSON (finish_reason=length)' : 'xKiro validator zwrócił niepoprawny JSON', truncatedJson, error: diagnostic, diagnostic };
+      return { status: 'unavailable', ok: false, technicalError: true, provider: 'xkiro', model: data?.model || model, unsupported_claims: [], reason: truncatedJson ? 'xKiro validator zwrócił UCIĘTY JSON (finish_reason=length)' : 'xKiro validator zwrócił niepoprawny JSON', failureKind: truncatedJson ? 'truncated_json' : 'invalid_json', truncatedJson, error: diagnostic, diagnostic };
     }
     const normalized = normalizujWynikWalidatora(parsed, data?.model || model, 'xkiro', wyodrebnijIdentyfikatoryZrodel(dane), dane, odpowiedz, { question: pytanie });
     if (!normalized) {
@@ -2412,7 +2426,7 @@ async function walidujOdpowiedzXKiro(persona, pytanie, odpowiedz, dane, requestI
         finish_reason: choice?.finish_reason || null,
         content_preview: content.slice(0, 700),
       });
-      return { status: 'unavailable', ok: false, technicalError: true, provider: 'xkiro', model: data?.model || model, unsupported_claims: [], reason: 'xKiro validator zwrócił JSON niespełniający lokalnego kontraktu', error: diagnostic, diagnostic };
+      return { status: 'unavailable', ok: false, technicalError: true, provider: 'xkiro', model: data?.model || model, unsupported_claims: [], reason: 'xKiro validator zwrócił JSON niespełniający lokalnego kontraktu', failureKind: 'invalid_schema', error: diagnostic, diagnostic };
     }
     console.log(`[AI][${requestId}] xKiro validator: status=${normalized.status} supported=${normalized.supported} complete=${normalized.complete}`);
     return normalized;
