@@ -155,6 +155,8 @@ test('live benchmark preflights validator providers before starting a ten-case s
   assert.match(workflow, /PREFLIGHT_TIMEOUT_MS:\s*"25000"/);
   assert.match(workflow, /PREFLIGHT_STRICT:\s*"1"/);
   assert.match(workflow, /node scripts\/validator-providers-preflight\.js/);
+  assert.ok(workflow.indexOf('Syntax check live benchmark modules') < workflow.indexOf('Preflight Tavily'));
+  assert.match(workflow, /find ai -maxdepth 1 -type f -name '\*\.js' -print0/);
   assert.ok(workflow.indexOf('Preflight validator providers') < workflow.indexOf('Run 10-case live benchmark'));
 });
 
