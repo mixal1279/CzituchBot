@@ -1080,7 +1080,7 @@ function czyOgraniczenieDowodowe(sentence) {
   // Twierdzenia o tym, czego materiały nie opisują, są oceną zakresu
   // retrieval, a nie negacją zdarzenia w świecie. Nie wolno klasyfikować ich
   // jako sprzeczności tylko dlatego, że cytat zawiera inną negację.
-  const metaAbsence = sourceMention && /\b(?:nie\s+(?:podaj\w*|opisuj\w*|wspomin\w*|wyjasni\w*|okresl\w*|potwierdz\w*|zawier\w*)|brak\s+(?:informacj\w*|danych|wzmian\w*))\b/u.test(text)
+  const metaAbsence = sourceMention && /\b(?:nie\s+(?:podaj\w*|opisuj\w*|wspomin\w*|wyjasni\w*|okresl\w*|potwierdz\w*|zawier\w*)|brak\s+(?:(?:wystarczajac\w*|dokladn\w*|pelnych?)\s+)?(?:informacj\w*|danych|wzmian\w*))\b/u.test(text)
     && /\b(?:co\s+stal\w*|los\w*|wydarz\w*|informacj\w*|szczegol\w*|przyczyn\w*|powod\w*|dat\w*|moment\w*|czas\w*|metod\w*|sposob\w*|lokalizacj\w*)\b/u.test(text);
   if (metaAbsence) return true;
 
