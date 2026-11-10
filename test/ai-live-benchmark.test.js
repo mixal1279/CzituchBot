@@ -283,7 +283,11 @@ test('live diagnostics distinguish validator failures from generation failures a
   assert.equal(diagnostics.validatorStatusCounts.unavailable, 1);
   assert.equal(diagnostics.validatorTransportFailures.length, 1);
   assert.equal(diagnostics.validatorTransportFailures[0].reason, 'timeout');
-  assert.deepEqual(diagnostics.generationProviderFailures, [\n    'gemini:gemini-3.8-flash:timeout',\n    'xkiro:cohere/command-a-reasoning:empty_response',\n    'xkiro:cohere/command-a-reasoning:invalid_json',\n  ]);
+  assert.deepEqual(diagnostics.generationProviderFailures, [
+    'gemini:gemini-3.8-flash:timeout',
+    'xkiro:cohere/command-a-reasoning:empty_response',
+    'xkiro:cohere/command-a-reasoning:invalid_json',
+  ]);
   assert.equal(diagnostics.validatorSecondOpinions, 1);
   assert.equal(diagnostics.tavilyHttpCalls, 1);
   assert.equal(diagnostics.avgTavilyHttpMs, 1200);
