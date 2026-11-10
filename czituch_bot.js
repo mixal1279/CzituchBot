@@ -3484,7 +3484,8 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
     const semanticTimeoutMs = Math.max(1500, Math.min(6000,
       Number.isFinite(semanticTimeoutRaw) && semanticTimeoutRaw > 0 ? semanticTimeoutRaw : 3500));
     if (semanticEnabled && semanticKey && !aiState.semanticSearches
-      && pozostalyCzasMs() > semanticTimeoutMs + 12000 && aiState.reserveTavily('retrieval')) {
+      && aiState.tavilySearches + (aiState.semanticSearches || 0) < aiState.maxWyszukanTavily
+      && pozostalyCzasMs() > semanticTimeoutMs + 12000) {
       const strictPersonaDomains = (pytanieOrazBilly ? domenyTavilyBilly : null)
         || (pytanieOrazEdzzi ? domenyTavilyEdzzi : null)
         || (pytanieOrazAngie ? domenyTavilyAngie : null);
