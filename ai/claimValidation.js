@@ -1461,6 +1461,13 @@ function wykryjPodmianePodmiotu(claimPl, claimEn) {
   };
 }
 
+function czyOgraniczenieEpistemiczneAngielskie(sentence) {
+  const text = normalizujClaim(sentence);
+  const uncertainty = /\\b(?:insufficient|not enough|lack of|no|without|unable to)\\b.{0,55}\\b(?:data|information|evidence|sources?)\\b|\\b(?:data|information|evidence|sources?)\\b.{0,70}\\b(?:insufficient|unavailable|not enough|do not contain|does not contain|cannot establish|cannot determine|does not explain|no information)\\b/u.test(text);
+  const scope = /\\b(?:source|sources|evidence|available|provided|determine|establish|confirm|explain|identify|reason|why|when|where|what)\\b/u.test(text);
+  return uncertainty && scope;
+}
+
 function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
   const pl = String(claimPl || '').trim();
   let en = String(claimEn || '').trim();
@@ -1632,7 +1639,10 @@ function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
     && !zbiorRowny(polishUnits, wyodrebnijJednostkoweWartosci(enLiczbowo))) {
     return { ok: false, reason: 'tlumaczenie claimu zmienia jednostki lub wartosci' };
   }
-  if (wyodrebnijMarkery(pl, NEGATION_RE) !== wyodrebnijMarkery(en, NEGATION_RE)) {
+  const equivalentEpistemicAbsence = czyOgraniczenieDowodowe(pl)
+    && czyOgraniczenieEpistemiczneAngielskie(en);
+  if (wyodrebnijMarkery(pl, NEGATION_RE) !== wyodrebnijMarkery(en, NEGATION_RE)
+    && !equivalentEpistemicAbsence) {
     return { ok: false, reason: 'tlumaczenie claimu zmienia negacje' };
   }
   // Zmiane zdarzenia (np. „przejal kontrole” → „destroyed”) wykrywaja ogolne pary
