@@ -56,6 +56,15 @@ test('Tavily retries an oversized advanced response once with one evidence-prese
   assert.match(result.text, /Tavily gameplay guide/);
 });
 
+test('secondary retrieval reports malformed JSON instead of disguising it as empty results', async () => {
+  const result = await searchExa({
+    apiKey: 'test-exa-key',
+    query: 'malformed provider response',
+    fetchFn: async () => new Response('not-json', { status: 200 }),
+  });
+  assert.equal(result.status, 'error');
+  assert.equal(result.error, 'provider_invalid_json');
+});
 test('secondary retrieval hard timeout releases a fetch that ignores AbortSignal', async () => {
   let observedSignal;
   const startedAt = Date.now();
