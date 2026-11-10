@@ -8,6 +8,7 @@ const {
   evaluateRetrieval, aggregateRetrievalMetrics,
 } = require('../ai/retrieval-evaluation');
 const { assessEvidence } = require('../ai/core');
+const { rerankujWynikiTavily } = require('../ai/tavily');
 
 test('RRF łączy rankingi bez porównywania ich surowych skal', () => {
   const result = reciprocalRankFusion([
@@ -65,4 +66,16 @@ test('assessEvidence zwraca ślad RRF i opcjonalnie stosuje jawny semantic score
   });
   assert.equal(semantic.retrievalTrace.semanticRerankingApplied, true);
   assert.equal(semantic.sources.find(source => source.url.includes('theportalwiki')).semanticScore, 0.99);
+});
+
+test('Tavily reranker applies optional semantic score without making an API request', () => {
+  const rows = [
+    { score: 0.8, url: 'https://a.example.org/portal', title: 'Portal 2 Wheatley GLaDOS', content: 'Wheatley przejął kontrolę nad GLaDOS w Portal 2.' },
+    { score: 0.8, url: 'https://b.example.org/portal', title: 'Portal 2 Wheatley GLaDOS', content: 'Wheatley przejął kontrolę nad GLaDOS w Portal 2.' },
+  ];
+  const ranked = rerankujWynikiTavily(rows, 'Dlaczego Wheatley przejął kontrolę nad GLaDOS w Portal 2?', [], {
+    semanticScores: { 'https://b.example.org/portal': 1 },
+  });
+  assert.equal(ranked.length, 2);
+  assert.equal(ranked[0].url, 'https://b.example.org/portal');
 });
