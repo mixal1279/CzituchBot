@@ -302,6 +302,39 @@ test('xKiro wysyła limit 1600 i json_object oraz honoruje własny endpoint', as
   assert.match(result.reason, /UCIĘTY JSON/);
 });
 
+test('limit tokenów odczytuje dodatnią wartość z ENV i odrzuca niepoprawne wartości', () => {
+  const key = 'AI_VALIDATOR_MAX_TOKENS_XKIRO';
+  const previous = process.env[key];
+  try {
+    process.env[key] = '2048';
+    assert.equal(hooks.dodatniaLiczbaEnv(key, 1600), 2048);
+    process.env[key] = '20x';
+    assert.equal(hooks.dodatniaLiczbaEnv(key, 1600), 1600);
+    process.env[key] = '0';
+    assert.equal(hooks.dodatniaLiczbaEnv(key, 1600), 1600);
+  } finally {
+    if (previous === undefined) delete process.env[key];
+    else process.env[key] = previous;
+  }
+});
+
+test('xKiro odróżnia niepoprawny JSON odpowiedzi HTTP od pustego contentu modelu', async () => {
+  hooks.KONFIGURACJA.xkiroKey = 'test-xkiro-key';
+  hooks.KONFIGURACJA.xkiroValidatorModel = 'cohere/command-a-reasoning';
+  mockFetch(async () => ({
+    ok: true,
+    status: 200,
+    json: async () => { throw new SyntaxError('Unexpected token'); },
+  }));
+
+  const result = await hooks.walidujOdpowiedzXKiro(
+    'generic', QUESTION, ANSWER, EVIDENCE, 'test-xkiro-invalid-http-json'
+  );
+  assert.equal(result.status, 'unavailable');
+  assert.equal(result.failureKind, 'invalid_json_body');
+  assert.match(result.reason, /niepoprawny JSON w odpowiedzi HTTP/);
+});
+
 test('xKiro validator preserves daily free-token exhaustion details when setting 429 cooldown', async () => {
   hooks.KONFIGURACJA.xkiroKey = 'test-xkiro-key';
   hooks.KONFIGURACJA.xkiroValidatorModel = 'cohere/command-a-reasoning';
