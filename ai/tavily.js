@@ -967,7 +967,7 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, lookupFn, normalizeQu
                   ...(domains && { include_domains: domains }),
                   ...(validTimeRange && { time_range: validTimeRange }),
                 });
-                logger.warn?.('[Tavily] odpowiedź przekroczyła limit 512 KiB — ponawiam jako ograniczony basic search');
+                logger.warn?.('[Tavily] odpowiedź przekroczyła limit 512 KiB — ponawiam z jednym ograniczonym wynikiem');
                 onStatus({ status: 'retry_reduced', query: searchQuery, reason: 'provider_response_too_large' });
                 continue;
               }
