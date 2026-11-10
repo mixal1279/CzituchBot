@@ -537,4 +537,4 @@ test('obca relacja przyczynowa z innego źródła nie blokuje ograniczenia epist
 
   assert.equal(result.status, 'accepted');
 });
-\n
+
