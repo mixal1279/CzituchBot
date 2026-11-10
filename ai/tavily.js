@@ -1,6 +1,6 @@
 'use strict';
 
-const { scoreSource: scoreCoreSource, diversifySources: diversifyCoreSources } = require('./core');
+const { scoreSource: scoreCoreSource, diversifySources: diversifyCoreSources, buildRetrievalPlan: buildCoreRetrievalPlan, reciprocalRankFusion } = require('./core');
 
 const fs = require('fs');
 const { resolveGameEntity, normalizujEncje } = require('./entities');
@@ -419,40 +419,88 @@ function rerankujWynikiTavily(results, sourceQuestion, requestedDomains = [], op
   const resolvedEntity = resolveGameEntity(sourceQuestion);
   const entity = resolvedEntity?.game || resolvedEntity?.name || null;
   const claimSignals = sygnalyClaimuTavily(sourceQuestion);
+  const isLore = options.isLore === true || /\\b(?:lore|fabuł|histori|kanon|canon|dlaczego|czemu|why|story|plot)\\b/iu.test(String(sourceQuestion || ''));
+  const isGameplay = options.isGameplay === true || /\\b(?:walkthrough|poradnik|solucj|jak\\s+(?:pokona|przej|zdoby|zrob|znale)|how\\s+to)\\b/iu.test(String(sourceQuestion || ''));
+  const retrievalRouting = {
+    ...(options.routing && typeof options.routing === 'object' ? options.routing : {}),
+    entity: options.routing?.entity || entity || '',
+    game: options.routing?.game || resolvedEntity?.game || (resolvedEntity?.type === 'game' ? resolvedEntity.name : ''),
+    resolved_entity: options.routing?.resolved_entity || resolvedEntity || undefined,
+    is_lore: isLore,
+    is_gameplay: isGameplay,
+  };
+  const queryPlan = buildCoreRetrievalPlan(sourceQuestion, retrievalRouting, { maxQueries: 4 });
+  const rankingQueries = [...new Set([
+    String(sourceQuestion || '').trim(),
+    ...queryPlan.map(item => item.query),
+  ].filter(Boolean))].slice(0, 5);
+  const semanticScores = options.semanticScores instanceof Map
+    ? options.semanticScores
+    : new Map(Object.entries(options.semanticScores || {}));
 
   const candidates = input.map((result, index) => {
     const localQuality = ocenaZrodlaLokalnie(result?.url, requestedDomains);
+    const key = String(result?.url || result?.title || index);
+    const semanticValue = Number(semanticScores.has(key) ? semanticScores.get(key) : NaN);
+    const semanticScore = Number.isFinite(semanticValue) && semanticValue >= 0 && semanticValue <= 1
+      ? semanticValue : null;
     const core = scoreCoreSource({
       ...result,
       authority: localQuality,
     }, sourceQuestion, {
       entity,
       freshness: options.freshness,
+      semanticScore,
     });
 
     const claimCoverage = claimCoverageTavily(result, claimSignals);
     const claimBonus = Math.min(0.16, claimCoverage * 0.16);
     const requestedBonus = requestedDomains?.length && hostnamePasujeDoDomenyTavily(result?.url, requestedDomains) ? 0.10 : 0;
-
     const base = typeof result?.score === 'number' ? result.score : 0;
     const rerankScore = Math.max(0, Math.min(1.5,
-      base * 0.35 +
-      core.coreScore * 0.55 +
-      claimBonus +
-      requestedBonus
+      base * 0.35 + core.coreScore * 0.55 + claimBonus + requestedBonus
     ));
 
     return {
       ...result,
       _coreScore: core.coreScore,
       _rerankScore: rerankScore,
+      _semanticScore: semanticScore,
       _host: core.host,
       _key: core.key,
       _index: index,
     };
   });
 
-  const sorted = candidates.sort((a,b) => b._rerankScore - a._rerankScore);
+  // RRF działa na rankingach tych samych kandydatów dla zapytań bazowego,
+  // encyjnego i intencyjnego. Nie generuje dodatkowych zapytań HTTP.
+  const rankings = rankingQueries.map(query => candidates
+    .map(item => {
+      const scored = scoreCoreSource({
+        ...item,
+        authority: ocenaZrodlaLokalnie(item?.url, requestedDomains),
+      }, query, { entity, freshness: options.freshness });
+      return { key: item._key, score: scored.coreScore, relevance: scored.relevance, titleRelevance: scored.titleRelevance };
+    })
+    .filter(item => item.relevance > 0 || item.titleRelevance > 0)
+    .sort((a, b) => b.score - a.score || a.key.localeCompare(b.key))
+    .map(item => item.key));
+  const fused = reciprocalRankFusion(rankings, { k: 60 });
+  const maxFusion = Math.max(0, ...fused.map(item => item.score));
+  const fusionByKey = new Map(fused.map(item => [item.id, item.score]));
+  for (const item of candidates) {
+    const rawFusion = fusionByKey.get(item._key) || 0;
+    const rrfScore = maxFusion > 0 ? rawFusion / maxFusion : 0;
+    item._rrfScore = rrfScore;
+    item._matchedQueryCount = rankings.filter(ranking => ranking.includes(item._key)).length;
+    item._rerankScore = Math.max(0, Math.min(1.5,
+      item._rerankScore * (item._semanticScore === null ? 0.82 : 0.77)
+      + rrfScore * 0.18
+      + (item._semanticScore === null ? 0 : item._semanticScore * 0.05)
+    ));
+  }
+
+  const sorted = candidates.sort((a,b) => b._rerankScore - a._rerankScore || a._index - b._index);
   const selected = [];
   const hosts = new Set();
   const maxSources = Math.max(1, input.length);
@@ -472,7 +520,7 @@ function rerankujWynikiTavily(results, sourceQuestion, requestedDomains = [], op
     selected.push(item);
   }
 
-  return selected.map(({_coreScore,_rerankScore,_host,_key,_index,...result}) => result);
+  return selected.map(({_coreScore,_rerankScore,_semanticScore,_rrfScore,_matchedQueryCount,_host,_key,_index,...result}) => result);
 }
 
 function ocenaZrodlaLokalnie(url, requestedDomains = []) {
