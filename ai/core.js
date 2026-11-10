@@ -548,9 +548,15 @@ function assessEvidence(results = [], question, routing = {}, options = {}) {
     unique.push(item);
   }
 
+  const requestedMaxSources = Number(options.maxSources);
+  const requestedMinIndependent = Number(options.minIndependent);
   const selected = diversifySources(unique, {
-    maxSources: routing.is_lore || routing.is_gameplay ? 6 : 5,
-    minIndependent: routing.is_lore || routing.is_gameplay ? 2 : 1,
+    maxSources: Number.isFinite(requestedMaxSources)
+      ? Math.max(1, Math.min(12, Math.floor(requestedMaxSources)))
+      : (routing.is_lore || routing.is_gameplay ? 6 : 5),
+    minIndependent: Number.isFinite(requestedMinIndependent)
+      ? Math.max(1, Math.min(6, Math.floor(requestedMinIndependent)))
+      : (routing.is_lore || routing.is_gameplay ? 2 : 1),
   });
 
   const hosts = new Set(selected.map(x => x.host).filter(Boolean));
