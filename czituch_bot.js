@@ -3837,7 +3837,7 @@ Pytanie użytkownika: ${pytanie}`;
           console.warn(`[xKiro] Odpowiedź ucięta (${powod}); jedna ponowna próba tego samego modelu z większym limitem tokenów.`);
           continue;
         }
-        return ujednolicWynik({ tekst: parsed.text, ucieta: parsed.truncated }, 'xkiro', parsed.model || model);
+        return ujednolicWynik({ tekst: parsed.text, ucieta: parsed.truncated, finishReason: parsed.finishReason, usage: parsed.usage, responseId: parsed.responseId, reasoningPresent: parsed.reasoningPresent }, 'xkiro', parsed.model || model);
       } catch (error) {
         lastError = error;
         const status = Number(error?.status || 0);
@@ -3862,7 +3862,15 @@ Pytanie użytkownika: ${pytanie}`;
   let liczbaProb120b = 0;
   let requestBlokada120b = false;
   const wynikPusty = (provider, model, error = null) => ({ tekst: '', status: 'unavailable', provider, model, ucieta: false, error });
-  const ujednolicWynik = (r, provider, model) => ({ tekst: String(r?.tekst || '').trim(), status: r?.tekst ? 'ok' : 'unavailable', provider: r?.provider || provider, model: r?.model || model, ucieta: Boolean(r?.ucieta), error: r?.error || null });
+  const ujednolicWynik = (r, provider, model) => ({
+    tekst: String(r?.tekst || '').trim(), status: r?.tekst ? 'ok' : 'unavailable',
+    provider: r?.provider || provider, model: r?.model || model,
+    ucieta: Boolean(r?.ucieta), error: r?.error || null,
+    ...(r?.finishReason ? { finishReason: String(r.finishReason).slice(0, 80) } : {}),
+    ...(r?.usage && typeof r.usage === 'object' ? { usage: r.usage } : {}),
+    ...(r?.responseId ? { responseId: String(r.responseId).slice(0, 160) } : {}),
+    ...(r?.reasoningPresent !== undefined ? { reasoningPresent: Boolean(r.reasoningPresent) } : {}),
+  });
 
   async function zapytajGlowny(maxTok, overrideSystemPrompt = systemPrompt, model = AI_MODELS.generatorPrimary) {
     if (timeoutDlaGeneracji() === null) {
@@ -3982,6 +3990,10 @@ Pytanie użytkownika: ${pytanie}`;
       status: attempt.status || 'unknown',
       failure: attempt.failure || null,
       latencyMs: Math.max(0, Number(attempt.latencyMs) || 0),
+      ...(attempt.finishReason ? { finishReason: String(attempt.finishReason).slice(0, 80) } : {}),
+      ...(attempt.usage && typeof attempt.usage === 'object' ? { usage: attempt.usage } : {}),
+      ...(attempt.responseId ? { responseId: String(attempt.responseId).slice(0, 160) } : {}),
+      ...(attempt.reasoningPresent !== undefined ? { reasoningPresent: Boolean(attempt.reasoningPresent) } : {}),
       elapsedMs: aiState.elapsedMs(),
       remainingMs: aiState.remainingMs(),
     };
@@ -4015,7 +4027,7 @@ Pytanie użytkownika: ${pytanie}`;
 
     if (result.tekst && !result.ucieta) {
       lastSuccessfulGenerationStep = primaryStep;
-      recordGenerationAttempt({ provider: result.provider, model: result.model, status: 'success', latencyMs: Date.now() - startedGenerationAt });
+      recordGenerationAttempt({ provider: result.provider, model: result.model, status: 'success', latencyMs: Date.now() - startedGenerationAt, finishReason: result.finishReason, usage: result.usage, responseId: result.responseId, reasoningPresent: result.reasoningPresent });
       return result;
     }
     if (result.error && shouldAttemptPrimary) {
