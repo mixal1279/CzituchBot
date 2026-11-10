@@ -277,6 +277,14 @@ function summarizeFalseRejectMetrics(results = []) {
   };
 }
 
+function extractRetrievalTrace(summary) {
+  const rows = Array.isArray(summary?.validatorResults) ? summary.validatorResults : [];
+  const traces = rows.map(row => row?.diagnostics?.retrievalTrace).filter(trace =>
+    trace && typeof trace === 'object' && Array.isArray(trace.selectedSourceKeys)
+  );
+  return traces.length ? traces[traces.length - 1] : null;
+}
+
 function extractClaimSupportAudit(summary) {
   const audits = [];
   for (const row of summary?.validatorResults || []) {
@@ -688,6 +696,7 @@ async function run() {
         fallbackReasons: summary?.fallbackReasons || [],
         tavilySearches: summary?.tavilySearches ?? null,
         sourceCount: summary?.sourceCount ?? null,
+        retrievalTrace: extractRetrievalTrace(summary),
       });
     } catch (error) {
       results.push({
@@ -718,6 +727,7 @@ async function run() {
         fallbackReasons: summary?.fallbackReasons || [],
         tavilySearches: summary?.tavilySearches ?? null,
         sourceCount: summary?.sourceCount ?? null,
+        retrievalTrace: extractRetrievalTrace(summary),
         error: String(error?.message || error),
       });
     }
@@ -813,6 +823,18 @@ async function run() {
     claimSupportPassRate: claimSupport.claimSupportPassRate,
     claimSupportUsableRate: claimSupport.claimSupportUsableRate,
     claimSupport,
+    retrievalTraceSummary: (() => {
+      const traces = results.map(result => result.retrievalTrace).filter(Boolean);
+      const average = key => traces.length
+        ? Number((traces.reduce((sum, trace) => sum + (Number(trace[key]) || 0), 0) / traces.length).toFixed(3))
+        : null;
+      return {
+        casesWithTrace: traces.length,
+        averageQueryCount: average('queryCount'),
+        averageCandidateCount: average('candidateCount'),
+        semanticRerankingCases: traces.filter(trace => trace.semanticRerankingApplied).length,
+      };
+    })(),
     validatorMetrics: agregujMetrykiWalidatorow(validatorMetricsRaw),
     validatorMetricsRaw,
     durationMs: Date.now() - started,
