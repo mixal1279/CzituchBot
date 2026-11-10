@@ -105,3 +105,22 @@ test('multi-query fusion deduplicates and selects evidence before generation', (
   assert.equal(fused.retrievalTrace.providerCounts.tavily, 2);
   assert.equal(fused.retrievalTrace.selectedHostCount, 1);
 });
+
+test('retrieval provenance sanitizes provider labels from evidence headers', () => {
+  const block = [
+    '[SOURCE 1]',
+    'TYP: UNTRUSTED_WEB_DATA',
+    'TYTUŁ: Portal 2 Wheatley',
+    'HOST: theportalwiki.com',
+    'URL: https://theportalwiki.com/wiki/Wheatley',
+    'PROVIDER: __proto__',
+    'TREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>',
+    'Wheatley Portal 2 GLaDOS transfer core.',
+    '<<<END_UNTRUSTED_SOURCE_CONTENT>>>',
+  ].join('\\n');
+  const fused = fuseTavilyEvidenceTexts([block], 'Wheatley Portal 2', {
+    intent: 'web_fact', is_lore: true, game: 'Portal 2',
+  });
+  assert.equal(fused.retrievalTrace.providerCounts.unknown, 1);
+  assert.equal(Object.getPrototypeOf(fused.retrievalTrace.providerCounts), null);
+});
