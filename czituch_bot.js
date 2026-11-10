@@ -3824,6 +3824,7 @@ Pytanie użytkownika: ${pytanie}`;
           });
           const error = new Error(diagnostic);
           error.status = status;
+          error.retryAfter = retryAfter || null;
           throw error;
         }
         const parsed = parseOpenAICompatibleCompletion(data);
@@ -3844,7 +3845,7 @@ Pytanie użytkownika: ${pytanie}`;
         const transientHttp = [500, 502, 503, 504, 529].includes(status);
         const retryable = error?.name === 'TimeoutError' || error?.code === 'XKIRO_INVALID_JSON'
           || /empty_response|invalid_response|timed out|fetch failed/i.test(String(error?.message || '')) || transientHttp;
-        const canRetry = attemptNumber < maxAttempts && retryable && ![401, 403, 429].includes(status)
+        const canRetry = attemptNumber < maxAttempts && retryable && !error?.retryAfter && ![401, 403, 429].includes(status)
           && pozostalyCzasMs() >= 32000;
         if (!canRetry) {
           const reason = sanitizujKomunikatBledu(error?.message || error);
