@@ -21,6 +21,14 @@ test('curated benchmark contains unique questions and balanced categories with i
   assert.ok(Object.values(validation.categories).every(count => count >= 4));
 });
 
+test('17-case live sample includes every independently curated gold case', () => {
+  const benchmark = JSON.parse(fs.readFileSync(path.join(__dirname, 'ai-benchmark.json'), 'utf8'));
+  const allGold = benchmark.cases.filter(item => item.expected?.factual?.independentGold === true);
+  const selected = stratifiedCases(benchmark.cases, 17, 0);
+  assert.equal(allGold.length, 17);
+  assert.equal(selected.length, 17);
+  assert.deepEqual(new Set(selected.map(item => item.id)), new Set(allGold.map(item => item.id)));
+});
 test('benchmark validation rejects duplicate prompts, missing categories and unsupported gold facts', () => {
   const source = JSON.parse(fs.readFileSync(path.join(__dirname, 'ai-benchmark.json'), 'utf8'));
   const duplicate = JSON.parse(JSON.stringify(source));
