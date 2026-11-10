@@ -139,6 +139,7 @@ jobs:
               "- przypadków: " + r.total + " (ziarno " + (r.seed || 0) + ")",
               "- odpowiedzi: " + r.answeredAccuracy + ", kompletność: " + r.completenessAccuracy + ", factual: " + r.factualAccuracy,
               "- claim-source support: ścisłe=" + r.claimSupportPassRate + ", użyteczne=" + r.claimSupportUsableRate,
+              "- retrieval trace: przypadki=" + ((r.retrievalTraceSummary || {}).casesWithTrace || 0) + ", średnie zapytania=" + ((r.retrievalTraceSummary || {}).averageQueryCount ?? "n/a") + ", średnie źródła=" + ((r.retrievalTraceSummary || {}).averageCandidateCount ?? "n/a") + ", semantic rerank=" + ((r.retrievalTraceSummary || {}).semanticRerankingCases || 0),
               "- claim-source werdykty: " + Object.entries((r.claimSupport || {}).claimSourceVerdictCounts || {}).map(([k, v]) => k + "=" + v).join(", "),
               "- błędy generatora: " + ((d.generationProviderFailures || []).join(", ") || "brak"),
               "- dostawcy zdegradowani: " + ((d.degradedProviders || []).join(", ") || "brak"),
