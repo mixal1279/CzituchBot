@@ -1463,8 +1463,8 @@ function wykryjPodmianePodmiotu(claimPl, claimEn) {
 
 function czyOgraniczenieEpistemiczneAngielskie(sentence) {
   const text = normalizujClaim(sentence);
-  const uncertainty = /\\b(?:insufficient|not enough|lack of|no|without|unable to)\\b.{0,55}\\b(?:data|information|evidence|sources?)\\b|\\b(?:data|information|evidence|sources?)\\b.{0,70}\\b(?:insufficient|unavailable|not enough|do not contain|does not contain|cannot establish|cannot determine|does not explain|no information)\\b/u.test(text);
-  const scope = /\\b(?:source|sources|evidence|available|provided|determine|establish|confirm|explain|identify|reason|why|when|where|what)\\b/u.test(text);
+  const uncertainty = /\b(?:insufficient|not enough|lack of|no|without|unable to)\b.{0,55}\b(?:data|information|evidence|sources?)\b|\b(?:data|information|evidence|sources?)\b.{0,70}\b(?:insufficient|unavailable|not enough|do not contain|does not contain|cannot establish|cannot determine|does not explain|no information)\b/u.test(text);
+  const scope = /\b(?:source|sources|evidence|available|provided|determine|establish|confirm|explain|identify|reason|why|when|where|what)\b/u.test(text);
   return uncertainty && scope;
 }
 
