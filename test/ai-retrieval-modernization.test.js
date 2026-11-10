@@ -8,7 +8,7 @@ const {
   evaluateRetrieval, aggregateRetrievalMetrics,
 } = require('../ai/retrieval-evaluation');
 const { assessEvidence } = require('../ai/core');
-const { rerankujWynikiTavily } = require('../ai/tavily');
+const { rerankujWynikiTavily, fuseTavilyEvidenceTexts } = require('../ai/tavily');
 
 test('RRF łączy rankingi bez porównywania ich surowych skal', () => {
   const result = reciprocalRankFusion([
@@ -78,4 +78,28 @@ test('Tavily reranker applies optional semantic score without making an API requ
   });
   assert.equal(ranked.length, 2);
   assert.equal(ranked[0].url, 'https://b.example.org/portal');
+});
+
+test('multi-query fusion deduplicates and selects evidence before generation', () => {
+  const source = (id, url, title, body) => [
+    `[SOURCE ${id}]`,
+    'TYP: UNTRUSTED_WEB_DATA',
+    `TYTUŁ: ${title}`,
+    `HOST: ${new URL(url).hostname}`,
+    `URL: ${url}`,
+    'PROVIDER: tavily',
+    'TREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>',
+    body,
+    '<<<END_UNTRUSTED_SOURCE_CONTENT>>>',
+  ].join('\\n');
+  const question = 'Dlaczego Wheatley przejął kontrolę nad GLaDOS w Portal 2?';
+  const fused = fuseTavilyEvidenceTexts([
+    source(1, 'https://theportalwiki.com/wiki/Wheatley', 'Wheatley Portal 2', 'Wheatley przejął kontrolę nad GLaDOS po transferze rdzeni.'),
+    source(2, 'https://www.ign.com/articles/portal-2', 'Portal 2 review', 'Portal 2 features Wheatley and GLaDOS. Wheatley is a personality core.'),
+  ], question, { intent: 'web_fact', is_lore: true, game: 'Portal 2' }, { maxSources: 1 });
+  assert.equal(fused.retrievalTrace.candidateCount, 2);
+  assert.equal(fused.sources.length, 1);
+  assert.match(fused.text, /^\\[SOURCE 1\\]/);
+  assert.ok(fused.text.includes(fused.sources[0].url));
+  assert.equal(fused.retrievalTrace.selectedSourceKeys.length, 1);
 });
