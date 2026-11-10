@@ -19,27 +19,41 @@ const { createTavilySearch, classifyTavilyError, filtrujPoScore, normalizujProgS
 const { assessEvidence, sourceMatchesRequestContext } = require('../ai/core');
 
 
-test('Tavily Search rejects oversized provider bodies before JSON parsing', async () => {
+test('Tavily retries an oversized provider response once with a bounded basic payload', async () => {
+  const requests = [];
   const search = createTavilySearch({
     apiKey: 'test-tavily-key',
     groq: null,
     normalizeQuery: value => value,
-    fetchZTimeout: async () => new Response(
-      JSON.stringify({ results: [] }) + ' '.repeat(600 * 1024),
-      { status: 200, headers: { 'content-type': 'application/json' } },
-    ),
+    fetchZTimeout: async (_url, options) => {
+      requests.push(JSON.parse(options.body));
+      if (requests.length === 1) return new Response(
+        JSON.stringify({ results: [] }) + ' '.repeat(600 * 1024),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+      return new Response(JSON.stringify({ results: [{
+        title: 'Tavily gameplay guide',
+        url: 'https://example.com/tavily-gameplay-guide',
+        raw_content: 'Tavily oversized provider response guide evidence. '.repeat(40),
+        score: 0.95,
+      }] }), { status: 200, headers: { 'content-type': 'application/json' } });
+    },
     logger: { log() {}, warn() {}, error() {} },
     cacheFile: '/tmp/czituch-tavily-oversized-response-test.json',
     geminiKey: '',
     exaKey: '',
   });
-
   const result = await search('Tavily oversized provider response', {
-    _skipRewrite: true,
-    returnMeta: true,
+    _skipRewrite: true, searchDepth: 'advanced', returnMeta: true,
   });
-  assert.equal(result.status, 'error');
-  assert.equal(result.error, 'provider_response_too_large');
+  assert.equal(requests.length, 2);
+  assert.equal(requests[0].search_depth, 'advanced');
+  assert.equal(requests[1].search_depth, 'basic');
+  assert.equal(requests[1].max_results, 3);
+  assert.equal(requests[1].chunks_per_source, 1);
+  assert.equal(requests[1].include_raw_content, false);
+  assert.equal(result.status, 'ok');
+  assert.match(result.text, /Tavily gameplay guide/);
 });
 
 test('secondary retrieval hard timeout releases a fetch that ignores AbortSignal', async () => {
