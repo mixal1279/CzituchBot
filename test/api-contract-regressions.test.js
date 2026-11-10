@@ -104,6 +104,7 @@ test('primary generation supports configured Groq or xKiro and checks endpoint c
 test('validator provider preflight covers Gemini, xKiro, OpenRouter and Groq production budgets', () => {
   const source = read('scripts/validator-providers-preflight.js');
   assert.match(source, /Gemini:\s*12000/);
+  assert.match(source, /AI_VALIDATOR_GEMINI !== '0'/);
   assert.match(source, /xKiro:\s*Math\.max\(6000, Number\(process\.env\.AI_XKIRO_VALIDATOR_TIMEOUT_MS\) \|\| 9000\)/);
   assert.match(source, /OpenRouter:\s*Math\.max\(4000, Number\(process\.env\.AI_OPENROUTER_VALIDATOR_TIMEOUT_MS\) \|\| 6000\)/);
   assert.match(source, /Groq:\s*3000/);

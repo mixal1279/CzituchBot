@@ -119,8 +119,11 @@ function groqProbe(payload, maxTokens) {
   };
 }
 
-if (GEMINI_KEY) probes.push(geminiProbe(SMALL, 900), geminiProbe(REAL, 1600));
-else console.log('[preflight] Gemini: pominięty (brak GEMINI_API_KEY)');
+if (GEMINI_KEY && process.env.AI_VALIDATOR_GEMINI !== '0') {
+  probes.push(geminiProbe(SMALL, 900), geminiProbe(REAL, 1600));
+} else {
+  console.log(`[preflight] Gemini validator: pominięty (${GEMINI_KEY ? 'wyłączony konfiguracją' : 'brak GEMINI_API_KEY'})`);
+}
 
 // xKiro/Cohere is the primary validator. Probe the exact configured validator
 // model, not XKIRO_MODEL (which belongs to the generation matrix).
