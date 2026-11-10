@@ -122,21 +122,24 @@ async function odczytajOgraniczonyJson(response, maxBytes = MAX_PROVIDER_RESPONS
       reader.releaseLock?.();
     }
     try { return JSON.parse(Buffer.concat(chunks, total).toString('utf8')); }
-    catch (_) { return {}; }
+    catch (error) { const invalid = new Error('provider_invalid_json'); invalid.cause = error; throw invalid; }
   }
 
   // Własne transporty mogą udostępniać json() i text() niezależnie.
   // Preferuj json(), tak jak robił poprzedni kontrakt fetchJson; limit sprawdzamy
   // po serializacji. Produkcyjny fetch używa wyżej ograniczonego streamu.
   if (typeof response.json === 'function') {
-    const data = await response.json().catch(() => ({}));
+    let data;
+    try { data = await response.json(); }
+    catch (error) { const invalid = new Error('provider_invalid_json'); invalid.cause = error; throw invalid; }
     if (Buffer.byteLength(JSON.stringify(data), 'utf8') > maxBytes) throw new Error('provider_response_too_large');
     return data;
   }
   if (typeof response.text === 'function') {
     const body = await response.text();
     if (Buffer.byteLength(body, 'utf8') > maxBytes) throw new Error('provider_response_too_large');
-    try { return JSON.parse(body); } catch (_) { return {}; }
+    try { return JSON.parse(body); }
+    catch (error) { const invalid = new Error('provider_invalid_json'); invalid.cause = error; throw invalid; }
   }
   return {};
 }
