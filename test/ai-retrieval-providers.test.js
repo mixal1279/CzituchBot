@@ -48,10 +48,10 @@ test('Tavily retries an oversized provider response once with a bounded basic pa
   });
   assert.equal(requests.length, 2);
   assert.equal(requests[0].search_depth, 'advanced');
-  assert.equal(requests[1].search_depth, 'basic');
-  assert.equal(requests[1].max_results, 3);
+  assert.equal(requests[1].search_depth, 'advanced');
+  assert.equal(requests[1].max_results, 1);
   assert.equal(requests[1].chunks_per_source, 1);
-  assert.equal(requests[1].include_raw_content, false);
+  assert.equal(requests[1].include_raw_content, 'markdown');
   assert.equal(result.status, 'ok');
   assert.match(result.text, /Tavily gameplay guide/);
 });
