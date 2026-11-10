@@ -101,6 +101,15 @@ test('primary generation supports configured Groq or xKiro and checks endpoint c
   assert.match(body, /allowPrimary \? classifyFailure\(result\.error \|\| ''\) : 'validator_rejection'/);
 });
 
+test('strict Cohere live benchmark never substitutes Groq or Gemini as generator', () => {
+  const source = read('czituch_bot.js');
+  const workflow = read('.github/workflows/ai-live-benchmark.yml');
+  assert.match(workflow, /AI_BENCHMARK_STRICT_GENERATOR:\s*"1"/);
+  assert.match(source, /AI_BENCHMARK_STRICT_GENERATOR === '1'/);
+  assert.match(source, /candidateSteps = candidateSteps\.filter\(step => step === primaryStep\)/);
+  assert.match(source, /exclude: strictBenchmarkGenerator\s*\? \[\]/);
+});
+
 test('validator provider preflight covers Gemini, xKiro, OpenRouter and Groq production budgets', () => {
   const source = read('scripts/validator-providers-preflight.js');
   assert.match(source, /Gemini:\s*12000/);
