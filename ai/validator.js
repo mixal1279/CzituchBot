@@ -916,7 +916,16 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
   const questionText = normalizujClaim(options.question || '');
   const causalQuestion = /\b(?:dlaczego|czemu|z jakiego powodu|jaka byla przyczyna|co spowodowalo|why|how come|what caused|what was the reason)\b/u.test(questionText);
   const causalLimitation = /\b(?:przyczyn\w*|powod\w*|cause\w*|reason\w*)\b/u.test(normalizujClaim(answer));
-  const retrievedEvidenceHasCausalSignal = CAUSAL_EVIDENCE_RE.test(normalizujClaim(dane));
+  // Ograniczenie epistemiczne blokujemy tylko wtedy, gdy sygnał przyczynowy
+  // występuje w dowodzie dopasowanym do pytania, a nie w dowolnym fragmencie
+  // któregoś z pobranych dokumentów. Inaczej obca relacja przyczynowa z retrieval
+  // potrafi zablokować uczciwą odmowę odpowiedzi o innym zdarzeniu.
+  const causalEvidenceCandidates = options.question
+    ? rankEvidenceForClaim(options.question, parsedEvidenceBlocks, null, 24)
+    : [];
+  const retrievedEvidenceHasCausalSignal = causalEvidenceCandidates.some(candidate =>
+    CAUSAL_EVIDENCE_RE.test(normalizujClaim(candidate.quote))
+  );
   // A source-scoped limitation is a valid answer to an explicitly causal question
   // when the retrieved evidence does not establish the cause. In this case the
   // answer contains no factual assertion to bind to claims; ignore contradictory
