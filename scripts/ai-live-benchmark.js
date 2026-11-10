@@ -831,10 +831,18 @@ async function run() {
       const average = key => traces.length
         ? Number((traces.reduce((sum, trace) => sum + (Number(trace[key]) || 0), 0) / traces.length).toFixed(3))
         : null;
+      const providerCounts = {};
+      for (const trace of traces) {
+        for (const [provider, count] of Object.entries(trace.providerCounts || {})) {
+          providerCounts[provider] = (providerCounts[provider] || 0) + Math.max(0, Number(count) || 0);
+        }
+      }
       return {
         casesWithTrace: traces.length,
         averageQueryCount: average('queryCount'),
         averageCandidateCount: average('candidateCount'),
+        averageSelectedHostCount: average('selectedHostCount'),
+        providerCounts,
         semanticRerankingCases: traces.filter(trace => trace.semanticRerankingApplied).length,
         semanticSearchCases: results.filter(result => result.semanticSearches > 0).length,
       };
