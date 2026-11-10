@@ -108,6 +108,7 @@ const AI_VALIDATOR = require('./ai/validator');
 const { createVerdictCache } = require('./ai/verdict-cache');
 const verdictCache = createVerdictCache();
 const { createTavilySearch, fuseTavilyEvidenceTexts } = require('./ai/tavily');
+const { searchExa } = require('./ai/webRetrieval');
 const { normalizujZapytanieTavily } = AI_POLICY;
 const { czyPytanieOLore, czyMaKontekstGry, dodajGameLoreDomenę, wytnijAtrybucjeGameLoreWszystkie, GAMELORE_DOMAIN } = require('./ai/lore');
 const { czyPytanieOGameplay, dodajGameFAQsDomenę, wytnijAtrybucjeGameFAQsWszystkie, GAMEFAQS_DOMAIN } = require('./ai/gameplay');
@@ -3067,6 +3068,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
       generationAttempts: aiState.generationAttempts || [],
       timingTrace: aiState.timingTrace || [],
       retrievalTrace: aiState.retrievalTrace || null,
+      semanticSearches: aiState.semanticSearches || 0,
       sourceCount: daneDoWalidacji ? (daneDoWalidacji.match(/\[(?:SOURCE|REFERENCE) [^\]]+\]/g) || []).length : 0,
       metrics: { ...AI_METRYKI, observability: snapshotAIMetrics(AI_OBSERVABILITY) },
       durationMs: Date.now() - aiState.startedAt, finalStatus: status,
@@ -3472,6 +3474,46 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
           kolejkaTavily.push(fallbackQuery);
           console.log(`[Tavily] 🔁 Słaby retrieval — dodatkowe zapytanie: "${fallbackQuery}"`);
         }
+      }
+    }
+    // Opcjonalny semantic retrieval przez Exa. Jest domyślnie wyłączony,
+    // zużywa maksymalnie jeden dodatkowy request i korzysta z tego samego budżetu czasu.
+    const semanticEnabled = process.env.AI_SEMANTIC_RETRIEVAL === '1';
+    const semanticKey = String(process.env.EXA_API_KEY || '').trim();
+    const semanticTimeoutRaw = Number(process.env.AI_SEMANTIC_RETRIEVAL_TIMEOUT_MS);
+    const semanticTimeoutMs = Math.max(1500, Math.min(6000,
+      Number.isFinite(semanticTimeoutRaw) && semanticTimeoutRaw > 0 ? semanticTimeoutRaw : 3500));
+    if (semanticEnabled && semanticKey && !aiState.semanticSearches
+      && aiState.reserveTavily('retrieval') && pozostalyCzasMs() > semanticTimeoutMs + 12000) {
+      const strictPersonaDomains = (pytanieOrazBilly ? domenyTavilyBilly : null)
+        || (pytanieOrazEdzzi ? domenyTavilyEdzzi : null)
+        || (pytanieOrazAngie ? domenyTavilyAngie : null);
+      const semanticStartedAt = Date.now();
+      try {
+        const semanticResult = await searchExa({
+          apiKey: semanticKey,
+          query: pytanie.slice(0, 1200),
+          domains: strictPersonaDomains || [],
+          startIndex: sourceOffset,
+          timeoutMs: Math.min(semanticTimeoutMs, Math.max(1000, pozostalyCzasMs() - 12000)),
+        });
+        aiState.semanticSearches = 1;
+        if (semanticResult?.status === 'ok' && semanticResult.text) {
+          materialyTavily.push(semanticResult.text);
+          sourceOffset += (semanticResult.text.match(/\\[SOURCE \\d+\\]/g) || []).length;
+        }
+        aiState.recordTiming?.('semantic_retrieval_end', {
+          provider: 'exa',
+          status: semanticResult?.status || 'empty',
+          sourceCount: semanticResult?.sources?.length || 0,
+          elapsedMs: Date.now() - semanticStartedAt,
+        });
+      } catch (_) {
+        aiState.semanticSearches = 1;
+        aiState.recordTiming?.('semantic_retrieval_end', {
+          provider: 'exa', status: 'error', sourceCount: 0,
+          elapsedMs: Date.now() - semanticStartedAt,
+        });
       }
     }
     const fusedRetrieval = fuseTavilyEvidenceTexts(materialyTavily, pytanie, routingAI, {
