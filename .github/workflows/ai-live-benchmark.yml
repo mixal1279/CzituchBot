@@ -92,7 +92,7 @@ jobs:
           PREFLIGHT_TIMEOUT_MS: "25000"
         run: node scripts/validator-providers-preflight.js
 
-      - name: Run 10-case live benchmark
+      - name: Run 17-case live benchmark
         id: live-benchmark
         shell: bash
         run: |
