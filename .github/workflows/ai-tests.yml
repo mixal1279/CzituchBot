@@ -61,6 +61,7 @@ jobs:
           node --check ai/policy.js
           node --check ai/response.js
           node --check ai/validator.js
+          node --check ai/core.js
           node --check ai/claimValidation.js
           node --check ai/entityAliases.js
           node --check ai/validator-telemetry.js
