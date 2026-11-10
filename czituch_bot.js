@@ -3500,7 +3500,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
         aiState.semanticSearches = 1;
         if (semanticResult?.status === 'ok' && semanticResult.text) {
           materialyTavily.push(semanticResult.text);
-          sourceOffset += (semanticResult.text.match(/\\[SOURCE \\d+\\]/g) || []).length;
+          sourceOffset += (semanticResult.text.match(/\[SOURCE \d+\]/g) || []).length;
         }
         aiState.recordTiming?.('semantic_retrieval_end', {
           provider: 'exa',
