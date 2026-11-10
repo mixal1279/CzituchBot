@@ -125,7 +125,7 @@ const { extractExplicitUserMemories, mergeMemoryRecords, buildVerifiedMemoryCont
 const { parseMemoryCommand, forgetMemories, describeMemories } = require('./ai/memory_manager');
 const { decomposeQuestion, isMultiPartQuestion, buildAdvancedRetrievalPlan, buildSupplementalRetrievalQuery, selectRetrievalQueries, selectRetrievalDomains, selectGameSpecificRetrievalDomains, initialRetrievalQueryLimit } = require('./ai/retrieval');
 const { configureProviderQuotaPersistence, quotaStateReady, classifyFailure, nextFallbacks, selectRepairFallbacks, filterAvailableFallbacks, repairBudgetBlockReason, GENERATION_FALLBACK_CHAIN, configuredMaxFallbackSteps, markProviderQuota, isProviderQuotaBlocked, shouldBlockProviderQuotaWide, quotaCooldownMsFromError, geminiGenerationCooldownMsFromError, retryAfterHint, openRouterErrorMessage, shouldOpenQuotaCircuit } = require('./ai/fallback');
-const { normalizeGroqBaseUrl, createGroqCompletion, createGroqCompletionWithSchemaFallback, awaitWithAbortTimeout, computeValidatorTimeout, computeValidatorReserveMs, computeGenerationTimeout, normalizeGroqSdkBaseUrl, INITIAL_VALIDATOR_REPAIR_RESERVE_MS, shouldAttemptUnavailableRepair } = require('./ai/provider-runtime');
+const { normalizeGroqBaseUrl, parseOpenAICompatibleCompletion, createGroqCompletion, createGroqCompletionWithSchemaFallback, awaitWithAbortTimeout, computeValidatorTimeout, computeValidatorReserveMs, computeGenerationTimeout, normalizeGroqSdkBaseUrl, INITIAL_VALIDATOR_REPAIR_RESERVE_MS, shouldAttemptUnavailableRepair } = require('./ai/provider-runtime');
 const { createAIMetrics, recordAIMetric, snapshotAIMetrics } = require('./ai/metrics');
 const { DEFAULTS, sanitizeRequestText } = require('./ai/limits');
 const { createAIRequestContext } = require('./ai/requestContext');
@@ -3780,14 +3780,14 @@ Pytanie użytkownika: ${pytanie}`;
       : 12000;
     const timeoutMs = aiState.generationPhase === 'repair'
       ? timeoutDlaGeneracji()
-      : computeGenerationTimeout(remainingMs, {
-          maxTimeoutMs: xkiroMaxTimeoutMs,
-          reserveMs: 6500,
-          minTimeoutMs: 4000,
-        });
+      : computeGenerationTimeout(remainingMs, { maxTimeoutMs: xkiroMaxTimeoutMs, reserveMs: 6500, minTimeoutMs: 4000 });
     if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) return wynikPusty('xkiro', model, 'AI request deadline too short for xKiro');
+    const configuredTokens = Number(process.env.AI_XKIRO_GENERATOR_MAX_TOKENS);
+    const requestedTokens = Number.isFinite(configuredTokens) && configuredTokens > 0
+      ? Math.max(Number(maxTok) || 300, configuredTokens)
+      : (Number(maxTok) || 700);
+    const maxTokens = Math.min(1200, Math.max(300, requestedTokens));
     try {
-      // Race the complete HTTP + body-read operation against the shared request deadline.
       const messages = buildMessages(overrideSystemPrompt);
       const { response, data } = await awaitWithAbortTimeout((async () => {
         const response = await fetch(`${KONFIGURACJA.xkiroBaseUrl}/chat/completions`, {
@@ -3801,39 +3801,41 @@ Pytanie użytkownika: ${pytanie}`;
               { role: 'user', content: messages.user },
             ],
             temperature,
-            max_tokens: maxTok,
+            max_tokens: maxTokens,
           }),
           signal: controller.signal,
         });
-        const data = await response.json().catch(() => ({}));
+        let data;
+        try {
+          data = await response.json();
+        } catch (error) {
+          const parseError = new Error(`xKiro invalid JSON response (HTTP ${response.status}): ${String(error?.message || 'parse failed').slice(0, 160)}`);
+          parseError.code = 'XKIRO_INVALID_JSON';
+          throw parseError;
+        }
         return { response, data };
       })(), timeoutMs, controller, 'xKiro generation');
       if (!response.ok) {
         const status = Number(response.status || 0);
         const retryAfter = retryAfterHint(response);
-        // Keep xKiro's stable type/code/status in the diagnostic. The fallback
-        // router uses status for failover and the cooldown parser uses Retry-After
-        // or explicit daily-quota wording; never retry this POST in-place.
         const diagnostic = formatProviderError('xkiro', data?.model || model, null, {
-          status,
-          code: data?.error?.code,
-          type: data?.error?.type,
-          param: data?.error?.param,
-          retry_after: retryAfter || null,
-          responseData: data,
+          status, code: data?.error?.code, type: data?.error?.type, param: data?.error?.param,
+          retry_after: retryAfter || null, responseData: data,
         });
         throw new Error(diagnostic);
       }
-      const choice = data?.choices?.[0];
-      const tekst = (typeof choice?.message?.content === 'string' ? choice.message.content : '').trim();
-      if (!tekst) throw new Error('xKiro zwrócił pustą odpowiedź');
-      return ujednolicWynik({ tekst, ucieta: choice?.finish_reason === 'length' }, 'xkiro', data?.model || model);
+      const parsed = parseOpenAICompatibleCompletion(data);
+      if (!parsed.text) {
+        const usage = parsed.usage ? `usage=${JSON.stringify(parsed.usage)}` : 'usage=unavailable';
+        throw new Error(`empty_response: xKiro returned no answer text; finish_reason=${parsed.finishReason}; reasoning_only=${parsed.reasoningPresent}; ${usage}; response_id=${parsed.responseId || 'unavailable'}`);
+      }
+      return ujednolicWynik({ tekst: parsed.text, ucieta: parsed.truncated }, 'xkiro', parsed.model || model);
     } catch (err) {
-      console.error(`[xKiro] Fallback nieudany (${powod}):`, sanitizujKomunikatBledu(err.message));
-      return wynikPusty('xkiro', model, sanitizujKomunikatBledu(err.message));
+      const reason = sanitizujKomunikatBledu(err.message);
+      console.error(`[xKiro] Fallback nieudany (${powod}):`, reason);
+      return wynikPusty('xkiro', model, reason);
     }
   }
-
   // Jedna główna próba 120B + najwyżej jeden retry tylko dla pustej/uciętej odpowiedzi.
   // Circuit breaker i quota 120B są globalne dla procesu — nie resetują się przy
   // każdym równoległym zapytaniu AI.
