@@ -107,7 +107,7 @@ const { serializujBladProvidera, sanitizujKomunikatBledu } = require('./ai/diagn
 const AI_VALIDATOR = require('./ai/validator');
 const { createVerdictCache } = require('./ai/verdict-cache');
 const verdictCache = createVerdictCache();
-const { createTavilySearch } = require('./ai/tavily');
+const { createTavilySearch, fuseTavilyEvidenceTexts } = require('./ai/tavily');
 const { normalizujZapytanieTavily } = AI_POLICY;
 const { czyPytanieOLore, czyMaKontekstGry, dodajGameLoreDomenę, wytnijAtrybucjeGameLoreWszystkie, GAMELORE_DOMAIN } = require('./ai/lore');
 const { czyPytanieOGameplay, dodajGameFAQsDomenę, wytnijAtrybucjeGameFAQsWszystkie, GAMEFAQS_DOMAIN } = require('./ai/gameplay');
@@ -3066,6 +3066,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
       },
       generationAttempts: aiState.generationAttempts || [],
       timingTrace: aiState.timingTrace || [],
+      retrievalTrace: aiState.retrievalTrace || null,
       sourceCount: daneDoWalidacji ? (daneDoWalidacji.match(/\[(?:SOURCE|REFERENCE) [^\]]+\]/g) || []).length : 0,
       metrics: { ...AI_METRYKI, observability: snapshotAIMetrics(AI_OBSERVABILITY) },
       durationMs: Date.now() - aiState.startedAt, finalStatus: status,
@@ -3473,7 +3474,13 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
         }
       }
     }
-    wynikSzukania = materialyTavily.join('\n---\n');
+    const fusedRetrieval = fuseTavilyEvidenceTexts(materialyTavily, pytanie, routingAI, {
+      maxSources: pytanieWieloczlonowe ? 8 : 6,
+      minIndependent: (pytanieOLore || pytanieOGameplay) ? 2 : 1,
+    });
+    wynikSzukania = fusedRetrieval.text || materialyTavily.join('\n---\n');
+    aiState.retrievalTrace = fusedRetrieval.retrievalTrace;
+    console.log(`[Retrieval] RRF candidates=${fusedRetrieval.retrievalTrace.candidateCount} selected=${fusedRetrieval.sources.length} queries=${fusedRetrieval.retrievalTrace.queryCount} status=${fusedRetrieval.evidenceStatus}`);
   }
 
   // RAG Billy: stabilne fakty pobieramy z własnej bazy wiedzy, a aktualne z sieci.
