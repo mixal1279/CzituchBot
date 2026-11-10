@@ -952,7 +952,7 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, lookupFn, normalizeQu
               );
             } catch (error) {
               // Advanced/raw-content payload może przekroczyć limit rozmiaru.
-              // Ponów raz jako tani basic search z mniejszą liczbą wyników;
+              // Ponów raz z tą samą głębokością, ale z jednym wynikiem i mniejszym payloadem;
               // nie powtarzaj bez końca ani nie zwiększaj limitu pamięci.
               if (error?.message === 'provider_response_too_large' && !reducedPayloadRetryUsed && probe === 0) {
                 reducedPayloadRetryUsed = true;
