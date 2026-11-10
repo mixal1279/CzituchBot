@@ -697,6 +697,7 @@ async function run() {
         fallbackReasons: summary?.fallbackReasons || [],
         tavilySearches: summary?.tavilySearches ?? null,
         sourceCount: summary?.sourceCount ?? null,
+        semanticSearches: Number(summary?.semanticSearches) || 0,
         retrievalTrace: extractRetrievalTrace(summary),
       });
     } catch (error) {
@@ -728,6 +729,7 @@ async function run() {
         fallbackReasons: summary?.fallbackReasons || [],
         tavilySearches: summary?.tavilySearches ?? null,
         sourceCount: summary?.sourceCount ?? null,
+        semanticSearches: Number(summary?.semanticSearches) || 0,
         retrievalTrace: extractRetrievalTrace(summary),
         error: String(error?.message || error),
       });
@@ -834,6 +836,7 @@ async function run() {
         averageQueryCount: average('queryCount'),
         averageCandidateCount: average('candidateCount'),
         semanticRerankingCases: traces.filter(trace => trace.semanticRerankingApplied).length,
+        semanticSearchCases: results.filter(result => result.semanticSearches > 0).length,
       };
     })(),
     validatorMetrics: agregujMetrykiWalidatorow(validatorMetricsRaw),
