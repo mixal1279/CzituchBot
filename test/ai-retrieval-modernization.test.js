@@ -9,6 +9,7 @@ const {
 } = require('../ai/retrieval-evaluation');
 const { assessEvidence } = require('../ai/core');
 const { rerankujWynikiTavily, fuseTavilyEvidenceTexts } = require('../ai/tavily');
+const { runRetrievalBenchmark } = require('../scripts/retrieval-benchmark');
 
 test('RRF łączy rankingi bez porównywania ich surowych skal', () => {
   const result = reciprocalRankFusion([
@@ -123,4 +124,12 @@ test('retrieval provenance sanitizes provider labels from evidence headers', () 
   });
   assert.equal(fused.retrievalTrace.providerCounts.unknown, 1);
   assert.equal(Object.getPrototypeOf(fused.retrievalTrace.providerCounts), null);
+});
+
+test('offline retrieval benchmark mierzy RRF względem baseline', () => {
+  const report = runRetrievalBenchmark();
+  assert.equal(report.benchmark, 'retrieval-rrf-offline-v2');
+  assert.equal(report.total, 3);
+  assert.ok(report.metrics.reciprocalRank >= report.baselineMetrics.reciprocalRank);
+  assert.ok(report.metrics.ndcgAtK >= report.baselineMetrics.ndcgAtK);
 });
