@@ -9560,6 +9560,7 @@ const moduleExports = { zapytajAI, startBot };
 if (process.env.NODE_ENV === 'test') {
   moduleExports.__validatorTestHooks = {
     zbudujPromptWalidatora,
+    dodatniaLiczbaEnv,
     walidujOdpowiedzGeminiModel,
     walidujOdpowiedzOpenRouter,
     walidujOdpowiedzXKiro,
