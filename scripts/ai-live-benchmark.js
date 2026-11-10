@@ -279,7 +279,7 @@ function summarizeFalseRejectMetrics(results = []) {
 
 function extractRetrievalTrace(summary) {
   const rows = Array.isArray(summary?.validatorResults) ? summary.validatorResults : [];
-  const traces = rows.map(row => row?.diagnostics?.retrievalTrace).filter(trace =>
+  const traces = rows.map(row => row?.validationDiagnostics?.retrievalTrace || row?.diagnostics?.retrievalTrace).filter(trace =>
     trace && typeof trace === 'object' && Array.isArray(trace.selectedSourceKeys)
   );
   return traces.length ? traces[traces.length - 1] : null;
