@@ -267,6 +267,7 @@ test('xKiro generation retries at most once for transient failures without leavi
   assert.match(generator, /attemptNumber < maxAttempts/);
   assert.match(generator, /!\[401, 403, 429\]\.includes\(status\)/);
   assert.match(generator, /error\.retryAfter = retryAfter \|\| null/);
+  assert.match(generator, /parseError\.status = Number\(response\.status \|\| 0\)/);
   assert.match(generator, /!error\?\.retryAfter/);
   assert.match(generator, /Math\.min\(1200, Math\.max\(maxTokens \+ 200/);
   assert.match(generator, /finishReason: parsed\.finishReason/);
