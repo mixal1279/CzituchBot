@@ -4020,6 +4020,8 @@ Pytanie użytkownika: ${pytanie}`;
       'openrouter:default': () => zapytajOpenRouterFallback(effectiveMaxTok, prompt, powod),
     };
 
+    const strictBenchmarkGenerator = process.env.AI_LIVE_BENCHMARK === '1'
+      && process.env.AI_BENCHMARK_STRICT_GENERATOR === '1';
     const repairBudgetFailure = phase === 'repair' ? repairBudgetBlockReason({
       remainingMs: typeof aiState.remainingMs === 'function' ? aiState.remainingMs() : null,
       generations: aiState.generacje,
@@ -4053,7 +4055,9 @@ Pytanie użytkownika: ${pytanie}`;
           failure: 'grounded_reject',
           attempted: [],
           failedProviders: [...failedFallbackProviders],
-          exclude: lastSuccessfulGenerationStep ? [lastSuccessfulGenerationStep] : [],
+          exclude: strictBenchmarkGenerator
+            ? []
+            : (lastSuccessfulGenerationStep ? [lastSuccessfulGenerationStep] : []),
           // Repair has one generation cycle, but may try several providers
           // if an endpoint fails quickly (e.g. quota). Each provider still obeys
           // the shared deadline and model-call budget.
@@ -4061,8 +4065,13 @@ Pytanie użytkownika: ${pytanie}`;
           // a nie pełnym łańcuchem generacji. Dwie próby wystarczą: szybki model
           // oraz jeden niezależny fallback; dalsze próby zwykle tylko konsumują
           // budżet i zwiększają ryzyko timeoutu.
-          maxFallbacks: Math.min(configuredFallbackLimit, 2),
+          maxFallbacks: strictBenchmarkGenerator ? 1 : Math.min(configuredFallbackLimit, 2),
         });
+    }
+    if (strictBenchmarkGenerator) {
+      // Benchmark ma mierzyć wskazany model, a nie mieszankę Cohere/Groq/Gemini.
+      // Fallback do innego generatora unieważnia porównanie jakości.
+      candidateSteps = candidateSteps.filter(step => step === primaryStep);
     }
 
     if (phase === 'repair') {
