@@ -450,6 +450,10 @@ function buildBenchmarkDiagnostics(results, allCases = benchmark.cases, selected
     if (/timeout|timed out|deadline/i.test(detail) || attempt.timeoutAbort === true) return 'timeout';
     if (/abort|cancelled|canceled/i.test(detail)) return 'abort';
     if (/5\d\d/.test(detail)) return 'http_5xx';
+    if (/empty_response|no answer text|reasoning_only/i.test(detail)) return 'empty_response';
+    if (/truncated_response|finish_reason.{0,24}(?:length|max_tokens)/i.test(detail)) return 'truncated_response';
+    if (/invalid_json|invalid json|malformed json|json parse/i.test(detail)) return 'invalid_json';
+    if (/invalid_response|invalid schema|schema_reject/i.test(detail)) return 'invalid_response';
     return 'unknown';
   };
   const generationProviderFailures = [...new Set(results.flatMap(result =>
