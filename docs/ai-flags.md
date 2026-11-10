@@ -37,12 +37,12 @@ Plan odpowiedzi ma osobne wymagania dotyczące kompletności. Gdy pytanie zawier
 | `AI_OPENROUTER_VALIDATOR_TIMEOUT_MS` | `6000` | Maksymalny budżet pojedynczego wywołania walidatora OpenRouter; wartość jest używana zarówno w orkiestratorze, jak i wrapperze transportowym. |
 | `AI_PROVIDER_QUOTA_COOLDOWN_MS` | `60000` ms | Domyślny czas przerwy po wykryciu limitu dla pary dostawca/model; aliasy `xkiro:default` i `openrouter:default` rozwiązują się do skonfigurowanego modelu. Nagłówek `Retry-After` (sekundy lub data HTTP) ma pierwszeństwo. Workflow CI ustawia `1800000` ms na czas live benchmarku. |
 | `AI_MAX_FALLBACK_STEPS` | długość łańcucha fallbacków (`6`) | Maksymalna liczba prób fallbacku po odfiltrowaniu niedostępnych endpointów; `0` wyłącza dodatkowe próby. |
-| `AI_120B_GLOBAL_MAX_REQUESTS` | `6` | Limit żądań do 120B w procesie w ruchomym oknie 1 godziny. HTTP 402 lub jednoznaczny dzienny limit tokenów (np. TPD) otwiera osobny globalny circuit breaker na 1 godzinę. Zwykły HTTP 429 z krótkim `Retry-After` otwiera tylko cooldown endpointu i nie blokuje 120B na całą godzinę. Workflow CI ustawia `20` dla próbki 17 przypadków. |
+| `AI_120B_GLOBAL_MAX_REQUESTS` | `6` | Limit żądań do 120B w procesie w ruchomym oknie 1 godziny. HTTP 402 lub jednoznaczny dzienny limit tokenów (np. TPD) otwiera osobny globalny circuit breaker na 1 godzinę. Zwykły HTTP 429 z krótkim `Retry-After` otwiera tylko cooldown endpointu i nie blokuje 120B na całą godzinę. Workflow CI ustawia `12` dla próbki 10 przypadków. |
 | `AI_CACHE_DIR` | katalog projektu (`__dirname`) | Katalog plikowego cache AI. |
 | `AI_TAVILY_CACHE_FILE` | `AI_CACHE_DIR/tavily_cache.json` | Ścieżka pliku cache Tavily; ta zmienna ma pierwszeństwo przed `AI_CACHE_DIR`. |
 | `TAVILY_MIN_SCORE` | `0.2` | Minimalny score wyniku Tavily; wyniki bez score nie są odrzucane wyłącznie z tego powodu. |
 | `AI_BENCHMARK_SEED` | `0` | Ziarno rotacji pytań live benchmarku; 0 oznacza zestaw stały. |
-| `AI_BENCHMARK_LIMIT` | `10` (skrypt) | Liczba przypadków live benchmarku; workflow CI jawnie ustawia `17`, aby objąć wszystkie niezależne przypadki gold. |
+| `AI_BENCHMARK_LIMIT` | `10` (skrypt) | Liczba przypadków live benchmarku; workflow CI jawnie ustawia `10`, aby ograniczyć koszt live testu przy zachowaniu pokrycia kategorii. |
 | `AI_BENCHMARK_DELAY_MS` | `0` ms | Opcjonalna przerwa między przypadkami; workflow CI ustawia `5000` ms. |
 | `AI_BENCHMARK_REQUIRE_PERFECT=1` | wyłączona | Kończy run błędem, jeśli nie wszystkie próbki zostały odpowiedziane i kompletne albo choć jeden gold fact nie przejdzie. Workflow CI i przykładowy `.env.example` jawnie włączają tę kontrolę. |
 | `PREFLIGHT_TIMEOUT_MS` | `20000` ms | Timeout skryptu `validator-providers-preflight.js`. |
@@ -77,7 +77,7 @@ Plik `.env.example` w katalogu głównym zawiera listę zmiennych konfiguracyjny
 
 - `npm test` — testy regresyjne, w tym offline; nie wymaga kluczy do dostawców.
 - `npm run benchmark:offline` — deterministyczny benchmark na syntetycznych fixture'ach. Sprawdza kod pipeline'u, nie aktualną jakość modelu ani dostępność API.
-- Workflow `AI live benchmark` — uruchamiany ręcznie przez `workflow_dispatch`; najpierw wykonuje ścisły preflight skonfigurowanych walidatorów, a następnie testuje 17 przypadków na żywych dostawcach, obejmując wszystkie niezależne przypadki gold. Wymaga poprawnych sekretów i może zużywać limity API.
+- Workflow `AI live benchmark` — uruchamiany ręcznie przez `workflow_dispatch`; najpierw wykonuje ścisły preflight skonfigurowanych walidatorów, a następnie testuje 10 stratyfikowanych przypadków na żywych dostawcach. Próbka obejmuje kategorie benchmarku, ale nie wszystkie niezależne przypadki gold. Wymaga poprawnych sekretów i może zużywać limity API.
 - Preflight walidatorów mierzy rzeczywistą latencję i poprawność JSON dla Gemini, xKiro, OpenRouter i Groq oraz porównuje je z limitem produkcyjnym per dostawca; blokada bezpieczeństwa Gemini jest raportowana oddzielnie od awarii transportu. Dłuższy czas diagnostyczny preflightu nie oznacza, że produkcja czeka równie długo.
 
 ## Cache werdyktów
