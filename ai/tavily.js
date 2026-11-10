@@ -958,11 +958,12 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, lookupFn, normalizeQu
                 reducedPayloadRetryUsed = true;
                 request.body = JSON.stringify({
                   query: searchQuery,
-                  search_depth: 'basic',
-                  max_results: 3,
+                  search_depth: depth,
+                  max_results: 1,
                   chunks_per_source: 1,
                   include_answer: false,
-                  include_raw_content: false,
+                  // Zachowaj ekstrakt strony w advanced; zmniejszaj liczbę wyników, nie dowody.
+                  include_raw_content: depth === 'advanced' ? 'markdown' : false,
                   ...(domains && { include_domains: domains }),
                   ...(validTimeRange && { time_range: validTimeRange }),
                 });
