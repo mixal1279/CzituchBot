@@ -455,7 +455,7 @@ function buildRetrievalPlan(question, routing = {}, options = {}) {
           : 'story plot lore';
     add(characterNames.join(' ') + ' ' + (game || entity) + ' ' + topic, 'character');
   } else if (entity) {
-    add(\`\${entity} \${q}\`);
+    add(entity + ' ' + q);
   }
   if (game && game !== entity) add(\`\${game} \${q}\`);
 
