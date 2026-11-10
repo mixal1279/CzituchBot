@@ -113,7 +113,7 @@ test('game-specific reference domains are added without replacing configured dom
   const { selectGameSpecificRetrievalDomains } = require('../ai/retrieval');
   assert.deepEqual(
     selectGameSpecificRetrievalDomains('Skyrim', 'Kim jest Dragonborn?', ['ign.com']),
-    ['ign.com', 'en.uesp.net', 'elderscrolls.fandom.com'],
+    ['ign.com', 'gamefaqs.gamespot.com', 'en.uesp.net', 'elderscrolls.fandom.com'],
   );
   assert.deepEqual(
     selectGameSpecificRetrievalDomains('Minecraft', 'Jak zdobyć elytrę?', ['minecraft.wiki']),
