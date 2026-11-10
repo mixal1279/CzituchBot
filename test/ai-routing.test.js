@@ -82,7 +82,7 @@ for (const [question, expectedIntent, expectedEntity, expectedType] of cases) {
 }
 
 const selectedDomains = dodajGameFAQsDomenę(['youtube.com', 'example.com']);
-assert.deepEqual(selectedDomains, ['youtube.com', 'example.com']);
+assert.deepEqual(selectedDomains, ['youtube.com', 'example.com', 'gamefaqs.gamespot.com']);
 assert.deepEqual(dodajGameFAQsDomenę(['gamefaqs.gamespot.com']), ['gamefaqs.gamespot.com']);
 assert.equal(czyPytanieOGameplay('Jak odblokować ten sekret?', ['unrelated.fandom.com']), false);
 assert.equal(czyPytanieOGameplay('Jak odblokować ten sekret?', ['gamelore.fandom.com']), true);
