@@ -419,8 +419,10 @@ function rerankujWynikiTavily(results, sourceQuestion, requestedDomains = [], op
   const resolvedEntity = resolveGameEntity(sourceQuestion);
   const entity = resolvedEntity?.game || resolvedEntity?.name || null;
   const claimSignals = sygnalyClaimuTavily(sourceQuestion);
-  const isLore = options.isLore === true || /\b(?:lore|fabuł|histori|kanon|canon|dlaczego|czemu|why|story|plot)\b/iu.test(String(sourceQuestion || ''));
-  const isGameplay = options.isGameplay === true || /\b(?:walkthrough|poradnik|solucj|jak\s+(?:pokona|przej|zdoby|zrob|znale)|how\s+to)\b/iu.test(String(sourceQuestion || ''));
+  const isLore = options.isLore === true || options.routing?.is_lore === true
+    || Boolean(resolvedEntity && /\b(?:lore|fabuł|histori|kanon|canon|dlaczego|czemu|why|story|plot)\b/iu.test(String(sourceQuestion || '')));
+  const isGameplay = options.isGameplay === true || options.routing?.is_gameplay === true
+    || Boolean(resolvedEntity && /\b(?:walkthrough|poradnik|solucj|jak\s+(?:pokona|przej|zdoby|zrob|znale)|how\s+to)\b/iu.test(String(sourceQuestion || '')));
   const retrievalRouting = {
     ...(options.routing && typeof options.routing === 'object' ? options.routing : {}),
     entity: options.routing?.entity || entity || '',
