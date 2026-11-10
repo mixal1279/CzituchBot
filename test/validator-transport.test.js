@@ -11,7 +11,7 @@ delete process.env.AI_VALIDATOR_BREAKER_MS;
 
 const { __validatorTestHooks: hooks } = require('../czituch_bot');
 const { createAIRequestContext } = require('../ai/requestContext');
-const { normalizeGroqBaseUrl } = require('../ai/provider-runtime');
+const { normalizeGroqBaseUrl, parseOpenAICompatibleCompletion } = require('../ai/provider-runtime');
 const { resetProviderQuotaCooldowns, quotaCooldownMsFromError, shouldOpenQuotaCircuit, isProviderQuotaBlocked } = require('../ai/fallback');
 const { GROQ_VALIDATOR_JSON_SCHEMA, buildGroqValidatorResponseFormat, buildOpenRouterValidatorResponseFormat } = require('../ai/validator');
 
@@ -970,4 +970,41 @@ test('OpenRouter empty successful responses cool down only the selected model en
   const second = await hooks.walidujOdpowiedzOpenRouter('generic', QUESTION, ANSWER, EVIDENCE, 'test-openrouter-empty-cooldown-repeat');
   assert.equal(second.skipped, true);
   assert.equal(calls, 1);
+});
+
+test('OpenAI-compatible parser extracts string and multipart text without exposing reasoning', () => {
+  const parsed = parseOpenAICompatibleCompletion({
+    id: 'resp-1', model: 'cohere/command-a-reasoning',
+    choices: [{ finish_reason: 'stop', message: {
+      content: [{ type: 'text', text: 'Odpowiedź ' }, { type: 'output_text', text: 'testowa.' }],
+      reasoning: 'internal reasoning must not be surfaced',
+    } }],
+    usage: { prompt_tokens: 120, completion_tokens: 80, total_tokens: 200 },
+  });
+  assert.equal(parsed.text, 'Odpowiedź testowa.');
+  assert.equal(parsed.finishReason, 'stop');
+  assert.equal(parsed.truncated, false);
+  assert.equal(parsed.reasoningPresent, true);
+  assert.deepEqual(parsed.usage, { promptTokens: 120, completionTokens: 80, totalTokens: 200 });
+  assert.equal(parsed.model, 'cohere/command-a-reasoning');
+});
+
+test('OpenAI-compatible parser distinguishes reasoning-only and truncated completions', () => {
+  const reasoningOnly = parseOpenAICompatibleCompletion({
+    choices: [{ finish_reason: 'length', message: { content: '', reasoning_content: 'private reasoning' } }],
+  });
+  assert.equal(reasoningOnly.text, '');
+  assert.equal(reasoningOnly.reasoningPresent, true);
+  assert.equal(reasoningOnly.truncated, true);
+  const truncated = parseOpenAICompatibleCompletion({
+    choices: [{ finish_reason: 'length', message: { content: 'Częściowa odpowiedź' } }],
+  });
+  assert.equal(truncated.text, 'Częściowa odpowiedź');
+  assert.equal(truncated.truncated, true);
+});
+
+test('OpenAI-compatible parser rejects malformed and provider-error payloads explicitly', () => {
+  assert.throws(() => parseOpenAICompatibleCompletion({}), /missing choices\[0\]/);
+  assert.throws(() => parseOpenAICompatibleCompletion({ error: { message: 'upstream overloaded' } }), /provider_error: upstream overloaded/);
+  assert.throws(() => parseOpenAICompatibleCompletion(null), /non-object payload/);
 });
