@@ -12,6 +12,7 @@
  */
 
 const { GAME_ALIASES, CHARACTER_ALIASES, containsAlias } = require('./entities');
+const { reciprocalRankFusion } = require('./rank-fusion');
 
 const STOPWORDS = new Set([
   'czy','jak','jaki','jaka','jakie','co','czym','kto','kim','kiedy','gdzie',
@@ -215,8 +216,11 @@ function scoreSource(source, query, options = {}) {
     freshnessBonus +
     contentBonus
   ));
+  const semanticScore = Number.isFinite(options.semanticScore)
+    && options.semanticScore >= 0 && options.semanticScore <= 1
+    ? options.semanticScore : null;
 
-  return { ...s, coreScore: Number(score.toFixed(4)), relevance, titleRelevance, authorityScore: authority };
+  return { ...s, coreScore: Number(score.toFixed(4)), semanticScore, relevance, titleRelevance, authorityScore: authority };
 }
 
 const ROMAN_SEQUEL_MARKERS = new Set(['ii', 'iii', 'iv', 'v', 'vi', 'vii', 'viii', 'ix']);
@@ -482,28 +486,63 @@ function czyStreszczenieModelu(source) {
   return /^gemini/i.test(String(source?.provider || ''));
 }
 
-function assessEvidence(results = [], question, routing = {}) {
-  const normalized = (Array.isArray(results) ? results : [])
+function assessEvidence(results = [], question, routing = {}, options = {}) {
+  const scopedSources = (Array.isArray(results) ? results : [])
     .filter(Boolean)
     .map((source, index) => normalizeSource(source, index))
     .filter(source => sourceMatchesRequestContext(source, routing, question))
-    .filter(source => sourceLanguageCompatible(source, question, routing))
-    .map((s, index) => scoreSource(s, question, {
-      index,
-      // Score against both the resolved character/item and its parent game.
-      // A game name must not shadow a more specific entity mention.
-      entities: [
-        routing.resolved_entity?.name,
-        routing.entity,
-        routing.game,
-        routing.resolved_entity?.game,
-      ],
-      freshness: routing.freshness,
-    }));
+    .filter(source => sourceLanguageCompatible(source, question, routing));
+  const entities = [
+    routing.resolved_entity?.name,
+    routing.entity,
+    routing.game,
+    routing.resolved_entity?.game,
+  ];
+  const semanticScores = options.semanticScores instanceof Map
+    ? options.semanticScores
+    : new Map(Object.entries(options.semanticScores || {}));
+  const baseScored = scopedSources.map((source, index) => {
+    const value = semanticScores.has(source.key) ? Number(semanticScores.get(source.key))
+      : semanticScores.has(source.url) ? Number(semanticScores.get(source.url)) : NaN;
+    return scoreSource(source, question, {
+      index, entities, freshness: routing.freshness,
+      semanticScore: Number.isFinite(value) && value >= 0 && value <= 1 ? value : null,
+    });
+  });
+
+  // RRF łączy rankingi kilku zapytań bez porównywania punktacji dostawców.
+  // Każdy ranking zawiera tylko źródła z rzeczywistym sygnałem dopasowania.
+  const queryPlan = buildRetrievalPlan(question, routing, { maxQueries: 4 });
+  const rankingQueries = [...new Set([
+    String(question || '').trim(),
+    ...queryPlan.map(item => item.query),
+  ].filter(Boolean))].slice(0, 5);
+  const rankings = rankingQueries.map(query => scopedSources
+    .map((source, index) => scoreSource(source, query, { index, entities, freshness: routing.freshness }))
+    .filter(source => source.relevance > 0 || source.titleRelevance > 0)
+    .sort((a, b) => b.coreScore - a.coreScore || a.key.localeCompare(b.key))
+    .map(source => source.key));
+  const fused = reciprocalRankFusion(rankings, { k: 60 });
+  const maxFusion = Math.max(0, ...fused.map(item => item.score));
+  const fusionByKey = new Map(fused.map(item => [item.id, item.score]));
+  const normalized = baseScored.map(source => {
+    const rawRrf = fusionByKey.get(source.key) || 0;
+    const rrfScore = maxFusion > 0 ? rawRrf / maxFusion : 0;
+    const blendedScore = source.semanticScore === null
+      ? source.coreScore * 0.7 + rrfScore * 0.3
+      : source.coreScore * 0.6 + rrfScore * 0.25 + source.semanticScore * 0.15;
+    return {
+      ...source,
+      lexicalScore: source.coreScore,
+      rrfScore: Number(rrfScore.toFixed(4)),
+      coreScore: Number(blendedScore.toFixed(4)),
+      matchedQueryCount: rankings.filter(ranking => ranking.includes(source.key)).length,
+    };
+  });
 
   const unique = [];
   const seen = new Set();
-  for (const item of normalized.sort((a,b) => b.coreScore - a.coreScore)) {
+  for (const item of normalized.sort((a,b) => b.coreScore - a.coreScore || a.key.localeCompare(b.key))) {
     if (seen.has(item.key)) continue;
     seen.add(item.key);
     unique.push(item);
@@ -543,6 +582,18 @@ function assessEvidence(results = [], question, routing = {}) {
     status,
     sources: selected,
     sourceCount: selected.length,
+    retrievalTrace: {
+      queryCount: rankingQueries.length,
+      candidateCount: scopedSources.length,
+      rankings: rankings.map((ranking, index) => ({
+        queryIndex: index,
+        candidateCount: ranking.length,
+        topSourceKeys: ranking.slice(0, 5),
+      })),
+      fusion: fused.slice(0, 10).map(item => ({ sourceKey: item.id, score: Number(item.score.toFixed(6)) })),
+      selectedSourceKeys: selected.map(source => source.key),
+      semanticRerankingApplied: selected.some(source => source.semanticScore !== null),
+    },
     independentHosts: independentHosts.size,
     uniqueHosts: hosts.size,
     relevantHosts: evidenceHosts.size,
@@ -591,6 +642,7 @@ module.exports = {
   AUTHORITY_ALIASES,
   normalizeSource,
   scoreSource,
+  reciprocalRankFusion,
   similarity,
   diversifySources,
   buildRetrievalPlan,
