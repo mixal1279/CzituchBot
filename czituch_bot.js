@@ -3520,6 +3520,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
     const fusedRetrieval = fuseTavilyEvidenceTexts(materialyTavily, pytanie, routingAI, {
       maxSources: pytanieWieloczlonowe ? 8 : 6,
       minIndependent: (pytanieOLore || pytanieOGameplay) ? 2 : 1,
+      searchCount: aiState.tavilySearches + (aiState.semanticSearches || 0),
     });
     wynikSzukania = fusedRetrieval.text || materialyTavily.join('\n---\n');
     aiState.retrievalTrace = fusedRetrieval.retrievalTrace;
