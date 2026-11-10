@@ -3811,6 +3811,8 @@ Pytanie użytkownika: ${pytanie}`;
           catch (error) {
             const parseError = new Error(`xKiro invalid JSON response (HTTP ${response.status}): ${String(error?.message || 'parse failed').slice(0, 160)}`);
             parseError.code = 'XKIRO_INVALID_JSON';
+            parseError.status = Number(response.status || 0);
+            parseError.retryAfter = retryAfterHint(response) || null;
             throw parseError;
           }
           return { response, data };
