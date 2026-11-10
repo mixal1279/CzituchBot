@@ -100,7 +100,7 @@ Werdykty `accepted` i `rejected` są cache'owane przez 10 minut, maksymalnie 200
 
 ## Retrieval v2 — ranking i ewaluacja
 
-- Wyniki z wielu rzeczywistych zapytań Tavily są łączone przed generowaniem algorytmem Reciprocal Rank Fusion (RRF, k=60). RRF wykorzystuje pozycje w rankingach zamiast surowych punktacji dostawców.
+- Wyniki z wielu rzeczywistych zapytań Tavily oraz opcjonalnego Exa są łączone przed generowaniem algorytmem Reciprocal Rank Fusion (RRF, k=60). RRF wykorzystuje pozycje w rankingach zamiast surowych punktacji dostawców.
 - Fuzja jest lokalna, deterministyczna i nie wykonuje dodatkowych wywołań sieciowych. Plan zapytań nadal ma limit maksymalnie 5 pozycji.
 - `assessEvidence(..., options)` przyjmuje opcjonalne `semanticScores` jako `Map` lub obiekt mapujący canonical URL/klucz źródła na score 0–1. Bez tego parametru nie ma semantycznego rerankingu ani dodatkowego requestu.
 - `retrievalTrace` zawiera liczbę zapytań i kandydatów, top source keys per ranking, wynik fuzji i wybrane źródła. Nie zawiera treści źródeł ani sekretów.
