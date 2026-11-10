@@ -30,9 +30,9 @@ jobs:
       AI_ALLOW_PARTIAL_ANSWERS: "1"
       AI_BENCHMARK_LIMIT: "10"
       AI_BENCHMARK_DELAY_MS: "5000"
-      AI_REQUEST_TIMEOUT_MS: "65000"
-      AI_XKIRO_GENERATOR_TIMEOUT_MS: "18000"
-      AI_XKIRO_VALIDATOR_TIMEOUT_MS: "15000"
+      AI_REQUEST_TIMEOUT_MS: "85000"
+      AI_XKIRO_GENERATOR_TIMEOUT_MS: "24000"
+      AI_XKIRO_VALIDATOR_TIMEOUT_MS: "22000"
       AI_OPENROUTER_VALIDATOR_TIMEOUT_MS: "6000"
       AI_GENERATOR_PROVIDER: "xkiro"
       AI_VALIDATOR_GEMINI: "0"
@@ -75,7 +75,7 @@ jobs:
         id: validator-preflight
         env:
           PREFLIGHT_STRICT: "1"
-          PREFLIGHT_TIMEOUT_MS: "20000"
+          PREFLIGHT_TIMEOUT_MS: "25000"
         run: node scripts/validator-providers-preflight.js
 
       - name: Run 10-case live benchmark
