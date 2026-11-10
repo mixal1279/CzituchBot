@@ -91,7 +91,7 @@ test('multi-query fusion deduplicates and selects evidence before generation', (
     'TREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>',
     body,
     '<<<END_UNTRUSTED_SOURCE_CONTENT>>>',
-  ].join('\\n');
+  ].join('\n');
   const question = 'Dlaczego Wheatley przejął kontrolę nad GLaDOS w Portal 2?';
   const fused = fuseTavilyEvidenceTexts([
     source(1, 'https://theportalwiki.com/wiki/Wheatley', 'Wheatley Portal 2', 'Wheatley przejął kontrolę nad GLaDOS po transferze rdzeni.'),
@@ -99,7 +99,7 @@ test('multi-query fusion deduplicates and selects evidence before generation', (
   ], question, { intent: 'web_fact', is_lore: true, game: 'Portal 2' }, { maxSources: 1 });
   assert.equal(fused.retrievalTrace.candidateCount, 2);
   assert.equal(fused.sources.length, 1);
-  assert.match(fused.text, /^\\[SOURCE 1\\]/);
+  assert.match(fused.text, /^\[SOURCE 1\]/);
   assert.ok(fused.text.includes(fused.sources[0].url));
   assert.equal(fused.retrievalTrace.selectedSourceKeys.length, 1);
 });
