@@ -419,8 +419,8 @@ function rerankujWynikiTavily(results, sourceQuestion, requestedDomains = [], op
   const resolvedEntity = resolveGameEntity(sourceQuestion);
   const entity = resolvedEntity?.game || resolvedEntity?.name || null;
   const claimSignals = sygnalyClaimuTavily(sourceQuestion);
-  const isLore = options.isLore === true || /\\b(?:lore|fabuł|histori|kanon|canon|dlaczego|czemu|why|story|plot)\\b/iu.test(String(sourceQuestion || ''));
-  const isGameplay = options.isGameplay === true || /\\b(?:walkthrough|poradnik|solucj|jak\\s+(?:pokona|przej|zdoby|zrob|znale)|how\\s+to)\\b/iu.test(String(sourceQuestion || ''));
+  const isLore = options.isLore === true || /\b(?:lore|fabuł|histori|kanon|canon|dlaczego|czemu|why|story|plot)\b/iu.test(String(sourceQuestion || ''));
+  const isGameplay = options.isGameplay === true || /\b(?:walkthrough|poradnik|solucj|jak\s+(?:pokona|przej|zdoby|zrob|znale)|how\s+to)\b/iu.test(String(sourceQuestion || ''));
   const retrievalRouting = {
     ...(options.routing && typeof options.routing === 'object' ? options.routing : {}),
     entity: options.routing?.entity || entity || '',
@@ -809,7 +809,7 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, lookupFn, normalizeQu
   // Głębokość jest częścią klucza: wynik `basic` nie może obsłużyć ponownego, głębszego zapytania.
   // Cached output is already filtered/reranked and conflict-checked against the full source question.
   // Keyword-only keys can collide (e.g. “when was Portal 2 released?” vs “where was Portal 2 released?”).
-  const cacheKey = (query, domains, timeRange, sourceQuestion = '', depth = 'basic') => `${query.toLowerCase().trim()}|${(domains || []).slice().sort().join(',')}|${timeRange || ''}|${String(sourceQuestion || '').toLowerCase().trim().replace(/\\s+/g, ' ')}|${depth}`;
+  const cacheKey = (query, domains, timeRange, sourceQuestion = '', depth = 'basic') => `${query.toLowerCase().trim()}|${(domains || []).slice().sort().join(',')}|${timeRange || ''}|${String(sourceQuestion || '').toLowerCase().trim().replace(/\s+/g, ' ')}|${depth}`;
 
   return async function szukajTavily(pytanie, options = {}) {
     await ensureCacheReady();
