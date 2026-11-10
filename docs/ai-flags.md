@@ -96,3 +96,13 @@ Werdykty `accepted` i `rejected` są cache'owane przez 10 minut, maksymalnie 200
 - **HowLongToBeat:** endpoint `/api/bleed` jest wewnętrznym endpointem strony, nie oficjalnym publicznym API. Zależność od niego jest podatna na zmiany po stronie serwisu.
 - **TikTok przez RSS-Bridge:** integracja zależy od zewnętrznego mostka i dostępności źródła RSS, a nie od stabilnego oficjalnego API TikToka. Kod sprawdza status HTTP i format Atom; błędy są logowane, ale funkcja nadal zwraca pustą listę do pollera, więc monitoruj logi i nie traktuj braku wpisów jako pewności, że konto nic nie opublikowało.
 - **Preflight:** mierzy czas odpowiedzi i kompletność JSON, ale nie potwierdza semantycznej poprawności dowodów. Limity produkcyjne są różne per dostawca i są wyświetlane w podsumowaniu.
+
+
+## Retrieval v2 — ranking i ewaluacja
+
+- Wyniki z wielu zapytań są łączone algorytmem Reciprocal Rank Fusion (RRF, k=60). RRF wykorzystuje pozycje w rankingach zamiast surowych punktacji dostawców.
+- Fuzja jest lokalna, deterministyczna i nie wykonuje dodatkowych wywołań sieciowych. Plan zapytań nadal ma limit maksymalnie 5 pozycji.
+- `assessEvidence(..., options)` przyjmuje opcjonalne `semanticScores` jako `Map` lub obiekt mapujący canonical URL/klucz źródła na score 0–1. Bez tego parametru nie ma semantycznego rerankingu ani dodatkowego requestu.
+- `retrievalTrace` zawiera liczbę zapytań i kandydatów, top source keys per ranking, wynik fuzji i wybrane źródła. Nie zawiera treści źródeł ani sekretów.
+- `npm run benchmark:retrieval` mierzy Precision@K, Recall@K, MRR i nDCG na etykietowanych fixture. Wynik fixture nie jest metryką produkcyjnego retrieval.
+- Embeddingi nie są uruchamiane lokalnie. Adapter semantyczny powinien być osobną, opcjonalną integracją z własnym timeoutem i budżetem requestów.
