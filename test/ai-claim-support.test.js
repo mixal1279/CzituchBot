@@ -532,7 +532,7 @@ test('obca relacja przyczynowa z innego źródła nie blokuje ograniczenia epist
     unsupported_claims: [],
     claims: [],
   }, 'test-model', 'xkiro', new Set(['SOURCE 1', 'SOURCE 2']), evidence,
-  'Dostępne źródła nie wyjaśniają, dlaczego Wheatley przejął kontrolę nad placówką.',
+  'Źródła nie potwierdzają przyczyny, dla której Wheatley przejął kontrolę nad placówką.',
   { question: 'Dlaczego Wheatley przejął kontrolę nad placówką?' });
 
   assert.equal(result.status, 'accepted');
