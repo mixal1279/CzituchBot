@@ -21,7 +21,7 @@ function extractHostname(value) {
   if (!raw) return null;
   try {
     const url = /^[a-z][a-z0-9+.-]*:\/\//i.test(raw) ? raw : `https://${raw}`;
-    return new URL(url).hostname.toLowerCase();
+    return new URL(url).hostname.toLowerCase().replace(/^www\./, '');
   } catch (_) {
     return null;
   }
