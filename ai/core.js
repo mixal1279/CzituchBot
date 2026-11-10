@@ -457,7 +457,7 @@ function buildRetrievalPlan(question, routing = {}, options = {}) {
   } else if (entity) {
     add(entity + ' ' + q);
   }
-  if (game && game !== entity) add(\`\${game} \${q}\`);
+  if (game && game !== entity) add(game + ' ' + q);
 
   if (routing.is_lore) {
     add(`${game || entity || q} lore plot canon story`, 'lore');
