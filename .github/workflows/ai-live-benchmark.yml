@@ -21,19 +21,7 @@ concurrency:
 jobs:
   live-benchmark:
     if: github.event_name == 'workflow_dispatch'
-    name: Live benchmark (${{ matrix.label }})
-    strategy:
-      fail-fast: false
-      # Sekwencyjnie, aby oba przebiegi nie konkurowały o wspólne limity API.
-      max-parallel: 1
-      matrix:
-        include:
-          - id: cohere-command-a-reasoning
-            label: Generator — Cohere Command A Reasoning
-            model: cohere/command-a-reasoning
-          - id: mistral-small-4
-            label: Generator — Mistral Small 4
-            model: mistralai/mistral-small-2603
+    name: Live benchmark (Cohere Command A Reasoning)
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -56,8 +44,7 @@ jobs:
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       EXA_API_KEY: ${{ secrets.EXA_API_KEY }}
       XKIRO_API_KEY: ${{ secrets.XKIRO_API_KEY }}
-      # Generator zmienia się w macierzy; walidator pozostaje Cohere.
-      XKIRO_MODEL: ${{ matrix.model }}
+      XKIRO_MODEL: cohere/command-a-reasoning
       XKIRO_VALIDATOR_MODEL: cohere/command-a-reasoning
       OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
 
@@ -160,7 +147,7 @@ jobs:
         continue-on-error: true
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: ai-live-benchmark-${{ matrix.id }}-${{ github.sha }}
+          name: ai-live-benchmark-cohere-${{ github.sha }}
           path: |
             ai-live-benchmark-report.txt
             ai-live-benchmark.json
