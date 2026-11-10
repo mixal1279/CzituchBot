@@ -429,6 +429,9 @@ function buildRetrievalPlan(question, routing = {}, options = {}) {
 
   const entity = String(routing.resolved_entity?.name || routing.entity || routing.game || '').trim();
   const game = String(routing.game || routing.resolved_entity?.game || '').trim();
+  const requestedCharacters = CHARACTER_ALIASES.filter(entry =>
+    [entry.name, ...(entry.aliases || [])].some(alias => containsAlias(q, alias))
+  );
   const base = [];
   const add = (x, reason = 'primary') => {
     const v = String(x || '').replace(/\s+/g, ' ').trim();
@@ -438,8 +441,23 @@ function buildRetrievalPlan(question, routing = {}, options = {}) {
   };
 
   add(q);
-  if (entity) add(`${entity} ${q}`);
-  if (game && game !== entity) add(`${game} ${q}`);
+  if (requestedCharacters.length) {
+    // Gdy router zwraca tytuł gry jako entity, zapytanie entity+question
+    // powiela treść pytania. Zastępujemy je krótkim, encyjnie zakotwiczonym
+    // zapytaniem, które lepiej trafia w artykuły o konkretnych postaciach.
+    const characterNames = requestedCharacters.slice(0, 4).map(entry => entry.name);
+    const topic = /\b(?:dlaczego|czemu|powod|przyczyn|why|reason|cause|motivation)\b/iu.test(q)
+      ? 'reason cause motivation story'
+      : /\b(?:kiedy|when|rok|data|date|timeline)\b/iu.test(q)
+        ? 'timeline date story'
+        : /\b(?:gdzie|where|lokalizac|location)\b/iu.test(q)
+          ? 'location story'
+          : 'story plot lore';
+    add(\`\${characterNames.join(' ')} \${game || entity} \${topic}\`, 'character');
+  } else if (entity) {
+    add(\`\${entity} \${q}\`);
+  }
+  if (game && game !== entity) add(\`\${game} \${q}\`);
 
   if (routing.is_lore) {
     add(`${game || entity || q} lore plot canon story`, 'lore');
