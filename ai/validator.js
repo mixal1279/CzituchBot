@@ -920,9 +920,15 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
   // występuje w dowodzie dopasowanym do pytania, a nie w dowolnym fragmencie
   // któregoś z pobranych dokumentów. Inaczej obca relacja przyczynowa z retrieval
   // potrafi zablokować uczciwą odmowę odpowiedzi o innym zdarzeniu.
-  const causalEvidenceCandidates = options.question
-    ? rankEvidenceForClaim(options.question, parsedEvidenceBlocks, null, 24)
+  const causalEvidenceQueries = options.question
+    ? [...new Set([
+        String(options.question),
+        ...wyodrebnijNazwyWlasne(options.question),
+      ].map(value => String(value || '').trim()).filter(Boolean))]
     : [];
+  const causalEvidenceCandidates = causalEvidenceQueries.flatMap(query =>
+    rankEvidenceForClaim(query, parsedEvidenceBlocks, null, 24)
+  );
   const retrievedEvidenceHasCausalSignal = causalEvidenceCandidates.some(candidate =>
     CAUSAL_EVIDENCE_RE.test(normalizujClaim(candidate.quote))
   );
