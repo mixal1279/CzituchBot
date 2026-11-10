@@ -524,7 +524,7 @@ test('obca relacja przyczynowa z innego źródła nie blokuje ograniczenia epist
     'TREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>',
     'GLaDOS caused the facility shutdown after the core transfer.',
     '<<<END_UNTRUSTED_SOURCE_CONTENT>>>',
-  ].join('\\n');
+  ].join('\n');
   const result = validator.normalizujWynikWalidatora({
     valid: true,
     reason: 'The retrieved sources do not establish why Wheatley took control.',
