@@ -85,14 +85,18 @@ test('YouTube chat polling respects the interval returned by the API', () => {
   assert.match(source, /reason === 'liveChatEnded' \|\| reason === 'liveChatNotFound' \|\| reason === 'liveChatDisabled'/);
 });
 
-test('primary generation honors AI_GENERATOR_MODEL and checks quota cooldown before calling Groq', () => {
+test('primary generation supports configured Groq or xKiro and checks endpoint cooldown before calling it', () => {
   const source = read('czituch_bot.js');
+  const config = read('ai/modelConfig.js');
   const start = source.indexOf('async function generujOdpowiedz(');
   const end = source.indexOf('const fallbackSteps = {', start);
   assert.ok(start >= 0 && end > start, 'generation orchestration should exist');
   const body = source.slice(start, end);
-  assert.match(body, /const primaryModel = AI_MODELS\.generatorPrimary/);
+  assert.match(config, /function resolvePrimaryGenerator\(/);
+  assert.match(body, /const primaryProvider = AI_PRIMARY_GENERATOR\.provider/);
+  assert.match(body, /const primaryModel = AI_PRIMARY_GENERATOR\.model/);
   assert.match(body, /isProviderQuotaBlocked\(primaryStep\)/);
+  assert.match(body, /primaryProvider === 'xkiro'[\s\S]{0,160}zapytajXKiro\(effectiveMaxTok, prompt, powod\)/);
   assert.match(body, /zapytajGlowny\(effectiveMaxTok, prompt, primaryModel\)/);
   assert.match(body, /allowPrimary \? classifyFailure\(result\.error \|\| ''\) : 'validator_rejection'/);
 });
