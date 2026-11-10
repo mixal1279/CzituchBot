@@ -3769,72 +3769,92 @@ Pytanie użytkownika: ${pytanie}`;
   // Bez reasoning_effort — to parametr specyficzny dla Groq. Wlicza się do budżetu generacji requestu.
   async function zapytajXKiro(maxTok = 700, overrideSystemPrompt = systemPrompt, powod = 'main') {
     const model = KONFIGURACJA.xkiroModel;
-    if (!KONFIGURACJA.xkiroKey) return wynikPusty('xkiro', model, 'brak XKIRO_API_KEY');
-    if (!moznaWykonacGeneracje('xkiro', model)) return wynikPusty('xkiro', model, 'AI request budget exceeded');
-    const remainingMs = pozostalyCzasMs();
-    if (!Number.isFinite(remainingMs) || remainingMs <= 0) return wynikPusty('xkiro', model, 'AI request deadline exceeded');
-    const controller = new AbortController();
+    const wynikBlad = error => wynikPusty('xkiro', model, sanitizujKomunikatBledu(error?.message || error));
     const configuredTimeoutMs = Number(process.env.AI_XKIRO_GENERATOR_TIMEOUT_MS);
     const xkiroMaxTimeoutMs = Number.isFinite(configuredTimeoutMs) && configuredTimeoutMs > 0
-      ? Math.min(30000, Math.max(4000, configuredTimeoutMs))
-      : 12000;
-    const timeoutMs = aiState.generationPhase === 'repair'
-      ? timeoutDlaGeneracji()
-      : computeGenerationTimeout(remainingMs, { maxTimeoutMs: xkiroMaxTimeoutMs, reserveMs: 6500, minTimeoutMs: 4000 });
-    if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) return wynikPusty('xkiro', model, 'AI request deadline too short for xKiro');
+      ? Math.min(30000, Math.max(4000, configuredTimeoutMs)) : 12000;
     const configuredTokens = Number(process.env.AI_XKIRO_GENERATOR_MAX_TOKENS);
-    const requestedTokens = Number.isFinite(configuredTokens) && configuredTokens > 0
-      ? Math.max(Number(maxTok) || 300, configuredTokens)
-      : (Number(maxTok) || 700);
-    const maxTokens = Math.min(1200, Math.max(300, requestedTokens));
-    try {
-      const messages = buildMessages(overrideSystemPrompt);
-      const { response, data } = await awaitWithAbortTimeout((async () => {
-        const response = await fetch(`${KONFIGURACJA.xkiroBaseUrl}/chat/completions`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${KONFIGURACJA.xkiroKey}` },
-          body: JSON.stringify({
-            model,
-            messages: [
-              { role: 'system', content: messages.system },
-              ...messages.history,
-              { role: 'user', content: messages.user },
-            ],
-            temperature,
-            max_tokens: maxTokens,
-          }),
-          signal: controller.signal,
-        });
-        let data;
-        try {
-          data = await response.json();
-        } catch (error) {
-          const parseError = new Error(`xKiro invalid JSON response (HTTP ${response.status}): ${String(error?.message || 'parse failed').slice(0, 160)}`);
-          parseError.code = 'XKIRO_INVALID_JSON';
-          throw parseError;
+    let maxTokens = Math.min(1200, Math.max(300, Number.isFinite(configuredTokens) && configuredTokens > 0
+      ? Math.max(Number(maxTok) || 300, configuredTokens) : (Number(maxTok) || 700)));
+    if (!KONFIGURACJA.xkiroKey) return wynikPusty('xkiro', model, 'brak XKIRO_API_KEY');
+    const messages = buildMessages(overrideSystemPrompt);
+    const maxAttempts = aiState.generationPhase === 'repair' ? 1 : 2;
+    let lastError = null;
+    for (let attemptNumber = 1; attemptNumber <= maxAttempts; attemptNumber++) {
+      if (!moznaWykonacGeneracje('xkiro', model)) return wynikBlad(lastError || 'AI request budget exceeded');
+      const remainingMs = pozostalyCzasMs();
+      if (!Number.isFinite(remainingMs) || remainingMs <= 0) return wynikBlad(lastError || 'AI request deadline exceeded');
+      const controller = new AbortController();
+      const timeoutMs = attemptNumber === 1
+        ? computeGenerationTimeout(remainingMs, { maxTimeoutMs: xkiroMaxTimeoutMs, reserveMs: 6500, minTimeoutMs: 4000 })
+        : computeGenerationTimeout(remainingMs, { maxTimeoutMs: 20000, reserveMs: 26000, minTimeoutMs: 5000 });
+      if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) return wynikBlad(lastError || 'AI request deadline too short for xKiro');
+      try {
+        const { response, data } = await awaitWithAbortTimeout((async () => {
+          const response = await fetch(`${KONFIGURACJA.xkiroBaseUrl}/chat/completions`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${KONFIGURACJA.xkiroKey}` },
+            body: JSON.stringify({
+              model,
+              messages: [
+                { role: 'system', content: messages.system },
+                ...messages.history,
+                { role: 'user', content: messages.user },
+              ],
+              temperature,
+              max_tokens: maxTokens,
+            }),
+            signal: controller.signal,
+          });
+          let data;
+          try { data = await response.json(); }
+          catch (error) {
+            const parseError = new Error(`xKiro invalid JSON response (HTTP ${response.status}): ${String(error?.message || 'parse failed').slice(0, 160)}`);
+            parseError.code = 'XKIRO_INVALID_JSON';
+            throw parseError;
+          }
+          return { response, data };
+        })(), timeoutMs, controller, `xKiro generation attempt ${attemptNumber}`);
+        if (!response.ok) {
+          const status = Number(response.status || 0);
+          const retryAfter = retryAfterHint(response);
+          const diagnostic = formatProviderError('xkiro', data?.model || model, null, {
+            status, code: data?.error?.code, type: data?.error?.type, param: data?.error?.param,
+            retry_after: retryAfter || null, responseData: data,
+          });
+          const error = new Error(diagnostic);
+          error.status = status;
+          throw error;
         }
-        return { response, data };
-      })(), timeoutMs, controller, 'xKiro generation');
-      if (!response.ok) {
-        const status = Number(response.status || 0);
-        const retryAfter = retryAfterHint(response);
-        const diagnostic = formatProviderError('xkiro', data?.model || model, null, {
-          status, code: data?.error?.code, type: data?.error?.type, param: data?.error?.param,
-          retry_after: retryAfter || null, responseData: data,
-        });
-        throw new Error(diagnostic);
+        const parsed = parseOpenAICompatibleCompletion(data);
+        if (!parsed.text) {
+          const usage = parsed.usage ? `usage=${JSON.stringify(parsed.usage)}` : 'usage=unavailable';
+          throw new Error(`empty_response: no answer text; finish_reason=${parsed.finishReason}; reasoning_only=${parsed.reasoningPresent}; ${usage}; response_id=${parsed.responseId || 'unavailable'}`);
+        }
+        if (parsed.truncated && attemptNumber < maxAttempts) {
+          maxTokens = Math.min(1200, Math.max(maxTokens + 200, Math.ceil(maxTokens * 1.5)));
+          lastError = new Error(`truncated_response: finish_reason=${parsed.finishReason}; retrying same model with max_tokens=${maxTokens}`);
+          console.warn(`[xKiro] Odpowiedź ucięta (${powod}); jedna ponowna próba tego samego modelu z większym limitem tokenów.`);
+          continue;
+        }
+        return ujednolicWynik({ tekst: parsed.text, ucieta: parsed.truncated }, 'xkiro', parsed.model || model);
+      } catch (error) {
+        lastError = error;
+        const status = Number(error?.status || 0);
+        const transientHttp = [500, 502, 503, 504, 529].includes(status);
+        const retryable = error?.name === 'TimeoutError' || error?.code === 'XKIRO_INVALID_JSON'
+          || /empty_response|invalid_response|timed out|fetch failed/i.test(String(error?.message || '')) || transientHttp;
+        const canRetry = attemptNumber < maxAttempts && retryable && ![401, 403, 429].includes(status)
+          && pozostalyCzasMs() >= 32000;
+        if (!canRetry) {
+          const reason = sanitizujKomunikatBledu(error?.message || error);
+          console.error(`[xKiro] Fallback nieudany (${powod}, próba ${attemptNumber}):`, reason);
+          return wynikPusty('xkiro', model, reason);
+        }
+        console.warn(`[xKiro] Błąd przejściowy (${powod}, próba ${attemptNumber}); ponawiam raz ten sam model w pozostałym budżecie.`);
       }
-      const parsed = parseOpenAICompatibleCompletion(data);
-      if (!parsed.text) {
-        const usage = parsed.usage ? `usage=${JSON.stringify(parsed.usage)}` : 'usage=unavailable';
-        throw new Error(`empty_response: xKiro returned no answer text; finish_reason=${parsed.finishReason}; reasoning_only=${parsed.reasoningPresent}; ${usage}; response_id=${parsed.responseId || 'unavailable'}`);
-      }
-      return ujednolicWynik({ tekst: parsed.text, ucieta: parsed.truncated }, 'xkiro', parsed.model || model);
-    } catch (err) {
-      const reason = sanitizujKomunikatBledu(err.message);
-      console.error(`[xKiro] Fallback nieudany (${powod}):`, reason);
-      return wynikPusty('xkiro', model, reason);
     }
+    return wynikBlad(lastError || 'xKiro generation failed');
   }
   // Jedna główna próba 120B + najwyżej jeden retry tylko dla pustej/uciętej odpowiedzi.
   // Circuit breaker i quota 120B są globalne dla procesu — nie resetują się przy
