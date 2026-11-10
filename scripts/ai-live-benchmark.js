@@ -839,7 +839,8 @@ async function run() {
       }
       return {
         casesWithTrace: traces.length,
-        averageQueryCount: average('queryCount'),
+        averageSearchCount: average('searchCount'),
+        averageRankingQueryCount: average('rankingQueryCount') ?? average('queryCount'),
         averageCandidateCount: average('candidateCount'),
         averageSelectedHostCount: average('selectedHostCount'),
         providerCounts,
