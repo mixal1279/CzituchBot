@@ -48,7 +48,7 @@ test('single-question retrieval reserves time for validation; multi-part questio
 test('a single question mark does not classify a question as multi-part', () => {
   assert.equal(isMultiPartQuestion('W grze Skyrim: Jak pokonać smoka?'), false);
   assert.equal(isMultiPartQuestion('W grze Portal 2: Dlaczego Wheatley przejął kontrolę nad GLaDOS?'), false);
-  assert.equal(isMultiPartQuestion('W grze Baldur\'s Gate 3: Kim jest Astarion?'), false);
+  assert.equal(isMultiPartQuestion('W grze Baldur\\'s Gate 3: Kim jest Astarion?'), false);
 });
 
 test('compound questions remain multi-part without relying on punctuation', () => {
@@ -107,13 +107,11 @@ test('retrieval planning keeps original atomic question and specialized query fo
   ]);
 });
 
-
- 
-test('game-specific reference domains are added without replacing configured domains', () => {
+test('game-specific lore reference domains are added without replacing configured domains', () => {
   const { selectGameSpecificRetrievalDomains } = require('../ai/retrieval');
   assert.deepEqual(
     selectGameSpecificRetrievalDomains('Skyrim', 'Kim jest Dragonborn?', ['ign.com']),
-    ['ign.com', 'gamefaqs.gamespot.com', 'en.uesp.net', 'elderscrolls.fandom.com'],
+    ['ign.com', 'en.uesp.net', 'elderscrolls.fandom.com'],
   );
   assert.deepEqual(
     selectGameSpecificRetrievalDomains('Minecraft', 'Jak zdobyć elytrę?', ['minecraft.wiki']),
@@ -126,5 +124,14 @@ test('game-specific reference domains are added without replacing configured dom
   assert.deepEqual(
     selectGameSpecificRetrievalDomains('GTA V', 'Kiedy Michael poznaje Trevora?', []),
     ['gta.fandom.com'],
+  );
+});
+
+test('GameFAQs is added to gameplay domains without duplicating configured domains', () => {
+  const { dodajGameFAQsDomenę } = require('../ai/gameplay');
+  assert.deepEqual(dodajGameFAQsDomenę(['ign.com']), ['ign.com', 'gamefaqs.gamespot.com']);
+  assert.deepEqual(
+    dodajGameFAQsDomenę(['ign.com', 'gamefaqs.gamespot.com']),
+    ['ign.com', 'gamefaqs.gamespot.com'],
   );
 });
