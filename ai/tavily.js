@@ -566,7 +566,8 @@ function fuseTavilyEvidenceTexts(texts, question, routing = {}, options = {}) {
   })));
   const providerCounts = blocks.reduce((counts, source) => {
     const rawProvider = String(source.provider || 'tavily').toLowerCase();
-    const provider = /^[a-z0-9_-]{1,32}$/u.test(rawProvider) ? rawProvider : 'unknown';
+    const provider = /^[a-z0-9_-]{1,32}$/u.test(rawProvider)
+      && !['__proto__', 'constructor', 'prototype'].includes(rawProvider) ? rawProvider : 'unknown';
     counts[provider] = (counts[provider] || 0) + 1;
     return counts;
   }, Object.create(null));
@@ -582,7 +583,8 @@ function fuseTavilyEvidenceTexts(texts, question, routing = {}, options = {}) {
       providerCounts,
       selectedProviders: evidence.sources.map(source => {
         const provider = String(source.provider || 'tavily').toLowerCase();
-        return /^[a-z0-9_-]{1,32}$/u.test(provider) ? provider : 'unknown';
+        return /^[a-z0-9_-]{1,32}$/u.test(provider)
+          && !['__proto__', 'constructor', 'prototype'].includes(provider) ? provider : 'unknown';
       }),
       selectedHostCount: evidence.independentHosts,
     },
