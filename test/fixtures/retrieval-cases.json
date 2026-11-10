@@ -1,0 +1,52 @@
+{
+  "version": 1,
+  "description": "Deterministyczne etykiety testowe retrieval; nie są metrykami live.",
+  "cases": [
+    {
+      "id": "portal-consensus",
+      "ranked": [
+        "portal-wheatley",
+        "portal-2",
+        "unrelated"
+      ],
+      "relevant": [
+        "portal-wheatley",
+        "portal-2"
+      ],
+      "relevance": {
+        "portal-wheatley": 3,
+        "portal-2": 2
+      },
+      "k": 3
+    },
+    {
+      "id": "late-hit",
+      "ranked": [
+        "unrelated-a",
+        "unrelated-b",
+        "bg3-lore"
+      ],
+      "relevant": [
+        "bg3-lore"
+      ],
+      "relevance": {
+        "bg3-lore": 3
+      },
+      "k": 3
+    },
+    {
+      "id": "miss",
+      "ranked": [
+        "unrelated-a",
+        "unrelated-b"
+      ],
+      "relevant": [
+        "cyberpunk-johnny"
+      ],
+      "relevance": {
+        "cyberpunk-johnny": 3
+      },
+      "k": 2
+    }
+  ]
+}
