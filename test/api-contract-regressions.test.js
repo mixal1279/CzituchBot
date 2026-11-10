@@ -268,3 +268,9 @@ test('xKiro generation retries at most once for transient failures without leavi
   assert.match(generator, /!\[401, 403, 429\]\.includes\(status\)/);
   assert.match(generator, /Math\.min\(1200, Math\.max\(maxTokens \+ 200/);
 });
+
+test('AI regression workflow runs offline tests on the hardening branch', () => {
+  const workflow = read('.github/workflows/ai-tests.yml');
+  assert.match(workflow, /push:\s*\n\s*branches:\s*\[ main, audit\/full-bot-hardening \]/);
+  assert.match(workflow, /Run AI regression tests/);
+});
