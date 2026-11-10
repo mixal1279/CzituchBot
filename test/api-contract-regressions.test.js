@@ -150,7 +150,7 @@ test('live benchmark preflights validator providers before starting a ten-case s
   const workflow = read('.github/workflows/ai-live-benchmark.yml');
   assert.match(workflow, /AI_BENCHMARK_LIMIT:\s*"10"/);
   assert.match(workflow, /AI_REQUEST_TIMEOUT_MS:\s*"85000"/);
-  assert.match(workflow, /AI_XKIRO_GENERATOR_TIMEOUT_MS:\s*"24000"/);
+  assert.match(workflow, /AI_XKIRO_GENERATOR_TIMEOUT_MS:\s*"30000"/);
   assert.match(workflow, /AI_XKIRO_VALIDATOR_TIMEOUT_MS:\s*"22000"/);
   assert.match(workflow, /PREFLIGHT_TIMEOUT_MS:\s*"25000"/);
   assert.match(workflow, /PREFLIGHT_STRICT:\s*"1"/);
@@ -252,4 +252,18 @@ test('Groq SDK and preflight honor GROQ_BASE_URL with the documented default', (
   assert.ok(runtime.includes(".replace(/\\/openai\\/v1$/i, '')"), 'SDK base URL strips /openai/v1 to avoid a duplicated endpoint path');
   assert.ok(preflight.includes('process.env.GROQ_BASE_URL'));
   assert.ok(preflight.includes('/chat/completions'));
+});
+
+test('xKiro generation retries at most once for transient failures without leaving the shared deadline', () => {
+  const source = read('czituch_bot.js');
+  const start = source.indexOf('async function zapytajXKiro(');
+  const end = source.indexOf('// Jedna główna próba 120B', start);
+  assert.ok(start >= 0 && end > start, 'xKiro generator should exist');
+  const generator = source.slice(start, end);
+  assert.match(generator, /maxAttempts = aiState\.generationPhase === 'repair' \? 1 : 2/);
+  assert.match(generator, /moznaWykonacGeneracje\('xkiro', model\)/);
+  assert.match(generator, /reserveMs: 26000/);
+  assert.match(generator, /attemptNumber < maxAttempts/);
+  assert.match(generator, /!\[401, 403, 429\]\.includes\(status\)/);
+  assert.match(generator, /Math\.min\(1200, Math\.max\(maxTokens \+ 200/);
 });
