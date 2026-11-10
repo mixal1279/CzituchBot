@@ -71,7 +71,7 @@ function aggregateRetrievalMetrics(rows) {
   const keys = ['precisionAtK', 'recallAtK', 'reciprocalRank', 'ndcgAtK'];
   const result = { cases: values.length };
   for (const key of keys) {
-    const usable = values.map(row => Number(row?.[key])).filter(Number.isFinite);
+    const usable = values.map(row => row?.[key]).filter(value => value !== null && value !== undefined && Number.isFinite(Number(value))).map(Number);
     result[key] = usable.length
       ? Number((usable.reduce((sum, value) => sum + value, 0) / usable.length).toFixed(4))
       : null;
