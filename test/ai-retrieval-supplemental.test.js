@@ -48,7 +48,7 @@ test('single-question retrieval reserves time for validation; multi-part questio
 test('a single question mark does not classify a question as multi-part', () => {
   assert.equal(isMultiPartQuestion('W grze Skyrim: Jak pokonać smoka?'), false);
   assert.equal(isMultiPartQuestion('W grze Portal 2: Dlaczego Wheatley przejął kontrolę nad GLaDOS?'), false);
-  assert.equal(isMultiPartQuestion('W grze Baldur\\'s Gate 3: Kim jest Astarion?'), false);
+  assert.equal(isMultiPartQuestion('W grze Baldur\'s Gate 3: Kim jest Astarion?'), false);
 });
 
 test('compound questions remain multi-part without relying on punctuation', () => {
