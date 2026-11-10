@@ -3974,12 +3974,13 @@ Pytanie użytkownika: ${pytanie}`;
     return false;
   };
 
-  const selectHealthyFallbacks = ({ failure = 'unknown', attempted = [], failedProviders = [], maxFallbacks = 1, exclude = [] } = {}) => {
+  const selectHealthyFallbacks = ({ failure = 'unknown', attempted = [], failedProviders = [], maxFallbacks = 1, exclude = [], allowedProviders = null } = {}) => {
     const blocked = new Set([...(failedProviders || []), ...(exclude || [])]);
     return selectRepairFallbacks({
       failedProviders: [...blocked],
       exclude: attempted,
       availableProviders: GENERATION_FALLBACK_CHAIN.filter(providerConfiguredForRequest),
+      allowedProviders,
       maxFallbacks,
     });
   };
@@ -4102,6 +4103,10 @@ Pytanie użytkownika: ${pytanie}`;
           // a nie pełnym łańcuchem generacji. Dwie próby wystarczą: szybki model
           // oraz jeden niezależny fallback; dalsze próby zwykle tylko konsumują
           // budżet i zwiększają ryzyko timeoutu.
+          // W trybie strict najpierw ograniczamy pulę do primaryStep, a dopiero
+          // potem wybieramy limit. Inaczej ranking Groq/Gemini ucinał xKiro
+          // przed filtrem strict i repair zawsze kończył się no_healthy_provider.
+          allowedProviders: strictBenchmarkGenerator ? [primaryStep] : null,
           maxFallbacks: strictBenchmarkGenerator ? 1 : Math.min(configuredFallbackLimit, 2),
         });
     }

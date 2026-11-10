@@ -371,6 +371,21 @@ test('repair after validator rejection selects only configured healthy providers
   }), []);
 });
 
+test('strict benchmark repair keeps its primary generator before applying the candidate limit', () => {
+  const selected = selectRepairFallbacks({
+    failedProviders: [],
+    availableProviders: [
+      'groq:openai/gpt-oss-20b',
+      'gemini:gemini-3.5-flash-lite',
+      'xkiro:default',
+      'openrouter:default',
+    ],
+    allowedProviders: ['xkiro:default'],
+    maxFallbacks: 1,
+  });
+  assert.deepEqual(selected, ['xkiro:default']);
+});
+
 test('semantic repair prefers fast configured providers over slow endpoints', () => {
   // Preferencja repairu ma dawać NAJPIERWSZEGO kandydata temu, kto odpowiada
   // najszybciej i najbardziej przewidywalnie. W live benchmarku (2026-10-21)

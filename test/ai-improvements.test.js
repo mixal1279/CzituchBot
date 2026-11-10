@@ -170,12 +170,13 @@ function geminiFetch(calls) {
 
 test('Tavily Extract: za flagą podmienia streszczenie Gemini treścią strony', async () => {
   const calls = [];
-  const on = await withEnv('AI_GEMINI_EXTRACT', '1', () => web.searchSecondaryProviders({ query: 'Jak działa creeper?', geminiKey: 'g', exaKey: null, tavilyKey: 't', fetchFn: geminiFetch(calls) }));
+  const publicDns = async () => [{ address: '93.184.216.34', family: 4 }];
+  const on = await withEnv('AI_GEMINI_EXTRACT', '1', () => web.searchSecondaryProviders({ query: 'Jak działa creeper?', geminiKey: 'g', exaKey: null, tavilyKey: 't', fetchFn: geminiFetch(calls), lookupFn: publicDns }));
   assert.equal(on.sources[0].provider, 'tavily_extract');
   assert.ok(calls.some(c => c.url.includes('tavily.com/extract')));
 
   const offCalls = [];
-  const off = await withEnv('AI_GEMINI_EXTRACT', undefined, () => web.searchSecondaryProviders({ query: 'x', geminiKey: 'g', exaKey: null, tavilyKey: 't', fetchFn: geminiFetch(offCalls) }));
+  const off = await withEnv('AI_GEMINI_EXTRACT', undefined, () => web.searchSecondaryProviders({ query: 'x', geminiKey: 'g', exaKey: null, tavilyKey: 't', fetchFn: geminiFetch(offCalls), lookupFn: publicDns }));
   assert.equal(off.status, 'empty');
   assert.deepEqual(off.sources, [], 'grounding metadata without extracted page text is not evidence');
   assert.equal(offCalls.length, 1);

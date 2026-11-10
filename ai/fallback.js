@@ -445,15 +445,19 @@ function nextFallbacks({ failure = 'unknown', attempted = [], failedProviders = 
   return remaining.slice(0, limit);
 }
 
-function selectRepairFallbacks({ failedProviders = [], exclude = [], availableProviders = null, maxFallbacks = 1 } = {}) {
+function selectRepairFallbacks({ failedProviders = [], exclude = [], availableProviders = null, allowedProviders = null, maxFallbacks = 1 } = {}) {
   const blocked = new Set([...(failedProviders || []), ...(exclude || [])]);
   const available = Array.isArray(availableProviders) ? new Set(availableProviders) : null;
+  // Ograniczenie benchmarku do konkretnego generatora musi zadziałać PRZED
+  // sortowaniem i limitem. Filtrowanie już przyciętej listy mogło usunąć
+  // jedyny dozwolony model, bo wyżej w rankingu stał zwykły fallback Groq.
+  const allowed = Array.isArray(allowedProviders) ? new Set(allowedProviders) : null;
   const candidates = nextFallbacks({
     failure: 'grounded_reject',
     failedProviders: [...blocked],
     maxFallbacks: GENERATION_FALLBACK_CHAIN.length,
   })
-    .filter(provider => !available || available.has(provider));
+    .filter(provider => (!available || available.has(provider)) && (!allowed || allowed.has(provider)));
   const preference = new Map(REPAIR_FALLBACK_PREFERENCE.map((provider, index) => [provider, index]));
   return candidates
     .sort((a, b) => (preference.get(a) ?? REPAIR_FALLBACK_PREFERENCE.length) - (preference.get(b) ?? REPAIR_FALLBACK_PREFERENCE.length))
