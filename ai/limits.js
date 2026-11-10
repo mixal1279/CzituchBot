@@ -1,5 +1,24 @@
 'use strict';
-const DEFAULTS={maxQuestionChars:500,maxHistoryMessages:8,maxReferenceChars:10000,maxMemoryRecords:20,requestTimeoutMs:40000,maxModelCalls:12,maxGenerations:6,maxInitialGenerations:5,maxRepairGenerations:4,maxValidators:4,maxTavilySearches:3};
+
+function configuredRequestTimeoutMs(value = process.env.AI_REQUEST_TIMEOUT_MS) {
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed < 10000 || parsed > 120000) return 40000;
+  return parsed;
+}
+
+const DEFAULTS = {
+  maxQuestionChars: 500,
+  maxHistoryMessages: 8,
+  maxReferenceChars: 10000,
+  maxMemoryRecords: 20,
+  requestTimeoutMs: configuredRequestTimeoutMs(),
+  maxModelCalls: 12,
+  maxGenerations: 6,
+  maxInitialGenerations: 5,
+  maxRepairGenerations: 4,
+  maxValidators: 4,
+  maxTavilySearches: 3,
+};
 function createRequestBudget(overrides={}){const c={...DEFAULTS,...overrides},startedAt=Date.now();return{startedAt,...c,modelCalls:0,generations:0,validators:0,tavilySearches:0,expired(){return Date.now()-startedAt>=c.requestTimeoutMs;},reserve(type){const map={modelCalls:'modelCalls',generation:'generations',validator:'validators',tavily:'tavilySearches'},key=map[type];if(!key||this.expired()||this[key]>=c['max'+key.charAt(0).toUpperCase()+key.slice(1)])return false;this[key]++;return true;}};}
 function sanitizeRequestText(text,maxChars=DEFAULTS.maxQuestionChars){
   // Znaki niewidoczne (zero-width, bidi) służą do ukrywania instrukcji; wycinamy je tak jak w danych ze stron.
@@ -10,4 +29,4 @@ function sanitizeRequestText(text,maxChars=DEFAULTS.maxQuestionChars){
   if(/[\uD800-\uDBFF]$/.test(cut))cut=cut.slice(0,-1);
   return cut;
 }
-module.exports={DEFAULTS,createRequestBudget,sanitizeRequestText};
+module.exports={DEFAULTS,createRequestBudget,sanitizeRequestText,configuredRequestTimeoutMs};

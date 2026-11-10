@@ -133,7 +133,7 @@ const { sprawdzTwardeFaktyOdpowiedzi, sprawdzFormatOdpowiedzi, maskSentenceAbbre
 const { Firestore } = require('@google-cloud/firestore');
 const { ocenJakoscOdpowiedzi } = require('./ai/quality');
 const { usunEtykietyEvidenceCandidate, maEtykieteEvidenceCandidate, oczyscOdpowiedzPrzedWalidacja } = require('./ai/answer-sanitize');
-const { AI_MODELS } = require('./ai/modelConfig');
+const { AI_MODELS, AI_PRIMARY_GENERATOR } = require('./ai/modelConfig');
 const { parsujStrukturalnePodsumowanie, oznaczUzycieHistorii, ograniczHistorieRozmow, zbudujKluczHistorii, zbudujKluczeUzytkownika } = require('./ai/history');
 const { createRequestId, sanitizeQuestion, planRequest, evaluateEvidence, shouldValidate, decideValidation, finalText: finalizeAIPipelineText } = require('./ai/pipeline');
 const { buildAnswerPlan } = require('./ai/answer-plan');
@@ -2308,9 +2308,9 @@ async function walidujOdpowiedzXKiro(persona, pytanie, odpowiedz, dane, requestI
   const configuredTimeoutMs = Number(process.env.AI_XKIRO_VALIDATOR_TIMEOUT_MS);
   // Cohere potrzebuje co najmniej sześciu sekund na użyteczny werdykt.
   // Preflight i transport korzystają z tego samego minimum oraz domyślnych 9 s.
-  const xkiroMaxTimeoutMs = Math.max(
-    6000,
-    Number.isFinite(configuredTimeoutMs) && configuredTimeoutMs > 0 ? configuredTimeoutMs : 9000,
+  const xkiroMaxTimeoutMs = Math.min(
+    30000,
+    Math.max(6000, Number.isFinite(configuredTimeoutMs) && configuredTimeoutMs > 0 ? configuredTimeoutMs : 9000),
   );
   const computedTimeoutMs = requestState
     ? computeValidatorTimeout(remainingMs, {
@@ -2591,7 +2591,9 @@ async function walidujOdpowiedzAIBezCache(persona, pytanie, odpowiedz, dane, his
 
   // Jeden stabilny model wystarcza do prostego JSON fact-checkera i nie
   // zużywa potrójnie darmowego limitu Gemini przy każdym pytaniu.
-  const models = KONFIGURACJA.geminiKey
+  const geminiValidatorEnabled = process.env.AI_VALIDATOR_GEMINI !== '0';
+  const models = geminiValidatorEnabled
+    && KONFIGURACJA.geminiKey
     && Date.now() >= geminiValidatorCooldownUntil
     && Date.now() >= geminiAccountQuotaCooldownUntil
     && !validatorBreakerIsOpen('gemini')
@@ -2599,13 +2601,15 @@ async function walidujOdpowiedzAIBezCache(persona, pytanie, odpowiedz, dane, his
     ? [AI_GEMINI_VALIDATOR_MODEL]
     : [];
   if (!models.length) {
-    const reason = !KONFIGURACJA.geminiKey
-      ? 'Gemini validator pominięty: brak klucza API'
-      : validatorBreakerIsOpen('gemini')
-        ? 'Gemini validator pominięty: circuit breaker aktywny'
-        : isProviderQuotaBlocked(`gemini:${AI_GEMINI_VALIDATOR_MODEL}`)
-          ? 'Gemini validator pominięty: aktywny cooldown limitu dostawcy'
-          : 'Gemini validator pominięty: aktywny cooldown';
+    const reason = !geminiValidatorEnabled
+      ? 'Gemini validator pominięty: wyłączony konfiguracją'
+      : !KONFIGURACJA.geminiKey
+        ? 'Gemini validator pominięty: brak klucza API'
+        : validatorBreakerIsOpen('gemini')
+          ? 'Gemini validator pominięty: circuit breaker aktywny'
+          : isProviderQuotaBlocked(`gemini:${AI_GEMINI_VALIDATOR_MODEL}`)
+            ? 'Gemini validator pominięty: aktywny cooldown limitu dostawcy'
+            : 'Gemini validator pominięty: aktywny cooldown';
     recordSkippedValidator('gemini', AI_GEMINI_VALIDATOR_MODEL, reason);
     console.warn(`[AI][${requestId}] ${reason} — używam fallbacku`);
   }
@@ -3770,7 +3774,17 @@ Pytanie użytkownika: ${pytanie}`;
     const remainingMs = pozostalyCzasMs();
     if (!Number.isFinite(remainingMs) || remainingMs <= 0) return wynikPusty('xkiro', model, 'AI request deadline exceeded');
     const controller = new AbortController();
-    const timeoutMs = timeoutDlaGeneracji();
+    const configuredTimeoutMs = Number(process.env.AI_XKIRO_GENERATOR_TIMEOUT_MS);
+    const xkiroMaxTimeoutMs = Number.isFinite(configuredTimeoutMs) && configuredTimeoutMs > 0
+      ? Math.min(30000, Math.max(4000, configuredTimeoutMs))
+      : 12000;
+    const timeoutMs = aiState.generationPhase === 'repair'
+      ? timeoutDlaGeneracji()
+      : computeGenerationTimeout(remainingMs, {
+          maxTimeoutMs: xkiroMaxTimeoutMs,
+          reserveMs: 6500,
+          minTimeoutMs: 4000,
+        });
     if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) return wynikPusty('xkiro', model, 'AI request deadline too short for xKiro');
     try {
       // Race the complete HTTP + body-read operation against the shared request deadline.
@@ -3957,16 +3971,19 @@ Pytanie użytkownika: ${pytanie}`;
   async function generujOdpowiedz(maxTok, prompt = systemPrompt, powod = 'main', allowPrimary = true) {
     const phase = /repair/i.test(String(powod || '')) ? 'repair' : 'initial';
     const effectiveMaxTok = phase === 'repair' ? Math.min(Math.max(Number(maxTok) || 300, 300), 700) : Math.max(Number(maxTok) || 300, 300);
-    const primaryModel = AI_MODELS.generatorPrimary || 'openai/gpt-oss-120b';
-    const primaryStep = `groq:${primaryModel}`;
+    const primaryProvider = AI_PRIMARY_GENERATOR.provider;
+    const primaryModel = AI_PRIMARY_GENERATOR.model;
+    const primaryStep = AI_PRIMARY_GENERATOR.step;
     const primaryQuotaBlocked = allowPrimary && isProviderQuotaBlocked(primaryStep);
     const shouldAttemptPrimary = allowPrimary && !primaryQuotaBlocked;
     aiState.generationPhase = phase;
     const startedGenerationAt = Date.now();
-    aiState.recordTiming('generation_cycle_start', { phase, provider: 'groq', model: shouldAttemptPrimary ? primaryModel : null });
+    aiState.recordTiming('generation_cycle_start', { phase, provider: primaryProvider, model: shouldAttemptPrimary ? primaryModel : null });
     let result = shouldAttemptPrimary
-      ? await zapytajGlowny(effectiveMaxTok, prompt, primaryModel)
-      : wynikPusty('groq', primaryModel, allowPrimary ? 'provider cooldown active' : 'primary model skipped for this generation cycle');
+      ? (primaryProvider === 'xkiro'
+          ? await zapytajXKiro(effectiveMaxTok, prompt, powod)
+          : await zapytajGlowny(effectiveMaxTok, prompt, primaryModel))
+      : wynikPusty(primaryProvider, primaryModel, allowPrimary ? 'provider cooldown active' : 'primary model skipped for this generation cycle');
     if (isMissingQuestionPlaceholder(result.tekst)) {
       result = { ...result, tekst: '', error: 'empty_response: generator returned a missing-question placeholder' };
       console.warn(`[AI][${requestId}] ${primaryStep} zwrócił placeholder „brak pytania”; traktuję jako pustą odpowiedź i uruchamiam fallback.`);
@@ -4107,8 +4124,8 @@ Pytanie użytkownika: ${pytanie}`;
     // Zwracamy rzeczywiście ostatnią próbę, a nie pierwszy 120B.
     // Dzięki temu SUMMARY pokazuje prawdziwy provider/model/error po wyczerpaniu fallbacku.
     return lastResult || wynikPusty(
-      result?.provider || 'groq',
-      result?.model || AI_MODELS.generatorPrimary,
+      result?.provider || primaryProvider,
+      result?.model || primaryModel,
       result?.error || 'AI fallback chain exhausted',
     );
   }
