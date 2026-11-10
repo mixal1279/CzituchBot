@@ -911,6 +911,7 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, lookupFn, normalizeQu
         let res;
         let responseText = '';
         let data;
+        let reducedPayloadRetryUsed = false;
         if (timeoutFromRemaining(15000) <= 0) throw new Error('AI request deadline exceeded before Tavily Search');
         const tavilyHttpStartedAt = Date.now();
         requestState?.recordTiming?.('tavily_http_start', {
@@ -941,12 +942,36 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, lookupFn, normalizeQu
               const bodyText = await odczytajOgraniczonyTekst(response);
               return { response, bodyData: null, bodyText };
             })();
-            const outcome = await awaitWithAbortTimeout(
-              attempt,
-              attemptTimeoutMs,
-              attemptController,
-              'Tavily Search response',
-            );
+            let outcome;
+            try {
+              outcome = await awaitWithAbortTimeout(
+                attempt,
+                attemptTimeoutMs,
+                attemptController,
+                'Tavily Search response',
+              );
+            } catch (error) {
+              // Advanced/raw-content payload może przekroczyć limit rozmiaru.
+              // Ponów raz jako tani basic search z mniejszą liczbą wyników;
+              // nie powtarzaj bez końca ani nie zwiększaj limitu pamięci.
+              if (error?.message === 'provider_response_too_large' && !reducedPayloadRetryUsed && probe === 0) {
+                reducedPayloadRetryUsed = true;
+                request.body = JSON.stringify({
+                  query: searchQuery,
+                  search_depth: 'basic',
+                  max_results: 3,
+                  chunks_per_source: 1,
+                  include_answer: false,
+                  include_raw_content: false,
+                  ...(domains && { include_domains: domains }),
+                  ...(validTimeRange && { time_range: validTimeRange }),
+                });
+                logger.warn?.('[Tavily] odpowiedź przekroczyła limit 512 KiB — ponawiam jako ograniczony basic search');
+                onStatus({ status: 'retry_reduced', query: searchQuery, reason: 'provider_response_too_large' });
+                continue;
+              }
+              throw error;
+            }
             res = outcome.response;
             responseText = outcome.bodyText;
             data = outcome.bodyData;
