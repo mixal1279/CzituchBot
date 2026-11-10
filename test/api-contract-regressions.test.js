@@ -158,7 +158,7 @@ test('live benchmark preflights validator providers before starting the full gol
   assert.match(workflow, /node scripts\/validator-providers-preflight\.js/);
   assert.ok(workflow.indexOf('Syntax check live benchmark modules') < workflow.indexOf('Preflight Tavily'));
   assert.match(workflow, /find ai -maxdepth 1 -type f -name '\*\.js' -print0/);
-  assert.ok(workflow.indexOf('Preflight validator providers') < workflow.indexOf('Run 10-case live benchmark'));
+  assert.ok(workflow.indexOf('Preflight validator providers') < workflow.indexOf('Run 17-case live benchmark'));
 });
 
 test('live benchmark is manual-only so pushes do not spend API quota', () => {
