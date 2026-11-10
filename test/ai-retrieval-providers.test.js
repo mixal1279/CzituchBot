@@ -19,7 +19,7 @@ const { createTavilySearch, classifyTavilyError, filtrujPoScore, normalizujProgS
 const { assessEvidence, sourceMatchesRequestContext } = require('../ai/core');
 
 
-test('Tavily retries an oversized provider response once with a bounded basic payload', async () => {
+test('Tavily retries an oversized advanced response once with one evidence-preserving result', async () => {
   const requests = [];
   const search = createTavilySearch({
     apiKey: 'test-tavily-key',
