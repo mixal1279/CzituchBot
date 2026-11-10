@@ -386,8 +386,45 @@ async function createGroqCompletionWithSchemaFallback(groqClient, payload, {
   }
 }
 
+/**
+ * Normalizuje odpowiedź z endpointu zgodnego z OpenAI Chat Completions.
+ * Nie traktuje reasoning jako odpowiedzi użytkowej.
+ */
+function parseOpenAICompatibleCompletion(data) {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    throw new Error('invalid_response: provider returned a non-object payload');
+  }
+  if (data.error && typeof data.error === 'object') {
+    const message = String(data.error.message || 'provider returned an error').slice(0, 500);
+    throw new Error('provider_error: ' + message);
+  }
+  const choice = Array.isArray(data.choices) ? data.choices[0] : null;
+  if (!choice || typeof choice !== 'object') throw new Error('invalid_response: missing choices[0]');
+  const message = choice.message && typeof choice.message === 'object' ? choice.message : {};
+  const content = message.content;
+  let text = '';
+  if (typeof content === 'string') text = content;
+  else if (Array.isArray(content)) {
+    text = content.filter(part => part && typeof part === 'object' && ['text', 'output_text'].includes(String(part.type || 'text')))
+      .map(part => typeof part.text === 'string' ? part.text : '').join('');
+  }
+  if (!text.trim() && typeof message.refusal === 'string') text = message.refusal;
+  const finishReason = String(choice.finish_reason || 'unknown').slice(0, 80);
+  const reasoningPresent = Boolean((typeof message.reasoning === 'string' && message.reasoning.trim())
+    || (typeof message.reasoning_content === 'string' && message.reasoning_content.trim()));
+  const usage = data.usage && typeof data.usage === 'object' ? {
+    promptTokens: Number.isFinite(Number(data.usage.prompt_tokens)) ? Number(data.usage.prompt_tokens) : null,
+    completionTokens: Number.isFinite(Number(data.usage.completion_tokens)) ? Number(data.usage.completion_tokens) : null,
+    totalTokens: Number.isFinite(Number(data.usage.total_tokens)) ? Number(data.usage.total_tokens) : null,
+  } : null;
+  return { text: text.trim(), finishReason, truncated: finishReason === 'length', reasoningPresent, usage,
+    model: typeof data.model === 'string' ? data.model.slice(0, 160) : null,
+    responseId: typeof data.id === 'string' ? data.id.slice(0, 160) : null };
+}
+
 module.exports = {
   normalizeGroqBaseUrl,
+  parseOpenAICompatibleCompletion,
   createGroqCompletion,
   createGroqCompletionWithSchemaFallback,
   isGroqSchemaValidationError,
