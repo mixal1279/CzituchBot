@@ -697,9 +697,13 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
     .filter(c => c.claim && !czyOgraniczenieDowodowe(c.claim));
 
   const allowed = allowedSourceIds instanceof Set ? allowedSourceIds : null;
-  const evidenceAssessment = assessEvidence(parseEvidenceBlocks(dane), answer || '', {
+  const evidenceQuestion = String(options.question || answer || '');
+  const evidenceAssessment = assessEvidence(parseEvidenceBlocks(dane), evidenceQuestion, {
     intent: 'web_fact',
-    is_lore: /lore|fabuł|histori|kanon|canon/i.test(String(answer || '')),
+    is_lore: /lore|fabuł|histori|kanon|canon/i.test(evidenceQuestion + ' ' + String(answer || '')),
+    game: options.game || options.routing?.game,
+    entity: options.entity || options.routing?.entity,
+    resolved_entity: options.resolved_entity || options.routing?.resolved_entity,
   });
   // Canonical evidence binding: prefer an exact match among cited, authorized blocks.
   // If the model picked the wrong ID, allow a unique exact match in this request's
@@ -1116,6 +1120,7 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
       uncoveredSentenceIndexes: answerCoverage.uncoveredSentenceIndexes || [],
     },
     evidenceStatus: evidenceAssessment.status,
+    retrievalTrace: evidenceAssessment.retrievalTrace,
     claimSupport: claimSupportAudit,
     hardOverclaimClaimIndexes,
     locallyVerifiedModelFalseClaimIndexes,
