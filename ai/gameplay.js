@@ -20,13 +20,10 @@ function extractHostname(value) {
   const raw = String(value || '').trim().toLowerCase();
   if (!raw) return null;
   try {
-    return new URL(raw).hostname.toLowerCase();
+    const url = /^[a-z][a-z0-9+.-]*:\/\//i.test(raw) ? raw : `https://${raw}`;
+    return new URL(url).hostname.toLowerCase();
   } catch (_) {
-    try {
-      return new URL(`http://${raw}`).hostname.toLowerCase();
-    } catch (__) {
-      return null;
-    }
+    return null;
   }
 }
 
