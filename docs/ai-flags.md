@@ -106,3 +106,13 @@ Werdykty `accepted` i `rejected` są cache'owane przez 10 minut, maksymalnie 200
 - `retrievalTrace` zawiera liczbę zapytań i kandydatów, top source keys per ranking, wynik fuzji i wybrane źródła. Nie zawiera treści źródeł ani sekretów.
 - `npm run benchmark:retrieval` mierzy Precision@K, Recall@K, MRR i nDCG na etykietowanych fixture. Wynik fixture nie jest metryką produkcyjnego retrieval.
 - Embeddingi nie są uruchamiane lokalnie. Adapter semantyczny powinien być osobną, opcjonalną integracją z własnym timeoutem i budżetem requestów.
+
+
+## Opcjonalny semantic retrieval
+
+| Zmienna | Domyślnie | Znaczenie |
+|---|---|---|
+| `AI_SEMANTIC_RETRIEVAL` | `0` | Ustaw `1`, aby wykonać maksymalnie jedno dodatkowe wyszukiwanie semantyczne Exa na żądanie. Wymaga `EXA_API_KEY`. |
+| `AI_SEMANTIC_RETRIEVAL_TIMEOUT_MS` | `3500` | Timeout Exa; wartość jest ograniczana do 1500–6000 ms. |
+
+Exa jest domyślnie wyłączone, ponieważ wykonuje dodatkowe płatne/limitowane wywołanie API. Gdy jest włączone, współdzieli limit wyszukiwań i rezerwę czasu z Tavily, a wyniki trafiają do tego samego RRF przed generowaniem. Ścisłe allowlisty domen persony są przekazywane również do Exa. Brak klucza, timeout lub błąd Exa nie blokuje odpowiedzi opartej na pozostałych źródłach.
