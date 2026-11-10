@@ -539,7 +539,7 @@ function fuseTavilyEvidenceTexts(texts, question, routing = {}, options = {}) {
       sources: [],
       evidenceStatus: 'weak',
       retrievalTrace: {
-        queryCount: 0, candidateCount: 0, rankings: [], fusion: [],
+        queryCount: 0, rankingQueryCount: 0, searchCount: Math.max(0, Number(options.searchCount) || 0), candidateCount: 0, rankings: [], fusion: [],
         selectedSourceKeys: [], semanticRerankingApplied: false,
       },
     };
@@ -577,6 +577,8 @@ function fuseTavilyEvidenceTexts(texts, question, routing = {}, options = {}) {
     evidenceStatus: evidence.status,
     retrievalTrace: {
       ...evidence.retrievalTrace,
+      rankingQueryCount: evidence.retrievalTrace.queryCount,
+      searchCount: Number.isFinite(Number(options.searchCount)) ? Math.max(0, Math.min(5, Math.floor(Number(options.searchCount)))) : inputs.filter(value => typeof value === 'string' && value.trim()).length,
       providerCounts,
       selectedProviders: evidence.sources.map(source => {
         const provider = String(source.provider || 'tavily').toLowerCase();
