@@ -148,9 +148,10 @@ test('OpenRouter and xKiro validator deadlines use the shared production budget 
 
 test('live benchmark preflights validator providers before starting a ten-case sample', () => {
   const workflow = read('.github/workflows/ai-live-benchmark.yml');
-  assert.match(workflow, /AI_BENCHMARK_LIMIT:\s*"10"/);
+  assert.match(workflow, /AI_BENCHMARK_LIMIT:\s*"17"/);
   assert.match(workflow, /AI_REQUEST_TIMEOUT_MS:\s*"85000"/);
   assert.match(workflow, /AI_XKIRO_GENERATOR_TIMEOUT_MS:\s*"30000"/);
+  assert.match(workflow, /AI_XKIRO_GENERATOR_MAX_TOKENS:\s*"700"/);
   assert.match(workflow, /AI_XKIRO_VALIDATOR_TIMEOUT_MS:\s*"22000"/);
   assert.match(workflow, /PREFLIGHT_TIMEOUT_MS:\s*"25000"/);
   assert.match(workflow, /PREFLIGHT_STRICT:\s*"1"/);
