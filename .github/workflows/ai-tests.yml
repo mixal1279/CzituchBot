@@ -3,7 +3,7 @@ name: AI regression tests
 on:
   workflow_dispatch:
   push:
-    branches: [ main ]
+    branches: [ main, audit/full-bot-hardening ]
     paths:
       - 'ai/**'
       - 'test/**'
