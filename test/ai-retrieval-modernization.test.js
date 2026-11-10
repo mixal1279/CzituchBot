@@ -102,4 +102,6 @@ test('multi-query fusion deduplicates and selects evidence before generation', (
   assert.match(fused.text, /^\[SOURCE 1\]/);
   assert.ok(fused.text.includes(fused.sources[0].url));
   assert.equal(fused.retrievalTrace.selectedSourceKeys.length, 1);
+  assert.equal(fused.retrievalTrace.providerCounts.tavily, 2);
+  assert.equal(fused.retrievalTrace.selectedHostCount, 1);
 });
