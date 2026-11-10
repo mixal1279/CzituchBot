@@ -104,7 +104,7 @@ Werdykty `accepted` i `rejected` są cache'owane przez 10 minut, maksymalnie 200
 - Fuzja jest lokalna, deterministyczna i nie wykonuje dodatkowych wywołań sieciowych. Plan zapytań nadal ma limit maksymalnie 5 pozycji.
 - `assessEvidence(..., options)` przyjmuje opcjonalne `semanticScores` jako `Map` lub obiekt mapujący canonical URL/klucz źródła na score 0–1. Bez tego parametru nie ma semantycznego rerankingu ani dodatkowego requestu.
 - `retrievalTrace` zawiera liczbę zapytań i kandydatów, top source keys per ranking, wynik fuzji i wybrane źródła. Nie zawiera treści źródeł ani sekretów.
-- `npm run benchmark:retrieval` mierzy Precision@K, Recall@K, MRR i nDCG na etykietowanych fixture. Wynik fixture nie jest metryką produkcyjnego retrieval.
+- `npm run benchmark:retrieval` uruchamia RRF na etykietowanych rankingach fixture i porównuje Precision@K, Recall@K, MRR i nDCG z baseline. Wynik fixture nie jest metryką produkcyjnego retrieval.
 - Embeddingi nie są uruchamiane lokalnie. Adapter semantyczny powinien być osobną, opcjonalną integracją z własnym timeoutem i budżetem requestów.
 
 
