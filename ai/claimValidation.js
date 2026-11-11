@@ -34,7 +34,7 @@ const CROSS_LANGUAGE_CONCEPTS = [
   // Dodane po przypadku benchmarkowym who-225 (Astarion): cytat 'freed him
   // from his bonds' nie byl rozpoznawany jako potwierdzenie claimu 'zostal
   // uwolniony', bo zadne pojecie nie lapalo pary freed/uwolniony.
-  ['uwolnienie', /\bfree(?:d|s|ing)?\b|\breleas(?:e|es|ed|ing)\b|liberat\w*|uwolni\w*|wyzwoli\w*/i],
+  ['uwolnienie', /\bfree(?:d|s|ing)?\b|liberat\w*|uwolni\w*|wyzwoli\w*/i],
   // Granica slowa przed „appear”: „disappears” oznacza przeciwna akcje i nie moze byc uznane za „appears”.
   ['wystepowanie', /\b(?:appear\w*|pojaw\w*|wystep\w*)/i],
   ['kontrola', /control\w*|take[s]?\s+over|command\w*|manipulat\w*|kontrol\w*|przej[a]l\w*|manipul\w*|removed?\s+from\s+power|los[et]\s+control/i],
