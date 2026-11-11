@@ -1437,6 +1437,8 @@ async function pobierzCzasHLTB(nazwaGry) {
         if (hltbCache.size > 200) hltbCache.delete(hltbCache.keys().next().value);
         await persistMapCache('hltb_results', hltbCache);
         return wynik;
+      } else {
+        console.log('[HLTB][diag] odrzucone dopasowanie:', wariant, 'vs', najlepsza.g.game_name, 'score:', najlepsza.score);
       }
     }
     console.log('[HLTB] Brak wyników dla:', nazwaGry);
