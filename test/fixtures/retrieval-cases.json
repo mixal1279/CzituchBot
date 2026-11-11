@@ -1,0 +1,91 @@
+{
+  "version": 2,
+  "description": "Deterministyczny benchmark fuzji RRF na ręcznie etykietowanych rankingach; nie jest pomiarem produkcyjnego retrieval.",
+  "cases": [
+    {
+      "id": "portal-consensus",
+      "rankings": [
+        [
+          "portal-wheatley",
+          "unrelated",
+          "portal-2"
+        ],
+        [
+          "portal-2",
+          "portal-wheatley",
+          "unrelated"
+        ],
+        [
+          "portal-wheatley",
+          "portal-2",
+          "unrelated"
+        ]
+      ],
+      "baseline": [
+        "unrelated",
+        "portal-wheatley",
+        "portal-2"
+      ],
+      "relevant": [
+        "portal-wheatley",
+        "portal-2"
+      ],
+      "relevance": {
+        "portal-wheatley": 3,
+        "portal-2": 2
+      },
+      "k": 3
+    },
+    {
+      "id": "late-hit",
+      "rankings": [
+        [
+          "unrelated-a",
+          "unrelated-b",
+          "bg3-lore"
+        ],
+        [
+          "bg3-lore",
+          "unrelated-a",
+          "unrelated-b"
+        ]
+      ],
+      "baseline": [
+        "unrelated-a",
+        "unrelated-b",
+        "bg3-lore"
+      ],
+      "relevant": [
+        "bg3-lore"
+      ],
+      "relevance": {
+        "bg3-lore": 3
+      },
+      "k": 3
+    },
+    {
+      "id": "miss",
+      "rankings": [
+        [
+          "unrelated-a",
+          "unrelated-b"
+        ],
+        [
+          "unrelated-b",
+          "unrelated-a"
+        ]
+      ],
+      "baseline": [
+        "unrelated-a",
+        "unrelated-b"
+      ],
+      "relevant": [
+        "cyberpunk-johnny"
+      ],
+      "relevance": {
+        "cyberpunk-johnny": 3
+      },
+      "k": 2
+    }
+  ]
+}

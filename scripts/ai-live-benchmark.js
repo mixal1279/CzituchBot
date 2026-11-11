@@ -277,6 +277,15 @@ function summarizeFalseRejectMetrics(results = []) {
   };
 }
 
+function extractRetrievalTrace(summary) {
+  if (summary?.retrievalTrace && Array.isArray(summary.retrievalTrace.selectedSourceKeys)) return summary.retrievalTrace;
+  const rows = Array.isArray(summary?.validatorResults) ? summary.validatorResults : [];
+  const traces = rows.map(row => row?.validationDiagnostics?.retrievalTrace || row?.diagnostics?.retrievalTrace).filter(trace =>
+    trace && typeof trace === 'object' && Array.isArray(trace.selectedSourceKeys)
+  );
+  return traces.length ? traces[traces.length - 1] : null;
+}
+
 function extractClaimSupportAudit(summary) {
   const audits = [];
   for (const row of summary?.validatorResults || []) {
@@ -450,6 +459,10 @@ function buildBenchmarkDiagnostics(results, allCases = benchmark.cases, selected
     if (/timeout|timed out|deadline/i.test(detail) || attempt.timeoutAbort === true) return 'timeout';
     if (/abort|cancelled|canceled/i.test(detail)) return 'abort';
     if (/5\d\d/.test(detail)) return 'http_5xx';
+    if (/empty_response|no answer text|reasoning_only/i.test(detail)) return 'empty_response';
+    if (/truncated_response|finish_reason.{0,24}(?:length|max_tokens)/i.test(detail)) return 'truncated_response';
+    if (/invalid_json|invalid json|malformed json|json parse/i.test(detail)) return 'invalid_json';
+    if (/invalid_response|invalid schema|schema_reject/i.test(detail)) return 'invalid_response';
     return 'unknown';
   };
   const generationProviderFailures = [...new Set(results.flatMap(result =>
@@ -684,6 +697,8 @@ async function run() {
         fallbackReasons: summary?.fallbackReasons || [],
         tavilySearches: summary?.tavilySearches ?? null,
         sourceCount: summary?.sourceCount ?? null,
+        semanticSearches: Number(summary?.semanticSearches) || 0,
+        retrievalTrace: extractRetrievalTrace(summary),
       });
     } catch (error) {
       results.push({
@@ -714,6 +729,8 @@ async function run() {
         fallbackReasons: summary?.fallbackReasons || [],
         tavilySearches: summary?.tavilySearches ?? null,
         sourceCount: summary?.sourceCount ?? null,
+        semanticSearches: Number(summary?.semanticSearches) || 0,
+        retrievalTrace: extractRetrievalTrace(summary),
         error: String(error?.message || error),
       });
     }
@@ -809,6 +826,28 @@ async function run() {
     claimSupportPassRate: claimSupport.claimSupportPassRate,
     claimSupportUsableRate: claimSupport.claimSupportUsableRate,
     claimSupport,
+    retrievalTraceSummary: (() => {
+      const traces = results.map(result => result.retrievalTrace).filter(Boolean);
+      const average = key => traces.length
+        ? Number((traces.reduce((sum, trace) => sum + (Number(trace[key]) || 0), 0) / traces.length).toFixed(3))
+        : null;
+      const providerCounts = {};
+      for (const trace of traces) {
+        for (const [provider, count] of Object.entries(trace.providerCounts || {})) {
+          providerCounts[provider] = (providerCounts[provider] || 0) + Math.max(0, Number(count) || 0);
+        }
+      }
+      return {
+        casesWithTrace: traces.length,
+        averageSearchCount: average('searchCount'),
+        averageRankingQueryCount: average('rankingQueryCount') ?? average('queryCount'),
+        averageCandidateCount: average('candidateCount'),
+        averageSelectedHostCount: average('selectedHostCount'),
+        providerCounts,
+        semanticRerankingCases: traces.filter(trace => trace.semanticRerankingApplied).length,
+        semanticSearchCases: results.filter(result => result.semanticSearches > 0).length,
+      };
+    })(),
     validatorMetrics: agregujMetrykiWalidatorow(validatorMetricsRaw),
     validatorMetricsRaw,
     durationMs: Date.now() - started,

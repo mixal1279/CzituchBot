@@ -697,9 +697,13 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
     .filter(c => c.claim && !czyOgraniczenieDowodowe(c.claim));
 
   const allowed = allowedSourceIds instanceof Set ? allowedSourceIds : null;
-  const evidenceAssessment = assessEvidence(parseEvidenceBlocks(dane), answer || '', {
+  const evidenceQuestion = String(options.question || answer || '');
+  const evidenceAssessment = assessEvidence(parseEvidenceBlocks(dane), evidenceQuestion, {
     intent: 'web_fact',
-    is_lore: /lore|fabuł|histori|kanon|canon/i.test(String(answer || '')),
+    is_lore: /lore|fabuł|histori|kanon|canon/i.test(evidenceQuestion + ' ' + String(answer || '')),
+    game: options.game || options.routing?.game,
+    entity: options.entity || options.routing?.entity,
+    resolved_entity: options.resolved_entity || options.routing?.resolved_entity,
   });
   // Canonical evidence binding: prefer an exact match among cited, authorized blocks.
   // If the model picked the wrong ID, allow a unique exact match in this request's
@@ -916,7 +920,22 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
   const questionText = normalizujClaim(options.question || '');
   const causalQuestion = /\b(?:dlaczego|czemu|z jakiego powodu|jaka byla przyczyna|co spowodowalo|why|how come|what caused|what was the reason)\b/u.test(questionText);
   const causalLimitation = /\b(?:przyczyn\w*|powod\w*|cause\w*|reason\w*)\b/u.test(normalizujClaim(answer));
-  const retrievedEvidenceHasCausalSignal = CAUSAL_EVIDENCE_RE.test(normalizujClaim(dane));
+  // Ograniczenie epistemiczne blokujemy tylko wtedy, gdy sygnał przyczynowy
+  // występuje w dowodzie dopasowanym do pytania, a nie w dowolnym fragmencie
+  // któregoś z pobranych dokumentów. Inaczej obca relacja przyczynowa z retrieval
+  // potrafi zablokować uczciwą odmowę odpowiedzi o innym zdarzeniu.
+  const causalEvidenceQueries = options.question
+    ? [...new Set([
+        String(options.question),
+        ...wyodrebnijNazwyWlasne(options.question),
+      ].map(value => String(value || '').trim()).filter(Boolean))]
+    : [];
+  const causalEvidenceCandidates = causalEvidenceQueries.flatMap(query =>
+    rankEvidenceForClaim(query, parsedEvidenceBlocks, null, 24)
+  );
+  const retrievedEvidenceHasCausalSignal = causalEvidenceCandidates.some(candidate =>
+    CAUSAL_EVIDENCE_RE.test(normalizujClaim(candidate.quote))
+  );
   // A source-scoped limitation is a valid answer to an explicitly causal question
   // when the retrieved evidence does not establish the cause. In this case the
   // answer contains no factual assertion to bind to claims; ignore contradictory
@@ -1101,6 +1120,7 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
       uncoveredSentenceIndexes: answerCoverage.uncoveredSentenceIndexes || [],
     },
     evidenceStatus: evidenceAssessment.status,
+    retrievalTrace: evidenceAssessment.retrievalTrace,
     claimSupport: claimSupportAudit,
     hardOverclaimClaimIndexes,
     locallyVerifiedModelFalseClaimIndexes,

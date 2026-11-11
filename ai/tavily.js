@@ -1,12 +1,13 @@
 'use strict';
 
-const { scoreSource: scoreCoreSource, diversifySources: diversifyCoreSources } = require('./core');
+const { scoreSource: scoreCoreSource, diversifySources: diversifyCoreSources, buildRetrievalPlan: buildCoreRetrievalPlan, reciprocalRankFusion, assessEvidence } = require('./core');
 
 const fs = require('fs');
 const { resolveGameEntity, normalizujEncje } = require('./entities');
 const { AI_MODELS } = require('./modelConfig');
 const { searchSecondaryProviders, formatSources, odczytajOgraniczonyJson, odczytajOgraniczonyTekst } = require('./webRetrieval');
 const { sanitizeUntrustedText } = require('./untrustedText');
+const { parseEvidenceBlocks } = require('./evidence');
 const { createGroqCompletion, awaitWithAbortTimeout } = require('./provider-runtime');
 
 
@@ -419,40 +420,90 @@ function rerankujWynikiTavily(results, sourceQuestion, requestedDomains = [], op
   const resolvedEntity = resolveGameEntity(sourceQuestion);
   const entity = resolvedEntity?.game || resolvedEntity?.name || null;
   const claimSignals = sygnalyClaimuTavily(sourceQuestion);
+  const isLore = options.isLore === true || options.routing?.is_lore === true
+    || Boolean(resolvedEntity && /\b(?:lore|fabuł|histori|kanon|canon|dlaczego|czemu|why|story|plot)\b/iu.test(String(sourceQuestion || '')));
+  const isGameplay = options.isGameplay === true || options.routing?.is_gameplay === true
+    || Boolean(resolvedEntity && /\b(?:walkthrough|poradnik|solucj|jak\s+(?:pokona|przej|zdoby|zrob|znale)|how\s+to)\b/iu.test(String(sourceQuestion || '')));
+  const retrievalRouting = {
+    ...(options.routing && typeof options.routing === 'object' ? options.routing : {}),
+    entity: options.routing?.entity || entity || '',
+    game: options.routing?.game || resolvedEntity?.game || (resolvedEntity?.type === 'game' ? resolvedEntity.name : ''),
+    resolved_entity: options.routing?.resolved_entity || resolvedEntity || undefined,
+    is_lore: isLore,
+    is_gameplay: isGameplay,
+  };
+  const queryPlan = buildCoreRetrievalPlan(sourceQuestion, retrievalRouting, { maxQueries: 4 });
+  const rankingQueries = [...new Set([
+    String(sourceQuestion || '').trim(),
+    ...queryPlan.map(item => item.query),
+  ].filter(Boolean))].slice(0, 5);
+  const semanticScores = options.semanticScores instanceof Map
+    ? options.semanticScores
+    : new Map(Object.entries(options.semanticScores || {}));
 
   const candidates = input.map((result, index) => {
     const localQuality = ocenaZrodlaLokalnie(result?.url, requestedDomains);
+    const key = String(result?.url || result?.title || index);
+    const semanticValue = Number(semanticScores.has(key) ? semanticScores.get(key) : NaN);
+    const semanticScore = Number.isFinite(semanticValue) && semanticValue >= 0 && semanticValue <= 1
+      ? semanticValue : null;
     const core = scoreCoreSource({
       ...result,
       authority: localQuality,
     }, sourceQuestion, {
       entity,
       freshness: options.freshness,
+      semanticScore,
     });
 
     const claimCoverage = claimCoverageTavily(result, claimSignals);
     const claimBonus = Math.min(0.16, claimCoverage * 0.16);
     const requestedBonus = requestedDomains?.length && hostnamePasujeDoDomenyTavily(result?.url, requestedDomains) ? 0.10 : 0;
-
     const base = typeof result?.score === 'number' ? result.score : 0;
     const rerankScore = Math.max(0, Math.min(1.5,
-      base * 0.35 +
-      core.coreScore * 0.55 +
-      claimBonus +
-      requestedBonus
+      base * 0.35 + core.coreScore * 0.55 + claimBonus + requestedBonus
     ));
 
     return {
       ...result,
       _coreScore: core.coreScore,
       _rerankScore: rerankScore,
+      _semanticScore: semanticScore,
       _host: core.host,
       _key: core.key,
       _index: index,
     };
   });
 
-  const sorted = candidates.sort((a,b) => b._rerankScore - a._rerankScore);
+  // RRF działa na rankingach tych samych kandydatów dla zapytań bazowego,
+  // encyjnego i intencyjnego. Nie generuje dodatkowych zapytań HTTP.
+  const rankings = rankingQueries.map(query => candidates
+    .map(item => {
+      const scored = scoreCoreSource({
+        ...item,
+        authority: ocenaZrodlaLokalnie(item?.url, requestedDomains),
+      }, query, { entity, freshness: options.freshness });
+      return { key: item._key, score: scored.coreScore, relevance: scored.relevance, titleRelevance: scored.titleRelevance };
+    })
+    .filter(item => item.relevance > 0 || item.titleRelevance > 0)
+    .sort((a, b) => b.score - a.score || a.key.localeCompare(b.key))
+    .map(item => item.key));
+  const fused = reciprocalRankFusion(rankings, { k: 60 });
+  const maxFusion = Math.max(0, ...fused.map(item => item.score));
+  const fusionByKey = new Map(fused.map(item => [item.id, item.score]));
+  for (const item of candidates) {
+    const rawFusion = fusionByKey.get(item._key) || 0;
+    const rrfScore = maxFusion > 0 ? rawFusion / maxFusion : 0;
+    item._rrfScore = rrfScore;
+    item._matchedQueryCount = rankings.filter(ranking => ranking.includes(item._key)).length;
+    item._rerankScore = Math.max(0, Math.min(1.5,
+      item._rerankScore * (item._semanticScore === null ? 0.82 : 0.77)
+      + rrfScore * 0.18
+      + (item._semanticScore === null ? 0 : item._semanticScore * 0.05)
+    ));
+  }
+
+  const sorted = candidates.sort((a,b) => b._rerankScore - a._rerankScore || a._index - b._index);
   const selected = [];
   const hosts = new Set();
   const maxSources = Math.max(1, input.length);
@@ -472,7 +523,72 @@ function rerankujWynikiTavily(results, sourceQuestion, requestedDomains = [], op
     selected.push(item);
   }
 
-  return selected.map(({_coreScore,_rerankScore,_host,_key,_index,...result}) => result);
+  return selected.map(({_coreScore,_rerankScore,_semanticScore,_rrfScore,_matchedQueryCount,_host,_key,_index,...result}) => result);
+}
+
+function fuseTavilyEvidenceTexts(texts, question, routing = {}, options = {}) {
+  const inputs = Array.isArray(texts) ? texts : [texts];
+  const blocks = inputs
+    .filter(value => typeof value === 'string' && value.trim())
+    .flatMap(value => parseEvidenceBlocks(value))
+    .filter(source => source.url && source.content);
+
+  if (!blocks.length) {
+    return {
+      text: '',
+      sources: [],
+      evidenceStatus: 'weak',
+      retrievalTrace: {
+        queryCount: 0, rankingQueryCount: 0, searchCount: Math.max(0, Number(options.searchCount) || 0), candidateCount: 0, rankings: [], fusion: [],
+        selectedSourceKeys: [], semanticRerankingApplied: false,
+      },
+    };
+  }
+
+  const semanticScores = options.semanticScores instanceof Map
+    ? options.semanticScores
+    : options.semanticScores && typeof options.semanticScores === 'object'
+      ? options.semanticScores : undefined;
+  const evidence = assessEvidence(blocks.map(source => ({
+    ...source,
+    provider: source.provider || 'tavily',
+    snippet: source.content,
+  })), question, routing, {
+    maxSources: options.maxSources,
+    minIndependent: options.minIndependent,
+    semanticScores,
+  });
+  const text = formatSources(evidence.sources.map(source => ({
+    ...source,
+    provider: source.provider || 'tavily',
+    snippet: source.content,
+    content: source.content,
+  })));
+  const providerCounts = blocks.reduce((counts, source) => {
+    const rawProvider = String(source.provider || 'tavily').toLowerCase();
+    const provider = /^[a-z0-9_-]{1,32}$/u.test(rawProvider)
+      && !['__proto__', 'constructor', 'prototype'].includes(rawProvider) ? rawProvider : 'unknown';
+    counts[provider] = (counts[provider] || 0) + 1;
+    return counts;
+  }, Object.create(null));
+
+  return {
+    text,
+    sources: evidence.sources,
+    evidenceStatus: evidence.status,
+    retrievalTrace: {
+      ...evidence.retrievalTrace,
+      rankingQueryCount: evidence.retrievalTrace.queryCount,
+      searchCount: Number.isFinite(Number(options.searchCount)) ? Math.max(0, Math.min(5, Math.floor(Number(options.searchCount)))) : inputs.filter(value => typeof value === 'string' && value.trim()).length,
+      providerCounts,
+      selectedProviders: evidence.sources.map(source => {
+        const provider = String(source.provider || 'tavily').toLowerCase();
+        return /^[a-z0-9_-]{1,32}$/u.test(provider)
+          && !['__proto__', 'constructor', 'prototype'].includes(provider) ? provider : 'unknown';
+      }),
+      selectedHostCount: evidence.independentHosts,
+    },
+  };
 }
 
 function ocenaZrodlaLokalnie(url, requestedDomains = []) {
@@ -761,7 +877,7 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, lookupFn, normalizeQu
   // Głębokość jest częścią klucza: wynik `basic` nie może obsłużyć ponownego, głębszego zapytania.
   // Cached output is already filtered/reranked and conflict-checked against the full source question.
   // Keyword-only keys can collide (e.g. “when was Portal 2 released?” vs “where was Portal 2 released?”).
-  const cacheKey = (query, domains, timeRange, sourceQuestion = '', depth = 'basic') => `${query.toLowerCase().trim()}|${(domains || []).slice().sort().join(',')}|${timeRange || ''}|${String(sourceQuestion || '').toLowerCase().trim().replace(/\\s+/g, ' ')}|${depth}`;
+  const cacheKey = (query, domains, timeRange, sourceQuestion = '', depth = 'basic') => `${query.toLowerCase().trim()}|${(domains || []).slice().sort().join(',')}|${timeRange || ''}|${String(sourceQuestion || '').toLowerCase().trim().replace(/\s+/g, ' ')}|${depth}`;
 
   return async function szukajTavily(pytanie, options = {}) {
     await ensureCacheReady();
@@ -1185,6 +1301,7 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, lookupFn, normalizeQu
 
 module.exports = {
   createTavilySearch,
+  fuseTavilyEvidenceTexts,
   czyPoprawnyWpisCacheTavily,
   hostnamePasujeDoDomenyTavily,
   czyZablokowanyHostTavily,

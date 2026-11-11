@@ -263,7 +263,11 @@ test('live diagnostics distinguish validator failures from generation failures a
   const diagnostics = buildBenchmarkDiagnostics([{
     finalStatus: 'rejected',
     modelCalls: 3,
-    generationAttempts: [{ provider: 'gemini', model: 'gemini-3.8-flash', status: 'error', failure: 'timeout' }],
+    generationAttempts: [
+      { provider: 'gemini', model: 'gemini-3.8-flash', status: 'error', failure: 'timeout' },
+      { provider: 'xkiro', model: 'cohere/command-a-reasoning', status: 'error', error: 'empty_response: no answer text; reasoning_only=true' },
+      { provider: 'xkiro', model: 'cohere/command-a-reasoning', status: 'error', error: 'xKiro invalid JSON response (HTTP 200)' },
+    ],
     validatorResults: [
       { provider: 'xkiro', model: 'cohere/command-a-reasoning', status: 'accepted' },
       { provider: 'gemini', model: 'gemini-3.8-flash', status: 'rejected' },
@@ -279,7 +283,11 @@ test('live diagnostics distinguish validator failures from generation failures a
   assert.equal(diagnostics.validatorStatusCounts.unavailable, 1);
   assert.equal(diagnostics.validatorTransportFailures.length, 1);
   assert.equal(diagnostics.validatorTransportFailures[0].reason, 'timeout');
-  assert.deepEqual(diagnostics.generationProviderFailures, ['gemini:gemini-3.8-flash:timeout']);
+  assert.deepEqual(diagnostics.generationProviderFailures, [
+    'gemini:gemini-3.8-flash:timeout',
+    'xkiro:cohere/command-a-reasoning:empty_response',
+    'xkiro:cohere/command-a-reasoning:invalid_json',
+  ]);
   assert.equal(diagnostics.validatorSecondOpinions, 1);
   assert.equal(diagnostics.tavilyHttpCalls, 1);
   assert.equal(diagnostics.avgTavilyHttpMs, 1200);

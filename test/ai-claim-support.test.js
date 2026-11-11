@@ -511,3 +511,29 @@ test('adjacent entity names use literal matching with Unicode-safe boundaries', 
   assert.equal(claimValidation.czyNazwySasiaduja('中Wheatley Control', 'Wheatley', 'Control'), false);
   assert.equal(claimValidation.czyNazwySasiaduja('Wheatley Control中', 'Wheatley', 'Control'), false);
 });
+
+test('obca relacja przyczynowa z innego źródła nie blokuje ograniczenia epistemicznego', () => {
+  const evidence = [
+    '[SOURCE 1]',
+    'TYTUŁ: Portal 2 — Wheatley',
+    'TREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>',
+    'Wheatley is a personality core in Portal 2.',
+    '<<<END_UNTRUSTED_SOURCE_CONTENT>>>',
+    '[SOURCE 2]',
+    'TYTUŁ: Portal 2 — GLaDOS',
+    'TREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>',
+    'GLaDOS caused the facility shutdown after the core transfer.',
+    '<<<END_UNTRUSTED_SOURCE_CONTENT>>>',
+  ].join('\n');
+  const result = validator.normalizujWynikWalidatora({
+    valid: true,
+    reason: 'The retrieved sources do not establish why Wheatley took control.',
+    confidence: 0.95,
+    unsupported_claims: [],
+    claims: [],
+  }, 'test-model', 'xkiro', new Set(['SOURCE 1', 'SOURCE 2']), evidence,
+  'Źródła nie potwierdzają przyczyny, dla której Wheatley przejął kontrolę nad placówką.',
+  { question: 'Dlaczego Wheatley przejął kontrolę nad placówką?' });
+
+  assert.equal(result.status, 'accepted');
+});
