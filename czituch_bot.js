@@ -1396,7 +1396,12 @@ async function szukajHLTBBleed(gameName, retried = false) {
     hltbBleedTokenCache = null;
     return szukajHLTBBleed(gameName, true);
   }
-  if (!res.ok) return null;
+  if (!res.ok) {
+    let bodySnippet = '';
+    try { bodySnippet = (await res.text()).slice(0, 300); } catch (_) { /* ignore */ }
+    console.log('[HLTB][diag] /api/search/site odpowiedzialo non-OK:', res.status, bodySnippet);
+    return null;
+  }
   return res.json();
 }
 
@@ -1486,7 +1491,10 @@ async function pobierzCzasHLTB(nazwaGry) {
     console.log('[HLTB] Brak wyniku po Steam AppID — fallback /api/search/site po nazwie.');
     for (const wariant of warianty) {
       const data = await szukajHLTBBleed(wariant);
-      if (!data || !data.data || data.data.length === 0) continue;
+      if (!data || !data.data || data.data.length === 0) {
+        console.log('[HLTB][diag] pusta odpowiedz dla wariantu:', wariant, '- surowe dane:', JSON.stringify(data).slice(0, 300));
+        continue;
+      }
 
       const ocenione = data.data.map(g => ({ g, score: ocenaDopasowaniaTytuluHLTB(wariant, g.game_name || '') }));
       ocenione.sort((a, b) => b.score - a.score);

@@ -483,23 +483,36 @@ function czyStreszczenieModelu(source) {
 }
 
 function assessEvidence(results = [], question, routing = {}) {
-  const normalized = (Array.isArray(results) ? results : [])
+  const normalizedSources = (Array.isArray(results) ? results : [])
     .filter(Boolean)
-    .map((source, index) => normalizeSource(source, index))
+    .map((source, index) => normalizeSource(source, index));
+  const scopeFiltered = normalizedSources
     .filter(source => sourceMatchesRequestContext(source, routing, question))
-    .filter(source => sourceLanguageCompatible(source, question, routing))
-    .map((s, index) => scoreSource(s, question, {
-      index,
-      // Score against both the resolved character/item and its parent game.
-      // A game name must not shadow a more specific entity mention.
-      entities: [
-        routing.resolved_entity?.name,
-        routing.entity,
-        routing.game,
-        routing.resolved_entity?.game,
-      ],
-      freshness: routing.freshness,
-    }));
+    .filter(source => sourceLanguageCompatible(source, question, routing));
+  // Gdy filtr zakresu (postac/gra) odrzuci WSZYSTKIE wyniki mimo ze retrieval
+  // faktycznie cos zwrocil, evidence spadalo do zera kandydatow i request
+  // konczyl sie odmowa (benchmark: outcome-393, why-002 — providerCounts.tavily=1,
+  // ale candidateCount=0). Zachowujemy najlepiej dopasowane zrodlo sprzed filtra
+  // zakresu jako slaby, ale niepusty material.
+  const scopedSources = scopeFiltered.length > 0
+    ? scopeFiltered
+    : (normalizedSources.length > 0
+      ? [normalizedSources
+          .map((source, index) => ({ source, score: scoreSource(source, question, { index }).coreScore }))
+          .sort((a, b) => b.score - a.score)[0].source]
+      : []);
+  const normalized = scopedSources.map((s, index) => scoreSource(s, question, {
+    index,
+    // Score against both the resolved character/item and its parent game.
+    // A game name must not shadow a more specific entity mention.
+    entities: [
+      routing.resolved_entity?.name,
+      routing.entity,
+      routing.game,
+      routing.resolved_entity?.game,
+    ],
+    freshness: routing.freshness,
+  }));
 
   const unique = [];
   const seen = new Set();

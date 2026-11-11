@@ -31,6 +31,10 @@ const CROSS_LANGUAGE_CONCEPTS = [
   ['konflikt', /conflict\w*|feud\w*|fight\w*|\bwar\w*|hatred|hate\w*|konflikt\w*|walcz\w*|wojn\w*/i],
   ['zwiazek', /relationship\w*|girlfriend\w*|boyfriend\w*|partner\w*|romanc\w*|romantic\w*|involved|zwi[aa]zk\w*|zwiaz\w*|relacj\w*|dziewczyn\w*|chlopak\w*/i],
   ['pomoc', /help\w*|assist\w*|save\w*|rescu\w*|pomog\w*|pomaga\w*|urat\w*|ocal\w*/i],
+  // Dodane po przypadku benchmarkowym who-225 (Astarion): cytat 'freed him
+  // from his bonds' nie byl rozpoznawany jako potwierdzenie claimu 'zostal
+  // uwolniony', bo zadne pojecie nie lapalo pary freed/uwolniony.
+  ['uwolnienie', /\bfree(?:d|s|ing)?\b|\breleas(?:e|es|ed|ing)\b|liberat\w*|uwolni\w*|wyzwoli\w*/i],
   // Granica slowa przed „appear”: „disappears” oznacza przeciwna akcje i nie moze byc uznane za „appears”.
   ['wystepowanie', /\b(?:appear\w*|pojaw\w*|wystep\w*)/i],
   ['kontrola', /control\w*|take[s]?\s+over|command\w*|manipulat\w*|kontrol\w*|przej[a]l\w*|manipul\w*|removed?\s+from\s+power|los[et]\s+control/i],
@@ -587,6 +591,13 @@ function tekstDoWykrywaniaNegacji(value) {
   // opisuje rownolegly, dodatkowy cel. Dotyczy to tylko fraz wprowadzonych
   // przez „and ... without ...” (nie samego poczatku zdania), wiec zwykle
   // „X did not do Y” nadal jest wykrywane jako negacja glownego twierdzenia.
+  // Fraza kontrastowa 'X, a nie Y, ...' poprawia/precyzuje encje, a nie neguje
+  // glownego orzeczenia zdania, np. 'W grze Portal, a nie Portal 2, Chell budzi
+  // sie w Aperture Science' to twierdzenie POZYTYWNE o Portalu, nie zaprzeczenie.
+  // Bez tego wyciecia samo 'nie' w dopowiedzeniu falszywie oznaczalo caly claim
+  // jako zanegowany (benchmark: przypadek when-115 / Chell).
+  cleaned = cleaned.replace(/,?\s*a\s+nie\s+[^,.!?;:]+(?=[,.!?;:]|$)/giu, ' ');
+  cleaned = cleaned.replace(/\bnot\s+[^,.!?;:]+?,\s*(?:but|rather)\s+/giu, ' ');
   cleaned = cleaned.replace(/\band\s+[^,.!?;:]*?\bwithout\s+[^,.!?;:]*/giu, (match) => {
     const beforeWithout = match.replace(/^\band\s+/iu, '').replace(/\bwithout\b[\s\S]*$/iu, '');
     return NEGATION_RE.test(beforeWithout) ? match : ' ';
