@@ -1558,6 +1558,8 @@ function wyodrebnijGreHLTB(pytanie) {
 
   let gra = String(pytanie).trim()
     .replace(/^!ai\s+/i, '')
+    .replace(/^w(?:e)?\s+(?:tej\s+)?grze\s+/iu, '')
+    .replace(/\s*[:,;—–-]\s*(?:ile\s+(?:jest\s+)?(?:godzin|czasu)|ile\s+trwa|jak\s+d[łl]ugo|d[łl]ugo[śs][ćc]|czas(?:u)?\s+(?:gry|przej[śs][ćc]cia|uko[ńn]czenia)).*$/iu, '')
     .replace(/^(?:ile\s+(?:jest\s+)?(?:godzin|czasu)|ile\s+trwa|jak\s+d[łl]ugo\s+trwa|jak\s+d[łl]ugo|d[łl]ugo[śs][ćc]\s+(?:tej\s+)?gr[ayęe]|czas(?:u)?\s+(?:przej[śs][ćc]cia|uko[ńn]czenia)|jak\s+dużo\s+czasu\s+zajmuje)\s*/i, '')
     .replace(/^(?:ile\s+godzin\s+ma|czas\s+gry)\s*/i, '')
     .replace(/^ma\s+/i, '')
@@ -1565,6 +1567,7 @@ function wyodrebnijGreHLTB(pytanie) {
     .replace(/^(?:przejść|przejsc|ukończyć|ukonczyc)\s+/i, '')
     .replace(/\s+(?:na|w)\s+(?:100\s*%|sto\s+procent).*$/i, '')
     .replace(/\s+(?:do|na)\s+ukończenia\s+gry\s*$/i, '')
+    .replace(/^(?:ca[łl][aeą]\s+)?(?:kampani[aeę]|fabu[łl][aeę]|gr[aeę])\s+(?:w(?:\s+grze)?\s+)?/iu, '')
     .replace(/[?!.]+$/, '')
     .trim();
 
