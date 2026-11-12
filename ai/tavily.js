@@ -600,6 +600,7 @@ function ocenaZrodlaLokalnie(url, requestedDomains = []) {
       .some(d => host === d || host.endsWith('.' + d));
     const guide = DOMENY_PRZEWODNIKI
       .some(d => host === d || host.endsWith('.' + d));
+    const requested = hostnamePasujeDoDomenyTavily(url, requestedDomains);
     if (official) return 'oficjalne';
     if (specialized || requested) return 'wyspecjalizowane';
     if (guide) return 'guide/referencyjne';
@@ -937,7 +938,7 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, lookupFn, normalizeQu
             logger.warn?.(`[Tavily] rewrite nieudany — używam oryginalnego pytania: ${error?.message || error}`);
           }
           const rewritten = normalizeQuery(rewrite?.choices?.[0]?.message?.content);
-          if (rewritten && rewritten.length >= 30 && rewritten.length >= Math.min(original.length * 0.28, 80)) searchQuery = rewritten;
+          if (rewritten && rewritten.length >= 12 && rewritten.split(/\s+/).filter(Boolean).length >= 2) searchQuery = rewritten;
           else logger.log(`[Tavily] ↩️ Rewrite odrzucony — używam oryginalnego pytania: "${original}"`);
           rewriteCache.set(rewriteKey, { query: searchQuery, czas: Date.now() });
           if (rewriteCache.size > TAVILY_REWRITE_MAX_ENTRIES) rewriteCache.delete(rewriteCache.keys().next().value);
@@ -1158,9 +1159,9 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, lookupFn, normalizeQu
               : '';
             const primaryPreview = primaryEvidenceResults.map((r, index) => {
               const content = String(r.raw_content || '').trim();
-              const materialRaw = content.substring(0, depth === 'advanced' ? 4200 : 1800)
+              const materialRaw = content.substring(0, 25000)
                 .split('\n').map(line => line.trim()).filter(Boolean).join('\n');
-              const material = sanityzujTrescZrodlaTavily(filtrujMaterialPoSlowachTavily(materialRaw, sourceQuestion));
+              const material = sanityzujTrescZrodlaTavily(filtrujMaterialPoSlowachTavily(materialRaw, sourceQuestion).substring(0, depth === 'advanced' ? 4200 : 1800));
               const host = (() => { try { return new URL(r.url).hostname; } catch (_) { return '(nieznany host)'; } })();
               return [
                 `[SOURCE ${index + 1}]`,
@@ -1198,12 +1199,12 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, lookupFn, normalizeQu
           const content = raw;
           // Pełna treść z etapu advanced ma pierwszeństwo przed krótkim snippetem.
           // Lekki filtr zachowuje dopasowane zdania oraz sąsiedni kontekst.
-          const materialRaw = (raw || content).substring(0, depth === 'advanced' ? 4200 : 2200)
+          const materialRaw = (raw || content).substring(0, 25000)
             .split('\n')
             .map(line => line.trim())
             .filter(Boolean)
             .join('\n');
-          const material = sanityzujTrescZrodlaTavily(filtrujMaterialPoSlowachTavily(materialRaw, sourceQuestion));
+          const material = sanityzujTrescZrodlaTavily(filtrujMaterialPoSlowachTavily(materialRaw, sourceQuestion).substring(0, depth === 'advanced' ? 4200 : 2200));
           const host = (() => { try { return new URL(r.url).hostname; } catch (_) { return '(nieznany host)'; } })();
           const quality = ocenaZrodla(r.url, domains);
           return `[SOURCE ${index + 1}]\nTYP: UNTRUSTED_WEB_DATA\nTYTUŁ: ${sanityzujTrescZrodlaTavily(String(r.title || '(brak tytułu)').slice(0, 300))}\nHOST: ${host}\nURL: ${r.url}\nHEURYSTYCZNA_OCENA: ${quality}\nTREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>\n${material}\n<<<END_UNTRUSTED_SOURCE_CONTENT>>>`;

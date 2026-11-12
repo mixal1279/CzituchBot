@@ -110,10 +110,11 @@ function classifyAuthority(source = {}) {
 function canonicalUrl(url) {
   try {
     const u = new URL(String(url));
+    if (u.protocol === 'http:') u.protocol = 'https:';
     u.hash = '';
     u.hostname = u.hostname.toLowerCase().replace(/^www\./, '');
     for (const key of [...u.searchParams.keys()]) {
-      if (/^(utm_|fbclid|gclid|ref|source)/i.test(key)) u.searchParams.delete(key);
+      if (/^(utm_|fbclid|gclid|igshid|mc_cid|ved|ref|source)/i.test(key)) u.searchParams.delete(key);
     }
     return u.toString().replace(/\/$/, '');
   } catch (_) { return String(url || '').trim().toLowerCase(); }
@@ -138,7 +139,11 @@ function cleanWikiMarkup(value) {
     .replace(/\[\[(?:Category|Kategoria):[^\]]+\]\]/giu, ' ')
     .replace(/\[\[[^\]|]+\|([^\]]+)\]\]/gu, '$1')
     .replace(/\[\[([^\]]+)\]\]/gu, '$1')
-    .replace(/\{\{[^{}]{0,500}\}\}/gu, ' ')
+    .replace(/\{\{(?:Quote|Cytat)\|([^|{}]+)[^{}]{0,400}\}\}/giu, ' "$1" ');
+  for (let i = 0; i < 3; i++) {
+    text = text.replace(/\{\{[^{}]{0,500}\}\}/gu, ' ');
+  }
+  text = text
     .replace(/&(?:nbsp|amp|quot|apos|lt|gt);/giu, ' ')
     .replace(/\s+/g, ' ')
     .trim();

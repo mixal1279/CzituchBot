@@ -196,7 +196,7 @@ function opakujDaneReferencyjne(dane) {
 
 function czyZapytanieUzupełniająceJestPoprawne(q) {
   const query = normalizujZapytanieTavily(q);
-  return query.length >= 30 && query.split(/\s+/).filter(Boolean).length >= 4;
+  return query.length >= 12 && query.split(/\s+/).filter(Boolean).length >= 2;
 }
 
 module.exports = {

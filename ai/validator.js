@@ -417,7 +417,9 @@ function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '', opt
     // when the nearby source context binds that field to the claimed subject.
     // A matching field value from another character/page section is not enough.
     if (quote.length < 12) {
-      const subject = String(claim || '').match(/^\s*([\p{Lu}][\p{L}\p{N}'’.-]*(?:\s+[\p{Lu}][\p{L}\p{N}'’.-]*){0,2})\s+(?:is|was|are|were|jest|był|była|są|należy|belongs)\b/iu)?.[1];
+      const explicitSubject = String(claim || '').match(/^\s*([\p{Lu}][\p{L}\p{N}'’.-]*(?:\s+[\p{Lu}][\p{L}\p{N}'’.-]*){0,2})\s+(?:is|was|are|were|jest|był|była|są|należy|belongs)\b/iu)?.[1];
+      const inheritedSubject = !explicitSubject ? String(options.defaultSubject || '').trim() : '';
+      const subject = explicitSubject || (inheritedSubject && !normalizujClaim(quote).includes(normalizujClaim(inheritedSubject)) ? inheritedSubject : '');
       if (!subject || !normalizujClaim(verificationContext).includes(normalizujClaim(subject))) {
         reasons.push('krótki cytat z infoboksu nie wiąże pola z encją claimu: ' + id);
         continue;
@@ -665,8 +667,16 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
           ? claim.sources
           : [claim?.source_id ?? claim?.sourceId ?? claim?.source].filter(value => value != null);
     const rawQuote = claim?.evidence_quote ?? claim?.evidenceQuote ?? claim?.quote;
+    const inferredSupported = typeof claim?.supported === 'boolean'
+      ? claim.supported
+      : (claim?.supported === 'true' || claim?.supported === 1
+        ? true
+        : (claim?.supported === 'false' || claim?.supported === 0
+          ? false
+          : (typeof rawQuote === 'string' && rawQuote.trim().length >= 8 && rawSourceIds.length > 0 ? true : claim?.supported)));
     return {
       ...claim,
+      supported: inferredSupported,
       source_ids: rawSourceIds,
       evidence_quote: typeof rawQuote === 'string' ? rawQuote : '',
     };
@@ -738,6 +748,7 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
   // Każde wskazane źródło sprawdzamy osobno. Jeśli kilka samodzielnie potwierdza
   // dokładny cytat i claim, wybieramy źródło o najwyższym autorytecie — bez
   // łączenia treści z jednej domeny z autorytetem innej.
+  const firstClaimSubject = String(claims[0]?.claim || '').match(/^\s*([\p{Lu}][\p{L}\p{N}'’.-]*(?:\s+[\p{Lu}][\p{L}\p{N}'’.-]*){0,2})\s+(?:to|is|was|are|were|jest|był|była|są|należy|belongs)\b/iu)?.[1] || '';
   const evidenceEvaluations = claims.map((claim, index) => {
     const sourceIds = effectiveClaimSourceIds[index];
     const evaluations = sourceIds.map(sourceId => ({
@@ -745,6 +756,7 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
       result: czyDowodPotwierdzaClaim(dane, [sourceId], claim.evidence_quote, claim.claim, {
         claimEn: claim.claim_en,
         nameOracle,
+        defaultSubject: index > 0 ? firstClaimSubject : '',
       }),
     }));
     const authorityRank = { unknown: 0, general: 1, guide: 2, reference: 3, specialized: 4, official: 5 };

@@ -299,7 +299,7 @@ function wyodrebnijLiczbyIDaty(value) {
   // Nie zmieniamy tekstu zrodlowego poza normalizacja samych tokenow liczbowych.
   let text = raw.toLocaleLowerCase('pl-PL')
     .replace(/(?<=\d)[\s\u00a0\u202f](?=\d{3}(?:\D|$))/gu, '')
-    .replace(/(\d)[,.](\d{3})(?=\D|$)/gu, '$1$2')
+    .replace(/\b([1-9]\d{0,2})[,.](000)(?=\D|$)/gu, '$1$2')
     .replace(/,/g, '.');
   const decadeFacts = [];
   // Dekada liczona numerycznie z roku (1980, 2000, 2010). Sklejanie cyfry wieku z cyfra dekady
@@ -389,11 +389,13 @@ function wyodrebnijJednostkoweWartosci(value) {
     .replace(/\b['\u2019]\d{2}\s*s\b/gu, ' ');
   const unitPattern = '(?:' + [...UNIT_ALIASES.keys()].filter(k => k !== 'm' && k !== 's').sort((a, b) => b.length - a.length).map(k => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|') + ')';
   const out = [];
-  const re = new RegExp(`(?:\\b(\\d+(?:\\.\\d+)?)\\s*(${unitPattern})(?=$|[^\\p{L}\\p{N}])|(${unitPattern})(?=$|[^\\p{L}\\p{N}])\\s*(\\d+(?:\\.\\d+)?))`, 'giu');
+  const re = new RegExp(`(?:\\b(?:(\\d+(?:\\.\\d+)?)\\s*(?:[-\\u2013\\u2014]|do|to|and|a)\\s*)?(\\d+(?:\\.\\d+)?)\\s*(${unitPattern})(?=$|[^\\p{L}\\p{N}])|(${unitPattern})(?=$|[^\\p{L}\\p{N}])\\s*(\\d+(?:\\.\\d+)?))`, 'giu');
   for (const m of text.matchAll(re)) {
-    const amount = Number(m[1] || m[4]);
-    const rawUnit = String(m[2] || m[3] || '').toLocaleLowerCase('pl-PL');
+    const rangeStart = m[1] ? Number(m[1]) : NaN;
+    const amount = Number(m[2] || m[5]);
+    const rawUnit = String(m[3] || m[4] || '').toLocaleLowerCase('pl-PL');
     const unit = UNIT_ALIASES.get(rawUnit);
+    if (Number.isFinite(rangeStart) && unit) out.push(`${rangeStart}:${unit}`);
     if (Number.isFinite(amount) && unit) out.push(`${amount}:${unit}`);
   }
   // Granice jednostki „m”/„s” musza rozumiec polskie litery: \b traktuje „a/e/o…” jako nie-litery,
@@ -1104,6 +1106,7 @@ function czyOgraniczenieDowodowe(sentence) {
     && /\b(?:dan\w*|informacj\w*|dowod\w*|lokalizacj\w*|moment\w*|czas\w*|szczegol\w*|przyczyn\w*|powod\w*)\b/u.test(text);
   const firstPersonAbsence = /\bnie\s+(?:posiad\w*|mam|mamy)\s+(?:wystarczajac\w*\s+)?(?:dan\w*|informacj\w*|dowod\w*)\b/u.test(text);
   if (epistemicAbsence || firstPersonAbsence) return true;
+  if (/\bbrak(?:uje)?\s+(?:wystarczajac\w*\s+|odpowiedni\w*\s+)?(?:danych|informacji|zrodel|dowodow|materialow)\b/u.test(text)) return true;
 
   const limitation = /\b(?:nie\s+(?:potwierdz\w*|podaj\w*|precyz\w*|okresl\w*|wskaz\w*|zawier\w*|znalazl\w*|znaleziono)|brak\s+(?:dokladn\w*\s+)?(?:dat\w*|moment\w*|czas\w*|potwierdzon\w*\s+(?:przyczyn\w*|powod\w*)))\b/u.test(text);
   const scopedTopic = /\b(?:dat\w*|moment\w*|czas\w*|rok\w*|przyczyn\w*|powod\w*|metod\w*|sposob\w*)\b/u.test(text);

@@ -30,6 +30,7 @@ const ENTITY_ALIAS_GROUPS = Object.freeze([
   // Zweryfikowane nazwy przedmiotow i lokacji z Wiedzmina 3 (PL/EN).
   { canonical: 'feline armor', names: ['Feline Armor', 'Feline Gear', 'Feline Gear Set', 'Cat School Gear', 'Zbroja Szkoły Kota', 'Zbroja wiedźmińskiego cechu kota', 'Rynsztunek Szkoły Kota', 'Rynsztunek Kociej Szkoły'] },
   { canonical: 'temple isle', names: ['Temple Isle', 'Wyspa Świątynna'] },
+  { canonical: 'white orchard', names: ['White Orchard', 'Biały Sad', 'Białym Sadzie', 'Białym Sadu', 'Białego Sadu', 'Bialy Sad', 'Bialym Sadzie', 'Bialym Sadu', 'Bialego Sadu'] },
   { canonical: 'eye of nehaleni', names: ['Eye of Nehaleni', 'Oko Nehaleni'] },
   // Keep the Skyrim item separate from Dragonrend; only the English item name is unambiguous.
   { canonical: 'dragonbane', names: ['Dragonbane'] },

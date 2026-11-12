@@ -149,7 +149,7 @@ function extractAnswerSignals(answer) {
   const whyExplanation = causalExplanation || motiveExplanation;
   const procedural = /\b(nalezy|trzeba|mozna|sposob|krok|najpierw|potem|nastepnie|first|then|step|wystarczy|uzyj|uzywaj|wykorzystaj|skorzystaj|wybierz|zdobadz|znajdz|idz|wejdz|pokonaj|unikaj|zabij|atakuj|zbuduj|stworz|wez|kup|otworz|podejdz|poczekaj|wyposaz|rzuc|cast|use|attack|avoid|equip)\b/.exec(text)?.[0] || '';
   const mechanism = /\b(dziala|funkcjonuje|polega|mechanizm|umozliw\w*|pozwala)\b/.exec(text)?.[0] || '';
-  const relationshipMarker = /(?<![\p{L}])(?:relacj\p{L}*|zwiazk\p{L}*|przyjac\p{L}*|przyjazn\p{L}*|towarzysz\p{L}*|romans\p{L}*|wrog\p{L}*|sojusz\p{L}*|zdrad\p{L}*|partner\p{L}*|relationship\p{L}*|friends?|friendship|enem(?:y|ies)|alliances?)(?![\p{L}])/u.exec(text)?.[0] || '';
+  const relationshipMarker = /(?<![\p{L}])(?:relacj\p{L}*|zwiazk\p{L}*|przyjac\p{L}*|przyjazn\p{L}*|towarzysz\p{L}*|romans\p{L}*|wrog\p{L}*|sojusz\p{L}*|zdrad\p{L}*|partner\p{L}*|cork\p{L}*|ojc\p{L}*|ojczym\p{L}*|matk\p{L}*|syn\p{L}*|rodzin\p{L}*|adopt\p{L}*|mentor\p{L}*|podopieczn\p{L}*|wiez\p{L}*|blisk\p{L}*|relationship\p{L}*|friends?|friendship|enem(?:y|ies)|alliances?|daughter\p{L}*|father\p{L}*|family)(?![\p{L}])/u.exec(text)?.[0] || '';
 
   const whenUnconfirmed = /\b(?:zrodla?\w*|materialy|dane|sources?|evidence)\b.{0,120}\bnie\s+(?:podaj\w*|precyzuj\w*|okresl\w*|wskazuj\w*|potwierdz\w*|zawier\w*)\b.{0,80}\b(?:dat\w*|moment\w*|czas\w*|rok\w*)\b/.test(text);
 
@@ -176,7 +176,7 @@ function extractAnswerSignals(answer) {
     outcome: /\b(wynik\w*|skutek|skutk\w*|konsekwenc\w*|ostatecznie|pozniej|potem|nastepnie|umar\w*|zgin\w*|gin\w*|zabij\w*|smier\w*|zostal\w*|zostaj\w*)\b/.test(text)
       && text.split(/\s+/).length >= 4,
     relationship: Boolean(relationshipMarker)
-      && /(?<![\p{L}])(?:wspolprac\p{L}*|konflikt\p{L}*|przyjazn\p{L}*|zauf\p{L}*|zdrad\p{L}*|sojusz\p{L}*|wrog\p{L}*|partner\p{L}*|towarzysz\p{L}*|romans\p{L}*|lacz\p{L}*|dziel\p{L}*|relationship\p{L}*|friends?|friendship|enem(?:y|ies)|alliances?)(?![\p{L}])/u.test(text),
+      && /(?<![\p{L}])(?:wspolprac\p{L}*|konflikt\p{L}*|przyjazn\p{L}*|zauf\p{L}*|zdrad\p{L}*|sojusz\p{L}*|wrog\p{L}*|partner\p{L}*|towarzysz\p{L}*|romans\p{L}*|lacz\p{L}*|dziel\p{L}*|traktuj\p{L}*|jak\s+cork\p{L}*|cork\p{L}*|ojc\p{L}*|ojczym\p{L}*|matk\p{L}*|syn\p{L}*|rodzin\p{L}*|adopt\p{L}*|mentor\p{L}*|podopieczn\p{L}*|wiez\p{L}*|blisk\p{L}*|relationship\p{L}*|friends?|friendship|enem(?:y|ies)|alliances?|daughter\p{L}*|father\p{L}*|family)(?![\p{L}])/u.test(text),
     entity_context: text.length > 0,
     // Dla slotu „dlaczego” jawnie podany motyw jest wyjaśnieniem, ale pozostaje oznaczony osobno.
     causal_explanation: causalExplanation,
