@@ -11,7 +11,7 @@ delete process.env.AI_VALIDATOR_BREAKER_MS;
 
 const { __validatorTestHooks: hooks } = require('../czituch_bot');
 const { createAIRequestContext } = require('../ai/requestContext');
-const { normalizeGroqBaseUrl } = require('../ai/provider-runtime');
+const { normalizeGroqBaseUrl, parseOpenAICompatibleCompletion } = require('../ai/provider-runtime');
 const { resetProviderQuotaCooldowns, quotaCooldownMsFromError, shouldOpenQuotaCircuit, isProviderQuotaBlocked } = require('../ai/fallback');
 const { GROQ_VALIDATOR_JSON_SCHEMA, buildGroqValidatorResponseFormat, buildOpenRouterValidatorResponseFormat } = require('../ai/validator');
 
@@ -64,7 +64,7 @@ const REJECTED_VERDICT = {
 const originalFetch = global.fetch;
 const oldConfig = {};
 function saveConfig() {
-  for (const key of ['geminiKey', 'openrouterKey', 'xkiroKey']) oldConfig[key] = hooks.KONFIGURACJA[key];
+  for (const key of ['geminiKey', 'openrouterKey', 'xkiroKey', 'xkiroModel', 'xkiroValidatorModel', 'xkiroBaseUrl']) oldConfig[key] = hooks.KONFIGURACJA[key];
 }
 function restoreConfig() {
   for (const [key, value] of Object.entries(oldConfig)) hooks.KONFIGURACJA[key] = value;
@@ -142,6 +142,25 @@ test('Gemini GenerateContent uses the documented systemInstruction and REST resp
   assert.equal(call.body.generationConfig.responseSchema.type, 'OBJECT');
   assert.ok(call.body.generationConfig.responseSchema.properties.claims.items.properties.claim_en);
   assert.equal(Object.hasOwn(call.body.generationConfig, 'responseFormat'), false);
+});
+
+test('Gemini wall-clock timeout kończy transport i odczyt body nawet gdy fetch ignoruje AbortSignal', async () => {
+  hooks.KONFIGURACJA.geminiKey = 'test-gemini-key';
+  let capturedSignal;
+  mockFetch(async (_url, options) => {
+    capturedSignal = options.signal;
+    return new Promise(() => {});
+  });
+
+  const started = Date.now();
+  const result = await hooks.walidujOdpowiedzGeminiModel(
+    'gemini-3.5-flash-lite', 'generic', QUESTION, ANSWER, EVIDENCE, [], 'test-gemini-timeout-race',
+  );
+
+  assert.equal(result.status, 'unavailable');
+  assert.equal(result.timeoutAbort, true);
+  assert.equal(capturedSignal.aborted, true);
+  assert.ok(Date.now() - started < 4500, 'Gemini transport must settle at its 3.5s timeout instead of waiting forever');
 });
 
 test('Gemini zachowuje promptFeedback, gdy prompt jest zablokowany i nie ma kandydatów', async () => {
@@ -263,12 +282,12 @@ test('OpenRouter wysyła strict json_schema, wymaga obsługi parametrów i honor
 test('xKiro wysyła limit 1600 i json_object oraz honoruje własny endpoint', async () => {
   hooks.KONFIGURACJA.xkiroKey = 'test-xkiro-key';
   hooks.KONFIGURACJA.xkiroBaseUrl = 'https://xkiro.example/custom/v1';
-  hooks.KONFIGURACJA.xkiroModel = 'qwen/qwen3.5-397b-a17b:free';
+  hooks.KONFIGURACJA.xkiroValidatorModel = 'cohere/command-a-reasoning';
   let call;
   mockFetch(async (url, options) => {
     call = { url, options, body: JSON.parse(options.body) };
     return jsonResponse({
-      model: 'qwen/qwen3.5-397b-a17b:free',
+      model: 'cohere/command-a-reasoning',
       choices: [{ finish_reason: 'length', message: { content: '{"valid":' } }],
     });
   });
@@ -276,15 +295,49 @@ test('xKiro wysyła limit 1600 i json_object oraz honoruje własny endpoint', as
   const result = await hooks.walidujOdpowiedzXKiro('generic', QUESTION, ANSWER, EVIDENCE, 'test-xk');
   assert.equal(call.url, 'https://xkiro.example/custom/v1/chat/completions');
   assert.equal(call.body.max_tokens, 1600);
+  assert.equal(Object.hasOwn(call.body, 'reasoning_effort'), false);
   assert.deepEqual(call.body.response_format, { type: 'json_object' });
   assert.equal(result.status, 'unavailable');
   assert.equal(result.truncatedJson, true);
   assert.match(result.reason, /UCIĘTY JSON/);
 });
 
+test('limit tokenów odczytuje dodatnią wartość z ENV i odrzuca niepoprawne wartości', () => {
+  const key = 'AI_VALIDATOR_MAX_TOKENS_XKIRO';
+  const previous = process.env[key];
+  try {
+    process.env[key] = '2048';
+    assert.equal(hooks.dodatniaLiczbaEnv(key, 1600), 2048);
+    process.env[key] = '20x';
+    assert.equal(hooks.dodatniaLiczbaEnv(key, 1600), 1600);
+    process.env[key] = '0';
+    assert.equal(hooks.dodatniaLiczbaEnv(key, 1600), 1600);
+  } finally {
+    if (previous === undefined) delete process.env[key];
+    else process.env[key] = previous;
+  }
+});
+
+test('xKiro odróżnia niepoprawny JSON odpowiedzi HTTP od pustego contentu modelu', async () => {
+  hooks.KONFIGURACJA.xkiroKey = 'test-xkiro-key';
+  hooks.KONFIGURACJA.xkiroValidatorModel = 'cohere/command-a-reasoning';
+  mockFetch(async () => ({
+    ok: true,
+    status: 200,
+    json: async () => { throw new SyntaxError('Unexpected token'); },
+  }));
+
+  const result = await hooks.walidujOdpowiedzXKiro(
+    'generic', QUESTION, ANSWER, EVIDENCE, 'test-xkiro-invalid-http-json'
+  );
+  assert.equal(result.status, 'unavailable');
+  assert.equal(result.failureKind, 'invalid_json_body');
+  assert.match(result.reason, /niepoprawny JSON w odpowiedzi HTTP/);
+});
+
 test('xKiro validator preserves daily free-token exhaustion details when setting 429 cooldown', async () => {
   hooks.KONFIGURACJA.xkiroKey = 'test-xkiro-key';
-  hooks.KONFIGURACJA.xkiroModel = 'qwen/qwen3.5-397b-a17b:free';
+  hooks.KONFIGURACJA.xkiroValidatorModel = 'cohere/command-a-reasoning';
   let calls = 0;
   mockFetch(async () => {
     calls++;
@@ -317,7 +370,7 @@ test('xKiro validator preserves daily free-token exhaustion details when setting
 
 test('xKiro validator wall-clock timeout settles at the enforced six-second floor even if fetch ignores AbortSignal', async () => {
   hooks.KONFIGURACJA.xkiroKey = 'test-xkiro-key';
-  hooks.KONFIGURACJA.xkiroModel = 'qwen/qwen3.5-397b-a17b:free';
+  hooks.KONFIGURACJA.xkiroValidatorModel = 'cohere/command-a-reasoning';
   const previousTimeout = process.env.AI_XKIRO_VALIDATOR_TIMEOUT_MS;
   process.env.AI_XKIRO_VALIDATOR_TIMEOUT_MS = '30';
   let capturedSignal;
@@ -369,13 +422,57 @@ test('Groq zwraca rejected dla negatywnego werdyktu i unavailable dla uszkodzone
   assert.equal(unavailable.status, 'unavailable');
 });
 
-test('kolejność walidatorów to Gemini, Groq, potem dalsze fallbacki; brak prawdziwych żądań sieciowych', async () => {
+test('Cohere przez xKiro działa także bez kontekstu requestu', async () => {
+  hooks.KONFIGURACJA.xkiroKey = 'test-xkiro-key';
+  hooks.KONFIGURACJA.xkiroValidatorModel = 'cohere/command-a-reasoning';
+  hooks.KONFIGURACJA.xkiroBaseUrl = 'https://xkiro.example/v1';
+  let calls = 0;
+  mockFetch(async (url, options) => {
+    calls++;
+    assert.equal(new URL(url).hostname, 'xkiro.example');
+    const payload = JSON.parse(options.body);
+    assert.equal(payload.model, 'cohere/command-a-reasoning');
+    return jsonResponse({
+      choices: [{ finish_reason: 'stop', message: { content: JSON.stringify(VALID_VERDICT) } }],
+    });
+  });
+
+  const result = await hooks.walidujOdpowiedzAIBezCache('generic', QUESTION, ANSWER, EVIDENCE, [], 'test-xkiro-no-context');
+
+  assert.equal(calls, 1);
+  assert.equal(result.provider, 'xkiro');
+  assert.equal(result.status, 'accepted');
+});
+
+test('brak slotu Cohere nie powoduje ReferenceError i zapisuje pominięcie', async () => {
+  hooks.KONFIGURACJA.xkiroKey = 'test-xkiro-key';
+  hooks.KONFIGURACJA.xkiroValidatorModel = 'cohere/command-a-reasoning';
+  const requestState = createAIRequestContext({ maxCzasMs: 60000, maxValidators: 4, maxModelCalls: 12 });
+  requestState.reserveValidatorModel = () => false;
+
+  const result = await hooks.walidujOdpowiedzAIBezCache(
+    'generic', QUESTION, ANSWER, EVIDENCE, [], 'test-xkiro-no-slot', requestState,
+  );
+
+  assert.equal(result.status, 'unavailable');
+  assert.match(result.reason, /budżet validatora\/modeli wyczerpany przed xKiro/);
+  assert.equal(requestState.validatorResults[0].provider, 'xkiro');
+  assert.equal(requestState.validatorResults[0].skipped, true);
+});
+
+test('Cohere przez xKiro jest pierwszym walidatorem, a Gemini i Groq pozostają fallbackami', async () => {
   hooks.KONFIGURACJA.geminiKey = 'test-gemini-key';
   hooks.KONFIGURACJA.openrouterKey = '';
-  hooks.KONFIGURACJA.xkiroKey = '';
+  hooks.KONFIGURACJA.xkiroKey = 'test-xkiro-key';
+  hooks.KONFIGURACJA.xkiroValidatorModel = 'cohere/command-a-reasoning';
+  hooks.KONFIGURACJA.xkiroBaseUrl = 'https://xkiro.example/v1';
   const order = [];
   mockFetch(async (url) => {
     const parsedUrl = new URL(url);
+    if (parsedUrl.hostname === 'xkiro.example') {
+      order.push('xkiro');
+      return jsonResponse({ choices: [{ finish_reason: 'stop', message: { content: 'not JSON' } }] });
+    }
     if (parsedUrl.hostname === 'generativelanguage.googleapis.com') {
       order.push('gemini');
       return jsonResponse({
@@ -391,10 +488,10 @@ test('kolejność walidatorów to Gemini, Groq, potem dalsze fallbacki; brak pra
   const requestState = createAIRequestContext({ maxCzasMs: 40000, maxValidators: 4, maxModelCalls: 12 });
   const result = await hooks.walidujOdpowiedzAIBezCache('generic', QUESTION, ANSWER, EVIDENCE, [], 'test-order', requestState, { entity: 'Portal 2' });
 
-  assert.deepEqual(order, ['gemini', 'groq']);
+  assert.deepEqual(order, ['xkiro', 'gemini', 'groq']);
   assert.equal(groqCalls.length, 1);
   assert.equal(result.status, 'accepted');
-  assert.deepEqual(requestState.validatorResults.map(row => row.provider), ['gemini', 'groq']);
+  assert.deepEqual(requestState.validatorResults.map(row => row.provider), ['xkiro', 'gemini', 'groq']);
   assert.ok(requestState.timingTrace.some(row => row.stage === 'validator_provider_start' && row.provider === 'groq'));
   assert.ok(requestState.timingTrace.some(row => row.stage === 'validator_provider_end' && row.provider === 'groq'));
 });
@@ -433,14 +530,14 @@ test('niepoprawny cytat kończy walidację bez drugiej opinii, bo wymaga naprawy
   assert.deepEqual(order, ['gemini']);
   assert.equal(groqCalls.length, 0);
   assert.equal(result.status, 'rejected');
-  assert.deepEqual(requestState.validatorResults.map(row => row.provider), ['gemini']);
+  assert.deepEqual(requestState.validatorResults.map(row => row.provider), ['xkiro', 'gemini']);
   assert.ok(!requestState.timingTrace.some(row => row.stage === 'validator_second_opinion'));
 });
 
 test('po deterministycznym odrzuceniu cytatu pipeline nie zużywa budżetu na kolejne opinie', async () => {
   hooks.KONFIGURACJA.geminiKey = 'test-gemini-key';
   hooks.KONFIGURACJA.xkiroKey = 'test-xkiro-key';
-  hooks.KONFIGURACJA.xkiroModel = 'qwen/qwen3.5-397b-a17b:free';
+  hooks.KONFIGURACJA.xkiroValidatorModel = 'cohere/command-a-reasoning';
   hooks.KONFIGURACJA.openrouterKey = 'test-openrouter-key';
   const order = [];
   const badQuoteVerdict = {
@@ -458,7 +555,7 @@ test('po deterministycznym odrzuceniu cytatu pipeline nie zużywa budżetu na ko
       return jsonResponse({ candidates: [{ content: { parts: [{ text: JSON.stringify(badQuoteVerdict) }] } }] });
     }
     order.push(url.includes('xkiro') ? 'xkiro' : 'openrouter');
-    throw new Error('slow third opinion should not be called after Groq rejection');
+    throw new Error('fallback provider should not be called after deterministic Cohere/Gemini rejection');
   });
   mockGroq(() => {
     order.push('groq');
@@ -469,8 +566,8 @@ test('po deterministycznym odrzuceniu cytatu pipeline nie zużywa budżetu na ko
     'generic', QUESTION, ANSWER, EVIDENCE, [], 'test-stop-after-groq-rejection', requestState, { entity: 'Portal 2' },
   );
   assert.equal(result.status, 'rejected');
-  assert.deepEqual(order, ['gemini']);
-  assert.deepEqual(requestState.validatorResults.map(row => row.provider), ['gemini']);
+  assert.deepEqual(order, ['xkiro', 'gemini']);
+  assert.deepEqual(requestState.validatorResults.map(row => row.provider), ['xkiro', 'gemini']);
 });
 
 test('circuit breaker dla Groq, xKiro, OpenRouter i Gemini otwiera się po dwóch timeoutach i resetuje po sukcesie', () => {
@@ -703,7 +800,7 @@ test('xKiro i OpenRouter honorują 402/429 cooldown i Retry-After bez kolejnych 
       resetProviderQuotaCooldowns();
       hooks.KONFIGURACJA.xkiroKey = provider === 'xkiro' ? 'test-xkiro-key' : '';
       hooks.KONFIGURACJA.openrouterKey = provider === 'openrouter' ? 'test-openrouter-key' : '';
-      hooks.KONFIGURACJA.xkiroModel = 'qwen/qwen3.5-397b-a17b:free';
+      hooks.KONFIGURACJA.xkiroValidatorModel = 'cohere/command-a-reasoning';
       hooks.KONFIGURACJA.openrouterValidatorModel = 'openai/gpt-oss-20b';
       let calls = 0;
       mockFetch(async () => {
@@ -782,7 +879,7 @@ test('HTTP circuit breakery xKiro i OpenRouter otwierają się po dwóch mockowa
     hooks.resetValidatorBreakers();
     if (provider === 'xkiro') {
       hooks.KONFIGURACJA.xkiroKey = 'test-xkiro-key';
-      hooks.KONFIGURACJA.xkiroModel = 'qwen/qwen3.5-397b-a17b:free';
+      hooks.KONFIGURACJA.xkiroValidatorModel = 'cohere/command-a-reasoning';
     } else {
       hooks.KONFIGURACJA.openrouterKey = 'test-openrouter-key';
     }
@@ -842,12 +939,12 @@ test('OpenRouter validator timeout covers a body read that ignores AbortSignal',
 
 test('xKiro is attempted below the former 14.5s hard threshold when the calculated budget permits it', async () => {
   hooks.KONFIGURACJA.xkiroKey = 'test-xkiro-key';
-  hooks.KONFIGURACJA.xkiroModel = 'qwen/qwen3.5-397b-a17b:free';
+  hooks.KONFIGURACJA.xkiroValidatorModel = 'cohere/command-a-reasoning';
   let calls = 0;
   mockFetch(async () => {
     calls++;
     return jsonResponse({
-      model: 'qwen/qwen3.5-397b-a17b:free',
+      model: 'cohere/command-a-reasoning',
       choices: [{ finish_reason: 'stop', message: { content: JSON.stringify(VALID_VERDICT) } }],
     });
   });
@@ -869,7 +966,7 @@ test('xKiro is attempted below the former 14.5s hard threshold when the calculat
 test('xKiro auth failures open a provider-scoped cooldown and are not retried on each request', async () => {
   resetProviderQuotaCooldowns();
   hooks.KONFIGURACJA.xkiroKey = 'test-xkiro-key';
-  hooks.KONFIGURACJA.xkiroModel = 'qwen/qwen3.5-397b-a17b:free';
+  hooks.KONFIGURACJA.xkiroValidatorModel = 'cohere/command-a-reasoning';
   let calls = 0;
   mockFetch(async () => {
     calls += 1;
@@ -880,7 +977,7 @@ test('xKiro auth failures open a provider-scoped cooldown and are not retried on
   assert.equal(first.status, 'unavailable');
   assert.equal(first.statusCode, 401);
   assert.equal(first.quota, false);
-  assert.equal(isProviderQuotaBlocked('xkiro:qwen/qwen3.5-397b-a17b:free'), true);
+  assert.equal(isProviderQuotaBlocked('xkiro:cohere/command-a-reasoning'), true);
 
   const second = await hooks.walidujOdpowiedzXKiro('generic', QUESTION, ANSWER, EVIDENCE, 'test-xkiro-auth-cooldown-repeat');
   assert.equal(second.skipped, true);
@@ -906,4 +1003,41 @@ test('OpenRouter empty successful responses cool down only the selected model en
   const second = await hooks.walidujOdpowiedzOpenRouter('generic', QUESTION, ANSWER, EVIDENCE, 'test-openrouter-empty-cooldown-repeat');
   assert.equal(second.skipped, true);
   assert.equal(calls, 1);
+});
+
+test('OpenAI-compatible parser extracts string and multipart text without exposing reasoning', () => {
+  const parsed = parseOpenAICompatibleCompletion({
+    id: 'resp-1', model: 'cohere/command-a-reasoning',
+    choices: [{ finish_reason: 'stop', message: {
+      content: [{ type: 'text', text: 'Odpowiedź ' }, { type: 'output_text', text: 'testowa.' }],
+      reasoning: 'internal reasoning must not be surfaced',
+    } }],
+    usage: { prompt_tokens: 120, completion_tokens: 80, total_tokens: 200 },
+  });
+  assert.equal(parsed.text, 'Odpowiedź testowa.');
+  assert.equal(parsed.finishReason, 'stop');
+  assert.equal(parsed.truncated, false);
+  assert.equal(parsed.reasoningPresent, true);
+  assert.deepEqual(parsed.usage, { promptTokens: 120, completionTokens: 80, totalTokens: 200 });
+  assert.equal(parsed.model, 'cohere/command-a-reasoning');
+});
+
+test('OpenAI-compatible parser distinguishes reasoning-only and truncated completions', () => {
+  const reasoningOnly = parseOpenAICompatibleCompletion({
+    choices: [{ finish_reason: 'length', message: { content: '', reasoning_content: 'private reasoning' } }],
+  });
+  assert.equal(reasoningOnly.text, '');
+  assert.equal(reasoningOnly.reasoningPresent, true);
+  assert.equal(reasoningOnly.truncated, true);
+  const truncated = parseOpenAICompatibleCompletion({
+    choices: [{ finish_reason: 'length', message: { content: 'Częściowa odpowiedź' } }],
+  });
+  assert.equal(truncated.text, 'Częściowa odpowiedź');
+  assert.equal(truncated.truncated, true);
+});
+
+test('OpenAI-compatible parser rejects malformed and provider-error payloads explicitly', () => {
+  assert.throws(() => parseOpenAICompatibleCompletion({}), /missing choices\[0\]/);
+  assert.throws(() => parseOpenAICompatibleCompletion({ error: { message: 'upstream overloaded' } }), /provider_error: upstream overloaded/);
+  assert.throws(() => parseOpenAICompatibleCompletion(null), /non-object payload/);
 });

@@ -85,32 +85,48 @@ test('YouTube chat polling respects the interval returned by the API', () => {
   assert.match(source, /reason === 'liveChatEnded' \|\| reason === 'liveChatNotFound' \|\| reason === 'liveChatDisabled'/);
 });
 
-test('primary generation honors AI_GENERATOR_MODEL and checks quota cooldown before calling Groq', () => {
+test('primary generation supports configured Groq or xKiro and checks endpoint cooldown before calling it', () => {
   const source = read('czituch_bot.js');
+  const config = read('ai/modelConfig.js');
   const start = source.indexOf('async function generujOdpowiedz(');
   const end = source.indexOf('const fallbackSteps = {', start);
   assert.ok(start >= 0 && end > start, 'generation orchestration should exist');
   const body = source.slice(start, end);
-  assert.match(body, /const primaryModel = AI_MODELS\.generatorPrimary/);
+  assert.match(config, /function resolvePrimaryGenerator\(/);
+  assert.match(body, /const primaryProvider = AI_PRIMARY_GENERATOR\.provider/);
+  assert.match(body, /const primaryModel = AI_PRIMARY_GENERATOR\.model/);
   assert.match(body, /isProviderQuotaBlocked\(primaryStep\)/);
+  assert.match(body, /primaryProvider === 'xkiro'[\s\S]{0,160}zapytajXKiro\(effectiveMaxTok, prompt, powod\)/);
   assert.match(body, /zapytajGlowny\(effectiveMaxTok, prompt, primaryModel\)/);
   assert.match(body, /allowPrimary \? classifyFailure\(result\.error \|\| ''\) : 'validator_rejection'/);
+});
+
+test('strict Cohere live benchmark never substitutes Groq or Gemini as generator', () => {
+  const source = read('czituch_bot.js');
+  const workflow = read('.github/workflows/ai-live-benchmark.yml');
+  assert.match(workflow, /AI_BENCHMARK_STRICT_GENERATOR:\s*"1"/);
+  assert.match(source, /AI_BENCHMARK_STRICT_GENERATOR === '1'/);
+  assert.match(source, /candidateSteps = candidateSteps\.filter\(step => step === primaryStep\)/);
+  assert.match(source, /exclude: strictBenchmarkGenerator\s*\? \[\]/);
 });
 
 test('validator provider preflight covers Gemini, xKiro, OpenRouter and Groq production budgets', () => {
   const source = read('scripts/validator-providers-preflight.js');
   assert.match(source, /Gemini:\s*12000/);
-  assert.match(source, /xKiro:\s*Math\.max\(6000, Number\(process\.env\.AI_XKIRO_VALIDATOR_TIMEOUT_MS\) \|\| 6000\)/);
+  assert.match(source, /AI_VALIDATOR_GEMINI !== '0'/);
+  assert.match(source, /xKiro:\s*Math\.max\(6000, Number\(process\.env\.AI_XKIRO_VALIDATOR_TIMEOUT_MS\) \|\| 9000\)/);
   assert.match(source, /OpenRouter:\s*Math\.max\(4000, Number\(process\.env\.AI_OPENROUTER_VALIDATOR_TIMEOUT_MS\) \|\| 6000\)/);
   assert.match(source, /Groq:\s*3000/);
   assert.match(source, /function geminiProbe\(/);
+  assert.match(source, /const XKIRO_VALIDATOR_MODEL = process\.env\.XKIRO_VALIDATOR_MODEL \|\| 'cohere\/command-a-reasoning'/);
+  assert.match(source, /model: XKIRO_VALIDATOR_MODEL/);
   assert.match(source, /buildGeminiValidatorGenerationConfig/);
-  assert.match(source, /GEMINI_KEY\) missingRequiredProviders\.push/);
+  assert.match(source, /XKIRO_KEY\) missingRequiredProviders\.push/);
   assert.match(source, /GROQ_KEY\) missingRequiredProviders\.push/);
-  assert.match(source, /const blockingFailures = bad\.filter\(isBlockingPreflightFailure\)/);
+  assert.match(source, /const blockingFailures = bad\.filter\(r => isBlockingPreflightFailure\(r\) \|\| r\.provider === 'xKiro'\)/);
   assert.match(source, /blockingFailures\.length > 0 \|\| missingRequiredProviders\.length > 0/);
-  assert.match(source, /degradedProviders = bad\.filter/);
-  assert.match(source, /if \(XKIRO_KEY\) probes\.push\(xkiroProbe\(REAL, 900\)\)/);
+  assert.match(source, /degradedProviders = bad\.filter\(r => !blockingFailures\.includes\(r\)\)/);
+  assert.match(source, /if \(XKIRO_KEY\) probes\.push\(xkiroProbe\(REAL, 1600\)\)/);
   assert.doesNotMatch(source, /PROD_TIMEOUT_MS\s*=\s*9000/);
   assert.match(source, /result\.ms > productionTimeoutMs/);
   assert.doesNotMatch(source, /PROD_TIMEOUT_MS\s*=\s*9000/);
@@ -130,11 +146,18 @@ test('OpenRouter and xKiro validator deadlines use the shared production budget 
   assert.match(bot, /maxTimeoutMs:\s*xkiroMaxTimeoutMs/);
 });
 
-test('live benchmark preflights validator providers before starting a ten-case sample', () => {
+test('live benchmark preflights validator providers before starting the stratified ten-case sample', () => {
   const workflow = read('.github/workflows/ai-live-benchmark.yml');
   assert.match(workflow, /AI_BENCHMARK_LIMIT:\s*"10"/);
+  assert.match(workflow, /AI_REQUEST_TIMEOUT_MS:\s*"85000"/);
+  assert.match(workflow, /AI_XKIRO_GENERATOR_TIMEOUT_MS:\s*"30000"/);
+  assert.match(workflow, /AI_XKIRO_GENERATOR_MAX_TOKENS:\s*"700"/);
+  assert.match(workflow, /AI_XKIRO_VALIDATOR_TIMEOUT_MS:\s*"22000"/);
+  assert.match(workflow, /PREFLIGHT_TIMEOUT_MS:\s*"25000"/);
   assert.match(workflow, /PREFLIGHT_STRICT:\s*"1"/);
   assert.match(workflow, /node scripts\/validator-providers-preflight\.js/);
+  assert.ok(workflow.indexOf('Syntax check live benchmark modules') < workflow.indexOf('Preflight Tavily'));
+  assert.match(workflow, /find ai -maxdepth 1 -type f -name '\*\.js' -print0/);
   assert.ok(workflow.indexOf('Preflight validator providers') < workflow.indexOf('Run 10-case live benchmark'));
 });
 
@@ -173,7 +196,17 @@ test('IGDB search terms from the model cannot append Apicalypse clauses', () => 
   assert.ok(start >= 0 && end > start, 'IGDB game lookup should exist');
   const lookup = source.slice(start, end);
   assert.match(lookup, /const igdbSearchTerm = nazwaGry\.replace/);
-  assert.match(lookup, /body: `search "\$\{igdbSearchTerm\}"; fields name,genres\.name; limit 5;`/);
+  const query = lookup.match(/body: `search "\$\{igdbSearchTerm\}"; fields ([^;]+); limit 8;`/);
+  assert.ok(query, 'IGDB query should use the sanitized search term and a bounded result limit');
+  const selectedFields = new Set(query[1].split(','));
+  for (const field of [
+    'id', 'name', 'genres.name', 'game_type.name', 'franchise.name', 'franchises.name',
+    'collections.name', 'parent_game.name', 'version_parent.name', 'version_title',
+    'first_release_date', 'remakes.name', 'remasters.name', 'dlcs.name', 'expansions.name',
+    'standalone_expansions.name', 'expanded_games.name', 'forks.name', 'ports.name', 'bundles.name',
+  ]) {
+    assert.ok(selectedFields.has(field), `IGDB query must select ${field}`);
+  }
   assert.doesNotMatch(lookup, /body: `search "\$\{nazwaGry\}"/);
 });
 
@@ -220,4 +253,29 @@ test('Groq SDK and preflight honor GROQ_BASE_URL with the documented default', (
   assert.ok(runtime.includes(".replace(/\\/openai\\/v1$/i, '')"), 'SDK base URL strips /openai/v1 to avoid a duplicated endpoint path');
   assert.ok(preflight.includes('process.env.GROQ_BASE_URL'));
   assert.ok(preflight.includes('/chat/completions'));
+});
+
+test('xKiro generation retries at most once for transient failures without leaving the shared deadline', () => {
+  const source = read('czituch_bot.js');
+  const start = source.indexOf('async function zapytajXKiro(');
+  const end = source.indexOf('// Jedna główna próba 120B', start);
+  assert.ok(start >= 0 && end > start, 'xKiro generator should exist');
+  const generator = source.slice(start, end);
+  assert.match(generator, /maxAttempts = aiState\.generationPhase === 'repair' \? 1 : 2/);
+  assert.match(generator, /moznaWykonacGeneracje\('xkiro', model\)/);
+  assert.match(generator, /reserveMs: 26000/);
+  assert.match(generator, /attemptNumber < maxAttempts/);
+  assert.match(generator, /!\[401, 403, 429\]\.includes\(status\)/);
+  assert.match(generator, /error\.retryAfter = retryAfter \|\| null/);
+  assert.match(generator, /parseError\.status = Number\(response\.status \|\| 0\)/);
+  assert.match(generator, /!error\?\.retryAfter/);
+  assert.match(generator, /Math\.min\(1200, Math\.max\(maxTokens \+ 200/);
+  assert.match(generator, /finishReason: parsed\.finishReason/);
+  assert.match(source, /attempt\.usage && typeof attempt\.usage === 'object'/);
+});
+
+test('AI regression workflow runs offline tests on the hardening branch', () => {
+  const workflow = read('.github/workflows/ai-tests.yml');
+  assert.match(workflow, /push:\s*\n\s*branches:\s*\[ main, audit\/full-bot-hardening \]/);
+  assert.match(workflow, /Run AI regression tests/);
 });

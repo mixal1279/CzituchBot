@@ -33,7 +33,8 @@ function normalize(value) {
 }
 
 function buildAnswerPlan(question, routing = {}) {
-  const q = String(question || '').replace(/\s+/g, ' ').trim();
+  // Twardy limit chroni regexy planera, ale zachowuje kontrakt obiektu planu.
+  const q = String(question || '').slice(0, 4000).replace(/\s+/g, ' ').trim();
   const slots = new Set(INTENT_REQUIREMENTS[routing.intent] || []);
   const matched = [];
   for (const [slot, re] of Object.entries(SLOT_PATTERNS)) {
@@ -81,6 +82,9 @@ function buildAnswerPlan(question, routing = {}) {
     required: true,
     reason: slot === 'clause_coverage' ? 'multiple_question_clauses' : (matched.includes(slot) ? 'question_signal' : 'intent_contract'),
   }));
+  const loreEvidenceGuidance = routing.is_lore
+    ? 'W odpowiedzi o lore bezwzględnie rozdzielaj status epistemiczny informacji. Fakt kanoniczny przedstawiaj jako kanon tylko wtedy, gdy dostępny materiał wyraźnie potwierdza go jako oficjalną treść świata gry; GameLore i inne wiki społecznościowe traktuj jako źródła wtórne, a nie automatyczny dowód kanoniczności; samo zdanie wiki „official canon” nie zastępuje potwierdzenia na oficjalnej domenie wydawcy lub twórców. Status kanoniczny lub niekanoniczny przypisuj tylko na podstawie źródła pierwotnego, a jeśli go brak, zaznacz, że status nie został niezależnie potwierdzony. Interpretację oznaczaj wprost jako interpretację. Teorię fanowską nazywaj teorią fanowską i nigdy nie przedstawiaj jej jako wydarzenia kanonicznego. Informację niepotwierdzoną oznacz jako niepotwierdzoną. Jeśli materiał nie zawiera odpowiedzi, powiedz, że brakuje danych. Jeśli źródła opisują sprzeczne wersje, wskaż rozbieżność i nie wybieraj arbitralnie; preferuj źródła oficjalne tylko wtedy, gdy ich status i treść są jednoznaczne. Nie wyprowadzaj kanonu z popularności teorii ani z samego faktu, że wiki zawiera daną informację.'
+    : '';
   const responseShapeGuidance = [
     slots.has('who')
       ? 'Dla pytań „kto/kim jest” zacznij od głównej tożsamości lub definiującego statusu postaci, który źródło wyraźnie podaje (np. wampirzy pomiot, nieumarły, bóstwo); następnie podaj istotną rolę lub relację (np. towarzysz lub antagonista). Rasa, klasa i profesja są dodatkowymi atrybutami — nie mogą zastąpić definiującej tożsamości. Nie dopisuj etykiety, której źródło nie potwierdza.'
@@ -106,7 +110,7 @@ function buildAnswerPlan(question, routing = {}) {
   ].filter(Boolean).join(' ');
 
   return {
-    version: 28,
+    version: 29,
     question: q,
     intent: routing.intent || 'conversation',
     entity: routing.entity || routing.resolved_entity?.name || null,
@@ -119,8 +123,8 @@ function buildAnswerPlan(question, routing = {}) {
     causalQuestion,
     quantityMayBeVariable,
     instruction: requirements.length
-      ? 'Odpowiedź musi pokryć: ' + requirements.map(r => r.id).join(', ') + '. Każde zdanie faktograficzne ma być atomowym claimem opartym na jednym zweryfikowanym fragmencie evidence. Dla pytania „dlaczego/czemu” oddziel fakt od przyczyny: podaj przyczynę tylko wtedy, gdy konkretny evidence quote wyraźnie łączy przyczynę ze skutkiem. Nie traktuj kolejności wydarzeń jako przyczynowości. Jeśli źródło jawnie podaje motyw lub cel działania (np. próbę upokorzenia), podaj ten motyw wprost i nie zastępuj go domniemaną przyczyną z sąsiednich zdań. Nie zamieniaj celu działania na przyczynę zdarzenia. Jeśli brak takiego dowodu, powiedz wprost, że źródła nie potwierdzają przyczyny.' + (responseShapeGuidance ? ' ' + responseShapeGuidance : '')
-      : 'Odpowiedz bezpośrednio i nie dodawaj niepotwierdzonych faktów.' + (responseShapeGuidance ? ' ' + responseShapeGuidance : ''),
+      ? 'Odpowiedź musi pokryć: ' + requirements.map(r => r.id).join(', ') + '. Każde zdanie faktograficzne ma być atomowym claimem opartym na jednym zweryfikowanym fragmencie evidence. Dla pytania „dlaczego/czemu” oddziel fakt od przyczyny: podaj przyczynę tylko wtedy, gdy konkretny evidence quote wyraźnie łączy przyczynę ze skutkiem. Nie traktuj kolejności wydarzeń jako przyczynowości. Jeśli źródło jawnie podaje motyw lub cel działania (np. próbę upokorzenia), podaj ten motyw wprost i nie zastępuj go domniemaną przyczyną z sąsiednich zdań. Nie zamieniaj celu działania na przyczynę zdarzenia. Jeśli brak takiego dowodu, powiedz wprost, że źródła nie potwierdzają przyczyny.' + (responseShapeGuidance ? ' ' + responseShapeGuidance : '') + (loreEvidenceGuidance ? ' ' + loreEvidenceGuidance : '')
+      : 'Odpowiedz bezpośrednio i nie dodawaj niepotwierdzonych faktów.' + (responseShapeGuidance ? ' ' + responseShapeGuidance : '') + (loreEvidenceGuidance ? ' ' + loreEvidenceGuidance : ''),
   };
 }
 
@@ -145,7 +149,7 @@ function extractAnswerSignals(answer) {
   const whyExplanation = causalExplanation || motiveExplanation;
   const procedural = /\b(nalezy|trzeba|mozna|sposob|krok|najpierw|potem|nastepnie|first|then|step|wystarczy|uzyj|uzywaj|wykorzystaj|skorzystaj|wybierz|zdobadz|znajdz|idz|wejdz|pokonaj|unikaj|zabij|atakuj|zbuduj|stworz|wez|kup|otworz|podejdz|poczekaj|wyposaz|rzuc|cast|use|attack|avoid|equip)\b/.exec(text)?.[0] || '';
   const mechanism = /\b(dziala|funkcjonuje|polega|mechanizm|umozliw\w*|pozwala)\b/.exec(text)?.[0] || '';
-  const relationshipMarker = /(?<![\p{L}])(?:relacj\p{L}*|zwiazk\p{L}*|przyjac\p{L}*|przyjazn\p{L}*|towarzysz\p{L}*|romans\p{L}*|wrog\p{L}*|sojusz\p{L}*|zdrad\p{L}*|partner\p{L}*|relationship\p{L}*|friends?|friendship|enem(?:y|ies)|alliances?)(?![\p{L}])/u.exec(text)?.[0] || '';
+  const relationshipMarker = /(?<![\p{L}])(?:relacj\p{L}*|zwiazk\p{L}*|przyjac\p{L}*|przyjazn\p{L}*|towarzysz\p{L}*|romans\p{L}*|wrog\p{L}*|sojusz\p{L}*|zdrad\p{L}*|partner\p{L}*|cork\p{L}*|ojc\p{L}*|ojczym\p{L}*|matk\p{L}*|syn\p{L}*|rodzin\p{L}*|adopt\p{L}*|mentor\p{L}*|podopieczn\p{L}*|wiez\p{L}*|blisk\p{L}*|relationship\p{L}*|friends?|friendship|enem(?:y|ies)|alliances?|daughter\p{L}*|father\p{L}*|family)(?![\p{L}])/u.exec(text)?.[0] || '';
 
   const whenUnconfirmed = /\b(?:zrodla?\w*|materialy|dane|sources?|evidence)\b.{0,120}\bnie\s+(?:podaj\w*|precyzuj\w*|okresl\w*|wskazuj\w*|potwierdz\w*|zawier\w*)\b.{0,80}\b(?:dat\w*|moment\w*|czas\w*|rok\w*)\b/.test(text);
 
@@ -172,7 +176,7 @@ function extractAnswerSignals(answer) {
     outcome: /\b(wynik\w*|skutek|skutk\w*|konsekwenc\w*|ostatecznie|pozniej|potem|nastepnie|umar\w*|zgin\w*|gin\w*|zabij\w*|smier\w*|zostal\w*|zostaj\w*)\b/.test(text)
       && text.split(/\s+/).length >= 4,
     relationship: Boolean(relationshipMarker)
-      && /(?<![\p{L}])(?:wspolprac\p{L}*|konflikt\p{L}*|przyjazn\p{L}*|zauf\p{L}*|zdrad\p{L}*|sojusz\p{L}*|wrog\p{L}*|partner\p{L}*|towarzysz\p{L}*|romans\p{L}*|lacz\p{L}*|dziel\p{L}*|relationship\p{L}*|friends?|friendship|enem(?:y|ies)|alliances?)(?![\p{L}])/u.test(text),
+      && /(?<![\p{L}])(?:wspolprac\p{L}*|konflikt\p{L}*|przyjazn\p{L}*|zauf\p{L}*|zdrad\p{L}*|sojusz\p{L}*|wrog\p{L}*|partner\p{L}*|towarzysz\p{L}*|romans\p{L}*|lacz\p{L}*|dziel\p{L}*|traktuj\p{L}*|jak\s+cork\p{L}*|cork\p{L}*|ojc\p{L}*|ojczym\p{L}*|matk\p{L}*|syn\p{L}*|rodzin\p{L}*|adopt\p{L}*|mentor\p{L}*|podopieczn\p{L}*|wiez\p{L}*|blisk\p{L}*|relationship\p{L}*|friends?|friendship|enem(?:y|ies)|alliances?|daughter\p{L}*|father\p{L}*|family)(?![\p{L}])/u.test(text),
     entity_context: text.length > 0,
     // Dla slotu „dlaczego” jawnie podany motyw jest wyjaśnieniem, ale pozostaje oznaczony osobno.
     causal_explanation: causalExplanation,
@@ -219,11 +223,11 @@ function coversQuestionClauses(answer, clauses) {
     .filter(word => word.length >= 4 && !CLAUSE_STOPWORDS.has(word)))]);
   return tokenLists.every((tokens, index) => {
     const distinctive = tokens.filter(token => !tokenLists.some((other, otherIndex) =>
-      otherIndex !== index && other.some(otherToken => otherToken === token)));
+      otherIndex !== index && other.some(otherToken => otherToken === token))); // njsscan-ignore: node_timing_attack — public query tokens, not secrets
     const candidates = distinctive.length ? distinctive : tokens;
     if (!candidates.length) return true;
     return candidates.some(token => answerWords.some(word => {
-      if (word === token) return true;
+      if (word === token) return true; // njsscan-ignore: node_timing_attack — public lexical tokens
       const prefixLength = Math.min(5, word.length, token.length);
       return prefixLength >= 4 && word.slice(0, prefixLength) === token.slice(0, prefixLength);
     }));

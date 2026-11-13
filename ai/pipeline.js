@@ -143,13 +143,9 @@ function finalText(text, status, helpers = {}) {
   if (status === STATUS.INCONCLUSIVE) return helpers.inconclusiveMessage || 'Chwilowo nie mogę wiarygodnie potwierdzić tej informacji, więc nie będę zgadywać.';
   if (status === STATUS.UNAVAILABLE) return helpers.unavailableMessage || 'Chwilowo nie mogę potwierdzić tej informacji, więc nie będę zgadywać.';
   if (status === STATUS.UNVERIFIED) {
-    let value = usunEtykietyDowodow(text || '');
-    if (typeof helpers.sanitizeResponse === 'function') value = helpers.sanitizeResponse(value);
-    value = value.trim();
-    const warning = '⚠️ Odpowiedź niezweryfikowana — walidator jest niedostępny. ';
-    return value
-      ? (value.startsWith(warning) ? value : warning + value)
-      : (helpers.unavailableMessage || 'Chwilowo nie mogę potwierdzić tej informacji, więc nie będę zgadywać.');
+    // Deterministyczne guardy nie zastępują semantycznej weryfikacji claimów.
+    // Przy awarii wszystkich validatorów nie publikujemy roboczej odpowiedzi.
+    return helpers.unavailableMessage || 'Chwilowo nie mogę potwierdzić tej informacji, więc nie będę zgadywać.';
   }
 
   let value = usunEtykietyDowodow(text || '');

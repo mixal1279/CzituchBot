@@ -107,9 +107,7 @@ test('retrieval planning keeps original atomic question and specialized query fo
   ]);
 });
 
-
- 
-test('game-specific reference domains are added without replacing configured domains', () => {
+test('game-specific lore reference domains are added without replacing configured domains', () => {
   const { selectGameSpecificRetrievalDomains } = require('../ai/retrieval');
   assert.deepEqual(
     selectGameSpecificRetrievalDomains('Skyrim', 'Kim jest Dragonborn?', ['ign.com']),
@@ -126,5 +124,14 @@ test('game-specific reference domains are added without replacing configured dom
   assert.deepEqual(
     selectGameSpecificRetrievalDomains('GTA V', 'Kiedy Michael poznaje Trevora?', []),
     ['gta.fandom.com'],
+  );
+});
+
+test('GameFAQs is added to gameplay domains without duplicating configured domains', () => {
+  const { dodajGameFAQsDomenę } = require('../ai/gameplay');
+  assert.deepEqual(dodajGameFAQsDomenę(['ign.com']), ['ign.com', 'gamefaqs.gamespot.com']);
+  assert.deepEqual(
+    dodajGameFAQsDomenę(['ign.com', 'gamefaqs.gamespot.com']),
+    ['ign.com', 'gamefaqs.gamespot.com'],
   );
 });

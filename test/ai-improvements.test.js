@@ -170,12 +170,13 @@ function geminiFetch(calls) {
 
 test('Tavily Extract: za flagą podmienia streszczenie Gemini treścią strony', async () => {
   const calls = [];
-  const on = await withEnv('AI_GEMINI_EXTRACT', '1', () => web.searchSecondaryProviders({ query: 'Jak działa creeper?', geminiKey: 'g', exaKey: null, tavilyKey: 't', fetchFn: geminiFetch(calls) }));
+  const publicDns = async () => [{ address: '93.184.216.34', family: 4 }];
+  const on = await withEnv('AI_GEMINI_EXTRACT', '1', () => web.searchSecondaryProviders({ query: 'Jak działa creeper?', geminiKey: 'g', exaKey: null, tavilyKey: 't', fetchFn: geminiFetch(calls), lookupFn: publicDns }));
   assert.equal(on.sources[0].provider, 'tavily_extract');
   assert.ok(calls.some(c => c.url.includes('tavily.com/extract')));
 
   const offCalls = [];
-  const off = await withEnv('AI_GEMINI_EXTRACT', undefined, () => web.searchSecondaryProviders({ query: 'x', geminiKey: 'g', exaKey: null, tavilyKey: 't', fetchFn: geminiFetch(offCalls) }));
+  const off = await withEnv('AI_GEMINI_EXTRACT', undefined, () => web.searchSecondaryProviders({ query: 'x', geminiKey: 'g', exaKey: null, tavilyKey: 't', fetchFn: geminiFetch(offCalls), lookupFn: publicDns }));
   assert.equal(off.status, 'empty');
   assert.deepEqual(off.sources, [], 'grounding metadata without extracted page text is not evidence');
   assert.equal(offCalls.length, 1);
@@ -197,7 +198,7 @@ test('Tavily: pierwsze zapytanie jest basic, głębsze advanced, a cache rozró�
     groq: null,
     fetchZTimeout: async (url, options) => {
       bodies.push(JSON.parse(options.body));
-      return { ok: true, status: 200, text: async () => '', json: async () => ({ results: [{ title: 'Wheatley', url: 'https://theportalwiki.com/wiki/Wheatley', content: 'Wheatley przejął kontrolę nad GLaDOS po transferze rdzenia w Portal 2.', score: 0.9 }] }) };
+      return { ok: true, status: 200, text: async () => '', json: async () => ({ results: [{ title: 'Wheatley', url: 'https://theportalwiki.com/wiki/Wheatley', content: 'Wheatley przejął kontrolę nad GLaDOS po transferze rdzenia w Portal 2.', raw_content: 'Wheatley przejął kontrolę nad GLaDOS po transferze rdzenia w Portal 2. '.repeat(4), score: 0.9 }] }) };
     },
     normalizeQuery: value => String(value || '').trim(),
     logger: { log() {}, warn() {}, error() {} },
@@ -223,6 +224,7 @@ test('Tavily query rewrite failure falls back to the original query and respects
         title: 'Portal 2 soundtrack',
         url: 'https://theportalwiki.com/wiki/Portal_2_soundtrack',
         content: 'Portal 2 soundtrack release information. '.repeat(40),
+        raw_content: 'Portal 2 soundtrack release information. '.repeat(40),
         score: 0.92,
       }] }) };
     },

@@ -15,7 +15,8 @@ Wszystkie ustawienia są opcjonalne, chyba że dana integracja jest wymagana prz
 | `AI_GEMINI_VALIDATOR_MODEL` | `gemini-3.5-flash-lite` | Model Gemini do walidacji; można go zmieniać na potrzeby porównania benchmarków. |
 | `OPENROUTER_VALIDATOR_MODEL` | wartość `AI_VALIDATOR_MODEL` | Osobny model walidatora OpenRouter. |
 | `OPENROUTER_GENERATOR_MODEL` | wartość `AI_GENERATOR_MODEL` | Osobny model generatora OpenRouter. |
-| `XKIRO_MODEL` | `qwen/qwen3.5-397b-a17b:free` | Model walidatora xKiro i generatora w łańcuchu fallbacków, jeśli `XKIRO_API_KEY` jest skonfigurowany. |
+| `XKIRO_MODEL` | `qwen/qwen3.5-397b-a17b:free` | Model xKiro używany w łańcuchu fallbacków generatora. |
+| `XKIRO_VALIDATOR_MODEL` | `cohere/command-a-reasoning` | Główny model walidatora claimów przez xKiro. |
 | `AI_VALIDATOR_GROQ` | włączona | Ustaw `0`, aby wyłączyć ścieżkę walidatora Groq. |
 
 ## Limity i cache
@@ -32,22 +33,22 @@ Plan odpowiedzi ma osobne wymagania dotyczące kompletności. Gdy pytanie zawier
 | `AI_GEMINI_EXTRACT=1` | wyłączona | Używa Gemini Grounding wyłącznie do znalezienia adresów, a treść pobiera przez Tavily Extract. Bez tej opcji segmenty odpowiedzi Gemini nie są traktowane jako tekst strony ani dowód; wymagane jest inne źródło treści, np. Exa. |
 | `AI_QUALITY_ALL_PROFILES=1` | wyłączona | Uruchamia bramkę jakości także dla profili `simple`, `comparison` i `technical`; może zwiększyć liczbę odrzuceń. |
 | `AI_GROQ_VALIDATOR_MAX_EVIDENCE_CHARS` | `12000` (minimum `8000`) | Ogranicza długość dowodów przekazywanych do walidatora Groq. |
-| `AI_XKIRO_VALIDATOR_TIMEOUT_MS` | `6000` | Maksymalny budżet pojedynczego wywołania walidatora xKiro; produkcyjna próba nie jest uruchamiana z budżetem krótszym niż 6 s. |
+| `AI_XKIRO_VALIDATOR_TIMEOUT_MS` | `9000` | Maksymalny budżet pojedynczego wywołania walidatora xKiro; produkcyjna próba nie jest uruchamiana z budżetem krótszym niż 6 s. |
 | `AI_OPENROUTER_VALIDATOR_TIMEOUT_MS` | `6000` | Maksymalny budżet pojedynczego wywołania walidatora OpenRouter; wartość jest używana zarówno w orkiestratorze, jak i wrapperze transportowym. |
 | `AI_PROVIDER_QUOTA_COOLDOWN_MS` | `60000` ms | Domyślny czas przerwy po wykryciu limitu dla pary dostawca/model; aliasy `xkiro:default` i `openrouter:default` rozwiązują się do skonfigurowanego modelu. Nagłówek `Retry-After` (sekundy lub data HTTP) ma pierwszeństwo. Workflow CI ustawia `1800000` ms na czas live benchmarku. |
 | `AI_MAX_FALLBACK_STEPS` | długość łańcucha fallbacków (`6`) | Maksymalna liczba prób fallbacku po odfiltrowaniu niedostępnych endpointów; `0` wyłącza dodatkowe próby. |
-| `AI_120B_GLOBAL_MAX_REQUESTS` | `6` | Limit żądań do 120B w procesie w ruchomym oknie 1 godziny. HTTP 402 lub jednoznaczny dzienny limit tokenów (np. TPD) otwiera osobny globalny circuit breaker na 1 godzinę. Zwykły HTTP 429 z krótkim `Retry-After` otwiera tylko cooldown endpointu i nie blokuje 120B na całą godzinę. Workflow CI ustawia `20` dla dziesięciu próbek. |
+| `AI_120B_GLOBAL_MAX_REQUESTS` | `6` | Limit żądań do 120B w procesie w ruchomym oknie 1 godziny. HTTP 402 lub jednoznaczny dzienny limit tokenów (np. TPD) otwiera osobny globalny circuit breaker na 1 godzinę. Zwykły HTTP 429 z krótkim `Retry-After` otwiera tylko cooldown endpointu i nie blokuje 120B na całą godzinę. Workflow CI ustawia `12` dla próbki 10 przypadków. |
 | `AI_CACHE_DIR` | katalog projektu (`__dirname`) | Katalog plikowego cache AI. |
 | `AI_TAVILY_CACHE_FILE` | `AI_CACHE_DIR/tavily_cache.json` | Ścieżka pliku cache Tavily; ta zmienna ma pierwszeństwo przed `AI_CACHE_DIR`. |
 | `TAVILY_MIN_SCORE` | `0.2` | Minimalny score wyniku Tavily; wyniki bez score nie są odrzucane wyłącznie z tego powodu. |
 | `AI_BENCHMARK_SEED` | `0` | Ziarno rotacji pytań live benchmarku; 0 oznacza zestaw stały. |
-| `AI_BENCHMARK_LIMIT` | `10` (skrypt) | Liczba przypadków live benchmarku; workflow CI jawnie ustawia `10`. |
+| `AI_BENCHMARK_LIMIT` | `10` (skrypt) | Liczba przypadków live benchmarku; workflow CI jawnie ustawia `10`, aby ograniczyć koszt live testu przy zachowaniu pokrycia kategorii. |
 | `AI_BENCHMARK_DELAY_MS` | `0` ms | Opcjonalna przerwa między przypadkami; workflow CI ustawia `5000` ms. |
 | `AI_BENCHMARK_REQUIRE_PERFECT=1` | wyłączona | Kończy run błędem, jeśli nie wszystkie próbki zostały odpowiedziane i kompletne albo choć jeden gold fact nie przejdzie. Workflow CI i przykładowy `.env.example` jawnie włączają tę kontrolę. |
 | `PREFLIGHT_TIMEOUT_MS` | `20000` ms | Timeout skryptu `validator-providers-preflight.js`. |
 | `PREFLIGHT_STRICT` | `0` | W trybie `1` błędy preflightu walidatorów kończą skrypt kodem niezerowym; nie zmienia zachowania preflightów Groq/Tavily. |
 
-Skrypt live benchmarku domyślnie wybiera `10` przypadków; workflow CI również ustawia `10`, z czego cztery przypadki są wybierane z niezależnym zestawem gold facts (gdy dostępne są co najmniej cztery kategorie gold). Workflow dodatkowo uruchamia ścisły preflight Gemini, xKiro, OpenRouter i Groq oraz ustawia `AI_BENCHMARK_DELAY_MS=5000`, `AI_120B_GLOBAL_MAX_REQUESTS=20` oraz `AI_PROVIDER_QUOTA_COOLDOWN_MS=1800000`.
+Skrypt live benchmarku domyślnie wybiera `10` przypadków; workflow CI jawnie ustawia `17`, co przy obecnym zbiorze obejmuje wszystkie niezależne przypadki gold. Benchmark pozostaje ręczny i może zużywać limity API. Workflow dodatkowo uruchamia ścisły preflight Gemini, xKiro, OpenRouter i Groq oraz ustawia `AI_BENCHMARK_DELAY_MS=5000`, `AI_120B_GLOBAL_MAX_REQUESTS=20` oraz `AI_PROVIDER_QUOTA_COOLDOWN_MS=1800000`.
 
 Live benchmark porównuje kompletność planu odpowiedzi oraz ręcznie przygotowane grupy `mustInclude`/`mustNot`. Wynik gold jest dopasowaniem fraz z ograniczoną obsługą odmian, a nie semantycznym weryfikatorem wszystkich twierdzeń; źródła `independentGoldSources` są referencjami do ręcznej kontroli, nie są pobierane ani oceniane automatycznie. Frazy zabronione obniżają teraz także wynik punktowy. Typowe odmowy po polsku i angielsku są klasyfikowane jako abstencja, a nie odpowiedź kompletna.
 
@@ -61,6 +62,8 @@ Live benchmark porównuje kompletność planu odpowiedzi oraz ręcznie przygotow
 | `OPENROUTER_API_KEY` | OpenRouter. |
 | `OPENROUTER_BASE_URL` | Bazowy endpoint OpenRouter zgodny z OpenAI API; domyślnie `https://openrouter.ai/api/v1`. Używany przez generator i walidator. Końcowe ukośniki są usuwane. |
 | `XKIRO_API_KEY` | xKiro. |
+| `AI_XKIRO_GENERATOR_TIMEOUT_MS` | `12000` ms | Maksymalny timeout pojedynczej próby generatora xKiro; limit jest ograniczony do 30 s. W live benchmarku Cohere ustawiono `30000` ms. |
+| `AI_XKIRO_GENERATOR_MAX_TOKENS` | limit przekazany przez pipeline | Opcjonalny dolny limit `max_tokens` dla generatora xKiro; wartość jest ograniczona do 1200. Live benchmark Cohere używa `700`. |
 | `XKIRO_BASE_URL` | Bazowy endpoint xKiro zgodny z OpenAI API; domyślnie `https://api.xkiro.com/v1`. Używany przez generator i walidator. Końcowe ukośniki są usuwane. |
 | `TAVILY_API_KEY` | Tavily Search/Extract. |
 | `TAVILY_MIN_SCORE` | Próg jakości wyników Tavily. |
@@ -74,7 +77,7 @@ Plik `.env.example` w katalogu głównym zawiera listę zmiennych konfiguracyjny
 
 - `npm test` — testy regresyjne, w tym offline; nie wymaga kluczy do dostawców.
 - `npm run benchmark:offline` — deterministyczny benchmark na syntetycznych fixture'ach. Sprawdza kod pipeline'u, nie aktualną jakość modelu ani dostępność API.
-- Workflow `AI live benchmark` — uruchamiany ręcznie przez `workflow_dispatch`; najpierw wykonuje ścisły preflight skonfigurowanych walidatorów, a następnie testuje 10 przypadków na żywych dostawcach (w tym cztery z niezależnym gold facts). Wymaga poprawnych sekretów i może zużywać limity API.
+- Workflow `AI live benchmark` — uruchamiany ręcznie przez `workflow_dispatch`; najpierw wykonuje ścisły preflight skonfigurowanych walidatorów, a następnie testuje 10 stratyfikowanych przypadków na żywych dostawcach. Próbka obejmuje kategorie benchmarku, ale nie wszystkie niezależne przypadki gold. Wymaga poprawnych sekretów i może zużywać limity API.
 - Preflight walidatorów mierzy rzeczywistą latencję i poprawność JSON dla Gemini, xKiro, OpenRouter i Groq oraz porównuje je z limitem produkcyjnym per dostawca; blokada bezpieczeństwa Gemini jest raportowana oddzielnie od awarii transportu. Dłuższy czas diagnostyczny preflightu nie oznacza, że produkcja czeka równie długo.
 
 ## Cache werdyktów
@@ -86,10 +89,30 @@ Werdykty `accepted` i `rejected` są cache'owane przez 10 minut, maksymalnie 200
 - **Gemini GenerateContent:** klucz API jest przesyłany nagłówkiem `x-goog-api-key`. System instruction w REST body musi nazywać się `systemInstruction` (camelCase). Wymuszony JSON korzysta z `generationConfig.responseFormat.text` z `mimeType: application/json` i `schema`. Nie używaj przestarzałych pól `responseMimeType` ani `responseSchema` na poziomie `generationConfig`. Zgodnie z aktualną dokumentacją modeli Gemini 3.x kod pomija również przestarzałe parametry próbkowania `temperature`, `top_p` i `top_k`; sterowanie rozumowaniem odbywa się przez wspierane dla danego modelu `thinkingConfig.thinkingLevel`. HTTP 402 (wyczerpane kredyty Prepay) otwiera lokalny 24-godzinny cooldown bez retry; HTTP 429 używa prawidłowego `Retry-After`, jeśli jest dostępny.
 - **Groq:** `json_schema` (`strict: true`) jest używany wyłącznie dla modeli obsługujących strict structured outputs (`openai/gpt-oss-20b`, `openai/gpt-oss-120b`, `qwen/qwen3.8-27b`); pozostałe modele dostają `json_object`. Każdy wynik i tak przechodzi lokalną walidację. Cooldown HTTP 429 respektuje `Retry-After` z nagłówków odpowiedzi SDK, jeśli jest dostępny. Oficjalna lista błędów Groq dokumentuje 429 i 5xx, ale nie wymienia 402; obsługa 402 w kodzie jest defensywnym fallbackiem dla zgodnych endpointów i lokalną polityką 24-godzinnego cooldownu, a nie deklaracją kontraktu Groq.
 - **OpenRouter:** używa OpenAI-compatible Chat Completions i `response_format: { type: json_schema, json_schema: { name, strict: true, schema } }`. `provider.require_parameters=true` wymusza routing wyłącznie do endpointu reklamującego obsługę structured outputs; jest to istotne, bo obsługa zależy od endpointu, nie tylko modelu. Sam `json_object` nie gwarantuje zgodności semantycznej i nie jest używany przez produkcyjny validator. HTTP 429 respektuje `Retry-After`. HTTP 402 `openrouter_in_flight_budget` jest przejściowy i respektuje `Retry-After`; `openrouter_credits` z powodem `weight_exceeds_budget` oznacza, że żądanie jest za drogie i wymaga zmniejszenia promptu lub `max_tokens`, więc nie powinno być ponawiane bez zmiany żądania. Dla 402 `openrouter_key_limit` oraz 403 limitów budżetowych kod blokuje całą integrację do przyszłego `resets_at`, jeśli jest dostępne; w przeciwnym razie stosuje lokalną politykę 24 godzin. Błędy 402 oznaczające wyczerpane saldo lub nierozpoznane źródło limitu otrzymują lokalny 24-godzinny cooldown; wyjątkiem jest żądanie `weight_exceeds_budget`, które wymaga zmniejszenia kosztu i nie powinno blokować innych żądań. Te czasy są polityką aplikacji, nie gwarancją resetu dostawcy.
-- **xKiro:** używa OpenAI-compatible Chat Completions i `response_format: { type: json_object }`. Zgodnie z dokumentacją błędy należy klasyfikować po statusie oraz stabilnych polach `error.type`/`error.code`, a nie wyłącznie po komunikacie. HTTP 429 respektuje `Retry-After`; HTTP 402 `insufficient_quota` nie jest ponawiany w pętli i otwiera lokalny 24-godzinny cooldown.
+- **xKiro:** używa OpenAI-compatible Chat Completions i `response_format: { type: json_object }`. Generator normalizuje `message.content` (string lub tablica bloków tekstowych), zapisuje diagnostykę `finish_reason`, `usage` i identyfikator odpowiedzi bez logowania całego payloadu ani reasoning. Dla timeoutu, pustej/niepoprawnej odpowiedzi, ucięcia oraz przejściowych 5xx dopuszczona jest najwyżej jedna ponowna próba tego samego modelu w ramach wspólnego budżetu; druga próba zachowuje 26 s na walidację i odpowiedź. HTTP 401/403/429 nie jest ponawiany; 429 respektuje `Retry-After`, a HTTP 402 `insufficient_quota` otwiera lokalny 24-godzinny cooldown.
 - **YouTube Live Chat:** polling korzysta z `pollingIntervalMillis` zwróconego przez API. Nie ustawiaj arbitralnego minimum 10 sekund, bo zwiększa to opóźnienie komend. Dokumentacja YouTube zaleca `liveChatMessages.streamList` dla nowych integracji; migracja z pollingu wymaga osobnego wdrożenia i testu reconnectów. Przy obsłudze błędów tylko `liveChatEnded`, `liveChatNotFound`, `liveChatDisabled` lub komunikat o zakończonym live kończą bieżące nasłuchiwanie; ogólne `forbidden` oznacza problem uprawnień i nie może być automatycznie utożsamiane z końcem transmisji.
 - **Twitch Send Chat Message / Stream Marker:** App Access Token uzyskany przez `client_credentials` nie ma własnych scope'ów. Wysłanie wiadomości nim wymaga wcześniejszej autoryzacji aplikacji: konto nadawcy musi przyznać `user:write:chat` i `user:bot`, a broadcaster `channel:bot`, chyba że nadawca jest moderatorem. Kod próbuje tokena użytkownika jako fallbacku po błędzie autoryzacji; taki fallback wymaga scope `user:write:chat` i nie gwarantuje odznaki Chat Bot. Create Stream Marker wymaga natomiast tokena użytkownika będącego broadcasterem ze scope `user:write:broadcast`; funkcja używa `TWITCH_OAUTH_TOKEN_BROADCASTER_BILLY`, nie tokena czatu bota.
 - **Kick VOD:** odczyt VOD przez endpoint `kick.com/api/v2/channels/.../livestream` nie jest stabilnym, udokumentowanym publicznym kontraktem API. Zmiana po stronie Kick może go zepsuć; kod powinien traktować brak danych jako błąd integracji, a nie jako dowód, że VOD nie istnieje.
 - **HowLongToBeat:** endpoint `/api/bleed` jest wewnętrznym endpointem strony, nie oficjalnym publicznym API. Zależność od niego jest podatna na zmiany po stronie serwisu.
 - **TikTok przez RSS-Bridge:** integracja zależy od zewnętrznego mostka i dostępności źródła RSS, a nie od stabilnego oficjalnego API TikToka. Kod sprawdza status HTTP i format Atom; błędy są logowane, ale funkcja nadal zwraca pustą listę do pollera, więc monitoruj logi i nie traktuj braku wpisów jako pewności, że konto nic nie opublikowało.
 - **Preflight:** mierzy czas odpowiedzi i kompletność JSON, ale nie potwierdza semantycznej poprawności dowodów. Limity produkcyjne są różne per dostawca i są wyświetlane w podsumowaniu.
+
+
+## Retrieval v2 — ranking i ewaluacja
+
+- Wyniki z wielu rzeczywistych zapytań Tavily oraz opcjonalnego Exa są łączone przed generowaniem algorytmem Reciprocal Rank Fusion (RRF, k=60). RRF wykorzystuje pozycje w rankingach zamiast surowych punktacji dostawców.
+- Fuzja jest lokalna, deterministyczna i nie wykonuje dodatkowych wywołań sieciowych. Plan zapytań nadal ma limit maksymalnie 5 pozycji.
+- `assessEvidence(..., options)` przyjmuje opcjonalne `semanticScores` jako `Map` lub obiekt mapujący canonical URL/klucz źródła na score 0–1. Bez tego parametru nie ma semantycznego rerankingu ani dodatkowego requestu.
+- `retrievalTrace` zawiera liczbę zapytań i kandydatów, top source keys per ranking, wynik fuzji i wybrane źródła. Nie zawiera treści źródeł ani sekretów.
+- `npm run benchmark:retrieval` uruchamia RRF na etykietowanych rankingach fixture i porównuje Precision@K, Recall@K, MRR i nDCG z baseline. Wynik fixture nie jest metryką produkcyjnego retrieval.
+- Embeddingi nie są uruchamiane lokalnie. Adapter semantyczny powinien być osobną, opcjonalną integracją z własnym timeoutem i budżetem requestów.
+
+
+## Opcjonalny semantic retrieval
+
+| Zmienna | Domyślnie | Znaczenie |
+|---|---|---|
+| `AI_SEMANTIC_RETRIEVAL` | `0` | Ustaw `1`, aby wykonać maksymalnie jedno dodatkowe wyszukiwanie semantyczne Exa na żądanie. Wymaga `EXA_API_KEY`. |
+| `AI_SEMANTIC_RETRIEVAL_TIMEOUT_MS` | `3500` | Timeout Exa; wartość jest ograniczana do 1500–6000 ms. |
+
+Exa jest domyślnie wyłączone, ponieważ wykonuje dodatkowe płatne/limitowane wywołanie API. Gdy jest włączone, współdzieli limit wyszukiwań i rezerwę czasu z Tavily, a wyniki trafiają do tego samego RRF przed generowaniem. Ścisłe allowlisty domen persony są przekazywane również do Exa. Brak klucza, timeout lub błąd Exa nie blokuje odpowiedzi opartej na pozostałych źródłach.

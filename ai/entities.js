@@ -128,7 +128,7 @@ const CONTEXT_REQUIRED_CHARACTER_ALIASES = new Set([
 ]);
 
 function normalizujEncje(text) {
-  return String(text || '').toLocaleLowerCase('pl-PL')
+  return String(text || '').slice(0, 12000).toLocaleLowerCase('pl-PL')
     .replace(/ł/g, 'l')
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     .replace(/[’']/g, '').replace(/[^a-z0-9 ]/gi, ' ')
@@ -140,7 +140,7 @@ function tokenyEncji(text) {
 }
 
 function tokenPasujeDoAliasu(token, aliasToken) {
-  if (token === aliasToken) return true;
+  if (token === aliasToken) return true; // njsscan-ignore: node_timing_attack — public entity aliases
   // Dopuszczamy typowe końcówki fleksyjne (maks. 3 znaki), ale nie dowolny
   // prefiks. To zachowuje np. „Wiedźminem” bez dopasowywania „Minecraftowo”.
   if (aliasToken.length < 6 || !token.startsWith(aliasToken)) return false;
@@ -177,7 +177,7 @@ function containsExactAlias(text, alias) {
   const aliasTokens = tokenyEncji(alias);
   if (!aliasTokens.length || textTokens.length < aliasTokens.length) return false;
   for (let i = 0; i <= textTokens.length - aliasTokens.length; i++) {
-    if (aliasTokens.every((token, offset) => textTokens[i + offset] === token)) return true;
+    if (aliasTokens.every((token, offset) => textTokens[i + offset] === token)) return true; // njsscan-ignore: node_timing_attack — public entity aliases
   }
   return false;
 }
@@ -208,16 +208,40 @@ function findAlias(text, entries, options = {}) {
 }
 
 function scoreExternalGameCandidate(query, candidateName) {
-  const normalize = value => normalizujEncje(value);
+  const normalize = value => {
+    const tokens = normalizujEncje(value).split(' ').filter(Boolean);
+    const roman = { ii: '2', iii: '3', iv: '4', v: '5', vi: '6', vii: '7', viii: '8', ix: '9' };
+    if (tokens.length) tokens[tokens.length - 1] = roman[tokens[tokens.length - 1]] || tokens[tokens.length - 1];
+    return tokens.join(' ');
+  };
   const q = normalize(query);
   const n = normalize(candidateName);
   if (!q || !n) return 0;
   if (q === n) return 1;
-  const qt = q.split(' ').filter(Boolean);
-  const nt = n.split(' ').filter(Boolean);
-  const overlap = nt.length ? nt.filter(token => qt.includes(token)).length / nt.length : 0;
-  if (n.includes(q) || q.includes(n)) return Math.max(0.82, overlap);
-  return overlap;
+  const suffix = n.startsWith(q + ' ') ? n.slice(q.length + 1) : '';
+  const editionSuffixes = new Set([
+    'ultimate edition', 'game of the year edition', 'goty edition',
+    'definitive edition', 'complete edition', 'deluxe edition',
+    'collector edition', 'collectors edition', 'enhanced edition',
+    'gold edition', 'standard edition', 'digital deluxe edition',
+  ]);
+  // Wydania handlowe tej samej gry nie są sequelami ani spin-offami.
+  if (suffix && editionSuffixes.has(suffix)) return 0.9;
+
+  const qt = q.split(' ');
+  const nt = n.split(' ');
+  const shared = nt.filter(token => qt.includes(token)).length;
+  const queryCoverage = shared / qt.length;
+  const candidateCoverage = shared / nt.length;
+
+  // Sam prefiks nazwy franczyzy nie identyfikuje konkretnej części.
+  // Wcześniej „Portal” dostawał 0.82 dla „Portal 2”, co pozwalało IGDB
+  // wybrać sequel/remake/spin-off tylko na podstawie kolejności wyników.
+  // Wymagamy wysokiego pokrycia obu nazw; nadmiarowe człony obniżają wynik.
+  if (queryCoverage >= 0.8 && candidateCoverage >= 0.8) {
+    return Math.min(queryCoverage, candidateCoverage);
+  }
+  return Math.min(queryCoverage, candidateCoverage) * 0.65;
 }
 
 // Aliasy będące zwykłymi słowami są uznawane za grę tylko z kontekstem gamingowym.
@@ -305,6 +329,22 @@ function resolveGameEntity(text) {
   return null;
 }
 
+// Rozpoznaje wyłącznie tytuł jawnie wskazany przez użytkownika jako grę.
+// Pozwala ominąć klasyfikator LLM, ale nie próbuje zgadywać tytułu z luźnego tekstu.
+function wyodrebnijJawnyTytulGry(text) {
+  const value = String(text || '').trim();
+  if (!value || value.length > 500) return null;
+
+  // Jawny kontekst „w grze” pozwala przyjąć również tytuły zapisane małymi
+  // literami. Koniec tytułu wyznacza początek pytania, a nie wielkość liter.
+  const pattern = /(?:^|[^\p{L}\p{N}_])w(?:e)?\s+(?:tej\s+)?grze\s+(?!(?:kim\s+jest|kto\s+(?:to|jest)|co\s+(?:to|się)|czym\s+jest|jak\s+(?:przejść|pokonać|zdobyć|działa|wygląda)|czy\s+(?:warto|jest|można)|dlaczego|czemu|gdzie|kiedy|opisz|wyjaśnij|who\s+(?:is|was)|what\s+(?:is|happened)|why|how\s+(?:to|does|is)|where|when)\b)(?:"([^"\n]{1,120})"|“([^”\n]{1,120})”|„([^”\n]{1,120})”|([\p{L}\p{N}][^\n?!]{0,119}?))(?=\s+(?:kim\s+jest|kto\s+(?:to|jest)|co\s+(?:to|się)|czym\s+jest|jak\s+(?:przejść|pokonać|zdobyć|działa|wygląda)|czy\s+(?:warto|jest|można)|dlaczego\b|czemu\b|gdzie\b|kiedy\b|opisz\b|wyjaśnij\b|who\s+(?:is|was)|what\s+(?:is|happened)|why\b|how\s+(?:to|does|is)|where\b|when\b)|\s*[:,;—–-]\s*(?:kim|kto|co|czym|jak|czy|dlaczego|czemu|gdzie|kiedy|opisz|wyjaśnij|who|what|why|how|where|when)\b|[.!?]\s*$|$)/iu;
+  const prefixPattern = /^\s*(?!(?:kim|kto|co|jak|czy|dlaczego|czemu|gdzie|kiedy|opisz|wyjaśnij|who|what|why|how|when|where|is|does)\b)(?:"([^"\n]{1,120})"|“([^”\n]{1,120})”|([\p{L}\p{N}][\p{L}\p{N}'’:&-]*(?:\s+(?:(?:of|the|and|&)\s+)?[\p{Lu}\p{N}][\p{L}\p{N}'’:&-]*){0,4}))\s*:\s*(?:kim|kto|co|jak|czy|dlaczego|czemu|gdzie|kiedy|opisz|wyjaśnij|who|what|why|how|when|where|is|does)\b/u;
+  const match = value.match(pattern) || value.match(prefixPattern);
+  const title = (match?.[1] || match?.[2] || match?.[3] || match?.[4] || '').replace(/\s+/g, ' ').replace(/[,:;.!?]+$/u, '').trim();
+  if (!title || title.length > 120 || title.split(' ').length > 5) return null;
+  return title;
+}
+
 function externalGameCandidateMatchesQuery(query, candidateName) {
   const directScore = scoreExternalGameCandidate(query, candidateName);
   if (directScore >= 0.72) return { ok: true, score: directScore, via: 'query_title_match' };
@@ -325,6 +365,7 @@ module.exports = {
   containsExactAlias,
   czyWspomnianoGre,
   scoreExternalGameCandidate,
+  wyodrebnijJawnyTytulGry,
   externalGameCandidateMatchesQuery,
   resolveGameEntity,
   resolveCompanyEntity,

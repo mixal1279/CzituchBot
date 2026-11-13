@@ -12,6 +12,7 @@
  */
 
 const { GAME_ALIASES, CHARACTER_ALIASES, containsAlias } = require('./entities');
+const { reciprocalRankFusion } = require('./rank-fusion');
 
 const STOPWORDS = new Set([
   'czy','jak','jaki','jaka','jakie','co','czym','kto','kim','kiedy','gdzie',
@@ -86,14 +87,16 @@ function classifyAuthority(source = {}) {
     'minecraft.net','rockstargames.com','thewitcher.com','cdprojektred.com',
     'playstation.com','xbox.com','nintendo.com','naughtydog.com','larian.com',
     'baldursgate3.game','bandainamcoent.com','epicgames.com','ea.com',
-    'ubisoft.com','bethesda.net','starwars.com','openai.com','discord.com'
+    'ubisoft.com','bethesda.net','starwars.com','openai.com','discord.com',
+    'valvesoftware.com','steampowered.com'
   ];
   const specialized = [
-    'minecraft.wiki','gamelore.fandom.com',
+    'minecraft.wiki','gamelore.fandom.com','theportalwiki.com','bg3.wiki','combineoverwiki.net',
+    'skyrim.fandom.com','cyberpunk.fandom.com','witcher.fandom.com','witcher-games.fandom.com','eldenring.fandom.com',
     'steamdb.info','howlongtobeat.com','pcgamingwiki.com'
   ];
-  const reference = ['wikipedia.org','imdb.com','mobygames.com'];
-  const guide = ['ign.com','gamespot.com','pcgamer.com','gamerant.com','polygon.com','gry-online.pl','eurogamer.net','eurogamer.pl'];
+  const reference = ['wikipedia.org','imdb.com','mobygames.com','isthereanydeal.com'];
+  const guide = ['ign.com','gamespot.com','pcgamer.com','gamerant.com','polygon.com','gry-online.pl','eurogamer.net','eurogamer.pl','fandom.com'];
 
   const inList = list => list.some(d => host === d || host.endsWith('.' + d));
   if (inList(official)) return 'official';
@@ -107,10 +110,11 @@ function classifyAuthority(source = {}) {
 function canonicalUrl(url) {
   try {
     const u = new URL(String(url));
+    if (u.protocol === 'http:') u.protocol = 'https:';
     u.hash = '';
     u.hostname = u.hostname.toLowerCase().replace(/^www\./, '');
     for (const key of [...u.searchParams.keys()]) {
-      if (/^(utm_|fbclid|gclid|ref|source)/i.test(key)) u.searchParams.delete(key);
+      if (/^(utm_|fbclid|gclid|igshid|mc_cid|ved|ref|source)/i.test(key)) u.searchParams.delete(key);
     }
     return u.toString().replace(/\/$/, '');
   } catch (_) { return String(url || '').trim().toLowerCase(); }
@@ -121,17 +125,42 @@ function sourceKey(source = {}) {
   return canonical || normalize(source.title);
 }
 
+function cleanWikiMarkup(value) {
+  let text = String(value || '');
+  // Usuwamy elementy nawigacyjne MediaWiki i surowe znaczniki infoboxów,
+  // które nie są treścią dowodową, a potrafią zanieczyścić ranking/negację.
+  text = text
+    .replace(/\{\s*"title"\s*:[\s\S]{0,4000}?\}\s*(?:\]\s*)?\}/giu, ' ')
+    .replace(/\[(?:Jump to navigation|Jump to search|Przejdź do nawigacji|Przejdź do wyszukiwania)\]\([^)]*\)/giu, ' ')
+    .replace(/\b(?:Jump to navigation|Jump to search|Przejdź do nawigacji|Przejdź do wyszukiwania)\b/giu, ' ')
+    .replace(/\{\s*"(?:title|rows|field|label)"\s*:/giu, ' ')
+    .replace(/\b(?:mw-head|searchInput|mw-content-text|toc)\b/giu, ' ')
+    .replace(/<\/?(?:div|span|table|tbody|thead|tr|td|th|ul|ol|li|nav|sup|ref|figure|figcaption|p|h[1-6])\b[^>]*>/giu, ' ')
+    .replace(/\[\[(?:Category|Kategoria):[^\]]+\]\]/giu, ' ')
+    .replace(/\[\[[^\]|]+\|([^\]]+)\]\]/gu, '$1')
+    .replace(/\[\[([^\]]+)\]\]/gu, '$1')
+    .replace(/\{\{(?:Quote|Cytat)\|([^|{}]+)[^{}]{0,400}\}\}/giu, ' "$1" ');
+  for (let i = 0; i < 3; i++) {
+    text = text.replace(/\{\{[^{}]{0,500}\}\}/gu, ' ');
+  }
+  text = text
+    .replace(/&(?:nbsp|amp|quot|apos|lt|gt);/giu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return text.slice(0, 12000);
+}
+
 function normalizeSource(source = {}, index = 0) {
   // Gemini grounding snippets are model-output spans tied to a URL, not page text.
   // webRetrieval deliberately marks them with content: ''; preserve that sentinel
   // instead of promoting the snippet into evidence during core normalization.
   const metadataOnlyGemini = /^gemini/i.test(String(source.provider || '')) && source.content === '';
-  const content = String(metadataOnlyGemini ? '' : (source.content || source.raw_content || source.snippet || '')).replace(/\s+/g, ' ').trim();
-  const title = String(source.title || '').replace(/\s+/g, ' ').trim();
+  const content = cleanWikiMarkup(metadataOnlyGemini ? '' : (source.content || source.raw_content || source.snippet || ''));
+  const title = String(source.title || '').slice(0, 300).replace(/\s+/g, ' ').trim();
   return {
     ...source,
     sourceId: source.sourceId || `SOURCE ${index + 1}`,
-    url: String(source.url || '').trim(),
+    url: String(source.url || '').slice(0, 2048).trim(),
     title,
     content,
     host: hostOf(source.url),
@@ -174,8 +203,12 @@ function scoreSource(source, query, options = {}) {
   if (options.freshness === 'live' || options.freshness === 'recent') {
     const date = source.publishedAt || source.published_date || source.date;
     if (date) {
-      const ageDays = Math.max(0, (Date.now() - new Date(date).getTime()) / 86400000);
-      if (Number.isFinite(ageDays)) freshnessBonus = ageDays <= 7 ? 0.12 : ageDays <= 30 ? 0.06 : ageDays <= 90 ? 0 : -0.08;
+      const publishedAt = new Date(date).getTime();
+      const ageDays = (Date.now() - publishedAt) / 86400000;
+      // Data z przyszłości nie może zdobywać bonusu świeżości.
+      if (Number.isFinite(ageDays) && ageDays >= 0) {
+        freshnessBonus = ageDays <= 7 ? 0.12 : ageDays <= 30 ? 0.06 : ageDays <= 90 ? 0 : -0.08;
+      }
     }
   }
 
@@ -188,13 +221,79 @@ function scoreSource(source, query, options = {}) {
     freshnessBonus +
     contentBonus
   ));
+  const semanticScore = Number.isFinite(options.semanticScore)
+    && options.semanticScore >= 0 && options.semanticScore <= 1
+    ? options.semanticScore : null;
 
-  return { ...s, coreScore: Number(score.toFixed(4)), relevance, titleRelevance, authorityScore: authority };
+  return { ...s, coreScore: Number(score.toFixed(4)), semanticScore, relevance, titleRelevance, authorityScore: authority };
 }
 
-function sourceMatchesRequestContext(source = {}, routing = {}) {
-  if (!routing?.is_lore && !routing?.is_gameplay) return true;
+const ROMAN_SEQUEL_MARKERS = new Set(['ii', 'iii', 'iv', 'v', 'vi', 'vii', 'viii', 'ix']);
+const SEQUEL_PREFIX_MARKERS = new Set(['part', 'episode', 'chapter']);
+
+function czyZnacznikCzesci(token) {
+  const value = String(token || '').trim().toLowerCase();
+  if (ROMAN_SEQUEL_MARKERS.has(value)) return true;
+  if (!value || value.length > 2) return false;
+  const number = Number(value);
+  return Number.isInteger(number) && number >= 0 && number <= 99;
+}
+
+function czyZrodloDotyczyInnejCzesciGry(source, gameName, routing) {
+  const entityType = routing.resolved_entity?.type || routing.entity_type;
+  // Część gry ogranicza również retrieval postaci przypisanej do konkretnej odsłony.
+  if (entityType !== 'game' && entityType !== 'character') return false;
+  const requested = normalize(gameName);
+  if (!requested) return false;
+  const requestedLastToken = requested.split(' ').pop();
+  if (czyZnacznikCzesci(requestedLastToken)) return false;
+
+  const title = normalize(source.title);
+  if (!title.startsWith(requested + ' ')) return false;
+  const suffix = title.slice(requested.length).trim().split(' ').filter(Boolean);
+  if (!suffix.length) return false;
+  const marker = SEQUEL_PREFIX_MARKERS.has(suffix[0]) ? suffix[1] : suffix[0];
+  return czyZnacznikCzesci(marker);
+}
+
+function sourceMatchesRequestContext(source = {}, routing = {}, question = '') {
   const resolved = routing.resolved_entity || {};
+  const routeEntity = String(routing.entity || resolved.name || '').trim();
+  const routeEntityIsGame = GAME_ALIASES.some(entry =>
+    [entry.name, ...(entry.aliases || [])].some(alias => containsAlias(routeEntity, alias))
+  );
+  // Router potrafi ustawić entity_type=character, ale jako entity zwrócić
+  // sam tytuł gry. W takim przypadku postacie wyciągamy bezpośrednio z pytania,
+  // zamiast traktować nazwę gry jako nazwę bohatera.
+  const hasCharacterScopeSignal = Boolean(
+    routing.game
+    || resolved.game
+    || resolved.type === 'game'
+    || resolved.type === 'character'
+    || routing.entity_type === 'character'
+  );
+  const questionCharacters = hasCharacterScopeSignal
+    ? CHARACTER_ALIASES.filter(entry =>
+      [entry.name, ...(entry.aliases || [])].some(alias => containsAlias(question, alias))
+    )
+    : [];
+  const explicitCharacter = resolved.type === 'character'
+    ? resolved.name
+    : (routing.entity_type === 'character' && !routeEntityIsGame ? routeEntity : '');
+  const requestedCharacters = [...new Set([
+    ...questionCharacters.map(entry => entry.name),
+    ...(explicitCharacter ? [explicitCharacter] : []),
+  ])];
+  const characterScoped = requestedCharacters.length > 0;
+  const gameNameForScope = resolved.game
+    || (resolved.type === 'game' ? resolved.name : '')
+    || routing.game
+    || questionCharacters[0]?.game;
+  // Pytania web_fact o konkretnych postaciach też wymagają dopasowania encji.
+  // Nie ograniczamy tego filtra do lore/gameplay: router często klasyfikuje
+  // pytanie „co stało się z X?” jako zwykły fakt.
+  const needsEntityScope = Boolean(routing.is_lore || routing.is_gameplay || characterScoped);
+  if (!needsEntityScope) return true;
   const haystack = [source.title, source.content, source.url].filter(Boolean).join(' ');
   const aliasesFor = (entries, name) => {
     const wanted = normalize(name);
@@ -206,20 +305,91 @@ function sourceMatchesRequestContext(source = {}, routing = {}) {
   };
 
   // A source about the right game is not sufficient for a request about a
-  // specific character. Require the character (or one of its aliases) itself.
-  const characterScoped = resolved.type === 'character' || routing.entity_type === 'character';
-  const characterName = resolved.name || (characterScoped ? routing.entity : '');
-  if (characterScoped && characterName) {
-    const characterAliases = aliasesFor(CHARACTER_ALIASES, characterName);
-    return characterAliases.some(alias => containsAlias(haystack, alias));
+  // specific character. For relationship questions, every named character
+  // must be present in the same source.
+  const franchiseScoped = resolved.type === 'franchise' || routing.entity_type === 'franchise';
+  const franchiseName = resolved.name || (franchiseScoped ? routing.entity : '');
+  if (franchiseScoped && franchiseName) {
+    const franchiseAliases = aliasesFor(GAME_ALIASES, franchiseName);
+    return franchiseAliases.some(alias => containsAlias(haystack, alias));
   }
 
-  const gameName = resolved.game || routing.game;
+  const gameName = gameNameForScope;
+  if (gameName && czyZrodloDotyczyInnejCzesciGry(source, gameName, routing)) return false;
+  if (characterScoped) {
+    const matchesAllCharacters = requestedCharacters.every(characterName => {
+      const characterAliases = aliasesFor(CHARACTER_ALIASES, characterName);
+      return characterAliases.some(alias => containsAlias(haystack, alias));
+    });
+    if (!matchesAllCharacters) return false;
+
+    // Sama nazwa postaci nie identyfikuje uniwersum (np. Alex, Chris, Jack).
+    // Gdy znany jest kontekst gry, źródło musi potwierdzać jednocześnie postać
+    // i grę; inaczej retrieval może połączyć materiały z różnych tytułów.
+    if (gameName) {
+      const gameAliases = aliasesFor(GAME_ALIASES, gameName);
+      return gameAliases.some(alias => containsAlias(haystack, alias));
+    }
+    return true;
+  }
+
   if (gameName) {
     const gameAliases = aliasesFor(GAME_ALIASES, gameName);
     return gameAliases.some(alias => containsAlias(haystack, alias));
   }
   return true;
+}
+
+// Tavily nie udostępnia parametru języka w Search API. Stosujemy więc
+// ostrożny filtr po pobraniu: odrzucamy wyłącznie źródła z mocnym sygnałem
+// języka trzeciego (np. portugalski), nie angielskie źródła używane normalnie
+// do odpowiedzi na polskie pytania.
+function wykryjJezykTekstu(value) {
+  const original = String(value || '').slice(0, 12000);
+  const text = normalize(original);
+  if (!text) return { language: 'unknown', confidence: 0 };
+
+  // Polskie pytania krótkie („Czym różni się X od Y?”) często nie osiągają
+  // progu słownikowego po normalizacji. Rozpoznajemy je po polskich znakach
+  // oraz co najmniej jednym charakterystycznym słowie funkcyjnym; sam polski
+  // znak w nazwie własnej (np. „Łódź”) nie wystarcza.
+  const polskieZnaki = /[ąćęłńóśźż]/iu.test(original);
+  const polskieMarkery = new Set([
+    'sie', 'czy', 'jak', 'kto', 'co', 'czym', 'gdzie', 'dlaczego', 'czemu',
+    'jest', 'grze', 'zostal', 'zostala', 'oraz', 'ktory', 'ktora', 'ktore',
+  ]);
+  const markerCount = text.split(' ').filter(token => polskieMarkery.has(token)).length;
+  if (polskieZnaki && markerCount >= 1) return { language: 'pl', confidence: 1 };
+
+  const słowa = {
+    pl: ['jest', 'oraz', 'ktory', 'ktora', 'ktore', 'gra', 'grze', 'postac', 'zostal', 'byla', 'nie', 'sie', 'kim', 'kto', 'co', 'czym', 'od', 'w', 'z', 'dla', 'czy', 'jak', 'gdzie', 'dlaczego', 'czemu'],
+    en: ['the', 'and', 'is', 'are', 'was', 'were', 'with', 'from', 'this', 'that', 'character', 'game'],
+    pt: ['uma', 'um', 'das', 'dos', 'nao', 'para', 'com', 'jogador', 'padrao', 'sao'],
+    es: ['una', 'uno', 'los', 'las', 'para', 'con', 'jugador', 'juego', 'esta'],
+    de: ['der', 'die', 'das', 'und', 'ist', 'sind', 'spieler', 'spiel', 'nicht'],
+    fr: ['une', 'des', 'les', 'avec', 'pour', 'joueur', 'jeu', 'est', 'sont'],
+  };
+  const scores = Object.entries(słowa).map(([language, terms]) => ({
+    language,
+    score: terms.reduce((sum, term) => sum + (new RegExp(`(?:^| )${term}(?: |$)`, 'u').test(text) ? 1 : 0), 0),
+  })).sort((a, b) => b.score - a.score);
+  const best = scores[0];
+  const second = scores[1]?.score || 0;
+  return { language: best.score >= 3 && best.score - second >= 2 ? best.language : 'unknown', confidence: best.score - second };
+}
+
+function sourceLanguageCompatible(source, question, routing = {}) {
+  const declaredLanguage = String(routing.language || '').toLowerCase().split(/[-_]/u)[0];
+  const questionLanguage = declaredLanguage && declaredLanguage !== 'unknown'
+    ? declaredLanguage
+    : wykryjJezykTekstu(question).language;
+  if (questionLanguage !== 'pl') return true;
+  const sourceText = [source.title, source.content].filter(Boolean).join(' ');
+  const detected = wykryjJezykTekstu(sourceText);
+  // Angielski jest akceptowany jako język źródłowy dla polskiego pytania.
+  // Blokujemy tylko mocno rozpoznany język trzeci, który powodował fałszywe
+  // konflikty PL↔PT w walidatorze.
+  return detected.language === 'unknown' || detected.language === 'pl' || detected.language === 'en';
 }
 
 function similarity(a, b) {
@@ -234,7 +404,7 @@ function similarity(a, b) {
 function diversifySources(scored, options = {}) {
   const max = Math.max(1, Number(options.maxSources) || 6);
   const minIndependent = Math.max(1, Number(options.minIndependent) || 2);
-  const candidates = [...scored].sort((a,b) => b.coreScore - a.coreScore);
+  const candidates = [...scored].sort((a,b) => (b.rankScore ?? b.coreScore) - (a.rankScore ?? a.coreScore));
   const chosen = [];
   const hosts = new Set();
 
@@ -268,6 +438,9 @@ function buildRetrievalPlan(question, routing = {}, options = {}) {
 
   const entity = String(routing.resolved_entity?.name || routing.entity || routing.game || '').trim();
   const game = String(routing.game || routing.resolved_entity?.game || '').trim();
+  const requestedCharacters = CHARACTER_ALIASES.filter(entry =>
+    [entry.name, ...(entry.aliases || [])].some(alias => containsAlias(q, alias))
+  );
   const base = [];
   const add = (x, reason = 'primary') => {
     const v = String(x || '').replace(/\s+/g, ' ').trim();
@@ -277,8 +450,23 @@ function buildRetrievalPlan(question, routing = {}, options = {}) {
   };
 
   add(q);
-  if (entity) add(`${entity} ${q}`);
-  if (game && game !== entity) add(`${game} ${q}`);
+  if (requestedCharacters.length) {
+    // Gdy router zwraca tytuł gry jako entity, zapytanie entity+question
+    // powiela treść pytania. Zastępujemy je krótkim, encyjnie zakotwiczonym
+    // zapytaniem, które lepiej trafia w artykuły o konkretnych postaciach.
+    const characterNames = requestedCharacters.slice(0, 4).map(entry => entry.name);
+    const topic = /\b(?:dlaczego|czemu|powod|przyczyn|why|reason|cause|motivation)\b/iu.test(q)
+      ? 'reason cause motivation story'
+      : /\b(?:kiedy|when|rok|data|date|timeline)\b/iu.test(q)
+        ? 'timeline date story'
+        : /\b(?:gdzie|where|lokalizac|location)\b/iu.test(q)
+          ? 'location story'
+          : 'story plot lore';
+    add(characterNames.join(' ') + ' ' + (game || entity) + ' ' + topic, 'character');
+  } else if (entity) {
+    add(entity + ' ' + q);
+  }
+  if (game && game !== entity) add(game + ' ' + q);
 
   if (routing.is_lore) {
     add(`${game || entity || q} lore plot canon story`, 'lore');
@@ -303,37 +491,113 @@ function czyStreszczenieModelu(source) {
   return /^gemini/i.test(String(source?.provider || ''));
 }
 
-function assessEvidence(results = [], question, routing = {}) {
-  const normalized = (Array.isArray(results) ? results : [])
+function assessEvidence(results = [], question, routing = {}, options = {}) {
+  const normalizedSources = (Array.isArray(results) ? results : [])
     .filter(Boolean)
-    .filter(source => sourceMatchesRequestContext(source, routing))
-    .map((s, index) => scoreSource(s, question, {
+    .map((source, index) => normalizeSource(source, index));
+
+  const scopeFiltered = normalizedSources
+    .filter(source => sourceMatchesRequestContext(source, routing, question))
+    .filter(source => sourceLanguageCompatible(source, question, routing));
+
+  // Zachowujemy najlepsze źródło, gdy filtry zakresu odrzucą wszystkie wyniki.
+  const scopedSources = scopeFiltered.length > 0
+    ? scopeFiltered
+    : (normalizedSources.length > 0
+      ? [normalizedSources
+          .map((source, index) => ({
+            source,
+            score: scoreSource(source, question, { index }).coreScore,
+          }))
+          .sort((a, b) => b.score - a.score)[0].source]
+      : []);
+
+  const entities = [
+    routing.resolved_entity?.name,
+    routing.entity,
+    routing.game,
+    routing.resolved_entity?.game,
+  ];
+
+  const semanticScores = options.semanticScores instanceof Map
+    ? options.semanticScores
+    : new Map(Object.entries(options.semanticScores || {}));
+
+  const baseScored = scopedSources.map((source, index) => {
+    const value = semanticScores.has(source.key)
+      ? Number(semanticScores.get(source.key))
+      : semanticScores.has(source.url)
+        ? Number(semanticScores.get(source.url))
+        : NaN;
+
+    return scoreSource(source, question, {
       index,
-      // Score against both the resolved character/item and its parent game.
-      // A game name must not shadow a more specific entity mention.
-      entities: [
-        routing.resolved_entity?.name,
-        routing.entity,
-        routing.game,
-        routing.resolved_entity?.game,
-      ],
+      entities,
       freshness: routing.freshness,
-    }));
+      semanticScore: Number.isFinite(value) && value >= 0 && value <= 1
+        ? value
+        : null,
+    });
+  });
+
+  // RRF łączy rankingi kilku zapytań bez porównywania punktacji dostawców.
+  const queryPlan = buildRetrievalPlan(question, routing, { maxQueries: 4 });
+  const rankingQueries = [...new Set([
+    String(question || '').trim(),
+    ...queryPlan.map(item => item.query),
+  ].filter(Boolean))].slice(0, 5);
+
+  const rankings = rankingQueries.map(query => scopedSources
+    .map((source, index) => scoreSource(source, query, {
+      index,
+      entities,
+      freshness: routing.freshness,
+    }))
+    .filter(source => source.relevance > 0 || source.titleRelevance > 0)
+    .sort((a, b) => b.coreScore - a.coreScore || a.key.localeCompare(b.key))
+    .map(source => source.key));
+
+  const fused = reciprocalRankFusion(rankings, { k: 60 });
+  const maxFusion = Math.max(0, ...fused.map(item => item.score));
+  const fusionByKey = new Map(fused.map(item => [item.id, item.score]));
+
+  const normalized = baseScored.map(source => {
+    const rawRrf = fusionByKey.get(source.key) || 0;
+    const rrfScore = maxFusion > 0 ? rawRrf / maxFusion : 0;
+    const rankScore = source.semanticScore === null
+      ? source.coreScore * 0.7 + rrfScore * 0.3
+      : source.coreScore * 0.6 + rrfScore * 0.25 + source.semanticScore * 0.15;
+
+    return {
+      ...source,
+      lexicalScore: source.coreScore,
+      rrfScore: Number(rrfScore.toFixed(4)),
+      rankScore: Number(rankScore.toFixed(4)),
+      matchedQueryCount: rankings.filter(ranking => ranking.includes(source.key)).length,
+    };
+  });
 
   const unique = [];
   const seen = new Set();
-  for (const item of normalized.sort((a,b) => b.coreScore - a.coreScore)) {
+  for (const item of normalized.sort((a,b) => b.rankScore - a.rankScore || a.key.localeCompare(b.key))) {
     if (seen.has(item.key)) continue;
     seen.add(item.key);
     unique.push(item);
   }
 
+  const requestedMaxSources = Number(options.maxSources);
+  const requestedMinIndependent = Number(options.minIndependent);
   const selected = diversifySources(unique, {
-    maxSources: routing.is_lore || routing.is_gameplay ? 6 : 5,
-    minIndependent: routing.is_lore || routing.is_gameplay ? 2 : 1,
+    maxSources: Number.isFinite(requestedMaxSources)
+      ? Math.max(1, Math.min(12, Math.floor(requestedMaxSources)))
+      : (routing.is_lore || routing.is_gameplay ? 6 : 5),
+    minIndependent: Number.isFinite(requestedMinIndependent)
+      ? Math.max(1, Math.min(6, Math.floor(requestedMinIndependent)))
+      : (routing.is_lore || routing.is_gameplay ? 2 : 1),
   });
 
   const hosts = new Set(selected.map(x => x.host).filter(Boolean));
+  const independentHosts = new Set(selected.filter(x => !czyStreszczenieModelu(x)).map(x => x.host).filter(Boolean));
   const strong = selected.filter(x => x.coreScore >= 0.55);
   const relevant = selected.filter(x => x.relevance >= 0.35 || x.titleRelevance >= 0.45);
 
@@ -343,23 +607,46 @@ function assessEvidence(results = [], question, routing = {}) {
   // strony. Mogą być trafne, ale nie są niezależnym potwierdzeniem.
   const independent = x => !czyStreszczenieModelu(x);
   const strongIndependent = strong.filter(independent);
-  const evidenceHosts = new Set([...strongIndependent, ...relevant.filter(independent)].map(x => x.host).filter(Boolean));
+  const relevantIndependent = relevant.filter(independent);
+  const evidenceHosts = new Set([...strongIndependent, ...relevantIndependent].map(x => x.host).filter(Boolean));
+  // Jeden mocny, tematycznie trafny materiał pierwotny może wystarczyć do odpowiedzi
+  // z obowiązkową walidacją. Nie udajemy wtedy niezależnego potwierdzenia z dwóch domen.
+  const singlePrimarySource = strongIndependent.some(source =>
+    source.authority === 'official'
+    && source.coreScore >= 0.62
+    && (source.relevance >= 0.35 || source.titleRelevance >= 0.45)
+  );
 
   let status = 'weak';
-  if (strongIndependent.length >= 2 && evidenceHosts.size >= 2 && relevant.length >= 2) status = 'strong';
-  else if (strongIndependent.length >= 1 && relevant.length >= 1 && evidenceHosts.size >= 2) status = 'usable';
+  if (strongIndependent.length >= 2 && evidenceHosts.size >= 2 && relevantIndependent.length >= 2) status = 'strong';
+  else if (singlePrimarySource || (strongIndependent.length >= 1 && relevantIndependent.length >= 1 && evidenceHosts.size >= 2)) status = 'usable';
 
   return {
     status,
     sources: selected,
     sourceCount: selected.length,
-    independentHosts: hosts.size,
+    retrievalTrace: {
+      queryCount: rankingQueries.length,
+      candidateCount: scopedSources.length,
+      rankings: rankings.map((ranking, index) => ({
+        queryIndex: index,
+        candidateCount: ranking.length,
+        topSourceKeys: ranking.slice(0, 5),
+      })),
+      fusion: fused.slice(0, 10).map(item => ({ sourceKey: item.id, score: Number(item.score.toFixed(6)) })),
+      selectedSourceKeys: selected.map(source => source.key),
+      semanticRerankingApplied: selected.some(source => source.semanticScore !== null),
+    },
+    independentHosts: independentHosts.size,
+    uniqueHosts: hosts.size,
     relevantHosts: evidenceHosts.size,
     modelSummarySources: selected.filter(czyStreszczenieModelu).length,
     strongSources: strong.length,
     relevantSources: relevant.length,
+    relevantIndependentSources: relevantIndependent.length,
+    singlePrimarySource,
     coverageScore: Number(Math.min(1,
-      relevant.length / (routing.is_lore || routing.is_gameplay ? 3 : 2)
+      relevantIndependent.length / (routing.is_lore || routing.is_gameplay ? 3 : 2)
     ).toFixed(3)),
   };
 }
@@ -398,10 +685,14 @@ module.exports = {
   AUTHORITY_ALIASES,
   normalizeSource,
   scoreSource,
+  reciprocalRankFusion,
   similarity,
   diversifySources,
   buildRetrievalPlan,
   assessEvidence,
   sourceMatchesRequestContext,
+  cleanWikiMarkup,
+  wykryjJezykTekstu,
+  sourceLanguageCompatible,
   decideEvidencePolicy,
 };

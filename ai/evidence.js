@@ -1,7 +1,75 @@
 'use strict';
 
+function usunLinkiMarkdown(value) {
+  const tekst = String(value || '');
+  let wynik = '';
+  let indeks = 0;
+
+  // Jedno przejście po tekście: nawiasy w adresie URL są obsługiwane
+  // przez licznik głębokości, bez rekurencyjnego lub zagnieżdżonego regexu.
+  while (indeks < tekst.length) {
+    const obraz = tekst[indeks] === '!' && tekst[indeks + 1] === '[';
+    const poczatekNawiasu = obraz ? indeks + 1 : indeks;
+    if (tekst[poczatekNawiasu] !== '[') {
+      wynik += tekst[indeks];
+      indeks++;
+      continue;
+    }
+
+    let glebokosc = 1;
+    let koniecEtykiety = poczatekNawiasu + 1;
+    while (koniecEtykiety < tekst.length && glebokosc > 0) {
+      if (tekst[koniecEtykiety] === '\\') {
+        koniecEtykiety += 2;
+        continue;
+      }
+      if (tekst[koniecEtykiety] === '[') glebokosc++;
+      if (tekst[koniecEtykiety] === ']') glebokosc--;
+      koniecEtykiety++;
+    }
+
+    if (glebokosc !== 0) {
+      wynik += tekst.slice(indeks);
+      break;
+    }
+
+    const koniecEtykietyBezNawiasu = koniecEtykiety - 1;
+    if (tekst[koniecEtykiety] !== '(') {
+      wynik += tekst.slice(indeks, koniecEtykiety);
+      indeks = koniecEtykiety;
+      continue;
+    }
+
+    glebokosc = 1;
+    let koniecAdresu = koniecEtykiety + 1;
+    while (koniecAdresu < tekst.length && glebokosc > 0) {
+      if (tekst[koniecAdresu] === '\\') {
+        koniecAdresu += 2;
+        continue;
+      }
+      if (tekst[koniecAdresu] === '(') glebokosc++;
+      if (tekst[koniecAdresu] === ')') glebokosc--;
+      koniecAdresu++;
+    }
+
+    if (glebokosc !== 0) {
+      wynik += tekst.slice(indeks);
+      break;
+    }
+
+    if (obraz) {
+      wynik += ' ';
+    } else {
+      wynik += tekst.slice(poczatekNawiasu + 1, koniecEtykietyBezNawiasu);
+    }
+    indeks = koniecAdresu;
+  }
+
+  return wynik;
+}
+
 function normalizeEvidenceText(value) {
-  return String(value || '')
+  return usunLinkiMarkdown(String(value || '').slice(0, 12000))
     .toLocaleLowerCase('pl-PL')
     .replace(/ł/g, 'l')
     .normalize('NFD')
@@ -150,6 +218,19 @@ function findQuotePrefix(sourceContent, quote) {
   return offset >= 0 ? source.slice(0, offset) : null;
 }
 
+function findQuoteSentencePrefix(sourceContent, quote) {
+  const wantedQuote = normalizeQuoteVerificationText(quote);
+  if (!wantedQuote) return null;
+  for (const sentence of splitEvidenceSentences(sourceContent)) {
+    const normalized = normalizeQuoteVerificationText(sentence);
+    const offset = normalized.indexOf(wantedQuote);
+    if (offset >= 0) return normalized.slice(0, offset);
+  }
+  // Cytat może obejmować kilka zdań. W takim przypadku nie zgadujemy
+  // referenta zaimka na podstawie całego wcześniejszego kontekstu strony.
+  return null;
+}
+
 function quoteExists(sourceContent, quote) {
   const sourceSegments = String(sourceContent || '')
     // Split before punctuation normalization: otherwise source-side ellipses
@@ -267,6 +348,7 @@ function rankEvidenceForClaim(claim, blocks, allowedSourceIds = null, limit = 3)
       if (!hasEllipsis && sentences[i + 1]) windows.push(sentences[i] + ' ' + sentences[i + 1]);
       for (const quote of windows) {
         if (!quote || quote.length > 350 || /\[\s*(?:\.{3}|…)\s*\]|\.{3}|…/u.test(quote)) continue;
+        if (/(?:\[\s*(?:…|\.\.\.)\s*\]|…|\.\.\.)/u.test(quote)) continue;
         const lexical = tokenOverlap(claim, quote);
         const semanticMatches = sharedEvidenceConceptCount(claim, quote);
         if (lexical <= 0 && semanticMatches === 0) continue;
@@ -470,4 +552,4 @@ function buildQuestionEvidenceContext(question, blocks, allowedSourceIds = null,
   }).join('\n\n');
 }
 
-module.exports = { escapeUntrustedEvidenceContent, normalizeEvidenceText, normalizeQuoteVerificationText, findQuotePrefix, parseEvidenceBlocks, quoteExists, splitEvidenceSentences, classifyClaimType, evidenceRelationSignals, rankEvidenceForClaim, ensureEvidenceSourceId, buildEvidenceCandidatesFromSources, buildEvidenceRepairContext, buildQuestionEvidenceContext, removeLeadingImageFilenameNoise, removeLeadingSourceMetadataNoise };
+module.exports = { escapeUntrustedEvidenceContent, normalizeEvidenceText, normalizeQuoteVerificationText, findQuotePrefix, findQuoteSentencePrefix, parseEvidenceBlocks, quoteExists, splitEvidenceSentences, classifyClaimType, evidenceRelationSignals, rankEvidenceForClaim, ensureEvidenceSourceId, buildEvidenceCandidatesFromSources, buildEvidenceRepairContext, buildQuestionEvidenceContext, removeLeadingImageFilenameNoise, removeLeadingSourceMetadataNoise };

@@ -16,11 +16,12 @@ permissions:
 concurrency:
   group: ai-live-benchmark-current
   # A newer commit must benchmark the current code, not wait behind a stale run.
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   live-benchmark:
     if: github.event_name == 'workflow_dispatch'
+    name: Live benchmark (Cohere Command A Reasoning generator + validator)
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -29,8 +30,14 @@ jobs:
       AI_ALLOW_PARTIAL_ANSWERS: "1"
       AI_BENCHMARK_LIMIT: "10"
       AI_BENCHMARK_DELAY_MS: "5000"
-      AI_XKIRO_VALIDATOR_TIMEOUT_MS: "6000"
+      AI_REQUEST_TIMEOUT_MS: "85000"
+      AI_XKIRO_GENERATOR_TIMEOUT_MS: "30000"
+      AI_XKIRO_GENERATOR_MAX_TOKENS: "700"
+      AI_XKIRO_VALIDATOR_TIMEOUT_MS: "22000"
       AI_OPENROUTER_VALIDATOR_TIMEOUT_MS: "6000"
+      AI_GENERATOR_PROVIDER: "xkiro"
+      AI_BENCHMARK_STRICT_GENERATOR: "1"
+      AI_VALIDATOR_GEMINI: "0"
       AI_BENCHMARK_SEED: ${{ inputs.seed || '0' }}
       AI_BENCHMARK_REQUIRE_PERFECT: "1"
       AI_BENCHMARK_JSON_PATH: ai-live-benchmark.json
@@ -43,7 +50,8 @@ jobs:
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       EXA_API_KEY: ${{ secrets.EXA_API_KEY }}
       XKIRO_API_KEY: ${{ secrets.XKIRO_API_KEY }}
-      XKIRO_MODEL: "qwen/qwen3.5-397b-a17b:free"
+      XKIRO_MODEL: cohere/command-a-reasoning
+      XKIRO_VALIDATOR_MODEL: cohere/command-a-reasoning
       OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
 
     steps:
@@ -59,6 +67,20 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+      - name: Run offline benchmark (no API calls)
+        run: npm run benchmark:offline
+      - name: Syntax check live benchmark modules
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS= read -r -d '' file; do
+            node --check "$file"
+          done < <(find ai -maxdepth 1 -type f -name '*.js' -print0)
+          node --check scripts/validator-providers-preflight.js
+          node --check scripts/groq-preflight.js
+          node --check scripts/ai-live-benchmark.js
+          node --check czituch_bot.js
+
       - name: Preflight Tavily
         run: node scripts/tavily-preflight.js
       - name: Preflight Groq
@@ -67,7 +89,7 @@ jobs:
         id: validator-preflight
         env:
           PREFLIGHT_STRICT: "1"
-          PREFLIGHT_TIMEOUT_MS: "20000"
+          PREFLIGHT_TIMEOUT_MS: "25000"
         run: node scripts/validator-providers-preflight.js
 
       - name: Run 10-case live benchmark
@@ -112,11 +134,13 @@ jobs:
             const r = JSON.parse(fs.readFileSync("ai-live-benchmark.json", "utf8"));
             const d = r.diagnostics || {};
             const lines = [
-              "## AI live benchmark",
+              "## AI live benchmark — generator: " + process.env.AI_GENERATOR_PROVIDER + "/" + process.env.XKIRO_MODEL,
               r.valid === false ? "**WYNIK NIEWAŻNY / NIEPORÓWNYWALNY: " + [...(d.outageProviders || []).map(x => "outage=" + x), ...(d.qualityDegradationReasons || [])].join(", ").replace(/^$/, "niewystarczająca dostępność providerów") + ".**" : "",
               "- przypadków: " + r.total + " (ziarno " + (r.seed || 0) + ")",
               "- odpowiedzi: " + r.answeredAccuracy + ", kompletność: " + r.completenessAccuracy + ", factual: " + r.factualAccuracy,
               "- claim-source support: ścisłe=" + r.claimSupportPassRate + ", użyteczne=" + r.claimSupportUsableRate,
+              "- retrieval trace: przypadki=" + ((r.retrievalTraceSummary || {}).casesWithTrace || 0) + ", średnie wyszukiwania=" + ((r.retrievalTraceSummary || {}).averageSearchCount ?? "n/a") + ", warianty rankingu=" + ((r.retrievalTraceSummary || {}).averageRankingQueryCount ?? "n/a") + ", średnie źródła=" + ((r.retrievalTraceSummary || {}).averageCandidateCount ?? "n/a") + ", średnie hosty=" + ((r.retrievalTraceSummary || {}).averageSelectedHostCount ?? "n/a") + ", providerzy=" + JSON.stringify((r.retrievalTraceSummary || {}).providerCounts || {}) + ", semantic rerank=" + ((r.retrievalTraceSummary || {}).semanticRerankingCases || 0),
+              "- Exa semantic retrieval: przypadki=" + ((r.retrievalTraceSummary || {}).semanticSearchCases || 0),
               "- claim-source werdykty: " + Object.entries((r.claimSupport || {}).claimSourceVerdictCounts || {}).map(([k, v]) => k + "=" + v).join(", "),
               "- błędy generatora: " + ((d.generationProviderFailures || []).join(", ") || "brak"),
               "- dostawcy zdegradowani: " + ((d.degradedProviders || []).join(", ") || "brak"),
@@ -128,6 +152,7 @@ jobs:
               "- odrzucone odpowiedzi zaakceptowane przez judge: " + (r.discardedJudgeAcceptedCount || 0) + " (" + ((r.discardedJudgeAcceptedCaseIds || []).join(", ") || "brak") + "), z poprawnymi gold facts: " + (r.discardedJudgeAcceptedFactualPassedCount || 0),
               "- blokady bezpieczeństwa Gemini: " + (d.validatorSafetyBlocks || 0),
               "- wywołania walidatora: " + d.validatorCalls + ", pominięte: " + (d.validatorSkipped || 0) + ", niedostępne: " + d.validatorUnavailable,
+              "- Cohere primary: wywołania=" + (d.xkiroValidatorCalls || 0) + ", werdykty=" + (d.xkiroValidatorVerdictCalls || 0),
               "- klasy wyników: " + Object.entries(d.outcomeCounts || {}).map(([k, v]) => k + "=" + v).join(", "),
               "",
               "| przypadek | odpowiedź | judge | status końcowy |",
@@ -140,9 +165,9 @@ jobs:
       - name: Upload benchmark report
         if: always()
         continue-on-error: true
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: ai-live-benchmark-${{ github.sha }}
+          name: ai-live-benchmark-cohere-${{ github.sha }}
           path: |
             ai-live-benchmark-report.txt
             ai-live-benchmark.json

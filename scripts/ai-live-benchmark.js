@@ -14,7 +14,77 @@ if (require.main === module && process.env.AI_LIVE_BENCHMARK !== '1') {
   process.exit(2);
 }
 
+const REQUIRED_BENCHMARK_CATEGORIES = new Set(['why', 'how', 'when', 'where', 'who', 'quantity', 'comparison', 'outcome', 'relationship']);
+
+function normalizeBenchmarkQuestion(value) {
+  return normalizeFactText(value).replace(/\s+/g, ' ').trim();
+}
+
+function validateBenchmarkDataset(data) {
+  const errors = [];
+  const all = Array.isArray(data?.cases) ? data.cases : [];
+  if (all.length < 30) errors.push('benchmark musi zawierać co najmniej 30 przypadków');
+  const ids = new Set();
+  const questions = new Set();
+  const categories = new Map();
+  for (const item of all) {
+    const id = String(item?.id || '').trim();
+    const question = normalizeBenchmarkQuestion(item?.question);
+    const category = String(item?.category || '').trim();
+    if (!id) errors.push('przypadek bez ID');
+    else if (ids.has(id)) errors.push('powtórzone ID: ' + id);
+    else ids.add(id);
+    if (question.length < 8) errors.push('brak lub zbyt krótkie pytanie: ' + (id || 'unknown'));
+    else if (questions.has(question)) errors.push('powtórzone pytanie: ' + (id || 'unknown'));
+    else questions.add(question);
+    if (!category) errors.push('brak kategorii: ' + (id || 'unknown'));
+    else categories.set(category, (categories.get(category) || 0) + 1);
+  }
+  for (const [category, count] of categories) {
+    if (!REQUIRED_BENCHMARK_CATEGORIES.has(category)) errors.push('nieznana kategoria: ' + category);
+    if (count < 4) errors.push('zbyt mało przypadków w kategorii ' + category + ': ' + count);
+  }
+  for (const category of REQUIRED_BENCHMARK_CATEGORIES) {
+    if (!categories.has(category)) errors.push('brak wymaganej kategorii: ' + category);
+  }
+
+  const gold = all.filter(item => item.expected?.factual?.independentGold === true);
+  const goldByCategory = Object.fromEntries([...new Set(gold.map(item => item.category))].sort().map(category => [
+    category, gold.filter(item => item.category === category).length,
+  ]));
+  const goldCategories = new Set(gold.map(item => item.category));
+  if (gold.length < Math.max(10, Math.ceil(all.length * 0.15))) errors.push('benchmark musi zawierać co najmniej 10 gold cases dla pełnej próbki live');
+  if (goldCategories.size !== REQUIRED_BENCHMARK_CATEGORIES.size) {
+    errors.push('gold cases muszą pokrywać wszystkie wymagane kategorie');
+  }
+
+  const poprawneGrupy = groups => Array.isArray(groups) && groups.length > 0
+    && groups.every(group => Array.isArray(group) && group.length > 0
+      && group.every(value => typeof value === 'string' && value.trim().length > 0));
+  for (const item of gold) {
+    const facts = item.expected.factual;
+    if (!poprawneGrupy(facts.mustInclude) && !poprawneGrupy(facts.mustIncludeAny)) errors.push('gold bez wymaganych faktów: ' + item.id);
+    if (facts.mustInclude !== undefined && !Array.isArray(facts.mustInclude)) errors.push('nieprawidłowe mustInclude: ' + item.id);
+    if (facts.mustIncludeAny !== undefined && !Array.isArray(facts.mustIncludeAny)) errors.push('nieprawidłowe mustIncludeAny: ' + item.id);
+    if (!Array.isArray(facts.mustNot) || facts.mustNot.some(value => typeof value !== 'string' || !value.trim())) errors.push('nieprawidłowe mustNot: ' + item.id);
+    const sources = facts.independentGoldSources;
+    const validSources = Array.isArray(sources) && sources.length > 0 && sources.every(value => {
+      try {
+        const url = new URL(value);
+        return url.protocol === 'https:' && Boolean(url.hostname) && !url.username && !url.password;
+      } catch (_) { return false; }
+    });
+    if (!validSources) errors.push('gold bez poprawnych źródeł HTTPS: ' + item.id);
+  }
+  return {
+    valid: errors.length === 0, errors, total: all.length,
+    uniqueQuestions: questions.size, categories: Object.fromEntries(categories),
+    independentGoldCases: gold.length, goldCategories: [...goldCategories].sort(), goldByCategory,
+  };
+}
 const benchmark = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'test', 'ai-benchmark.json'), 'utf8'));
+const benchmarkValidation = validateBenchmarkDataset(benchmark);
+if (!benchmarkValidation.valid) throw new Error('Niepoprawny benchmark AI: ' + benchmarkValidation.errors.join('; '));
 const defaultLimit = Math.min(10, benchmark.cases.length);
 const requestedLimit = Number(process.env.AI_BENCHMARK_LIMIT);
 const limit = Math.max(1, Math.min(benchmark.cases.length, Number.isFinite(requestedLimit) && requestedLimit > 0 ? requestedLimit : defaultLimit));
@@ -25,7 +95,9 @@ function resolveDelayMs(value, defaultMs = 8000) {
 }
 const delayMs = resolveDelayMs(process.env.AI_BENCHMARK_DELAY_MS);
 function stratifiedCases(all, requested, seed = 0) {
-  if (requested >= all.length) return [...all];
+  const limit = Math.max(0, Math.floor(Number(requested)) || 0);
+  if (limit >= all.length) return [...all];
+  if (limit === 0) return [];
   const offset = Math.max(0, Math.floor(Number(seed)) || 0);
   const groups = new Map();
   for (const item of all) {
@@ -33,49 +105,78 @@ function stratifiedCases(all, requested, seed = 0) {
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(item);
   }
-  // Rotate each category deterministically so non-gold questions still vary by seed.
   if (offset) for (const bucket of groups.values()) {
     if (bucket.length > 1) bucket.push(...bucket.splice(0, offset % bucket.length));
   }
 
   const selected = [];
   const selectedIds = new Set();
-  const goldCases = all.filter(item => item.expected?.factual?.independentGold === true);
-  // A single gold example in a small live run is too weak to tell whether factual
-  // accuracy improved. Reserve roughly one third of the sample for independent
-  // gold facts, taking different categories before taking a second item from
-  // the same category. Remaining slots stay category-stratified.
-  const targetGoldCount = Math.min(goldCases.length, Math.max(1, Math.ceil(requested / 3)));
+  const selectedCategories = new Set();
   const goldByCategory = new Map();
-  for (const item of goldCases) {
+  for (const item of all.filter(row => row.expected?.factual?.independentGold === true)) {
     const key = item.category || 'uncategorized';
     if (!goldByCategory.has(key)) goldByCategory.set(key, []);
     goldByCategory.get(key).push(item);
   }
+  // Każde z 10 pytań live ma własne gold facts. Najpierw bierzemy po jednym
+  // przypadku z każdej kategorii, a następny slot rotujemy między kategoriami
+  // mającymi więcej niż jeden niezależny przypadek.
+  const totalGold = [...goldByCategory.values()].reduce((sum, bucket) => sum + bucket.length, 0);
+  const targetGoldCount = Math.min(totalGold, limit);
   const goldCategories = [...goldByCategory.keys()];
   if (offset && goldCategories.length > 1) {
     const shift = offset % goldCategories.length;
     goldCategories.push(...goldCategories.splice(0, shift));
   }
-  for (const category of goldCategories) {
-    if (selected.length >= targetGoldCount) break;
-    const candidates = goldByCategory.get(category) || [];
-    if (!candidates.length) continue;
-    const item = candidates[offset % candidates.length];
-    if (!selectedIds.has(item.id)) {
-      selected.push(item);
-      selectedIds.add(item.id);
+  let goldRound = 0;
+  while (selected.length < targetGoldCount) {
+    let added = false;
+    for (const category of goldCategories) {
+      if (selected.length >= targetGoldCount) break;
+      const candidates = goldByCategory.get(category) || [];
+      if (!candidates.length) continue;
+      const startIndex = (offset + goldRound) % candidates.length;
+      let candidate = null;
+      for (let step = 0; step < candidates.length; step++) {
+        const item = candidates[(startIndex + step) % candidates.length];
+        if (!selectedIds.has(item.id)) { candidate = item; break; }
+      }
+      if (!candidate) continue;
+      selected.push(candidate);
+      selectedIds.add(candidate.id);
+      selectedCategories.add(category);
+      added = true;
     }
+    if (!added) break;
+    goldRound++;
+  }
+
+  // Najpierw zapewnij obecność każdej kategorii, dopiero potem dobieraj drugi przypadek.
+  for (const [category, bucket] of groups) {
+    if (selected.length >= limit) break;
+    if (selectedCategories.has(category)) continue;
+    const candidate = bucket.find(item => !selectedIds.has(item.id) && item.expected?.factual?.independentGold !== true)
+      || bucket.find(item => !selectedIds.has(item.id));
+    if (!candidate) continue;
+    selected.push(candidate);
+    selectedIds.add(candidate.id);
+    selectedCategories.add(category);
   }
 
   const keys = [...groups.keys()];
   let cursor = 0;
-  while (selected.length < requested && keys.length) {
+  while (selected.length < limit && keys.length) {
     const key = keys[cursor % keys.length];
     const bucket = groups.get(key);
     while (bucket.length && selectedIds.has(bucket[0].id)) bucket.shift();
     if (bucket.length) {
-      const item = bucket.shift();
+      // Po zebraniu docelowej liczby gold nie dokładamy kolejnych do próbki.
+      const index = bucket.findIndex(item => !selectedIds.has(item.id) && item.expected?.factual?.independentGold !== true);
+      if (index < 0) {
+        keys.splice(cursor % keys.length, 1);
+        continue;
+      }
+      const [item] = bucket.splice(index, 1);
       selected.push(item);
       selectedIds.add(item.id);
       cursor++;
@@ -161,6 +262,28 @@ function isFalseReject(discardedEvaluation, discardedFactual, evaluation, item) 
     && !evaluation.answered
     && discardedFactsPass
   );
+}
+
+function summarizeFalseRejectMetrics(results = []) {
+  const rows = Array.isArray(results) ? results : [];
+  const semantic = rows.filter(result => Boolean(result?.discardedAnswer)
+    && result?.discardedJudgeStatus === 'accepted' && !result?.answered);
+  const strict = rows.filter(result => result?.falseReject === true);
+  return {
+    semanticFalseRejects: semantic.length,
+    semanticFalseRejectCaseIds: semantic.map(result => result.id),
+    strictFactFalseRejects: strict.length,
+    strictFactFalseRejectCaseIds: strict.map(result => result.id),
+  };
+}
+
+function extractRetrievalTrace(summary) {
+  if (summary?.retrievalTrace && Array.isArray(summary.retrievalTrace.selectedSourceKeys)) return summary.retrievalTrace;
+  const rows = Array.isArray(summary?.validatorResults) ? summary.validatorResults : [];
+  const traces = rows.map(row => row?.validationDiagnostics?.retrievalTrace || row?.diagnostics?.retrievalTrace).filter(trace =>
+    trace && typeof trace === 'object' && Array.isArray(trace.selectedSourceKeys)
+  );
+  return traces.length ? traces[traces.length - 1] : null;
 }
 
 function extractClaimSupportAudit(summary) {
@@ -336,6 +459,10 @@ function buildBenchmarkDiagnostics(results, allCases = benchmark.cases, selected
     if (/timeout|timed out|deadline/i.test(detail) || attempt.timeoutAbort === true) return 'timeout';
     if (/abort|cancelled|canceled/i.test(detail)) return 'abort';
     if (/5\d\d/.test(detail)) return 'http_5xx';
+    if (/empty_response|no answer text|reasoning_only/i.test(detail)) return 'empty_response';
+    if (/truncated_response|finish_reason.{0,24}(?:length|max_tokens)/i.test(detail)) return 'truncated_response';
+    if (/invalid_json|invalid json|malformed json|json parse/i.test(detail)) return 'invalid_json';
+    if (/invalid_response|invalid schema|schema_reject/i.test(detail)) return 'invalid_response';
     return 'unknown';
   };
   const generationProviderFailures = [...new Set(results.flatMap(result =>
@@ -360,9 +487,8 @@ function buildBenchmarkDiagnostics(results, allCases = benchmark.cases, selected
   );
   const goldCases = allCases.filter(item => item.expected?.factual?.independentGold === true);
   const selectedGoldCases = selectedCases.filter(item => item.expected?.factual?.independentGold === true);
-  // Only primary roles make the run invalid: Groq is the generation primary,
-  // Gemini is the primary validator. Failures of secondary/fallback providers
-  // are reported as degraded capability, not mistaken for a broken benchmark.
+  // Only primary roles make the run invalid: Groq generates and Cohere through
+  // xKiro validates. Gemini, Groq-validator and OpenRouter are fallbacks.
   const generationAttempts = results.flatMap(result =>
     (result.generationAttempts || [])
       .filter(attempt => attempt.skipped !== true && attempt.provider)
@@ -386,13 +512,17 @@ function buildBenchmarkDiagnostics(results, allCases = benchmark.cases, selected
   const failedValidatorProviders = failedProvidersInRole(validatorAttempts);
   const failedOutageProviders = [...new Set([
     ...failedGenerationProviders.filter(provider => provider === 'groq'),
-    ...failedValidatorProviders.filter(provider => provider === 'gemini'),
+    ...failedValidatorProviders.filter(provider => provider === 'xkiro'),
   ])].sort();
   const degradedProviders = [...new Set([
     ...failedGenerationProviders.filter(provider => provider !== 'groq').map(provider => `${provider}:generation`),
-    ...failedValidatorProviders.filter(provider => provider !== 'gemini').map(provider => `${provider}:validator`),
+    ...failedValidatorProviders.filter(provider => provider !== 'xkiro').map(provider => `${provider}:validator`),
   ])].sort();
   const validatorCalls = validatorRows.filter(row => row.skipped !== true).length;
+  const xkiroValidatorRows = validatorRows.filter(row => String(row.provider || '').toLowerCase() === 'xkiro');
+  const xkiroValidatorCalls = xkiroValidatorRows.filter(row => row.skipped !== true).length;
+  const xkiroValidatorVerdictCalls = xkiroValidatorRows.filter(row => row.skipped !== true && row.safetyBlocked !== true
+    && row.status !== 'unavailable' && row.status !== 'error').length;
   const validatorSafetyBlocks = validatorRows.filter(row => row.safetyBlocked === true && row.skipped !== true).length;
   const validatorVerdictCalls = validatorRows.filter(row => row.skipped !== true && row.safetyBlocked !== true
     && row.status !== 'unavailable' && row.status !== 'error').length;
@@ -404,6 +534,9 @@ function buildBenchmarkDiagnostics(results, allCases = benchmark.cases, selected
   if (validatorCalls === 0) qualityDegradationReasons.push('no_validator_calls');
   else if (validatorSafetyBlocks > 0 && validatorVerdictCalls === 0) qualityDegradationReasons.push('all_validator_calls_safety_blocked');
   else if (validatorCalls < results.length) qualityDegradationReasons.push('validator_calls_below_case_count');
+  if (xkiroValidatorCalls === 0) qualityDegradationReasons.push('no_primary_validator_calls');
+  else if (xkiroValidatorCalls < results.length) qualityDegradationReasons.push('primary_validator_calls_below_case_count');
+  if (xkiroValidatorVerdictCalls < results.length) qualityDegradationReasons.push('primary_validator_verdicts_below_case_count');
   if (validatorUnavailableRate > 0.25) qualityDegradationReasons.push('validator_unavailable_rate_above_25_percent');
   if (degradedProviders.length > 0) qualityDegradationReasons.push('fallback_provider_degradation');
   if (generationProviderFailures.length > 0) qualityDegradationReasons.push('generation_provider_errors');
@@ -433,6 +566,8 @@ function buildBenchmarkDiagnostics(results, allCases = benchmark.cases, selected
     requestsUnavailable: results.filter(result => result.finalStatus === 'unavailable').length,
     validatorCalls,
     validatorVerdictCalls,
+    xkiroValidatorCalls,
+    xkiroValidatorVerdictCalls,
     validatorUnavailableRate: Number(validatorUnavailableRate.toFixed(3)),
     qualityComparable,
     qualityDegradationReasons,
@@ -546,6 +681,9 @@ async function run() {
         missing: evaluation.missing,
         factualScore: factual.score,
         factualPassed: factual.passed,
+        factualRequiredFacts: factual.requiredFacts,
+        factualPassedFacts: factual.passedFacts,
+        factualFactAccuracy: factual.factAccuracy,
         factualMissing: factual.missing,
         factualForbidden: factual.forbidden,
         finalStatus: summary?.finalStatus || null,
@@ -559,6 +697,8 @@ async function run() {
         fallbackReasons: summary?.fallbackReasons || [],
         tavilySearches: summary?.tavilySearches ?? null,
         sourceCount: summary?.sourceCount ?? null,
+        semanticSearches: Number(summary?.semanticSearches) || 0,
+        retrievalTrace: extractRetrievalTrace(summary),
       });
     } catch (error) {
       results.push({
@@ -573,6 +713,9 @@ async function run() {
         missing: [],
         factualScore: item.expected?.factual?.independentGold ? 0 : null,
         factualPassed: item.expected?.factual?.independentGold ? false : null,
+        factualRequiredFacts: item.expected?.factual?.independentGold ? ((item.expected.factual.mustInclude || []).length + (item.expected.factual.mustIncludeAny || []).length + (item.expected.factual.mustNot || []).length) : 0,
+        factualPassedFacts: 0,
+        factualFactAccuracy: item.expected?.factual?.independentGold ? 0 : null,
         factualMissing: [],
         factualForbidden: [],
         finalStatus: summary?.finalStatus || 'error',
@@ -586,6 +729,8 @@ async function run() {
         fallbackReasons: summary?.fallbackReasons || [],
         tavilySearches: summary?.tavilySearches ?? null,
         sourceCount: summary?.sourceCount ?? null,
+        semanticSearches: Number(summary?.semanticSearches) || 0,
+        retrievalTrace: extractRetrievalTrace(summary),
         error: String(error?.message || error),
       });
     }
@@ -607,6 +752,23 @@ async function run() {
   const factualCases = results.filter(x => x.factualPassed !== null);
   const factualPassed = factualCases.filter(x => x.factualPassed).length;
   const factualAverage = factualCases.length ? factualCases.reduce((sum, x) => sum + x.factualScore, 0) / factualCases.length : null;
+  const factualRequiredFacts = factualCases.reduce((sum, x) => sum + (Number(x.factualRequiredFacts) || 0), 0);
+  const factualPassedFacts = factualCases.reduce((sum, x) => sum + (Number(x.factualPassedFacts) || 0), 0);
+  const factualFactAccuracy = factualRequiredFacts ? factualPassedFacts / factualRequiredFacts : null;
+  const factualByCategory = Object.fromEntries([...new Set(factualCases.map(x => x.category))].sort().map(category => {
+    const rows = factualCases.filter(x => x.category === category);
+    const requiredFacts = rows.reduce((sum, x) => sum + (Number(x.factualRequiredFacts) || 0), 0);
+    const passedFacts = rows.reduce((sum, x) => sum + (Number(x.factualPassedFacts) || 0), 0);
+    const passedCases = rows.filter(x => x.factualPassed === true).length;
+    return [category, {
+      goldCases: rows.length, passedCases,
+      caseAccuracy: rows.length ? Number((passedCases / rows.length).toFixed(4)) : null,
+      requiredFacts, passedFacts,
+      factAccuracy: requiredFacts ? Number((passedFacts / requiredFacts).toFixed(4)) : null,
+    }];
+  }));
+  const selectedGoldCategories = [...new Set(factualCases.map(x => x.category))].sort();
+  const sampledCategories = [...new Set(results.map(x => x.category))].sort();
   const diagnostic = buildBenchmarkDiagnostics(results, benchmark.cases, cases);
   const providerOutage = Boolean(diagnostic.providerOutage);
   const claimSupport = summarizeClaimSupportAudits(results.map(result => result.claimSupport).filter(Boolean));
@@ -614,6 +776,7 @@ async function run() {
   // plan i sędziego, więc tylko on może orzec, że odrzucona odpowiedź była
   // poprawna. Pipeline tego nie wie i nie może wiedzieć.
   const falseRejects = results.filter(result => result.falseReject);
+  const falseRejectMetrics = summarizeFalseRejectMetrics(results);
   const discardedAnswers = results.filter(result => result.discardedAnswer);
   // Keep semantic candidate acceptance visible even when independent gold facts
   // are incomplete. This is not counted as a false reject unless the strict
@@ -625,8 +788,27 @@ async function run() {
     seed: benchmarkSeed,
     valid: isBenchmarkRunValid(diagnostic),
     total: results.length,
+    datasetQuality: {
+      uniqueQuestions: benchmarkValidation.uniqueQuestions,
+      independentGoldCases: benchmarkValidation.independentGoldCases,
+      goldCategories: benchmarkValidation.goldCategories,
+      goldByCategory: benchmarkValidation.goldByCategory,
+      categoryCounts: benchmarkValidation.categories,
+    },
+    sampleQuality: {
+      sampledCategories, sampledCategoryCount: sampledCategories.length,
+      requiredCategoryCount: REQUIRED_BENCHMARK_CATEGORIES.size,
+      selectedGoldCategories, selectedGoldCategoryCount: selectedGoldCategories.length,
+      selectedGoldCases: factualCases.length,
+    },
     answeredAccuracy: Number((answered / results.length).toFixed(4)),
     completenessAccuracy: Number((complete / results.length).toFixed(4)),
+    // Semantic lane: judge accepted the discarded answer, even when the case
+    // has no independent gold facts. Strict lane remains a subset requiring
+    // manually curated factual gold; keep `falseRejects` for compatibility.
+    semanticFalseRejects: falseRejectMetrics.semanticFalseRejects,
+    semanticFalseRejectCaseIds: falseRejectMetrics.semanticFalseRejectCaseIds,
+    strictFactFalseRejects: falseRejectMetrics.strictFactFalseRejects,
     falseRejects: falseRejects.length,
     falseRejectCaseIds: falseRejects.map(result => result.id),
     discardedAnswers: discardedAnswers.length,
@@ -636,14 +818,40 @@ async function run() {
     discardedJudgeAcceptedFactualPassedCount: discardedJudgeAccepted.filter(result => result.discardedFactualPassed === true).length,
     factualGoldCases: factualCases.length,
     factualAccuracy: factualCases.length ? Number((factualPassed / factualCases.length).toFixed(4)) : null,
+    factualFactAccuracy: factualFactAccuracy === null ? null : Number(factualFactAccuracy.toFixed(4)),
+    factualRequiredFacts,
+    factualPassedFacts,
+    factualByCategory,
     factualAverageScore: factualAverage === null ? null : Number(factualAverage.toFixed(4)),
     claimSupportPassRate: claimSupport.claimSupportPassRate,
     claimSupportUsableRate: claimSupport.claimSupportUsableRate,
     claimSupport,
+    retrievalTraceSummary: (() => {
+      const traces = results.map(result => result.retrievalTrace).filter(Boolean);
+      const average = key => traces.length
+        ? Number((traces.reduce((sum, trace) => sum + (Number(trace[key]) || 0), 0) / traces.length).toFixed(3))
+        : null;
+      const providerCounts = {};
+      for (const trace of traces) {
+        for (const [provider, count] of Object.entries(trace.providerCounts || {})) {
+          providerCounts[provider] = (providerCounts[provider] || 0) + Math.max(0, Number(count) || 0);
+        }
+      }
+      return {
+        casesWithTrace: traces.length,
+        averageSearchCount: average('searchCount'),
+        averageRankingQueryCount: average('rankingQueryCount') ?? average('queryCount'),
+        averageCandidateCount: average('candidateCount'),
+        averageSelectedHostCount: average('selectedHostCount'),
+        providerCounts,
+        semanticRerankingCases: traces.filter(trace => trace.semanticRerankingApplied).length,
+        semanticSearchCases: results.filter(result => result.semanticSearches > 0).length,
+      };
+    })(),
     validatorMetrics: agregujMetrykiWalidatorow(validatorMetricsRaw),
     validatorMetricsRaw,
     durationMs: Date.now() - started,
-    note: 'Ten testuje produkcyjny pipeline, kompletność odpowiedzi i osobny audyt wsparcia claim-cytat. Nie jest niezależnym pomiarem factual accuracy; do tego potrzebny jest ręcznie zweryfikowany gold answer/fact set.',
+    note: 'FactualAccuracy to odsetek zaliczonych przypadków gold; factualFactAccuracy to odsetek zaliczonych wymagań faktograficznych. Gold facts są ręcznie kuratorowane i nie dowodzą automatycznie, że źródło cytowane przez bota rzeczywiście wspiera każdy claim. Wynik nie jest absolutnym pomiarem prawdziwości.',
     categories: [...new Set(results.map(x => x.category))].sort(),
     diagnostics: diagnostic,
     failures: results.filter(x => !x.answered || x.judgeStatus !== 'accepted' || x.factualPassed === false).slice(0, 100),
@@ -670,7 +878,7 @@ async function run() {
       const gateReasons = [];
       if (answered !== results.length) gateReasons.push(`nieudzielone odpowiedzi ${answered}/${results.length}`);
       if (complete !== results.length) gateReasons.push(`niekompletne odpowiedzi ${complete}/${results.length}`);
-      if (!factualOk) gateReasons.push(`gold facts niezaliczone lub brak gold case (${factualPassed}/${factualCases.length})`);
+      if (!factualOk) gateReasons.push(`gold facts niezaliczone lub brak gold case (${factualPassed}/${factualCases.length}; fakty ${factualPassedFacts}/${factualRequiredFacts})`);
       console.error(`[LIVE BENCHMARK] PRZYCZYNY NIEPOWODZENIA: ${gateReasons.join('; ')}`);
       console.error('[LIVE BENCHMARK] Szczegóły per przypadek:');
       for (const line of formatBenchmarkFailureDiagnostics(results)) console.error(line);
@@ -679,8 +887,8 @@ async function run() {
   }
 }
 
-module.exports = { isBenchmarkRunValid, resolveDelayMs,
-  wybierzOdrzuconaOdpowiedz, normalizeFactText, scoreGoldenFacts, stratifiedCases, buildQuestionForBot, isFailureText, evaluateBenchmarkAnswer, isFalseReject, extractClaimSupportAudit, classifyBenchmarkOutcome, buildBenchmarkDiagnostics, formatBenchmarkFailureDiagnostics, writeBenchmarkReport, writeStdoutAndWait, run };
+module.exports = { validateBenchmarkDataset, normalizeBenchmarkQuestion, isBenchmarkRunValid, resolveDelayMs,
+  wybierzOdrzuconaOdpowiedz, summarizeFalseRejectMetrics, normalizeFactText, scoreGoldenFacts, stratifiedCases, buildQuestionForBot, isFailureText, evaluateBenchmarkAnswer, isFalseReject, extractClaimSupportAudit, classifyBenchmarkOutcome, buildBenchmarkDiagnostics, formatBenchmarkFailureDiagnostics, writeBenchmarkReport, writeStdoutAndWait, run };
 
 if (require.main === module) {
   run().catch(error => {

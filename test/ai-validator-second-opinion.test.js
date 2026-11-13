@@ -68,6 +68,15 @@ test('ambiguous proper-name/evidence binding can still receive an independent op
   assert.equal(czyWartoDrugaOpinieWalidatora(result), true);
 });
 
+test('semantic scope overgeneralization can receive an independent second opinion', () => {
+  const result = {
+    status: 'rejected',
+    reason: "Źródło opisuje wieżę obserwacyjną, a odpowiedź uogólnia do wieży. Nie ma wystarczających dowodów.",
+    diagnostics: { localRejectReasons: ['evidence_not_verified'] },
+  };
+  assert.equal(czyWartoDrugaOpinieWalidatora(result), true);
+});
+
 test('accepted results never trigger a second opinion', () => {
   assert.equal(czyWartoDrugaOpinieWalidatora({ status: 'accepted' }), false);
 });

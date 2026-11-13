@@ -20,6 +20,13 @@ function base(claim, sourceId, quote, answer = claim) {
   }, 'test-model', 'test', new Set([sourceId]), answer && `[${sourceId}]\nTREŚĆ: ${quote}`);
 }
 
+test('quote verification ignores Markdown link destinations but preserves visible link text', () => {
+  const source = 'The Intelligence Dampening Sphere, more commonly known as [Wheatley](https://example.test/wiki/Wheatley), is a personality core.';
+  const quote = 'The Intelligence Dampening Sphere, more commonly known as Wheatley, is a personality core.';
+  assert.equal(quoteExists(source, quote), true);
+  assert.equal(quoteExists(source, 'The Intelligence Dampening Sphere, more commonly known as a different character, is a personality core.'), false);
+});
+
 test('validator rejects a hedged source upgraded to an absolute and emits claim support audit', () => {
   const result = base(
     'The method improves outcomes.',
@@ -540,7 +547,7 @@ test('benchmark validator traces expose answer and source-bound claims only in l
       quoteVerified: true,
       supportVerified: true,
       supportReason: 'cytat występuje w źródle i bezpośrednio wspiera claim',
-      ignoredSentenceInitialNames: ['Wheatley'],
+      ignoredSentenceInitialNames: [],
     });
   } finally {
     if (original === undefined) delete process.env.AI_LIVE_BENCHMARK;

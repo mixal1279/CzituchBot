@@ -28,11 +28,44 @@ test('provider quota cooldowns restore from and persist to the runtime state sto
   fallback.configureProviderQuotaPersistence(null);
 });
 
+test('persisted cooldowns reject malformed keys and implausible future expiries', async () => {
+  const now = Date.now();
+  const store = {
+    async read() {
+      return {
+        version: 1,
+        entries: [
+          ['gemini:flash', now + 8 * 24 * 60 * 60 * 1000],
+          ['unknown:flash', now + 60_000],
+          ['groq:*', now + 60_000],
+        ],
+      };
+    },
+    async write() {},
+    logger: { warn() {} },
+  };
+
+  fallback.configureProviderQuotaPersistence(null);
+  fallback.resetProviderQuotaCooldowns();
+  await fallback.configureProviderQuotaPersistence(store);
+  assert.equal(fallback.isProviderQuotaBlocked('gemini:flash'), false);
+  assert.equal(fallback.isProviderQuotaBlocked('unknown:flash'), false);
+  assert.equal(fallback.isProviderQuotaBlocked('groq:openai/gpt-oss-20b'), true);
+  fallback.configureProviderQuotaPersistence(null);
+  fallback.resetProviderQuotaCooldowns();
+});
+
 test('provider-wide quota scope blocks sibling models but endpoint scope stays isolated', () => {
   fallback.configureProviderQuotaPersistence(null);
   fallback.resetProviderQuotaCooldowns();
   assert.equal(fallback.shouldBlockProviderQuotaWide('groq:openai/gpt-oss-120b', 'Rate limit exceeded: 6000 TPM'), true);
+  assert.equal(fallback.shouldBlockProviderQuotaWide('groq:openai/gpt-oss-120b', 'Rate limit reached for model `openai/gpt-oss-120b` in organization `org_test` on tokens per minute (TPM)'), false);
   assert.equal(fallback.shouldBlockProviderQuotaWide('xkiro:qwen/model', { status: 429, code: 'free_tokens_exhausted' }), true);
+  assert.equal(fallback.shouldBlockProviderQuotaWide('xkiro:qwen/model', { status: 429, metadata: { error_type: 'free_tokens_exhausted' } }), true);
+  assert.equal(fallback.shouldBlockProviderQuotaWide('xkiro:qwen/model', { status: 429, metadata: { provider_code: 'daily_quota_exceeded' } }), true);
+  assert.equal(fallback.shouldOpenQuotaCircuit({ status: 429, metadata: { provider_code: 'daily_quota_exceeded' } }), true);
+  assert.equal(fallback.shouldOpenQuotaCircuit({ status: 429, metadata: { provider_code: 'free_tokens_exhausted' } }), true);
+  assert.equal(fallback.shouldOpenQuotaCircuit({ status: 429, metadata: { provider_code: 'rate_limited' } }), false);
   assert.equal(fallback.shouldBlockProviderQuotaWide('gemini:flash', { status: 429, message: 'model rate limit exceeded' }), false);
   assert.equal(fallback.shouldBlockProviderQuotaWide('gemini:flash', { status: 402, message: 'payment required' }), true);
   fallback.markProviderQuota('groq:openai/gpt-oss-120b', 60_000, { scope: 'provider' });

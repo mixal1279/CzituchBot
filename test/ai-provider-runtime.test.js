@@ -69,6 +69,34 @@ test('Groq schema-validation 400 retries once in JSON mode and remains subject t
   assert.equal(result.choices[0].message.content, '{"valid":true,"claims":[]}');
 });
 
+test('Groq schema fallback aborts transport on timeout when only a parent signal is supplied', async () => {
+  let observedSignal;
+  let calls = 0;
+  const groqClient = {
+    chat: { completions: { create(_payload, options) {
+      calls++;
+      observedSignal = options.signal;
+      return new Promise((resolve, reject) => {
+        options.signal.addEventListener('abort', () => {
+          reject(Object.assign(new Error('request aborted'), { name: 'AbortError' }));
+        }, { once: true });
+      });
+    } } },
+  };
+
+  await assert.rejects(
+    createGroqCompletionWithSchemaFallback(groqClient, {
+      model: 'test-model',
+      messages: [{ role: 'user', content: 'validate' }],
+      max_completion_tokens: 100,
+      response_format: { type: 'json_schema', json_schema: { strict: true } },
+    }, { signal: new AbortController().signal, timeoutMs: 20 }),
+    error => error.name === 'TimeoutError',
+  );
+  assert.equal(calls, 1, 'timeout must not start a concurrent JSON fallback request');
+  assert.equal(observedSignal.aborted, true, 'timeout must abort the underlying SDK transport');
+});
+
 test('hard timeout releases the pipeline when a provider ignores AbortSignal', async () => {
   const controller = new AbortController();
   const startedAt = Date.now();
@@ -79,6 +107,19 @@ test('hard timeout releases the pipeline when a provider ignores AbortSignal', a
   );
   assert.equal(controller.signal.aborted, true);
   assert.ok(Date.now() - startedAt < 250, 'pipeline should not wait for the provider’s own timeout');
+});
+
+test('parent abort releases the pipeline when a provider ignores AbortSignal', async () => {
+  const controller = new AbortController();
+  const startedAt = Date.now();
+  const neverSettles = new Promise(() => {});
+  const pending = awaitWithAbortTimeout(neverSettles, 1000, controller, 'test provider');
+  controller.abort(new Error('request cancelled'));
+  await assert.rejects(
+    pending,
+    error => error.name === 'AbortError' && /test provider aborted/.test(error.message),
+  );
+  assert.ok(Date.now() - startedAt < 250, 'parent abort should not wait for the local timeout');
 });
 
 test('unavailable-validator repair requires evidence, one attempt, and enough remaining time', () => {
@@ -201,6 +242,21 @@ test('fallback selection excludes failed and repeated providers', () => {
   assert.ok(!selected.includes('openrouter:default'));
 });
 
+test('provider cooldown clamps oversized Retry-After values and never creates an infinite block', () => {
+  const maxCooldownMs = 7 * 24 * 60 * 60 * 1000;
+  const hugeRetryAfter = '9'.repeat(400);
+  assert.equal(
+    quotaCooldownMsFromError({ status: 429, message: `HTTP 429 Retry-After=${hugeRetryAfter}s` }),
+    maxCooldownMs,
+  );
+
+  resetProviderQuotaCooldowns();
+  markProviderQuota('groq:openai/gpt-oss-20b', Infinity);
+  assert.equal(isProviderQuotaBlocked('groq:openai/gpt-oss-20b'), true);
+  assert.equal(isProviderQuotaBlocked('groq:openai/gpt-oss-20b', Date.now() + maxCooldownMs + 1_000), false);
+  resetProviderQuotaCooldowns();
+});
+
 test('quota circuit blocks only the exhausted endpoint and expires', () => {
   resetProviderQuotaCooldowns();
   const blocked = markProviderQuota('groq:openai/gpt-oss-120b', 10_000);
@@ -266,6 +322,21 @@ test('Retry-After supports seconds and HTTP-date headers', () => {
   assert.equal(retryAfterHint({ headers: new Headers() }, now), '');
 });
 
+test('Retry-After falls back to response headers when error headers are empty', () => {
+  const now = Date.parse('2026-10-19T12:00:00Z');
+  const error = {
+    headers: new Headers(),
+    response: { headers: new Headers({ 'retry-after': '9' }) },
+  };
+  assert.equal(retryAfterHint(error, now), 'Retry-After=9s');
+  assert.equal(quotaCooldownMsFromError({ ...error, status: 429, message: 'rate limited' }), 9000);
+});
+
+test('Retry-After header lookup is case-insensitive for plain header objects', () => {
+  const now = Date.parse('2026-10-19T12:00:00Z');
+  assert.equal(retryAfterHint({ response: { headers: { 'ReTrY-AfTeR': '6' } } }, now), 'Retry-After=6s');
+});
+
 test('quota cooldown respects Retry-After and never goes below the configured backoff', () => {
   const previous = process.env.AI_PROVIDER_QUOTA_COOLDOWN_MS;
   process.env.AI_PROVIDER_QUOTA_COOLDOWN_MS = '5000';
@@ -298,6 +369,21 @@ test('repair after validator rejection selects only configured healthy providers
     availableProviders: [],
     maxFallbacks: 1,
   }), []);
+});
+
+test('strict benchmark repair keeps its primary generator before applying the candidate limit', () => {
+  const selected = selectRepairFallbacks({
+    failedProviders: [],
+    availableProviders: [
+      'groq:openai/gpt-oss-20b',
+      'gemini:gemini-3.5-flash-lite',
+      'xkiro:default',
+      'openrouter:default',
+    ],
+    allowedProviders: ['xkiro:default'],
+    maxFallbacks: 1,
+  });
+  assert.deepEqual(selected, ['xkiro:default']);
 });
 
 test('semantic repair prefers fast configured providers over slow endpoints', () => {
@@ -419,4 +505,29 @@ test('shared Groq TPM/TPD quota blocks sibling model fallbacks, model-specific q
   assert.equal(shouldBlockProviderQuotaWide('groq:openai/gpt-oss-20b', 'tokens per minute quota exceeded'), true);
   assert.equal(shouldBlockProviderQuotaWide('groq:openai/gpt-oss-120b', 'model-specific quota exceeded'), false);
   assert.equal(shouldBlockProviderQuotaWide('openrouter:default', 'TPM quota exceeded'), false);
+});
+
+test('oversized Retry-After header is capped instead of being ignored', () => {
+  const maxCooldownMs = 7 * 24 * 60 * 60 * 1000;
+  const hugeSeconds = '9'.repeat(400);
+  assert.equal(
+    quotaCooldownMsFromError({
+      status: 429,
+      message: 'rate limited',
+      headers: new Headers({ 'retry-after': hugeSeconds }),
+    }),
+    maxCooldownMs,
+  );
+});
+
+test('malformed Retry-After header falls back to a valid response header', () => {
+  const now = Date.parse('2026-10-19T12:00:00Z');
+  const error = {
+    status: 429,
+    message: 'rate limited',
+    headers: new Headers({ 'retry-after': 'not-a-date' }),
+    response: { headers: new Headers({ 'retry-after': '8' }) },
+  };
+  assert.equal(retryAfterHint(error, now), 'Retry-After=8s');
+  assert.equal(quotaCooldownMsFromError(error), 8000);
 });

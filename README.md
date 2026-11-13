@@ -26,7 +26,10 @@ Szczegóły modeli, limitów, cache i przełączników są opisane w [docs/ai-fl
 
 - `npm test` — testy regresyjne, w tym testy offline.
 - `npm run benchmark:offline` — deterministyczny test pipeline'u na syntetycznych danych.
-- Workflow **AI live benchmark** — ręczny test pięciu przypadków na żywych dostawcach; wymaga skonfigurowanych GitHub Actions Secrets i może zużywać limity API.
+- `npm run benchmark:retrieval` — uruchamia RRF i porównuje Precision@K, Recall@K, MRR i nDCG z baseline na etykietowanych rankingach offline.
+- Workflow **AI live benchmark** — ręczny test 10 starannie dobranych przypadków na żywych dostawcach; wymaga skonfigurowanych GitHub Actions Secrets i może zużywać limity API. Lokalny rozmiar próbki kontroluje `AI_BENCHMARK_LIMIT`.
+
+Benchmark retrieval korzysta z ręcznie etykietowanych fixture i nie jest pomiarem produkcyjnego retrieval. RRF łączy rankingi zapytań lokalnie. Opcjonalne semantic score nie wykonuje automatycznego requestu API.
 
 Testy offline nie potwierdzają dostępności dostawców ani bieżącej jakości modeli. Live benchmark używa ręcznie przygotowanych grup fraz gold (`mustInclude`/`mustNot`), więc jest testem regresji, a nie pełnym semantycznym fact-checkiem wszystkich twierdzeń. Po zmianach integracji należy sprawdzić logi preflightu i, gdy klucze są dostępne, uruchomić live benchmark ręcznie.
 

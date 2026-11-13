@@ -4,11 +4,18 @@
 // from answer completeness and factual gold scoring: it measures whether each
 // claim is supported by its own cited span and records why it was not.
 const { CAUSAL_RE, CAUSAL_EVIDENCE_RE } = require('./claimValidation');
+const MAX_CONTEXT_LENGTH = 2000;
 const HARD_OVERCLAIM_TYPES = new Set([
   'correlation_to_causation',
   'hedge_to_absolute',
   'up_to_qualifier_dropped',
   'unsupported_quantifier',
+  'speculation_presented_as_fact',
+  'interpretation_presented_as_fact',
+  'canon_status_not_in_evidence',
+  'canon_status_conflict',
+  'canon_status_not_official_source',
+  'input_too_long',
 ]);
 
 function normalizeText(value) {
@@ -22,10 +29,42 @@ function normalizeText(value) {
     .trim();
 }
 
+
+function czyMarkerNieJestZaprzeczony(tekst, indeks) {
+  const prefix = tekst.slice(Math.max(0, indeks - 48), indeks);
+  return /(?:\bnot\s+(?:a\s+)?|\bisn't\s+(?:a\s+)?|\bis\s+not\s+(?:a\s+)?|\bwasn't\s+(?:a\s+)?|\bwas\s+not\s+(?:a\s+)?|\bnever\s+(?:a\s+)?|\bno\s+longer\s+(?:a\s+)?|\bnot\s+(?:part\s+of|in)\s+|\bnie\s+(?:(?:jest|byl|byla|bylo|sa|stanowi|pozostaje)\s+)?|\bto\s+nie\s+(?:jest\s+)?|\bnie\s+nalezy\s+do\s+)$/u.test(prefix);
+}
+
+function znajdzStatusEpistemiczny(tekst, wzorzec) {
+  let pierwszy = null;
+  let aktywne = false;
+  // Wzorce są prekompilowanymi stałymi z flagą g. matchAll kopiuje regex,
+  // więc nie zmienia jego lastIndex i nie wymaga dynamicznego konstruktora RegExp.
+  for (const match of tekst.matchAll(wzorzec)) {
+    const marker = match[0].toLocaleLowerCase('pl-PL');
+    const negatywnyPrefiks = czyMarkerNieJestZaprzeczony(tekst, match.index);
+    const jawnieNegatywny = /^(?:non[- ]canonical|niekanoniczn)/u.test(marker);
+    const pozytywny = !(negatywnyPrefiks || jawnieNegatywny);
+    if (!pierwszy) pierwszy = { wystepuje: true, pozytywny, marker };
+    if (pozytywny) aktywne = true;
+  }
+  return pierwszy
+    ? { ...pierwszy, aktywne }
+    : { wystepuje: false, aktywne: false, pozytywny: null, marker: null };
+}
+
+const THEORY_STATUS_RE = /(?:fan theor(?:y|ies)|theor(?:y|ies)\s+(?:suggest\w*|propos\w*|claim\w*|argu\w*|hold\w*)|speculat\p{L}*|rumou?r\p{L}*|unconfirmed|hypothes\p{L}*|teori\p{L}*\s+(?:fanowsk\p{L}*|zaklad\p{L}*|mow\p{L}*|sugeruj\p{L}*|glos\p{L}*|twierdz\p{L}*)|spekulacj\p{L}*|plotk\p{L}*|niepotwierdzon\p{L}*|hipotez\p{L}*|wedlug fanow|fani uwazaja|niektorzy gracze uwazaja)/giu;
+const INTERPRETATION_STATUS_RE = /(?:interpretation\p{L}*|interpreted as|can be interpreted|fans interpret|interpretacj\p{L}*|interpretowan\p{L}*|mozna interpretowac|fani interpretuja|may symbolize|might symbolize|could symbolize|moze symbolizowac|moze oznaczac)/giu;
+const CANON_STATUS_RE = /(?:non[- ]canonical|niekanoniczn\p{L}*|canon(?:ical(?:ly)?|ically)?|kanon\p{L}*)/giu;
+
 function detectOverclaimTypes(claim, evidence, options = {}) {
+  if (String(claim || '').length > 1000 || String(evidence || '').length > 2000) return ['input_too_long'];
   const c = normalizeText(claim);
   const e = normalizeText(evidence);
-  const context = normalizeText(options.context || '');
+  // Kontekst jest opcjonalnym rozszerzeniem dowodu, więc nie może omijać limitów wejścia.
+  // Zbyt długi kontekst pomijamy w całości — nie obcinamy go do fragmentu, który mógłby zmienić sens.
+  const contextInput = String(options.context || '');
+  const context = contextInput.length <= MAX_CONTEXT_LENGTH ? normalizeText(contextInput) : '';
   const types = [];
   if (!c || !e) return types;
 
@@ -38,6 +77,36 @@ function detectOverclaimTypes(claim, evidence, options = {}) {
   const causalEvidence = CAUSAL_EVIDENCE_RE.test(e)
     || (options.allowContextForCausality === true && CAUSAL_EVIDENCE_RE.test(context));
   if (causalClaim && !causalEvidence) types.push('correlation_to_causation');
+
+  // Lore: a quote explicitly framed as a fan theory, hypothesis or rumour
+  // cannot support the same proposition stated as an established event.
+  // The answer must preserve the epistemic label instead of dropping it.
+  const theoryEvidence = znajdzStatusEpistemiczny(e, THEORY_STATUS_RE).aktywne;
+  const theoryLabelInClaim = znajdzStatusEpistemiczny(c, THEORY_STATUS_RE).aktywne;
+  if (theoryEvidence && !theoryLabelInClaim) types.push('speculation_presented_as_fact');
+
+  // Preserve interpretation as interpretation. A symbolic/interpretive reading
+  // is not a plot event merely because the same nouns appear in the quote.
+  const interpretationEvidence = znajdzStatusEpistemiczny(e, INTERPRETATION_STATUS_RE).aktywne;
+  const interpretationLabelInClaim = znajdzStatusEpistemiczny(c, INTERPRETATION_STATUS_RE).aktywne;
+  if (interpretationEvidence && !interpretationLabelInClaim) types.push('interpretation_presented_as_fact');
+
+  // A claim about canonical/official status needs that status stated in its
+  // own cited span. Ordinary plot evidence does not prove canonicity.
+  const canonClaimStatus = znajdzStatusEpistemiczny(c, CANON_STATUS_RE);
+  const canonEvidenceStatus = znajdzStatusEpistemiczny(e, CANON_STATUS_RE);
+  if (canonClaimStatus.wystepuje && !canonEvidenceStatus.wystepuje) {
+    types.push('canon_status_not_in_evidence');
+  } else if (canonClaimStatus.wystepuje && canonEvidenceStatus.wystepuje
+    && canonClaimStatus.pozytywny !== canonEvidenceStatus.pozytywny) {
+    types.push('canon_status_conflict');
+  }
+  // Status kanoniczny jest twierdzeniem o oficjalnym stanie uniwersum.
+  // Wiki społecznościowa może opisywać kanon, ale sama nie jest źródłem
+  // pierwotnym potwierdzającym jego status.
+  if (canonClaimStatus.wystepuje && options.sourceAuthority !== 'official') {
+    types.push('canon_status_not_official_source');
+  }
 
   const sourceHedged = /\b(?:may|might|could|possibly|potentially|suggests?|appears? to|limited evidence|small study|moze|mozliwe|mozna(?:\s+byc)?|da\s+sie|bywa|prawdopodobnie|sugeruje|wstepne dane|niewielkim badaniu)\b/u.test(e);
   const claimAbsolute = /\b(?:always|never|proves?|guarantees?|definitely|certainly|undoubtedly|all|every|none|must|zawsze|nigdy|dowodzi|udowodniono|gwarantuje|bez watpienia|na pewno|wszyscy|wszystkie|kazdy|kazda|zaden|zadna)\b/u.test(c);
@@ -88,7 +157,7 @@ function detectOverclaimTypes(claim, evidence, options = {}) {
   return [...new Set(types)];
 }
 
-function buildClaimSupportAudit({ claims = [], evidenceEvaluations = [], evidenceQuoteVerified = [], evidenceQuotes = [], evidenceContexts = [] } = {}) {
+function buildClaimSupportAudit({ claims = [], evidenceEvaluations = [], evidenceQuoteVerified = [], evidenceQuotes = [], evidenceContexts = [], evidenceAuthorities = [] } = {}) {
   const records = claims.map((claim, index) => {
     const evaluation = evidenceEvaluations[index] || { ok: false, reason: 'brak lokalnej oceny dowodu' };
     const quoteVerified = evidenceQuoteVerified[index] === true;
@@ -102,6 +171,7 @@ function buildClaimSupportAudit({ claims = [], evidenceEvaluations = [], evidenc
       // structural verifier already accepted that exact claim as source_context.
       // Never let neighbouring text rescue an exact-quote overclaim.
       allowContextForCausality: evaluation.ok === true && evaluation.mode === 'source_context',
+      sourceAuthority: evidenceAuthorities[index] || null,
     });
     const hardOverclaims = overclaimTypes.filter(type => HARD_OVERCLAIM_TYPES.has(type));
     const reason = String(evaluation.reason || claim?.reason || '').slice(0, 500);
@@ -135,6 +205,8 @@ function buildClaimSupportAudit({ claims = [], evidenceEvaluations = [], evidenc
     return {
       claimIndex: index,
       claim: String(claim?.claim || '').slice(0, 500),
+      // Zachowujemy claim_en w audycie, aby diagnozować utratę nazw i błędne tłumaczenia.
+      claimEn: String(claim?.claim_en || '').slice(0, 500),
       sourceIds: Array.isArray(claim?.source_ids) ? claim.source_ids.slice(0, 5) : [],
       evidenceQuote: String(claim?.evidence_quote || '').slice(0, 500),
       evidenceContext: evidenceContext.slice(0, 1200),
@@ -142,6 +214,7 @@ function buildClaimSupportAudit({ claims = [], evidenceEvaluations = [], evidenc
       quoteVerified,
       localEvidenceVerified: evaluation.ok === true,
       supportMode: evaluation.mode || null,
+      sourceAuthority: evidenceAuthorities[index] || 'unknown',
       verdict,
       claimSourceVerdict,
       reason: hardOverclaims.length

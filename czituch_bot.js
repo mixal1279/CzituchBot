@@ -38,6 +38,8 @@ const { youtube: youtubeFactory } = require('@googleapis/youtube');
 const { discoverLiveVideoId, isLiveVideoFromChannel } = require('./youtube-live-discovery');
 const { agregujMetrykiWalidatorow, zbudujKontekstMetrykiWalidatora, wybierzTimeoutWalidatora } = require('./ai/validator-telemetry');
 const { OAuth2Client } = require('google-auth-library');
+const { oczekujNaKodOAuth } = require('./youtube-oauth-callback');
+const { czyBezpiecznaKwotaEko } = require('./economy/validation');
 const Groq       = require('groq-sdk');
 const tmi        = require('tmi.js');
 const {
@@ -49,24 +51,49 @@ const {
   normalizeTwitchOAuthToken,
 } = require('./twitch/chat-runtime');
 const WebSocket  = require('ws');
+const { utworzLifecycle } = require('./lifecycle');
+const lifecycle = utworzLifecycle({ logger: console, closeTimeoutMs: 4000 });
 
-// Fix: siatka bezpieczeństwa na poziomie procesu. Bez tego JEDEN nieobsłużony
-// wyjątek/odrzucenie Promise (np. dziwna odpowiedź jakiegoś API w środku streama)
-// zabija CAŁY proces Node (unhandled rejection domyślnie kończy proces od Node 15+),
-// a wtedy żadna logika reconnectu (EventSub, tmi.js) nie ma szans zadziałać, bo
-// runtime już nie istnieje — bot wraca dopiero po ręcznym/Pterodactylowym restarcie.
-// To nie naprawia samych błędów (te trzeba łatać punktowo jak dotąd), ale nie
-// pozwala pojedynczej, nieprzewidzianej usterce ubić całego bota.
-process.on('unhandledRejection', (err) => {
-  console.error('[Proces] ❌ Nieobsłużone odrzucenie Promise — restart procesu:', err?.stack || err);
-  process.exitCode = 1;
-  setImmediate(() => process.exit(1));
-});
-process.on('uncaughtException', (err) => {
-  console.error('[Proces] ❌ Nieobsłużony wyjątek — restart procesu:', err?.stack || err);
-  process.exitCode = 1;
-  setImmediate(() => process.exit(1));
-});
+// Wszystkie timery z głównego procesu są rejestrowane, aby restart Pterodactyla
+// nie pozostawiał interwałów ani opóźnionych reconnectów.
+const zarejestrowaneTimery = new Map();
+function ustawTimeout(fn, opoznienie, ...argumenty) {
+  if (lifecycle.czyZamykanie()) return null;
+  let wyrejestruj = null;
+  let timer;
+  timer = globalThis.setTimeout((...args) => {
+    wyrejestruj?.();
+    zarejestrowaneTimery.delete(timer);
+    return fn(...args);
+  }, opoznienie, ...argumenty);
+  wyrejestruj = lifecycle.zarejestruj('timeout', () => {
+    globalThis.clearTimeout(timer);
+    zarejestrowaneTimery.delete(timer);
+  });
+  zarejestrowaneTimery.set(timer, wyrejestruj);
+  return timer;
+}
+function ustawInterwal(fn, opoznienie, ...argumenty) {
+  if (lifecycle.czyZamykanie()) return null;
+  const timer = globalThis.setInterval(fn, opoznienie, ...argumenty);
+  const wyrejestruj = lifecycle.zarejestruj('interval', () => {
+    globalThis.clearInterval(timer);
+    zarejestrowaneTimery.delete(timer);
+  });
+  zarejestrowaneTimery.set(timer, wyrejestruj);
+  return timer;
+}
+function wyczyscTimeout(timer) {
+  globalThis.clearTimeout(timer);
+  zarejestrowaneTimery.get(timer)?.();
+  zarejestrowaneTimery.delete(timer);
+}
+function wyczyscInterwal(timer) {
+  globalThis.clearInterval(timer);
+  zarejestrowaneTimery.get(timer)?.();
+  zarejestrowaneTimery.delete(timer);
+}
+
 
 const fs = require('fs');
 const path = require('path');
@@ -75,23 +102,31 @@ const BILLY_CM = require('./billy-cm');
 const BILLY_SEX = require('./billy-sex');
 const { createFirestoreState, encryptSecret, encryptionKeyFromEnv } = require('./storage/firestore-state');
 const AI_POLICY = require('./ai/policy');
+const { utworzKolejkeAI } = require('./ai/concurrency');
+const { serializujBladProvidera, sanitizujKomunikatBledu } = require('./ai/diagnostics');
 const AI_VALIDATOR = require('./ai/validator');
 const { createVerdictCache } = require('./ai/verdict-cache');
 const verdictCache = createVerdictCache();
-const { createTavilySearch } = require('./ai/tavily');
+const { createTavilySearch, fuseTavilyEvidenceTexts } = require('./ai/tavily');
+const { searchExa } = require('./ai/webRetrieval');
 const { normalizujZapytanieTavily } = AI_POLICY;
-const { czyPytanieOLore, dodajGameLoreDomenę, wytnijAtrybucjeGameLore, GAMELORE_DOMAIN } = require('./ai/lore');
-const { czyPytanieOGameplay, dodajGameFAQsDomenę, wytnijAtrybucjeGameFAQs, GAMEFAQS_DOMAIN } = require('./ai/gameplay');
+const { czyPytanieOLore, czyMaKontekstGry, dodajGameLoreDomenę, wytnijAtrybucjeGameLoreWszystkie, GAMELORE_DOMAIN } = require('./ai/lore');
+const { czyPytanieOGameplay, dodajGameFAQsDomenę, wytnijAtrybucjeGameFAQsWszystkie, GAMEFAQS_DOMAIN } = require('./ai/gameplay');
 const { przygotujHistorieDoModelu, opakujDaneReferencyjne } = AI_POLICY;
 const { classifyAIRequest } = require('./ai/router');
+const { obliczPytanie, formatujWynik } = require('./ai/calculator');
 const { czyWymagaKlasyfikacjiSemantycznej, klasyfikujSemantycznie } = require('./ai/semantic-classifier');
 const { planAIRequest, responseContract, RESPONSE_PROFILES, buildRetrievalQueries, czyPotrzebujeRewrite } = require('./ai/planner');
-const { resolveGameEntity, scoreExternalGameCandidate, externalGameCandidateMatchesQuery } = require('./ai/entities');
+const { resolveGameEntity, scoreExternalGameCandidate, wyodrebnijJawnyTytulGry, externalGameCandidateMatchesQuery } = require('./ai/entities');
+const { utworzCacheIGDB } = require('./ai/igdb-cache');
+const { klasyfikujKandydataIGDB } = require('./ai/game-relations');
+const { ucieknijRegex, utworzRegexPelnejNazwy } = require('./ai/regex-utils');
+const igdbSearchCache = utworzCacheIGDB({ maxEntries: 100, ttlMs: 30 * 60 * 1000, negativeTtlMs: 5 * 60 * 1000 });
 const { extractExplicitUserMemories, mergeMemoryRecords, buildVerifiedMemoryContext, pruneExpiredMemories } = require('./ai/memory');
 const { parseMemoryCommand, forgetMemories, describeMemories } = require('./ai/memory_manager');
 const { decomposeQuestion, isMultiPartQuestion, buildAdvancedRetrievalPlan, buildSupplementalRetrievalQuery, selectRetrievalQueries, selectRetrievalDomains, selectGameSpecificRetrievalDomains, initialRetrievalQueryLimit } = require('./ai/retrieval');
 const { configureProviderQuotaPersistence, quotaStateReady, classifyFailure, nextFallbacks, selectRepairFallbacks, filterAvailableFallbacks, repairBudgetBlockReason, GENERATION_FALLBACK_CHAIN, configuredMaxFallbackSteps, markProviderQuota, isProviderQuotaBlocked, shouldBlockProviderQuotaWide, quotaCooldownMsFromError, geminiGenerationCooldownMsFromError, retryAfterHint, openRouterErrorMessage, shouldOpenQuotaCircuit } = require('./ai/fallback');
-const { normalizeGroqBaseUrl, createGroqCompletion, createGroqCompletionWithSchemaFallback, awaitWithAbortTimeout, computeValidatorTimeout, computeValidatorReserveMs, computeGenerationTimeout, normalizeGroqSdkBaseUrl, INITIAL_VALIDATOR_REPAIR_RESERVE_MS, shouldAttemptUnavailableRepair } = require('./ai/provider-runtime');
+const { normalizeGroqBaseUrl, parseOpenAICompatibleCompletion, createGroqCompletion, createGroqCompletionWithSchemaFallback, awaitWithAbortTimeout, computeValidatorTimeout, computeValidatorReserveMs, computeGenerationTimeout, normalizeGroqSdkBaseUrl, INITIAL_VALIDATOR_REPAIR_RESERVE_MS, shouldAttemptUnavailableRepair } = require('./ai/provider-runtime');
 const { createAIMetrics, recordAIMetric, snapshotAIMetrics } = require('./ai/metrics');
 const { DEFAULTS, sanitizeRequestText } = require('./ai/limits');
 const { createAIRequestContext } = require('./ai/requestContext');
@@ -99,8 +134,8 @@ const { sprawdzTwardeFaktyOdpowiedzi, sprawdzFormatOdpowiedzi, maskSentenceAbbre
 const { Firestore } = require('@google-cloud/firestore');
 const { ocenJakoscOdpowiedzi } = require('./ai/quality');
 const { usunEtykietyEvidenceCandidate, maEtykieteEvidenceCandidate, oczyscOdpowiedzPrzedWalidacja } = require('./ai/answer-sanitize');
-const { AI_MODELS } = require('./ai/modelConfig');
-const { parsujStrukturalnePodsumowanie } = require('./ai/history');
+const { AI_MODELS, AI_PRIMARY_GENERATOR } = require('./ai/modelConfig');
+const { parsujStrukturalnePodsumowanie, oznaczUzycieHistorii, ograniczHistorieRozmow, zbudujKluczHistorii, zbudujKluczeUzytkownika } = require('./ai/history');
 const { createRequestId, sanitizeQuestion, planRequest, evaluateEvidence, shouldValidate, decideValidation, finalText: finalizeAIPipelineText } = require('./ai/pipeline');
 const { buildAnswerPlan } = require('./ai/answer-plan');
 const { judgeAnswer, partialAnswerPreservesCoreIntent } = require('./ai/answer-judge');
@@ -240,7 +275,7 @@ async function pobierzPolskieNazwyMC() {
   if (MC26_POLSKIE_NAZWY_PROMISE) return MC26_POLSKIE_NAZWY_PROMISE;
   MC26_POLSKIE_NAZWY_PROMISE = (async () => {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 5000);
+    const timer = ustawTimeout(() => controller.abort(), 5000);
     try {
       // Lokalizacja Minecraft 26.1.x: używamy aktualnego patcha tej samej
       // linii jako słownika nazw; receptury pozostają z lokalnego minecraft-data-26.1.
@@ -259,7 +294,7 @@ async function pobierzPolskieNazwyMC() {
       console.warn(`[Minecraft 26.1] Nie udało się pobrać polskiej lokalizacji nazw: ${err.message}`);
       return {};
     } finally {
-      clearTimeout(timer);
+      wyczyscTimeout(timer);
     }
   })();
   return MC26_POLSKIE_NAZWY_PROMISE;
@@ -479,6 +514,7 @@ const db = process.env.CZITUCHBOT_SKIP_STARTUP_IO === '1'
     });
 
 const FIRESTORE_STATE = createFirestoreState(db);
+if (db) lifecycle.zarejestruj('Firestore', () => db.terminate());
 // Restore provider cooldowns across restarts; writes are best-effort when Firestore is unavailable.
 void configureProviderQuotaPersistence(FIRESTORE_STATE.enabled ? {
   read: FIRESTORE_STATE.read,
@@ -599,7 +635,7 @@ async function wczytajZweryfikowanaPamiecAI(userId) {
     }
     return records;
   } catch (err) {
-    console.warn('[AI Memory] Odczyt pamięci nieudany:', err.message);
+    console.warn('[AI Memory] Odczyt pamięci nieudany:', sanitizujKomunikatBledu(err?.message));
     return [];
   }
 }
@@ -621,7 +657,7 @@ async function zapiszZweryfikowanaPamiecAI(userId, incoming) {
     });
     console.log('[AI Memory] Zapisano', incoming.length, 'zweryfikowanych faktów.');
   } catch (err) {
-    console.warn('[AI Memory] Zapis pamięci nieudany:', err.message);
+    console.warn('[AI Memory] Zapis pamięci nieudany:', sanitizujKomunikatBledu(err?.message));
   }
 }
 
@@ -629,15 +665,14 @@ async function ustawZweryfikowanaPamiecAI(userId, records) {
   try {
     const ref = db.collection(COL_AI_MEMORY).doc(hashAIUserMemoryId(userId));
     await ref.set({ version: 1, records: pruneExpiredMemories(records || []), updatedAt: Date.now() }, { merge: true });
-  } catch (err) { console.warn('[AI Memory] Aktualizacja pamięci nieudana:', err.message); }
+  } catch (err) { console.warn('[AI Memory] Aktualizacja pamięci nieudana:', sanitizujKomunikatBledu(err?.message)); }
 }
 
 const readline   = require('readline');
 const crypto     = require('crypto');
+const { wylosujLiczbe, wylosujIndeks, wylosujBit } = require('./economy/random');
 
-console.log('[DEBUG] GOOGLE_API_KEY:', process.env.GOOGLE_API_KEY ? '✅ ustawiony' : '❌ BRAK');
-console.log('[Gemini] 🔑 GEMINI_API_KEY:', process.env.GEMINI_API_KEY ? '✅ ustawiony (fallback aktywny)' : '❌ BRAK (fallback wyłączony)');
-console.log('[OpenRouter] 🔑 OPENROUTER_API_KEY:', process.env.OPENROUTER_API_KEY ? '✅ ustawiony (fallback aktywny)' : '❌ BRAK (fallback wyłączony)');
+// Nie logujemy nawet samej obecności kluczy API — ograniczamy ujawnianie konfiguracji providerów.
 
 // =============================================
 //  KONFIGURACJA
@@ -677,10 +712,12 @@ const KONFIGURACJA = {
   groqKey: process.env.GROQ_API_KEY,
   groqBaseUrl: normalizeGroqBaseUrl(process.env.GROQ_BASE_URL),
 
-  // ---- xKiro (fallback po Groq 20B) ----
+  // ---- Cohere przez xKiro (główny walidator) ----
   xkiroKey: typeof process.env.XKIRO_API_KEY === 'string' ? process.env.XKIRO_API_KEY.replace(/[\r\n]/g, '').trim() : process.env.XKIRO_API_KEY,
   xkiroBaseUrl: String(process.env.XKIRO_BASE_URL || 'https://api.xkiro.com/v1').replace(/\/+$/, ''),
+  // Model xKiro dla generowania pozostaje niezależny od walidatora.
   xkiroModel: process.env.XKIRO_MODEL || 'qwen/qwen3.5-397b-a17b:free',
+  xkiroValidatorModel: process.env.XKIRO_VALIDATOR_MODEL || 'cohere/command-a-reasoning',
 
   // ---- ITAD ----
   itadKey: process.env.ITAD_API_KEY,
@@ -769,11 +806,11 @@ async function fetchZTimeout(url, options = {}, timeoutMs = 15000) {
   const abortFromUpstream = () => controller.abort();
   if (upstreamSignal?.aborted) controller.abort();
   else upstreamSignal?.addEventListener('abort', abortFromUpstream, { once: true });
-  const timeout = setTimeout(() => controller.abort(), duration);
+  const timeout = ustawTimeout(() => controller.abort(), duration);
   try {
     return await fetch(url, { ...options, signal: controller.signal });
   } finally {
-    clearTimeout(timeout);
+    wyczyscTimeout(timeout);
     upstreamSignal?.removeEventListener('abort', abortFromUpstream);
   }
 }
@@ -998,7 +1035,7 @@ function zakresTavilyDlaPytania(pytanie, domyslny = null) {
 // domyslnieMinecraft=true -> jeśli nie wykryto innej gry ORAZ pytanie faktycznie dotyczy MC, defaultuj do minecraft.wiki.
 // NIE defaultuje do MC dla pytań niezwiązanych z Minecraftem (np. sport, filmy itp.).
 function domenyDlaPytania(pytanie, domyslnieMinecraft = false) {
-  const p = String(pytanie || '').toLowerCase();
+  const p = String(pytanie || '').slice(0, 4000).toLowerCase();
   if (/billybulka|bu[łl]k[ai]\b/.test(p)) return ['twitchtracker.com', 'twitch.tv', 'tiktok.com', 'instagram.com'];
   if (/portal(?:\s*2)?|wheatley|glados|aperture\s+science|chell\b/.test(p)) return ['theportalwiki.com', 'combineoverwiki.net', 'ign.com', 'gamespot.com', 'fandom.com'];
   if (/cyberpunk|rel[i]?c|johnny\s+silverhand|night\s*city|mikoshi/.test(p)) return ['cyberpunk.net', 'ign.com', 'gamespot.com', 'pcgamer.com', 'fandom.com'];
@@ -1052,15 +1089,44 @@ function domenyDlaPytania(pytanie, domyslnieMinecraft = false) {
 // ALE tylko gdy domenyDlaPytania nie zwróciło już konkretnych domen (np. minecraft.wiki).
 async function wybierzDomenyDlaPytania(pytanie, domyslnieMinecraft = false, requestState = null) {
   let domeny = domenyDlaPytania(pytanie, domyslnieMinecraft);
-  if (!domeny && KONFIGURACJA.twitchClientId) {
-    const znanaGra = resolveGameEntity(pytanie);
-    if (znanaGra?.game) {
-      console.log('[IGDB] Pomijam classifier — używam encji deterministycznej:', znanaGra.game);
-      domeny = ['ign.com', 'gamespot.com', 'pcgamer.com', 'eurogamer.net', 'fandom.com'];
-      domeny.resolvedGame = { nazwa: znanaGra.game, confidence: znanaGra.confidence, resolution: 'deterministic' };
+  const znanaGra = resolveGameEntity(pytanie);
+  const maPewnaGre = Boolean(
+    znanaGra
+    && !['deterministic_ambiguous', 'explicit_unverified'].includes(znanaGra.resolution)
+    && (znanaGra.game || znanaGra.type === 'game')
+  );
+  let probowanoDynamicznegoRozpoznania = false;
+
+  // Ogólna reguła „gra/gry/game” zwracała domeny poradnikowe i blokowała IGDB.
+  // Dla pytań lore o nieznanym lokalnie tytule uruchamiamy rozpoznanie gry
+  // niezależnie od tego, czy wcześniej dobrano już ogólne domeny gamingowe.
+  if (!maPewnaGre && czyPytanieOLore(pytanie) && czyMaKontekstGry(pytanie) && KONFIGURACJA.twitchClientId) {
+    probowanoDynamicznegoRozpoznania = true;
+    try {
+      const gra = await znajdzGreIGDB(pytanie, requestState);
+      if (gra) {
+        console.log(`[IGDB] Dynamicznie rozpoznano grę dla pytania lore: ${gra.nazwa}`);
+        const domenyGamingowe = ['ign.com', 'gamespot.com', 'pcgamer.com', 'eurogamer.net', 'fandom.com'];
+        domeny = [...new Set([...(Array.isArray(domeny) ? domeny : []), ...domenyGamingowe])];
+        domeny.resolvedGame = gra;
+        return domeny;
+      }
+    } catch (err) {
+      console.warn('[IGDB] Dynamiczne rozpoznanie gry niedostępne — zachowuję wyszukiwanie GameLore:', sanitizujKomunikatBledu(err?.message));
     }
   }
-  if (!domeny && KONFIGURACJA.twitchClientId) {
+
+  if (!domeny && KONFIGURACJA.twitchClientId && maPewnaGre) {
+    console.log('[IGDB] Pomijam classifier — używam encji deterministycznej:', znanaGra.game || znanaGra.name);
+    domeny = ['ign.com', 'gamespot.com', 'pcgamer.com', 'eurogamer.net', 'fandom.com'];
+    domeny.resolvedGame = {
+      nazwa: znanaGra.game || znanaGra.name,
+      confidence: znanaGra.confidence,
+      resolution: 'deterministic',
+    };
+  }
+
+  if (!domeny && !probowanoDynamicznegoRozpoznania && KONFIGURACJA.twitchClientId) {
     try {
       const gra = await znajdzGreIGDB(pytanie, requestState);
       if (gra) {
@@ -1076,43 +1142,37 @@ async function wybierzDomenyDlaPytania(pytanie, domyslnieMinecraft = false, requ
 // =============================================
 //  RAWG – rozpoznawanie gier
 // =============================================
-let igdbToken = null;
-let igdbTokenExpiry = 0;
-
+// IGDB i pozostałe wywołania Helix korzystają z tego samego App Access Tokena.
+// Jeden cache i jeden Promise odświeżania zapobiegają równoległym żądaniom OAuth.
 async function pobierzTokenIGDB() {
-  if (igdbToken && Date.now() < igdbTokenExpiry) return igdbToken;
-  const res = await fetchZTimeout(
-    `https://id.twitch.tv/oauth2/token?client_id=${KONFIGURACJA.twitchClientId}&client_secret=${KONFIGURACJA.twitchClientSecret}&grant_type=client_credentials`,
-    { method: 'POST' },
-    6000
-  );
-  if (!res.ok) throw new Error(`IGDB token HTTP ${res.status}`);
-  const data = await res.json();
-  igdbToken = data.access_token;
-  igdbTokenExpiry = Date.now() + (data.expires_in - 60) * 1000;
-  return igdbToken;
+  return pobierzTwitchAppToken();
 }
 
 async function znajdzGreIGDB(pytanie, requestState = null) {
   try {
-    if (requestState?.zarezerwujModel && !requestState.zarezerwujModel('igdb-classifier')) return null;
-    const classifierController = new AbortController();
-    const rewrite = await awaitWithAbortTimeout(
-      createGroqCompletion(groq, {
-        model: AI_MODELS.queryRewrite,
-        max_tokens: 60,
-        reasoning_effort: 'low',
-        temperature: 0,
-        messages: [
-          { role: 'system', content: 'Jeśli w podanym tekście pojawia się tytuł gry wideo, odpowiedz TYLKO tym tytułem po angielsku (np. "Clair Obscur Expedition 33", "Minecraft", "Fortnite"). Jeśli nie ma tytułu gry, odpowiedz dokładnie: NONE.' },
-          { role: 'user', content: pytanie }
-        ]
-      }, { signal: classifierController.signal }),
-      Math.min(2200, typeof requestState?.remainingMs === 'function' ? requestState.remainingMs() : 2200),
-      classifierController,
-      'IGDB game classifier'
-    );
-    const nazwaGry = (rewrite.choices[0].message.content || '').trim();
+    // Jawny prefiks „w grze X” jest silniejszym sygnałem niż klasyfikator LLM.
+    // W takim przypadku pytanie trafia bezpośrednio do IGDB, także przy awarii Groq.
+    let nazwaGry = wyodrebnijJawnyTytulGry(pytanie);
+    if (!nazwaGry) {
+      if (requestState?.zarezerwujModel && !requestState.zarezerwujModel('igdb-classifier')) return null;
+      const classifierController = new AbortController();
+      const rewrite = await awaitWithAbortTimeout(
+        createGroqCompletion(groq, {
+          model: AI_MODELS.queryRewrite,
+          max_tokens: 60,
+          reasoning_effort: 'low',
+          temperature: 0,
+          messages: [
+            { role: 'system', content: 'Jeśli w podanym tekście pojawia się tytuł gry wideo, odpowiedz TYLKO tym tytułem po angielsku (np. "Clair Obscur Expedition 33", "Minecraft", "Fortnite"). Jeśli nie ma tytułu gry, odpowiedz dokładnie: NONE.' },
+            { role: 'user', content: pytanie }
+          ]
+        }, { signal: classifierController.signal }),
+        Math.min(2200, typeof requestState?.remainingMs === 'function' ? requestState.remainingMs() : 2200),
+        classifierController,
+        'IGDB game classifier'
+      );
+      nazwaGry = (rewrite.choices[0].message.content || '').trim();
+    }
     if (!nazwaGry || nazwaGry.toUpperCase() === 'NONE') return null;
     // Model output is untrusted input to the Apicalypse query language.
     // Remove query delimiters and bound the search term so a title cannot
@@ -1120,40 +1180,69 @@ async function znajdzGreIGDB(pytanie, requestState = null) {
     const igdbSearchTerm = nazwaGry.replace(/[";\\]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120);
     if (!igdbSearchTerm) return null;
 
-    const token = await pobierzTokenIGDB();
-    const res = await fetchZTimeout('https://api.igdb.com/v4/games', {
-      method: 'POST',
-      headers: {
-        'Client-ID': KONFIGURACJA.twitchClientId,
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'text/plain',
-      },
-      // IGDB zwraca wyniki uporządkowane wg podobieństwa, ale pierwszy rekord
-      // może być edycją/spinoffem. Pobieramy kilka kandydatów i weryfikujemy
-      // nazwę lokalnie przed użyciem encji w routingu.
-      body: `search "${igdbSearchTerm}"; fields name,genres.name; limit 5;`,
-    }, 6000);
-    if (!res.ok) return null;
-    const data = await res.json();
+    // Wyniki IGDB są publiczne, więc cache może być współdzielony między kanałami.
+    // Ograniczony TTL/LRU i single-flight redukują quota bez przechowywania danych użytkowników.
+    const cacheKey = 'games:' + igdbSearchTerm.toLocaleLowerCase('en-US').trim();
+    const data = await igdbSearchCache.pobierzLubWczytaj(cacheKey, async () => {
+      const token = await pobierzTokenIGDB();
+      const res = await fetchZTimeout('https://api.igdb.com/v4/games', {
+        method: 'POST',
+        headers: {
+          'Client-ID': KONFIGURACJA.twitchClientId,
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'text/plain',
+        },
+        // IGDB zwraca wyniki uporządkowane wg podobieństwa; pobieramy maksymalnie 5 kandydatów.
+        body: `search "${igdbSearchTerm}"; fields id,name,genres.name,game_type.name,franchise.name,franchises.name,collections.name,parent_game.name,version_parent.name,version_title,first_release_date,remakes.name,remasters.name,dlcs.name,expansions.name,standalone_expansions.name,expanded_games.name,forks.name,ports.name,bundles.name; limit 8;`,
+      }, 6000);
+      if (!res.ok) throw new Error(`IGDB HTTP ${res.status}`);
+      const responseData = await res.json();
+      return Array.isArray(responseData) ? responseData.slice(0, 5) : null;
+    });
     if (!Array.isArray(data) || !data.length) return null;
 
+    const jawnyTytul = Boolean(wyodrebnijJawnyTytulGry(pytanie));
     const kandydaci = data
-      .map(gra => ({ gra, score: scoreExternalGameCandidate(igdbSearchTerm, gra?.name) }))
+      .map(gra => ({
+        gra,
+        relacje: klasyfikujKandydataIGDB(gra, { requestedTitle: igdbSearchTerm, question: pytanie }),
+        score: scoreExternalGameCandidate(igdbSearchTerm, gra?.name),
+      }))
+      .map(item => ({
+        ...item,
+        // Potwierdzona relacja franczyzy/serii jest silniejsza niż podobieństwo
+        // tytułu pojedynczej gry (np. "The Witcher" -> "The Witcher 3").
+        score: item.relacje.ok && item.relacje.entity.type === 'franchise'
+          ? Math.max(item.score, 0.92)
+          : item.score,
+      }))
+      .filter(item => item.relacje.ok && item.score >= 0.72)
       .sort((a, b) => b.score - a.score);
     const najlepszy = kandydaci[0];
-    if (!najlepszy || najlepszy.score < 0.72) {
-      console.log(`[IGDB] Pomijam niepewne dopasowanie "${nazwaGry}" (score=${najlepszy?.score?.toFixed?.(2) || '0.00'})`);
-      return null;
-    }
-    const grounded = externalGameCandidateMatchesQuery(pytanie, najlepszy.gra.name);
-    if (!grounded.ok) {
-      console.log(`[IGDB] Odrzucam "${najlepszy.gra.name}" — brak potwierdzenia w oryginalnym pytaniu (rewrite="${nazwaGry}", score=${grounded.score.toFixed(2)})`);
+    if (!najlepszy) {
+      console.log(`[IGDB] Odrzucam kandydatów "${nazwaGry}" — brak zgodnej części, edycji lub relacji franczyzy.`);
       return null;
     }
     const gra = najlepszy.gra;
-    return { nazwa: gra.name, gatunki: (gra.genres || []).map(g => g.name).join(', '), confidence: Math.min(0.99, Math.min(najlepszy.score, grounded.score)), resolution: `igdb_verified:${grounded.via}` };
+    const relacje = najlepszy.relacje.entity;
+    const grounded = relacje.type === 'franchise'
+      ? { ok: true, score: najlepszy.score, via: 'igdb_franchise_relation' }
+      : (jawnyTytul
+        ? { ok: true, score: najlepszy.score, via: 'explicit_user_title' }
+        : externalGameCandidateMatchesQuery(pytanie, gra.name));
+    if (!grounded.ok) {
+      console.log(`[IGDB] Odrzucam "${gra.name}" — brak potwierdzenia tytułu w oryginalnym pytaniu.`);
+      return null;
+    }
+    return {
+      ...relacje,
+      nazwa: relacje.name,
+      gatunki: (gra.genres || []).map(g => g.name).join(', '),
+      confidence: Math.min(0.99, Math.min(najlepszy.score, grounded.score)),
+      resolution: `igdb_verified:${grounded.via}`,
+    };
   } catch (err) {
-    console.error('[IGDB] Błąd:', err.message);
+    console.error('[IGDB] Błąd:', sanitizujKomunikatBledu(err?.message));
     return null;
   }
 }
@@ -1308,7 +1397,12 @@ async function szukajHLTBBleed(gameName, retried = false) {
     hltbBleedTokenCache = null;
     return szukajHLTBBleed(gameName, true);
   }
-  if (!res.ok) return null;
+  if (!res.ok) {
+    let bodySnippet = '';
+    try { bodySnippet = (await res.text()).slice(0, 300); } catch (_) { /* ignore */ }
+    console.log('[HLTB][diag] /api/search/site odpowiedzialo non-OK:', res.status, bodySnippet);
+    return null;
+  }
   return res.json();
 }
 
@@ -1398,7 +1492,10 @@ async function pobierzCzasHLTB(nazwaGry) {
     console.log('[HLTB] Brak wyniku po Steam AppID — fallback /api/search/site po nazwie.');
     for (const wariant of warianty) {
       const data = await szukajHLTBBleed(wariant);
-      if (!data || !data.data || data.data.length === 0) continue;
+      if (!data || !data.data || data.data.length === 0) {
+        console.log('[HLTB][diag] pusta odpowiedz dla wariantu:', wariant, '- surowe dane:', JSON.stringify(data).slice(0, 300));
+        continue;
+      }
 
       const ocenione = data.data.map(g => ({ g, score: ocenaDopasowaniaTytuluHLTB(wariant, g.game_name || '') }));
       ocenione.sort((a, b) => b.score - a.score);
@@ -1461,6 +1558,8 @@ function wyodrebnijGreHLTB(pytanie) {
 
   let gra = String(pytanie).trim()
     .replace(/^!ai\s+/i, '')
+    .replace(/^w(?:e)?\s+(?:tej\s+)?grze\s+/iu, '')
+    .replace(/\s*[:,;—–-]\s*(?:ile\s+(?:jest\s+)?(?:godzin|czasu)|ile\s+trwa|jak\s+d[łl]ugo|d[łl]ugo[śs][ćc]|czas(?:u)?\s+(?:gry|przej[śs][ćc]cia|uko[ńn]czenia)).*$/iu, '')
     .replace(/^(?:ile\s+(?:jest\s+)?(?:godzin|czasu)|ile\s+trwa|jak\s+d[łl]ugo\s+trwa|jak\s+d[łl]ugo|d[łl]ugo[śs][ćc]\s+(?:tej\s+)?gr[ayęe]|czas(?:u)?\s+(?:przej[śs][ćc]cia|uko[ńn]czenia)|jak\s+dużo\s+czasu\s+zajmuje)\s*/i, '')
     .replace(/^(?:ile\s+godzin\s+ma|czas\s+gry)\s*/i, '')
     .replace(/^ma\s+/i, '')
@@ -1468,6 +1567,7 @@ function wyodrebnijGreHLTB(pytanie) {
     .replace(/^(?:przejść|przejsc|ukończyć|ukonczyc)\s+/i, '')
     .replace(/\s+(?:na|w)\s+(?:100\s*%|sto\s+procent).*$/i, '')
     .replace(/\s+(?:do|na)\s+ukończenia\s+gry\s*$/i, '')
+    .replace(/^(?:ca[łl][aeą]\s+)?(?:kampani[aeę]|fabu[łl][aeę]|gr[aeę])\s+(?:w(?:\s+grze)?\s+)?/iu, '')
     .replace(/[?!.]+$/, '')
     .trim();
 
@@ -1585,7 +1685,7 @@ Zwróć WYŁĄCZNIE jeden poprawny obiekt JSON bez markdownu i komentarza, z pol
 
 function dodatniaLiczbaEnv(envName, fallback) {
   const raw = String(process.env[envName] || '').trim();
-  if (!/^\\d+$/.test(raw)) return fallback;
+  if (!/^\d+$/.test(raw)) return fallback;
   const value = Number(raw);
   return Number.isSafeInteger(value) && value > 0 ? value : fallback;
 }
@@ -1666,17 +1766,20 @@ async function walidujOdpowiedzGeminiModel(model, persona, pytanie, odpowiedz, d
     if (requestState && validatorTimeoutMs === null) {
       return { status: 'unavailable', ok: false, technicalError: true, transient: true, skipped: true, provider: 'gemini', model, unsupported_claims: [], reason: 'Gemini validator pominięty: zbyt mały pozostały budżet czasu' };
     }
-    const timer = setTimeout(() => controller.abort(), validatorTimeoutMs);
-    try {
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+    // Ogranicz cały transport, łącznie z odczytem body; sam abort nie gwarantuje,
+      // że niestandardowy transport lub adapter zakończy oczekującą obietnicę.
+      const { response, data } = await awaitWithAbortTimeout((async () => {
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': KONFIGURACJA.geminiKey },
         body: JSON.stringify({
           systemInstruction: { parts: [{ text: system }] },
           contents: [{ role: 'user', parts: [{ text: user }] }],
           generationConfig: buildGeminiValidatorGenerationConfig(model, GEMINI_VALIDATOR_JSON_SCHEMA),
         }), signal: controller.signal,
-      });
-      const data = await response.json().catch(() => ({}));
+        });
+        const data = await response.json().catch(() => ({}));
+        return { response, data };
+      })(), validatorTimeoutMs, controller, 'Gemini validator');
       if (!response.ok) {
         const error = new Error(data?.error?.message || `HTTP ${response.status}`);
         error.status = response.status;
@@ -1787,10 +1890,9 @@ async function walidujOdpowiedzGeminiModel(model, persona, pytanie, odpowiedz, d
       }
       console.log(`[AI][${requestId}] ${model}: decyzja ok=${normalized.ok} supported=${normalized.supported} relevant=${normalized.relevant} complete=${normalized.complete} hallucination=${normalized.hallucination} unsupported=${normalized.unsupported_claims.length}`);
       return normalized;
-    } finally { clearTimeout(timer); }
   } catch (err) {
     const message = String(err?.message || '');
-    const abortLike = err?.name === 'AbortError' || /aborted|abort|cancelled|canceled/i.test(message);
+    const abortLike = err?.name === 'AbortError' || err?.name === 'TimeoutError' || /aborted|abort|cancelled|canceled|timed out|timeout/i.test(message);
     const status = Number(err?.status ?? err?.statusCode ?? 0);
     const quota = status === 402 || status === 429 || /quota|rate.?limit|resource.?exhausted|429|limit:/i.test(message);
     const transient = status !== 402 && (
@@ -2200,7 +2302,7 @@ async function walidujOdpowiedzGroq(persona, pytanie, odpowiedz, dane, requestId
 }
 
 async function walidujOdpowiedzXKiro(persona, pytanie, odpowiedz, dane, requestId = '-', requestState = null, requestMeta = null, timeoutOverrideMs = null) {
-  const model = KONFIGURACJA.xkiroModel;
+  const model = KONFIGURACJA.xkiroValidatorModel;
   if (!KONFIGURACJA.xkiroKey || !dane) {
     return { status: 'unavailable', ok: false, technicalError: true, provider: 'xkiro', model, unsupported_claims: [], reason: 'brak XKIRO_API_KEY lub danych referencyjnych' };
   }
@@ -2213,18 +2315,14 @@ async function walidujOdpowiedzXKiro(persona, pytanie, odpowiedz, dane, requestI
   const remainingMs = requestState
     ? (typeof requestState.remainingMs === 'function' ? requestState.remainingMs() : requestState.maxCzasMs - (Date.now() - requestState.startedAt))
     : 6000;
-  // OpenRouter remains the next fallback after xKiro, so xKiro must always
-  // leave enough time for that final validator. The validator counter alone
-  // does not mean xKiro is the last provider in the fallback chain.
-  // xKiro ma wysoką latencję; minimalny czas sensownej próby to 6 s.
-  // Nie pomijamy go, jeśli pełna próba mieści się w rezerwie budżetu requestu.
+  // Cohere jest głównym walidatorem; domyślny limit wynosi 9 s, z zachowaniem
+  // minimum 6 s. Pozostały budżet musi nadal uwzględniać fallbacki.
   const configuredTimeoutMs = Number(process.env.AI_XKIRO_VALIDATOR_TIMEOUT_MS);
-  // xKiro needs at least six seconds to return a useful verdict. The outer
-  // preflight uses the same floor; keep this transport-level deadline aligned
-  // so it cannot silently launch a 1.2s/4.5s attempt after passing preflight.
-  const xkiroMaxTimeoutMs = Math.max(
-    6000,
-    Number.isFinite(configuredTimeoutMs) && configuredTimeoutMs > 0 ? configuredTimeoutMs : 6000,
+  // Cohere potrzebuje co najmniej sześciu sekund na użyteczny werdykt.
+  // Preflight i transport korzystają z tego samego minimum oraz domyślnych 9 s.
+  const xkiroMaxTimeoutMs = Math.min(
+    30000,
+    Math.max(6000, Number.isFinite(configuredTimeoutMs) && configuredTimeoutMs > 0 ? configuredTimeoutMs : 9000),
   );
   const computedTimeoutMs = requestState
     ? computeValidatorTimeout(remainingMs, {
@@ -2250,12 +2348,11 @@ async function walidujOdpowiedzXKiro(persona, pytanie, odpowiedz, dane, requestI
           messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
           temperature: 0,
           max_tokens: AI_VALIDATOR_MAX_TOKENS_XKIRO,
-          reasoning_effort: 'none',
           response_format: { type: 'json_object' },
         }),
         signal: controller.signal,
       });
-      const data = await response.json().catch(() => ({}));
+      const data = await response.json().catch(() => ({ __invalidJson: true }));
       return { response, data };
     })(), timeoutMs, controller, 'xKiro validator');
     if (!response.ok) {
@@ -2294,6 +2391,20 @@ async function walidujOdpowiedzXKiro(persona, pytanie, odpowiedz, dane, requestI
       });
       return { status: 'unavailable', ok: false, technicalError: true, transient, quota, statusCode: status || null, provider: 'xkiro', model: data?.model || model, unsupported_claims: [], reason: quota ? `xKiro limit/credit error (HTTP ${status})` : `xKiro HTTP error (${status})`, error: diagnostic, diagnostic };
     }
+    if (data?.__invalidJson) {
+      const diagnostic = formatProviderError('xkiro', model, null, {
+        status: response.status,
+        invalid_json_body: true,
+      });
+      console.warn(`[AI][${requestId}] xKiro validator INVALID_HTTP_JSON: ${diagnostic}`);
+      return {
+        status: 'unavailable', ok: false, technicalError: true,
+        provider: 'xkiro', model, unsupported_claims: [],
+        failureKind: 'invalid_json_body',
+        reason: 'xKiro validator zwrócił niepoprawny JSON w odpowiedzi HTTP',
+        error: diagnostic, diagnostic,
+      };
+    }
     const choice = data?.choices?.[0] || {};
     const rawContent = choice?.message?.content;
     const content = Array.isArray(rawContent)
@@ -2307,7 +2418,7 @@ async function walidujOdpowiedzXKiro(persona, pytanie, odpowiedz, dane, requestI
       });
       const truncatedJson = choice?.finish_reason === 'length';
       console.warn(`[AI][${requestId}] xKiro validator ${truncatedJson ? 'UCIĘTY_JSON' : 'EMPTY_CONTENT'}: ${diagnostic}`);
-      return { status: 'unavailable', ok: false, technicalError: true, provider: 'xkiro', model: data?.model || model, unsupported_claims: [], reason: truncatedJson ? 'xKiro validator zwrócił UCIĘTY JSON (finish_reason=length)' : 'xKiro validator zwrócił pusty content', truncatedJson, error: diagnostic, diagnostic };
+      return { status: 'unavailable', ok: false, technicalError: true, provider: 'xkiro', model: data?.model || model, unsupported_claims: [], reason: truncatedJson ? 'xKiro validator zwrócił UCIĘTY JSON (finish_reason=length)' : 'xKiro validator zwrócił pusty content', failureKind: truncatedJson ? 'truncated_json' : 'empty_response', truncatedJson, error: diagnostic, diagnostic };
     }
     const parsed = wytnijJsonWalidatora(content);
     if (!parsed) {
@@ -2318,7 +2429,7 @@ async function walidujOdpowiedzXKiro(persona, pytanie, odpowiedz, dane, requestI
       });
       const truncatedJson = choice?.finish_reason === 'length';
       console.warn(`[AI][${requestId}] xKiro validator ${truncatedJson ? 'UCIĘTY_JSON' : 'INVALID_JSON'}: ${diagnostic}`);
-      return { status: 'unavailable', ok: false, technicalError: true, provider: 'xkiro', model: data?.model || model, unsupported_claims: [], reason: truncatedJson ? 'xKiro validator zwrócił UCIĘTY JSON (finish_reason=length)' : 'xKiro validator zwrócił niepoprawny JSON', truncatedJson, error: diagnostic, diagnostic };
+      return { status: 'unavailable', ok: false, technicalError: true, provider: 'xkiro', model: data?.model || model, unsupported_claims: [], reason: truncatedJson ? 'xKiro validator zwrócił UCIĘTY JSON (finish_reason=length)' : 'xKiro validator zwrócił niepoprawny JSON', failureKind: truncatedJson ? 'truncated_json' : 'invalid_json', truncatedJson, error: diagnostic, diagnostic };
     }
     const normalized = normalizujWynikWalidatora(parsed, data?.model || model, 'xkiro', wyodrebnijIdentyfikatoryZrodel(dane), dane, odpowiedz, { question: pytanie });
     if (!normalized) {
@@ -2327,7 +2438,7 @@ async function walidujOdpowiedzXKiro(persona, pytanie, odpowiedz, dane, requestI
         finish_reason: choice?.finish_reason || null,
         content_preview: content.slice(0, 700),
       });
-      return { status: 'unavailable', ok: false, technicalError: true, provider: 'xkiro', model: data?.model || model, unsupported_claims: [], reason: 'xKiro validator zwrócił JSON niespełniający lokalnego kontraktu', error: diagnostic, diagnostic };
+      return { status: 'unavailable', ok: false, technicalError: true, provider: 'xkiro', model: data?.model || model, unsupported_claims: [], reason: 'xKiro validator zwrócił JSON niespełniający lokalnego kontraktu', failureKind: 'invalid_schema', error: diagnostic, diagnostic };
     }
     console.log(`[AI][${requestId}] xKiro validator: status=${normalized.status} supported=${normalized.supported} complete=${normalized.complete}`);
     return normalized;
@@ -2354,7 +2465,7 @@ const AI_GEMINI_VALIDATOR_MODEL = process.env.AI_GEMINI_VALIDATOR_MODEL || 'gemi
 
 async function walidujOdpowiedzAI(persona, pytanie, odpowiedz, dane, historiaRozmowy = [], requestId = '-', requestState = null, requestMeta = null) {
   odpowiedz = usunEtykietyEvidenceCandidate(odpowiedz);
-  const cacheKey = dane ? verdictCache.key({ question: pytanie, answer: odpowiedz, evidence: dane, model: AI_GEMINI_VALIDATOR_MODEL }) : null;
+  const cacheKey = dane ? verdictCache.key({ question: pytanie, answer: odpowiedz, evidence: dane, model: [KONFIGURACJA.xkiroValidatorModel, AI_GEMINI_VALIDATOR_MODEL, AI_MODELS.validator, KONFIGURACJA.openrouterValidatorModel].join('|') }) : null;
   const cached = cacheKey ? verdictCache.get(cacheKey) : null;
   if (cached) {
     console.log(`[AI][${requestId}] validator: werdykt z cache (${cached.status}) — bez wywołania modelu`);
@@ -2430,13 +2541,85 @@ async function walidujOdpowiedzAIBezCache(persona, pytanie, odpowiedz, dane, his
       reason: entry.reason,
     });
   };
+  let last = null;
+  let lastRejected = null;
   if (budzetValidatoraPrzekroczony()) {
-    recordSkippedValidator('gemini', AI_GEMINI_VALIDATOR_MODEL, 'Gemini validator pominięty: budżet czasu validatora wyczerpany');
-    return { status: 'unavailable', ok: false, technicalError: true, provider: 'gemini', model: null, unsupported_claims: [], reason: 'budżet czasu validatora wyczerpany' };
+    const reason = 'Cohere/xKiro validator pominięty: budżet czasu validatora wyczerpany';
+    recordSkippedValidator('xkiro', KONFIGURACJA.xkiroValidatorModel, reason);
+    return { status: 'unavailable', ok: false, technicalError: true, provider: 'xkiro', model: KONFIGURACJA.xkiroValidatorModel, unsupported_claims: [], reason };
   }
+  // Cohere Command A Reasoning przez xKiro jest głównym walidatorem.
+  // Pozostali dostawcy są uruchamiani wyłącznie jako fallback po błędzie technicznym
+  // lub po odrzuceniu, które kwalifikuje się do drugiej opinii.
+  if (!KONFIGURACJA.xkiroKey) {
+    recordSkippedValidator('xkiro', KONFIGURACJA.xkiroValidatorModel, 'xKiro validator pominięty: brak klucza API');
+  } else if (validatorBreakerIsOpen('xkiro')) {
+    recordSkippedValidator('xkiro', KONFIGURACJA.xkiroValidatorModel, 'xKiro validator pominięty: circuit breaker aktywny');
+    console.warn(`[AI][${requestId}] xKiro validator pominięty przed rezerwacją slotu: circuit breaker aktywny`);
+  } else {
+    const xkiroRemainingMs = requestState
+      ? (typeof requestState.remainingMs === 'function' ? requestState.remainingMs() : requestState.maxCzasMs - (Date.now() - requestState.startedAt))
+      : 6000;
+    const configuredXkiroTimeout = Number(process.env.AI_XKIRO_VALIDATOR_TIMEOUT_MS);
+    const xkiroMaxTimeoutMs = Math.max(6000, Number.isFinite(configuredXkiroTimeout) && configuredXkiroTimeout > 0 ? configuredXkiroTimeout : 9000);
+    const xkiroTimeoutMs = requestState
+      ? computeValidatorTimeout(xkiroRemainingMs, {
+          maxTimeoutMs: xkiroMaxTimeoutMs,
+          reserveMs: computeValidatorReserveMs(xkiroRemainingMs, requestState.validatory + 1, requestState.maxValidatorow, requestState.validationPass === 1 ? INITIAL_VALIDATOR_REPAIR_RESERVE_MS : 0),
+          minTimeoutMs: 6000,
+        })
+      : xkiroMaxTimeoutMs;
+    if (requestState && xkiroTimeoutMs === null) {
+      const reason = 'xKiro validator pominięty: mniej niż 6 s użytecznego budżetu po rezerwie';
+      recordSkippedValidator('xkiro', KONFIGURACJA.xkiroValidatorModel, reason);
+      console.warn(`[AI][${requestId}] ${reason}; remaining=${xkiroRemainingMs}ms`);
+    } else if (!zarezerwujSlotWalidatora(requestState, 'validator:xkiro')) {
+      const reason = 'budżet validatora/modeli wyczerpany przed xKiro';
+      recordSkippedValidator('xkiro', KONFIGURACJA.xkiroValidatorModel, reason);
+      return lastRejected || { ...(last || {}), status: 'unavailable', ok: false, technicalError: true, unsupported_claims: [], reason };
+    } else {
+      const validatorStartedAt = Date.now();
+      const remainingBefore = requestState?.remainingMs?.() ?? null;
+      requestState?.recordTiming?.('validator_provider_start', { provider: 'xkiro', model: KONFIGURACJA.xkiroValidatorModel, remainingBefore });
+      const xkiroResult = await walidujOdpowiedzXKiro(persona, pytanie, odpowiedz, dane, requestId, requestState, requestMeta, requestState ? xkiroTimeoutMs : null);
+      recordValidatorTransportResult('xkiro', xkiroResult, requestId);
+      recordValidatorMetric('xkiro', xkiroResult.model || KONFIGURACJA.xkiroValidatorModel, remainingBefore, xkiroTimeoutMs, validatorStartedAt, xkiroResult);
+      const validatorElapsedMs = Date.now() - validatorStartedAt;
+      const remainingAfter = requestState?.remainingMs?.() ?? null;
+      requestState?.recordTiming?.('validator_provider_end', { provider: 'xkiro', model: xkiroResult.model || KONFIGURACJA.xkiroValidatorModel, status: xkiroResult.status, validatorElapsedMs, remainingBefore, remainingAfter, reason: String(xkiroResult.reason || '').slice(0, 180) });
+      if (requestState) requestState.validatorResults.push({
+        model: xkiroResult.model || KONFIGURACJA.xkiroValidatorModel,
+        provider: 'xkiro',
+        status: xkiroResult.status,
+        elapsedMs: validatorElapsedMs,
+        remainingMsBefore: remainingBefore,
+        remainingMsAfter: remainingAfter,
+        complete: xkiroResult.complete === true,
+        confidence: Number.isFinite(xkiroResult.confidence) ? xkiroResult.confidence : null,
+        claimCoverage: Array.isArray(xkiroResult.claims) && xkiroResult.claims.length
+          ? xkiroResult.claims.filter(c => c.supported === true).length / xkiroResult.claims.length
+          : null,
+        reason: typeof xkiroResult.reason === 'string' ? xkiroResult.reason.slice(0, 300) : null,
+        technicalError: xkiroResult.technicalError === true, timeoutAbort: xkiroResult.timeoutAbort === true,
+        quota: xkiroResult.quota === true, skipped: xkiroResult.skipped === true,
+        statusCode: Number.isFinite(Number(xkiroResult.statusCode)) && xkiroResult.statusCode != null ? Number(xkiroResult.statusCode) : null,
+        validationDiagnostics: xkiroResult.diagnostics || null,
+      });
+      if (xkiroResult.status === 'accepted' || xkiroResult.status === 'soft_accepted') return xkiroResult;
+      if (xkiroResult.status === 'rejected') {
+        if (!czyWartoDrugaOpinieWalidatora(xkiroResult)) return xkiroResult;
+        lastRejected = xkiroResult;
+        requestState?.recordTiming?.('validator_second_opinion', { rejectedProvider: xkiroResult.provider || 'xkiro', reason: String(xkiroResult.reason || '').slice(0, 180) });
+      }
+      last = xkiroResult;
+    }
+  }
+
   // Jeden stabilny model wystarcza do prostego JSON fact-checkera i nie
   // zużywa potrójnie darmowego limitu Gemini przy każdym pytaniu.
-  const models = KONFIGURACJA.geminiKey
+  const geminiValidatorEnabled = process.env.AI_VALIDATOR_GEMINI !== '0';
+  const models = geminiValidatorEnabled
+    && KONFIGURACJA.geminiKey
     && Date.now() >= geminiValidatorCooldownUntil
     && Date.now() >= geminiAccountQuotaCooldownUntil
     && !validatorBreakerIsOpen('gemini')
@@ -2444,18 +2627,18 @@ async function walidujOdpowiedzAIBezCache(persona, pytanie, odpowiedz, dane, his
     ? [AI_GEMINI_VALIDATOR_MODEL]
     : [];
   if (!models.length) {
-    const reason = !KONFIGURACJA.geminiKey
-      ? 'Gemini validator pominięty: brak klucza API'
-      : validatorBreakerIsOpen('gemini')
-        ? 'Gemini validator pominięty: circuit breaker aktywny'
-        : isProviderQuotaBlocked(`gemini:${AI_GEMINI_VALIDATOR_MODEL}`)
-          ? 'Gemini validator pominięty: aktywny cooldown limitu dostawcy'
-          : 'Gemini validator pominięty: aktywny cooldown';
+    const reason = !geminiValidatorEnabled
+      ? 'Gemini validator pominięty: wyłączony konfiguracją'
+      : !KONFIGURACJA.geminiKey
+        ? 'Gemini validator pominięty: brak klucza API'
+        : validatorBreakerIsOpen('gemini')
+          ? 'Gemini validator pominięty: circuit breaker aktywny'
+          : isProviderQuotaBlocked(`gemini:${AI_GEMINI_VALIDATOR_MODEL}`)
+            ? 'Gemini validator pominięty: aktywny cooldown limitu dostawcy'
+            : 'Gemini validator pominięty: aktywny cooldown';
     recordSkippedValidator('gemini', AI_GEMINI_VALIDATOR_MODEL, reason);
     console.warn(`[AI][${requestId}] ${reason} — używam fallbacku`);
   }
-  let last = null;
-  let lastRejected = null;
   for (let i = 0; i < models.length; i++) {
     const remainingMs = requestState
       ? (typeof requestState.remainingMs === 'function' ? requestState.remainingMs() : requestState.maxCzasMs - (Date.now() - requestState.startedAt))
@@ -2591,70 +2774,6 @@ async function walidujOdpowiedzAIBezCache(persona, pytanie, odpowiedz, dane, his
     recordSkippedValidator('groq', AI_MODELS.validator, process.env.AI_VALIDATOR_GROQ === '0' ? 'Groq validator pominięty: wyłączony konfiguracją' : 'Groq validator pominięty: brak klienta lub klucza API');
   }
 
-  // xKiro is the preferred independent validator before OpenRouter when
-  // configured. Keep a minimum six-second attempt budget so a call is not
-  // launched with a timeout too short to produce a useful verdict.
-  if (!KONFIGURACJA.xkiroKey) {
-    recordSkippedValidator('xkiro', KONFIGURACJA.xkiroModel, 'xKiro validator pominięty: brak klucza API');
-  } else if (validatorBreakerIsOpen('xkiro')) {
-    recordSkippedValidator('xkiro', KONFIGURACJA.xkiroModel, 'xKiro validator pominięty: circuit breaker aktywny');
-    console.warn(`[AI][${requestId}] xKiro validator pominięty przed rezerwacją slotu: circuit breaker aktywny`);
-  } else {
-    const xkiroRemainingMs = requestState
-      ? (typeof requestState.remainingMs === 'function' ? requestState.remainingMs() : requestState.maxCzasMs - (Date.now() - requestState.startedAt))
-      : 6000;
-    const configuredXkiroTimeout = Number(process.env.AI_XKIRO_VALIDATOR_TIMEOUT_MS);
-    const xkiroMaxTimeoutMs = Math.max(6000, Number.isFinite(configuredXkiroTimeout) && configuredXkiroTimeout > 0 ? configuredXkiroTimeout : 6000);
-    const xkiroTimeoutMs = computeValidatorTimeout(xkiroRemainingMs, {
-      maxTimeoutMs: xkiroMaxTimeoutMs,
-      reserveMs: computeValidatorReserveMs(xkiroRemainingMs, requestState?.validatory + 1, requestState?.maxValidatorow, requestState?.validationPass === 1 ? INITIAL_VALIDATOR_REPAIR_RESERVE_MS : 0),
-      minTimeoutMs: 6000,
-    });
-    if (xkiroTimeoutMs === null) {
-      const reason = 'xKiro validator pominięty: mniej niż 6 s użytecznego budżetu po rezerwie';
-      recordSkippedValidator('xkiro', KONFIGURACJA.xkiroModel, reason);
-      console.warn(`[AI][${requestId}] ${reason}; remaining=${xkiroRemainingMs}ms`);
-    } else if (!zarezerwujSlotWalidatora(requestState, 'validator:xkiro')) {
-      const reason = 'budżet validatora/modeli wyczerpany przed xKiro';
-      recordSkippedValidator('xkiro', KONFIGURACJA.xkiroModel, reason);
-      return lastRejected || { ...(last || {}), status: 'unavailable', ok: false, technicalError: true, unsupported_claims: [], reason };
-    } else {
-      const validatorStartedAt = Date.now();
-      const remainingBefore = requestState?.remainingMs?.() ?? null;
-      requestState?.recordTiming?.('validator_provider_start', { provider: 'xkiro', model: KONFIGURACJA.xkiroModel, remainingBefore });
-      const xkiroResult = await walidujOdpowiedzXKiro(persona, pytanie, odpowiedz, dane, requestId, requestState, requestMeta, requestState ? xkiroTimeoutMs : null);
-      recordValidatorTransportResult('xkiro', xkiroResult, requestId);
-      recordValidatorMetric('xkiro', xkiroResult.model || KONFIGURACJA.xkiroModel, remainingBefore, xkiroTimeoutMs, validatorStartedAt, xkiroResult);
-      const validatorElapsedMs = Date.now() - validatorStartedAt;
-      const remainingAfter = requestState?.remainingMs?.() ?? null;
-      requestState?.recordTiming?.('validator_provider_end', { provider: 'xkiro', model: xkiroResult.model || KONFIGURACJA.xkiroModel, status: xkiroResult.status, validatorElapsedMs, remainingBefore, remainingAfter, reason: String(xkiroResult.reason || '').slice(0, 180) });
-      if (requestState) requestState.validatorResults.push({
-        model: xkiroResult.model || KONFIGURACJA.xkiroModel,
-        provider: 'xkiro',
-        status: xkiroResult.status,
-        elapsedMs: validatorElapsedMs,
-        remainingMsBefore: remainingBefore,
-        remainingMsAfter: remainingAfter,
-        complete: xkiroResult.complete === true,
-        confidence: Number.isFinite(xkiroResult.confidence) ? xkiroResult.confidence : null,
-        claimCoverage: Array.isArray(xkiroResult.claims) && xkiroResult.claims.length
-          ? xkiroResult.claims.filter(c => c.supported === true).length / xkiroResult.claims.length
-          : null,
-        reason: typeof xkiroResult.reason === 'string' ? xkiroResult.reason.slice(0, 300) : null,
-        technicalError: xkiroResult.technicalError === true, timeoutAbort: xkiroResult.timeoutAbort === true,
-        quota: xkiroResult.quota === true, skipped: xkiroResult.skipped === true,
-        statusCode: Number.isFinite(Number(xkiroResult.statusCode)) && xkiroResult.statusCode != null ? Number(xkiroResult.statusCode) : null,
-        validationDiagnostics: xkiroResult.diagnostics || null,
-      });
-      if (xkiroResult.status === 'accepted' || xkiroResult.status === 'soft_accepted') return xkiroResult;
-      if (xkiroResult.status === 'rejected') {
-        if (!czyWartoDrugaOpinieWalidatora(xkiroResult)) return xkiroResult;
-        lastRejected = xkiroResult;
-        requestState?.recordTiming?.('validator_second_opinion', { rejectedProvider: xkiroResult.provider || 'xkiro', reason: String(xkiroResult.reason || '').slice(0, 180) });
-      }
-      last = xkiroResult;
-    }
-  }
   if (validatorBreakerIsOpen('openrouter')) {
     const reason = 'OpenRouter validator pominięty: circuit breaker aktywny';
     recordSkippedValidator('openrouter', KONFIGURACJA.openrouterValidatorModel, reason);
@@ -2826,27 +2945,6 @@ function wykonajAIWHistorii(historia, zadanie) {
  * Provider diagnostics must be available to every AI provider path.
  * Keep this at module scope so validators/fallbacks cannot hit a TDZ/scope error.
  */
-function serializujBladProvidera(err) {
-  if (!err || typeof err !== 'object') return null;
-  const seen = new WeakSet();
-  const visit = (value, depth = 0) => {
-    if (value == null || depth > 3) return value;
-    if (typeof value !== 'object') return String(value).slice(0, 1600);
-    if (seen.has(value)) return '[Circular]';
-    seen.add(value);
-    if (Array.isArray(value)) return value.slice(0, 8).map(item => visit(item, depth + 1));
-    const out = {};
-    for (const key of Object.getOwnPropertyNames(value).slice(0, 40)) {
-      try {
-        const v = value[key];
-        if (v !== undefined) out[key] = visit(v, depth + 1);
-      } catch (_) {}
-    }
-    return out;
-  };
-  return visit(err);
-}
-
 function formatProviderError(provider, model, err, extra = {}) {
   const serializedError = serializujBladProvidera(err);
   const providerError = err?.error && typeof err.error === 'object'
@@ -2854,13 +2952,13 @@ function formatProviderError(provider, model, err, extra = {}) {
     : (serializedError?.error && typeof serializedError.error === 'object' ? serializedError.error : null);
   const responseData = extra.responseData && typeof extra.responseData === 'object' ? extra.responseData : null;
   const nestedResponseError = responseData?.error && typeof responseData.error === 'object' ? responseData.error : null;
-  const message = String(
+  const message = sanitizujKomunikatBledu(
     err?.message
       || providerError?.message
       || nestedResponseError?.message
       || (typeof err === 'string' ? err : '')
-      || 'unknown'
-  ).slice(0, 1600);
+      || 'unknown',
+  );
   const details = {
     provider,
     model,
@@ -2869,23 +2967,19 @@ function formatProviderError(provider, model, err, extra = {}) {
     code: err?.code ?? providerError?.code ?? serializedError?.code ?? nestedResponseError?.code ?? responseData?.error?.code ?? extra.code ?? null,
     type: err?.type ?? providerError?.type ?? serializedError?.type ?? nestedResponseError?.type ?? responseData?.error?.type ?? extra.type ?? null,
     param: err?.param ?? providerError?.param ?? serializedError?.param ?? nestedResponseError?.param ?? responseData?.error?.param ?? extra.param ?? null,
-    failed_generation: err?.failed_generation ?? providerError?.failed_generation ?? serializedError?.failed_generation ?? nestedResponseError?.failed_generation ?? responseData?.error?.failed_generation ?? extra.failed_generation ?? null,
+    failed_generation: null, // Nie logujemy surowego outputu providera — może zawierać treść promptu lub dane użytkownika.
     request_id: err?.request_id ?? providerError?.request_id ?? serializedError?.request_id ?? nestedResponseError?.request_id ?? responseData?.error?.request_id ?? extra.request_id ?? null,
     response_error: nestedResponseError ? {
-      message: String(nestedResponseError.message || '').slice(0, 1000),
+      message: sanitizujKomunikatBledu(nestedResponseError.message || '', 1000),
       code: nestedResponseError.code ?? null,
       type: nestedResponseError.type ?? null,
       param: nestedResponseError.param ?? null,
-      failed_generation: nestedResponseError.failed_generation ?? null,
+      failed_generation: null,
     } : null,
     error_object: serializedError,
     extra: Object.keys(extra).filter(key => key !== 'responseData').length ? extra : undefined,
   };
   return JSON.stringify(details);
-}
-
-function escapeRegExp(value) {
-  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn, opcje = {}) {
@@ -2898,8 +2992,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
   const loadMemory = opcje.__testDeps?.loadMemory || wczytajZweryfikowanaPamiecAI;
   const testMaxTavilySearches = Number.isInteger(opcje.__testDeps?.maxWyszukanTavily) ? Math.max(2, opcje.__testDeps.maxWyszukanTavily) : DEFAULTS.maxTavilySearches;
   const onAISummary = typeof opcje.__testDeps?.onSummary === 'function' ? opcje.__testDeps.onSummary : null;
-  const verifiedMemoryUserId = memoryUserId || String(nick || '').toLowerCase();
-  const verifiedMemoryPromise = loadMemory(verifiedMemoryUserId);
+  const verifiedMemoryUserId = opcje.disableMemory === true ? null : (memoryUserId || String(nick || '').toLowerCase());
   systemPrompt = `${systemPrompt}\n\nNie umieszczaj w odpowiedzi nazw źródeł, atrybucji, etykiet „Źródło:” ani URL-i. Źródła są wyłącznie wewnętrznym materiałem RAG i walidacji. Jeśli pytanie zaczyna się od „W grze <tytuł>:”, traktuj ten prefiks wyłącznie jako kontekst gry i nie powtarzaj go jako twierdzenia faktograficznego, chyba że treść źródła wprost potwierdza tytuł.`;
   const jestAI_Billy = aiProfile === 'billy' || systemPrompt === AI_SYSTEM_PROMPT_BILLY;
   const jestAI_EdzzI = aiProfile === 'edzzi' || systemPrompt === AI_SYSTEM_PROMPT_EDZZI;
@@ -2912,6 +3005,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
     return;
   }
   pytanie = questionInput.value;
+  // Nie wykonuj odczytu Firestore dla wejścia odrzuconego przez walidator.
   const requestId = createRequestId(crypto.randomUUID?.bind(crypto));
   // Jeden kontekst kontroluje czas i wszystkie limity całego pipeline'u AI.
   // Nie utrzymujemy osobnych budżetów w generatorze, retrievalu i validatorze.
@@ -2984,13 +3078,15 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
       },
       generationAttempts: aiState.generationAttempts || [],
       timingTrace: aiState.timingTrace || [],
+      retrievalTrace: aiState.retrievalTrace || null,
+      semanticSearches: aiState.semanticSearches || 0,
       sourceCount: daneDoWalidacji ? (daneDoWalidacji.match(/\[(?:SOURCE|REFERENCE) [^\]]+\]/g) || []).length : 0,
       metrics: { ...AI_METRYKI, observability: snapshotAIMetrics(AI_OBSERVABILITY) },
       durationMs: Date.now() - aiState.startedAt, finalStatus: status,
     };
     console.log(`[AI][${requestId}] SUMMARY ${JSON.stringify(summary)}`);
     if (onAISummary) {
-      try { onAISummary({ ...summary, validatorMetricsRaw: [...(aiState.validatorMetrics || [])] }); } catch (err) { console.warn(`[AI][${requestId}] summary hook error: ${err.message}`); }
+      try { onAISummary({ ...summary, validatorMetricsRaw: [...(aiState.validatorMetrics || [])] }); } catch (err) { console.warn(`[AI][${requestId}] summary hook error: ${sanitizujKomunikatBledu(err.message)}`); }
     }
   };
   console.log(`[AI][${requestId}] start kategoria=pending persona=${aiProfile}`);
@@ -3039,7 +3135,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
     planAIRequest,
     buildRetrievalQueries,
   );
-  const answerPlan = buildAnswerPlan(pytanie, routingAI);
+  let answerPlan = buildAnswerPlan(pytanie, routingAI);
   // Pytania "dlaczego" potrzebują osobnego retrievalu przyczynowego. Zwykłe
   // zapytanie o fabułę często zwraca chronologię wydarzeń, ale nie zdanie
   // łączące przyczynę ze skutkiem, którego wymaga validator.
@@ -3051,6 +3147,21 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
   max_tokens = Math.max(Number(max_tokens) || 200, responseCfg.maxTokens);
   systemPrompt = `${systemPrompt}\n\n${responseContract(aiPlan.responseProfile)}\n\n[ANSWER PLAN]\n${answerPlan.instruction}\n\n[EVIDENCE-FIRST GENERATION]\nDla każdej informacji faktograficznej najpierw wybierz konkretny EVIDENCE CANDIDATE, a dopiero potem napisz zdanie. Jedno zdanie ma zawierać tylko jeden materialny claim albo bardzo ścisłe parafrazowanie jednego fragmentu dowodu. Nie łącz kilku wydarzeń w jeden claim, jeśli wymagają różnych dowodów. Nie wyciągaj przyczynowości z samej kolejności wydarzeń: użyj relacji przyczynowej tylko wtedy, gdy pojedynczy dowód wyraźnie ją stwierdza. ${answerPlan.causalQuestion ? 'To pytanie wymaga wyjaśnienia przyczyny: jeśli źródło jawnie opisuje skutek (np. „putting him in control” lub „giving him control”), nazwij tę relację wprost („co dało mu kontrolę”); samo „po”, „następnie” lub „w trakcie” nie wyjaśnia przyczyny. Jeśli źródło podaje tylko następstwo, nie wymyślaj przyczyny.' : ''} Zachowuj kategorię rzeczy podczas tłumaczenia: „cart/carriage/wagon” to „wóz/wózek”, a nie „kosz/basket”; jeśli nie znasz polskiego odpowiednika, użyj neutralnego opisu zamiast zmieniać rodzaj obiektu. Przy pytaniu „kim jest X?” podaj najbardziej konkretną, źródłowo potwierdzoną tożsamość/rolę i wyróżniającą cechę; nie kończ na ogólnym „towarzysz” lub „postać”, jeśli materiał podaje dokładniejszy opis. Nie wymyślaj cytatów, source_id, nazw własnych, dat, liczb ani szczegółów. Jeśli EVIDENCE CANDIDATES nie potwierdzają części pytania, pomiń tę część albo jasno powiedz, że brak wystarczających danych. Przed wysłaniem odpowiedzi sprawdź mentalnie każde zdanie: „który dokładnie candidate je potwierdza?”. Nigdy nie wypisuj etykiet technicznych „EVIDENCE CANDIDATE” ani numerów candidate w odpowiedzi dla użytkownika. Jeśli pytanie zaczyna się od „W grze <tytuł>:”, potraktuj tytuł jako kontekst retrieval, nie powtarzaj go w claimach bez dowodu z treści źródła.`;
   const kategoriaAI = routingAI.intent;
+  // Obliczenia wykonujemy lokalnie: nie uruchamiamy retrieval, pamięci ani LLM.
+  // Błędne wyrażenie kończy się odmową zamiast przekazania go do modelu.
+  if (kategoriaAI === 'calculation') {
+    const wynikObliczenia = obliczPytanie(pytanie);
+    if (!wynikObliczenia.ok) {
+      console.warn(`[AI][${requestId}] odrzucono wyrażenie arytmetyczne: ${wynikObliczenia.reason}`);
+      await wyslijFn(`@${nick} Nie mogę bezpiecznie obliczyć tego wyrażenia. Użyj liczb, operatorów +, -, *, / oraz nawiasów.`);
+      zalogujPodsumowanieAI('rejected');
+      return;
+    }
+    await wyslijFn(`@${nick} ${wynikObliczenia.expression} = ${formatujWynik(wynikObliczenia.value)}`);
+    zalogujPodsumowanieAI('accepted');
+    return;
+  }
+  const verifiedMemoryPromise = verifiedMemoryUserId ? loadMemory(verifiedMemoryUserId) : Promise.resolve([]);
   console.log(`[AI][${requestId}] routing=${JSON.stringify({ intent: routingAI.intent, entity: routingAI.entity, game: routingAI.game, entity_type: routingAI.entity_type, game_type: routingAI.game_type, needs_web: routingAI.needs_web, freshness: routingAI.freshness, source_type: routingAI.source_type, response_profile: aiPlan.responseProfile, topic_type: routingAI.topic_type, question_type: routingAI.question_type, semantic_classification: routingAI.semantic_classification || 'deterministic', confidence: routingAI.confidence })}`);
   console.log(`[AI] kategoria=${kategoriaAI} nick=${nick}`);
   const jestRecepturaMC = czyPytanieOReceptureMC(pytanie);
@@ -3108,7 +3219,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
             );
             return (rewriteResult?.choices?.[0]?.message?.content || '').trim() || null;
           } catch (error) {
-            console.warn(`[Tavily] ⏱️ Rewrite pominięty (${error?.message || error}); używam oryginalnego pytania.`);
+            console.warn(`[Tavily] ⏱️ Rewrite pominięty (${sanitizujKomunikatBledu(error?.message || error)}); używam oryginalnego pytania.`);
             return null;
           }
         })() : Promise.resolve(null))
@@ -3123,11 +3234,38 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
   const verifiedMemory = await verifiedMemoryPromise;
   const verifiedMemoryContext = buildVerifiedMemoryContext(verifiedMemory);
   systemPrompt = `${systemPrompt}${verifiedMemoryContext ? `\n\n${verifiedMemoryContext}` : ''}`;
-  if (domeny?.resolvedGame && !routingAI.game) {
-    routingAI.game = domeny.resolvedGame.nazwa;
-    routingAI.entity = routingAI.entity || domeny.resolvedGame.nazwa;
-    routingAI.entity_type = routingAI.entity_type || 'game';
-    routingAI.resolved_entity = routingAI.resolved_entity || { type: 'game', name: domeny.resolvedGame.nazwa, confidence: 0.90, resolution: 'igdb' };
+  if (domeny?.resolvedGame && (!routingAI.game || routingAI.resolved_entity?.resolution === 'explicit_unverified' || domeny.resolvedGame.type === 'franchise')) {
+    const resolved = domeny.resolvedGame;
+    const nazwaGry = String(resolved.nazwa || resolved.name || '').trim().slice(0, 120);
+    const typEncji = resolved.type === 'franchise' ? 'franchise' : 'game';
+    const pewnoscGry = Number(resolved.confidence);
+    const dataPierwszegoWydania = Number.isFinite(resolved.firstReleaseDate)
+      ? new Date(resolved.firstReleaseDate * 1000).toISOString().slice(0, 10)
+      : null;
+    if (nazwaGry) {
+      routingAI.game = typEncji === 'franchise' ? null : nazwaGry;
+      routingAI.entity = nazwaGry;
+      routingAI.entity_type = typEncji;
+      routingAI.resolved_entity = {
+        type: typEncji,
+        name: nazwaGry,
+        game: typEncji === 'franchise' ? null : nazwaGry,
+        franchise: resolved.franchise || (typEncji === 'franchise' ? nazwaGry : null),
+        collection: resolved.collection || null,
+        game_type: resolved.gameType || null,
+        parent_game: resolved.parentGame || null,
+        version_parent: resolved.versionParent || null,
+        first_release_date: resolved.firstReleaseDate || null,
+        confidence: Number.isFinite(pewnoscGry) ? Math.max(0, Math.min(1, pewnoscGry)) : 0.75,
+        resolution: resolved.resolution || 'igdb',
+      };
+      answerPlan.game = typEncji === 'franchise' ? null : nazwaGry;
+      answerPlan.entity = nazwaGry;
+      answerPlan.instruction += typEncji === 'franchise'
+        ? ` Rozpoznany zakres to franczyza/seria "${nazwaGry}", nie pierwsza część. Uwzględniaj różne gry z tej serii i nie przypisuj wydarzeń do konkretnej części bez dowodu.`
+        : ` Kontekst gry rozpoznany dynamicznie: ${nazwaGry}. Nie łącz go z innymi seriami bez bezpośredniego dowodu.`;
+      systemPrompt += `\n\n[RESOLVED GAME CONTEXT]\nZakres encji: ${typEncji}. Tytuł/seria: ${nazwaGry}. Typ IGDB: ${resolved.gameType || 'nieustalony'}. Franczyza: ${resolved.franchise || 'nieustalona'}. Kolekcje: ${(resolved.collections || []).join(', ') || 'brak danych'}. Data pierwszego wydania (metadane identyfikacyjne IGDB, nie dowód fabularny): ${dataPierwszegoWydania || 'brak danych'}. Używaj tych relacji wyłącznie do rozpoznawania zakresu gry. Nie traktuj metadanych IGDB jako źródła faktów fabularnych. Nie mieszaj remake'u, remastera, DLC ani wersji z grą podstawową.\n[/RESOLVED GAME CONTEXT]`;
+    }
   }
 
   const metadaneRequestu = {
@@ -3199,14 +3337,14 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
       const wynikiHLTB = [];
       for (const tytulHLTB of gryHLTB) {
         const wynikHLTB = await pobierzCzasHLTBFn(tytulHLTB).catch(err => {
-          console.error(`[HLTB] Błąd pobierania danych dla ${tytulHLTB}:`, err.message);
+          console.error(`[HLTB] Błąd pobierania danych dla ${tytulHLTB}:`, sanitizujKomunikatBledu(err.message));
           return null;
         });
         console.log(`[HLTB] ⏱️ ${tytulHLTB} -> ${wynikHLTB ? 'OK' : 'brak danych'}`);
         if (wynikHLTB) wynikiHLTB.push(wynikHLTB);
       }
       if (wynikiHLTB.length) {
-        const safeNickPattern = escapeRegExp(nick);
+        const safeNickPattern = ucieknijRegex(nick);
         const odpowiedziHLTB = wynikiHLTB.map(w => przygotujOdpowiedzHLTB(nick, w, pytanie).replace(new RegExp(`^@${safeNickPattern}\\s*`), ''));
         await wyslijFn(`@${nick} ${odpowiedziHLTB.join(' | ')}`);
         return;
@@ -3262,8 +3400,14 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
     const intentSpecificRetrievalQueries = plannedRetrievalQueries.filter(query =>
       /(?:exact location landmark nearby map|story timeline quest order arrival|character identity background role companion lore|cause reason motivation (?:event core transfer|story conflict)|gameplay strategy mechanics guide walkthrough)/i.test(query)
     );
+    const loreScopeName = routingAI.game
+      || (routingAI.entity_type === 'franchise' ? routingAI.entity : '');
+    const dynamicGameLoreQueries = aiPlan.responseProfile === 'lore' && loreScopeName
+      ? [`${loreScopeName} ${routingAI.entity_type === 'franchise' ? 'franchise series' : 'game'} lore canon story timeline character relationships`]
+      : [];
     const specializedRetrievalQueries = [
       ...intentSpecificRetrievalQueries,
+      ...dynamicGameLoreQueries,
       ...advancedRetrievalPlan
         .filter(item => aiPlan.responseProfile === 'lore'
           ? item?.reason === 'lore'
@@ -3343,7 +3487,55 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
         }
       }
     }
-    wynikSzukania = materialyTavily.join('\n---\n');
+    // Opcjonalny semantic retrieval przez Exa. Jest domyślnie wyłączony,
+    // zużywa maksymalnie jeden dodatkowy request i korzysta z tego samego budżetu czasu.
+    const semanticEnabled = process.env.AI_SEMANTIC_RETRIEVAL === '1';
+    const semanticKey = String(process.env.EXA_API_KEY || '').trim();
+    const semanticTimeoutRaw = Number(process.env.AI_SEMANTIC_RETRIEVAL_TIMEOUT_MS);
+    const semanticTimeoutMs = Math.max(1500, Math.min(6000,
+      Number.isFinite(semanticTimeoutRaw) && semanticTimeoutRaw > 0 ? semanticTimeoutRaw : 3500));
+    if (semanticEnabled && semanticKey && !aiState.semanticSearches
+      && aiState.tavilySearches + (aiState.semanticSearches || 0) < aiState.maxWyszukanTavily
+      && pozostalyCzasMs() > semanticTimeoutMs + 12000) {
+      const strictPersonaDomains = (pytanieOrazBilly ? domenyTavilyBilly : null)
+        || (pytanieOrazEdzzi ? domenyTavilyEdzzi : null)
+        || (pytanieOrazAngie ? domenyTavilyAngie : null);
+      const semanticStartedAt = Date.now();
+      try {
+        const semanticResult = await searchExa({
+          apiKey: semanticKey,
+          query: pytanie.slice(0, 1200),
+          domains: strictPersonaDomains || [],
+          startIndex: sourceOffset,
+          timeoutMs: Math.min(semanticTimeoutMs, Math.max(1000, pozostalyCzasMs() - 12000)),
+        });
+        aiState.semanticSearches = 1;
+        if (semanticResult?.status === 'ok' && semanticResult.text) {
+          materialyTavily.push(semanticResult.text);
+          sourceOffset += (semanticResult.text.match(/\[SOURCE \d+\]/g) || []).length;
+        }
+        aiState.recordTiming?.('semantic_retrieval_end', {
+          provider: 'exa',
+          status: semanticResult?.status || 'empty',
+          sourceCount: semanticResult?.sources?.length || 0,
+          elapsedMs: Date.now() - semanticStartedAt,
+        });
+      } catch (_) {
+        aiState.semanticSearches = 1;
+        aiState.recordTiming?.('semantic_retrieval_end', {
+          provider: 'exa', status: 'error', sourceCount: 0,
+          elapsedMs: Date.now() - semanticStartedAt,
+        });
+      }
+    }
+    const fusedRetrieval = fuseTavilyEvidenceTexts(materialyTavily, pytanie, routingAI, {
+      maxSources: pytanieWieloczlonowe ? 8 : 6,
+      minIndependent: (pytanieOLore || pytanieOGameplay) ? 2 : 1,
+      searchCount: aiState.tavilySearches + (aiState.semanticSearches || 0),
+    });
+    wynikSzukania = fusedRetrieval.text || materialyTavily.join('\n---\n');
+    aiState.retrievalTrace = fusedRetrieval.retrievalTrace;
+    console.log(`[Retrieval] RRF candidates=${fusedRetrieval.retrievalTrace.candidateCount} selected=${fusedRetrieval.sources.length} queries=${fusedRetrieval.retrievalTrace.queryCount} status=${fusedRetrieval.evidenceStatus}`);
   }
 
   // RAG Billy: stabilne fakty pobieramy z własnej bazy wiedzy, a aktualne z sieci.
@@ -3515,9 +3707,9 @@ Pytanie użytkownika: ${pytanie}`;
     const prompt = messages.user;
     const controller = new AbortController();
     const timeoutMs = timeoutDlaGeneracji();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const response = await fetch(buildGeminiGenerateContentUrl(AI_MODELS.generatorGemini), {
+      const { response, data } = await awaitWithAbortTimeout((async () => {
+        const response = await fetch(buildGeminiGenerateContentUrl(AI_MODELS.generatorGemini), {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': KONFIGURACJA.geminiKey },
         body: JSON.stringify({
           systemInstruction: { parts: [{ text: overrideSystemPrompt }] },
@@ -3527,8 +3719,10 @@ Pytanie użytkownika: ${pytanie}`;
           ],
           generationConfig: { maxOutputTokens: Math.max(300, Math.min(Number(maxTok) || 700, 1200)) },
         }), signal: controller.signal,
-      });
-      const data = await response.json().catch(() => ({}));
+        });
+        const data = await response.json().catch(() => ({}));
+        return { response, data };
+      })(), timeoutMs, controller, 'Gemini generation');
       if (!response.ok) {
         const retryAfter = retryAfterHint(response);
         const message = data?.error?.message || 'provider returned an error';
@@ -3546,11 +3740,11 @@ Pytanie użytkownika: ${pytanie}`;
         ...(parsed.safetyRatings ? { safetyRatings: parsed.safetyRatings } : {}),
       };
     } catch (err) {
-      console.error(`[Gemini] Fallback nieudany (${powod}):`, err.message);
+      console.error(`[Gemini] Fallback nieudany (${powod}):`, sanitizujKomunikatBledu(err.message));
       const cooldownMs = geminiGenerationCooldownMsFromError(err);
       if (cooldownMs > 0) ustawGeminiGenerationCooldown(AI_MODELS.generatorGemini, cooldownMs);
-      return wynikPusty('gemini', AI_MODELS.generatorGemini, err.message);
-    } finally { clearTimeout(timer); }
+      return wynikPusty('gemini', AI_MODELS.generatorGemini, sanitizujKomunikatBledu(err.message));
+    }
   }
 
   async function zapytajGeminiLiteFallback(maxTok = 700, overrideSystemPrompt = systemPrompt, powod = 'Gemini 3.8 Flash') {
@@ -3561,9 +3755,9 @@ Pytanie użytkownika: ${pytanie}`;
     const prompt = messages.user;
     const controller = new AbortController();
     const timeoutMs = timeoutDlaGeneracji();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const response = await fetch(buildGeminiGenerateContentUrl(AI_MODELS.generatorGeminiLite), {
+      const { response, data } = await awaitWithAbortTimeout((async () => {
+        const response = await fetch(buildGeminiGenerateContentUrl(AI_MODELS.generatorGeminiLite), {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': KONFIGURACJA.geminiKey },
         body: JSON.stringify({
           systemInstruction: { parts: [{ text: overrideSystemPrompt }] },
@@ -3573,8 +3767,10 @@ Pytanie użytkownika: ${pytanie}`;
           ],
           generationConfig: { maxOutputTokens: Math.max(300, Math.min(Number(maxTok) || 700, 1200)), thinkingConfig: { thinkingLevel: 'minimal' } },
         }), signal: controller.signal,
-      });
-      const data = await response.json().catch(() => ({}));
+        });
+        const data = await response.json().catch(() => ({}));
+        return { response, data };
+      })(), timeoutMs, controller, 'Gemini Lite generation');
       if (!response.ok) {
         const retryAfter = retryAfterHint(response);
         const message = data?.error?.message || 'provider returned an error';
@@ -3592,11 +3788,11 @@ Pytanie użytkownika: ${pytanie}`;
         ...(parsed.safetyRatings ? { safetyRatings: parsed.safetyRatings } : {}),
       };
     } catch (err) {
-      console.error(`[Gemini Lite] Fallback nieudany (${powod}):`, err.message);
+      console.error(`[Gemini Lite] Fallback nieudany (${powod}):`, sanitizujKomunikatBledu(err.message));
       const cooldownMs = geminiGenerationCooldownMsFromError(err);
       if (cooldownMs > 0) ustawGeminiGenerationCooldown(AI_MODELS.generatorGeminiLite, cooldownMs);
-      return wynikPusty('gemini', AI_MODELS.generatorGeminiLite, err.message);
-    } finally { clearTimeout(timer); }
+      return wynikPusty('gemini', AI_MODELS.generatorGeminiLite, sanitizujKomunikatBledu(err.message));
+    }
   }
 
   async function zapytajOpenRouterFallback(maxTok = 700, overrideSystemPrompt = systemPrompt, powod = 'Gemini') {
@@ -3606,15 +3802,17 @@ Pytanie użytkownika: ${pytanie}`;
     const prompt = messages[messages.length - 1]?.content || pytanie;
     const controller = new AbortController();
     const timeoutMs = timeoutDlaGeneracji();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const response = await fetch(`${KONFIGURACJA.openrouterBaseUrl}/chat/completions`, {
+      const { response, data } = await awaitWithAbortTimeout((async () => {
+        const response = await fetch(`${KONFIGURACJA.openrouterBaseUrl}/chat/completions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${KONFIGURACJA.openrouterKey}`, 'HTTP-Referer': 'https://czituchbot.pl', 'X-Title': 'CzituchBot' },
         body: JSON.stringify({ model: KONFIGURACJA.openrouterGeneratorModel, messages, temperature: Math.min(Number(temperature) || 0.2, 0.4), max_tokens: Math.max(300, Math.min(Number(maxTok) || 700, 1200)) }),
         signal: controller.signal,
-      });
-      const data = await response.json().catch(() => ({}));
+        });
+        const data = await response.json().catch(() => ({}));
+        return { response, data };
+      })(), timeoutMs, controller, 'OpenRouter generation');
       const retryAfter = retryAfterHint(response);
       if (!response.ok) {
         throw new Error(openRouterErrorMessage(response.status, data, retryAfter));
@@ -3638,77 +3836,120 @@ Pytanie użytkownika: ${pytanie}`;
       }
       return { tekst, ucieta: data?.choices?.[0]?.finish_reason === 'length', provider: 'openrouter', model: data?.model || KONFIGURACJA.openrouterGeneratorModel };
     } catch (err) {
-      console.error(`[OpenRouter] Fallback nieudany (${powod}):`, err.message);
+      console.error(`[OpenRouter] Fallback nieudany (${powod}):`, sanitizujKomunikatBledu(err.message));
       return wynikPusty('openrouter', KONFIGURACJA.openrouterGeneratorModel, formatProviderError('openrouter', KONFIGURACJA.openrouterGeneratorModel, err));
-    } finally { clearTimeout(timer); }
+    }
   }
 
   // xKiro jako dodatkowy fallback po Groq 20B (OpenAI-compatible gateway).
   // Bez reasoning_effort — to parametr specyficzny dla Groq. Wlicza się do budżetu generacji requestu.
   async function zapytajXKiro(maxTok = 700, overrideSystemPrompt = systemPrompt, powod = 'main') {
     const model = KONFIGURACJA.xkiroModel;
+    const wynikBlad = error => wynikPusty('xkiro', model, sanitizujKomunikatBledu(error?.message || error));
+    const configuredTimeoutMs = Number(process.env.AI_XKIRO_GENERATOR_TIMEOUT_MS);
+    const xkiroMaxTimeoutMs = Number.isFinite(configuredTimeoutMs) && configuredTimeoutMs > 0
+      ? Math.min(30000, Math.max(4000, configuredTimeoutMs)) : 12000;
+    const configuredTokens = Number(process.env.AI_XKIRO_GENERATOR_MAX_TOKENS);
+    let maxTokens = Math.min(1200, Math.max(300, Number.isFinite(configuredTokens) && configuredTokens > 0
+      ? Math.max(Number(maxTok) || 300, configuredTokens) : (Number(maxTok) || 700)));
     if (!KONFIGURACJA.xkiroKey) return wynikPusty('xkiro', model, 'brak XKIRO_API_KEY');
-    if (!moznaWykonacGeneracje('xkiro', model)) return wynikPusty('xkiro', model, 'AI request budget exceeded');
-    const remainingMs = pozostalyCzasMs();
-    if (!Number.isFinite(remainingMs) || remainingMs <= 0) return wynikPusty('xkiro', model, 'AI request deadline exceeded');
-    const controller = new AbortController();
-    const timeoutMs = timeoutDlaGeneracji();
-    if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) return wynikPusty('xkiro', model, 'AI request deadline too short for xKiro');
-    try {
-      // Race the complete HTTP + body-read operation against the shared request deadline.
-      const messages = buildMessages(overrideSystemPrompt);
-      const { response, data } = await awaitWithAbortTimeout((async () => {
-        const response = await fetch(`${KONFIGURACJA.xkiroBaseUrl}/chat/completions`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${KONFIGURACJA.xkiroKey}` },
-          body: JSON.stringify({
-            model,
-            messages: [
-              { role: 'system', content: messages.system },
-              ...messages.history,
-              { role: 'user', content: messages.user },
-            ],
-            temperature,
-            max_tokens: maxTok,
-          }),
-          signal: controller.signal,
-        });
-        const data = await response.json().catch(() => ({}));
-        return { response, data };
-      })(), timeoutMs, controller, 'xKiro generation');
-      if (!response.ok) {
-        const status = Number(response.status || 0);
-        const retryAfter = retryAfterHint(response);
-        // Keep xKiro's stable type/code/status in the diagnostic. The fallback
-        // router uses status for failover and the cooldown parser uses Retry-After
-        // or explicit daily-quota wording; never retry this POST in-place.
-        const diagnostic = formatProviderError('xkiro', data?.model || model, null, {
-          status,
-          code: data?.error?.code,
-          type: data?.error?.type,
-          param: data?.error?.param,
-          retry_after: retryAfter || null,
-          responseData: data,
-        });
-        throw new Error(diagnostic);
+    const messages = buildMessages(overrideSystemPrompt);
+    const maxAttempts = aiState.generationPhase === 'repair' ? 1 : 2;
+    let lastError = null;
+    for (let attemptNumber = 1; attemptNumber <= maxAttempts; attemptNumber++) {
+      if (!moznaWykonacGeneracje('xkiro', model)) return wynikBlad(lastError || 'AI request budget exceeded');
+      const remainingMs = pozostalyCzasMs();
+      if (!Number.isFinite(remainingMs) || remainingMs <= 0) return wynikBlad(lastError || 'AI request deadline exceeded');
+      const controller = new AbortController();
+      const timeoutMs = attemptNumber === 1
+        ? computeGenerationTimeout(remainingMs, { maxTimeoutMs: xkiroMaxTimeoutMs, reserveMs: 6500, minTimeoutMs: 4000 })
+        : computeGenerationTimeout(remainingMs, { maxTimeoutMs: 20000, reserveMs: 26000, minTimeoutMs: 5000 });
+      if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) return wynikBlad(lastError || 'AI request deadline too short for xKiro');
+      try {
+        const { response, data } = await awaitWithAbortTimeout((async () => {
+          const response = await fetch(`${KONFIGURACJA.xkiroBaseUrl}/chat/completions`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${KONFIGURACJA.xkiroKey}` },
+            body: JSON.stringify({
+              model,
+              messages: [
+                { role: 'system', content: messages.system },
+                ...messages.history,
+                { role: 'user', content: messages.user },
+              ],
+              temperature,
+              max_tokens: maxTokens,
+            }),
+            signal: controller.signal,
+          });
+          let data;
+          try { data = await response.json(); }
+          catch (error) {
+            const parseError = new Error(`xKiro invalid JSON response (HTTP ${response.status}): ${String(error?.message || 'parse failed').slice(0, 160)}`);
+            parseError.code = 'XKIRO_INVALID_JSON';
+            parseError.status = Number(response.status || 0);
+            parseError.retryAfter = retryAfterHint(response) || null;
+            throw parseError;
+          }
+          return { response, data };
+        })(), timeoutMs, controller, `xKiro generation attempt ${attemptNumber}`);
+        if (!response.ok) {
+          const status = Number(response.status || 0);
+          const retryAfter = retryAfterHint(response);
+          const diagnostic = formatProviderError('xkiro', data?.model || model, null, {
+            status, code: data?.error?.code, type: data?.error?.type, param: data?.error?.param,
+            retry_after: retryAfter || null, responseData: data,
+          });
+          const error = new Error(diagnostic);
+          error.status = status;
+          error.retryAfter = retryAfter || null;
+          throw error;
+        }
+        const parsed = parseOpenAICompatibleCompletion(data);
+        if (!parsed.text) {
+          const usage = parsed.usage ? `usage=${JSON.stringify(parsed.usage)}` : 'usage=unavailable';
+          throw new Error(`empty_response: no answer text; finish_reason=${parsed.finishReason}; reasoning_only=${parsed.reasoningPresent}; ${usage}; response_id=${parsed.responseId || 'unavailable'}`);
+        }
+        if (parsed.truncated && attemptNumber < maxAttempts) {
+          maxTokens = Math.min(1200, Math.max(maxTokens + 200, Math.ceil(maxTokens * 1.5)));
+          lastError = new Error(`truncated_response: finish_reason=${parsed.finishReason}; retrying same model with max_tokens=${maxTokens}`);
+          console.warn(`[xKiro] Odpowiedź ucięta (${powod}); jedna ponowna próba tego samego modelu z większym limitem tokenów.`);
+          continue;
+        }
+        return ujednolicWynik({ tekst: parsed.text, ucieta: parsed.truncated, finishReason: parsed.finishReason, usage: parsed.usage, responseId: parsed.responseId, reasoningPresent: parsed.reasoningPresent }, 'xkiro', parsed.model || model);
+      } catch (error) {
+        lastError = error;
+        const status = Number(error?.status || 0);
+        const transientHttp = [500, 502, 503, 504, 529].includes(status);
+        const retryable = error?.name === 'TimeoutError' || error?.code === 'XKIRO_INVALID_JSON'
+          || /empty_response|invalid_response|timed out|fetch failed/i.test(String(error?.message || '')) || transientHttp;
+        const canRetry = attemptNumber < maxAttempts && retryable && !error?.retryAfter && ![401, 403, 429].includes(status)
+          && pozostalyCzasMs() >= 32000;
+        if (!canRetry) {
+          const reason = sanitizujKomunikatBledu(error?.message || error);
+          console.error(`[xKiro] Fallback nieudany (${powod}, próba ${attemptNumber}):`, reason);
+          return wynikPusty('xkiro', model, reason);
+        }
+        console.warn(`[xKiro] Błąd przejściowy (${powod}, próba ${attemptNumber}); ponawiam raz ten sam model w pozostałym budżecie.`);
       }
-      const choice = data?.choices?.[0];
-      const tekst = (typeof choice?.message?.content === 'string' ? choice.message.content : '').trim();
-      if (!tekst) throw new Error('xKiro zwrócił pustą odpowiedź');
-      return ujednolicWynik({ tekst, ucieta: choice?.finish_reason === 'length' }, 'xkiro', data?.model || model);
-    } catch (err) {
-      console.error(`[xKiro] Fallback nieudany (${powod}):`, err.message);
-      return wynikPusty('xkiro', model, err.message);
     }
+    return wynikBlad(lastError || 'xKiro generation failed');
   }
-
   // Jedna główna próba 120B + najwyżej jeden retry tylko dla pustej/uciętej odpowiedzi.
   // Circuit breaker i quota 120B są globalne dla procesu — nie resetują się przy
   // każdym równoległym zapytaniu AI.
   let liczbaProb120b = 0;
   let requestBlokada120b = false;
   const wynikPusty = (provider, model, error = null) => ({ tekst: '', status: 'unavailable', provider, model, ucieta: false, error });
-  const ujednolicWynik = (r, provider, model) => ({ tekst: String(r?.tekst || '').trim(), status: r?.tekst ? 'ok' : 'unavailable', provider: r?.provider || provider, model: r?.model || model, ucieta: Boolean(r?.ucieta), error: r?.error || null });
+  const ujednolicWynik = (r, provider, model) => ({
+    tekst: String(r?.tekst || '').trim(), status: r?.tekst ? 'ok' : 'unavailable',
+    provider: r?.provider || provider, model: r?.model || model,
+    ucieta: Boolean(r?.ucieta), error: r?.error || null,
+    ...(r?.finishReason ? { finishReason: String(r.finishReason).slice(0, 80) } : {}),
+    ...(r?.usage && typeof r.usage === 'object' ? { usage: r.usage } : {}),
+    ...(r?.responseId ? { responseId: String(r.responseId).slice(0, 160) } : {}),
+    ...(r?.reasoningPresent !== undefined ? { reasoningPresent: Boolean(r.reasoningPresent) } : {}),
+  });
 
   async function zapytajGlowny(maxTok, overrideSystemPrompt = systemPrompt, model = AI_MODELS.generatorPrimary) {
     if (timeoutDlaGeneracji() === null) {
@@ -3809,12 +4050,13 @@ Pytanie użytkownika: ${pytanie}`;
     return false;
   };
 
-  const selectHealthyFallbacks = ({ failure = 'unknown', attempted = [], failedProviders = [], maxFallbacks = 1, exclude = [] } = {}) => {
+  const selectHealthyFallbacks = ({ failure = 'unknown', attempted = [], failedProviders = [], maxFallbacks = 1, exclude = [], allowedProviders = null } = {}) => {
     const blocked = new Set([...(failedProviders || []), ...(exclude || [])]);
     return selectRepairFallbacks({
       failedProviders: [...blocked],
       exclude: attempted,
       availableProviders: GENERATION_FALLBACK_CHAIN.filter(providerConfiguredForRequest),
+      allowedProviders,
       maxFallbacks,
     });
   };
@@ -3828,6 +4070,10 @@ Pytanie użytkownika: ${pytanie}`;
       status: attempt.status || 'unknown',
       failure: attempt.failure || null,
       latencyMs: Math.max(0, Number(attempt.latencyMs) || 0),
+      ...(attempt.finishReason ? { finishReason: String(attempt.finishReason).slice(0, 80) } : {}),
+      ...(attempt.usage && typeof attempt.usage === 'object' ? { usage: attempt.usage } : {}),
+      ...(attempt.responseId ? { responseId: String(attempt.responseId).slice(0, 160) } : {}),
+      ...(attempt.reasoningPresent !== undefined ? { reasoningPresent: Boolean(attempt.reasoningPresent) } : {}),
       elapsedMs: aiState.elapsedMs(),
       remainingMs: aiState.remainingMs(),
     };
@@ -3839,16 +4085,19 @@ Pytanie użytkownika: ${pytanie}`;
   async function generujOdpowiedz(maxTok, prompt = systemPrompt, powod = 'main', allowPrimary = true) {
     const phase = /repair/i.test(String(powod || '')) ? 'repair' : 'initial';
     const effectiveMaxTok = phase === 'repair' ? Math.min(Math.max(Number(maxTok) || 300, 300), 700) : Math.max(Number(maxTok) || 300, 300);
-    const primaryModel = AI_MODELS.generatorPrimary || 'openai/gpt-oss-120b';
-    const primaryStep = `groq:${primaryModel}`;
+    const primaryProvider = AI_PRIMARY_GENERATOR.provider;
+    const primaryModel = AI_PRIMARY_GENERATOR.model;
+    const primaryStep = AI_PRIMARY_GENERATOR.step;
     const primaryQuotaBlocked = allowPrimary && isProviderQuotaBlocked(primaryStep);
     const shouldAttemptPrimary = allowPrimary && !primaryQuotaBlocked;
     aiState.generationPhase = phase;
     const startedGenerationAt = Date.now();
-    aiState.recordTiming('generation_cycle_start', { phase, provider: 'groq', model: shouldAttemptPrimary ? primaryModel : null });
+    aiState.recordTiming('generation_cycle_start', { phase, provider: primaryProvider, model: shouldAttemptPrimary ? primaryModel : null });
     let result = shouldAttemptPrimary
-      ? await zapytajGlowny(effectiveMaxTok, prompt, primaryModel)
-      : wynikPusty('groq', primaryModel, allowPrimary ? 'provider cooldown active' : 'primary model skipped for this generation cycle');
+      ? (primaryProvider === 'xkiro'
+          ? await zapytajXKiro(effectiveMaxTok, prompt, powod)
+          : await zapytajGlowny(effectiveMaxTok, prompt, primaryModel))
+      : wynikPusty(primaryProvider, primaryModel, allowPrimary ? 'provider cooldown active' : 'primary model skipped for this generation cycle');
     if (isMissingQuestionPlaceholder(result.tekst)) {
       result = { ...result, tekst: '', error: 'empty_response: generator returned a missing-question placeholder' };
       console.warn(`[AI][${requestId}] ${primaryStep} zwrócił placeholder „brak pytania”; traktuję jako pustą odpowiedź i uruchamiam fallback.`);
@@ -3858,7 +4107,7 @@ Pytanie użytkownika: ${pytanie}`;
 
     if (result.tekst && !result.ucieta) {
       lastSuccessfulGenerationStep = primaryStep;
-      recordGenerationAttempt({ provider: result.provider, model: result.model, status: 'success', latencyMs: Date.now() - startedGenerationAt });
+      recordGenerationAttempt({ provider: result.provider, model: result.model, status: 'success', latencyMs: Date.now() - startedGenerationAt, finishReason: result.finishReason, usage: result.usage, responseId: result.responseId, reasoningPresent: result.reasoningPresent });
       return result;
     }
     if (result.error && shouldAttemptPrimary) {
@@ -3885,6 +4134,8 @@ Pytanie użytkownika: ${pytanie}`;
       'openrouter:default': () => zapytajOpenRouterFallback(effectiveMaxTok, prompt, powod),
     };
 
+    const strictBenchmarkGenerator = process.env.AI_LIVE_BENCHMARK === '1'
+      && process.env.AI_BENCHMARK_STRICT_GENERATOR === '1';
     const repairBudgetFailure = phase === 'repair' ? repairBudgetBlockReason({
       remainingMs: typeof aiState.remainingMs === 'function' ? aiState.remainingMs() : null,
       generations: aiState.generacje,
@@ -3918,7 +4169,9 @@ Pytanie użytkownika: ${pytanie}`;
           failure: 'grounded_reject',
           attempted: [],
           failedProviders: [...failedFallbackProviders],
-          exclude: lastSuccessfulGenerationStep ? [lastSuccessfulGenerationStep] : [],
+          exclude: strictBenchmarkGenerator
+            ? []
+            : (lastSuccessfulGenerationStep ? [lastSuccessfulGenerationStep] : []),
           // Repair has one generation cycle, but may try several providers
           // if an endpoint fails quickly (e.g. quota). Each provider still obeys
           // the shared deadline and model-call budget.
@@ -3926,8 +4179,17 @@ Pytanie użytkownika: ${pytanie}`;
           // a nie pełnym łańcuchem generacji. Dwie próby wystarczą: szybki model
           // oraz jeden niezależny fallback; dalsze próby zwykle tylko konsumują
           // budżet i zwiększają ryzyko timeoutu.
-          maxFallbacks: Math.min(configuredFallbackLimit, 2),
+          // W trybie strict najpierw ograniczamy pulę do primaryStep, a dopiero
+          // potem wybieramy limit. Inaczej ranking Groq/Gemini ucinał xKiro
+          // przed filtrem strict i repair zawsze kończył się no_healthy_provider.
+          allowedProviders: strictBenchmarkGenerator ? [primaryStep] : null,
+          maxFallbacks: strictBenchmarkGenerator ? 1 : Math.min(configuredFallbackLimit, 2),
         });
+    }
+    if (strictBenchmarkGenerator) {
+      // Benchmark ma mierzyć wskazany model, a nie mieszankę Cohere/Groq/Gemini.
+      // Fallback do innego generatora unieważnia porównanie jakości.
+      candidateSteps = candidateSteps.filter(step => step === primaryStep);
     }
 
     if (phase === 'repair') {
@@ -3989,8 +4251,8 @@ Pytanie użytkownika: ${pytanie}`;
     // Zwracamy rzeczywiście ostatnią próbę, a nie pierwszy 120B.
     // Dzięki temu SUMMARY pokazuje prawdziwy provider/model/error po wyczerpaniu fallbacku.
     return lastResult || wynikPusty(
-      result?.provider || 'groq',
-      result?.model || AI_MODELS.generatorPrimary,
+      result?.provider || primaryProvider,
+      result?.model || primaryModel,
       result?.error || 'AI fallback chain exhausted',
     );
   }
@@ -4021,6 +4283,7 @@ Pytanie użytkownika: ${pytanie}`;
   // przy statusie soft_accepted. Trzymamy ją poza blokiem walidacji, bo
   // finalizacja odpowiedzi jest poza nim.
   let odpowiedzCzesciowa = null;
+  let zweryfikowaneZrodlaIds = new Set();
   if (maWalidowac) {
     aiState.validationPass = 1;
     aiState.recordTiming('validator_start', { pass: 1, answerChars: odp.length });
@@ -4085,7 +4348,11 @@ Pytanie użytkownika: ${pytanie}`;
             : await uzupelnijDanePoValidatorze(walidacja.unsupported_claims || [])));
       const unsupported = (walidacja.unsupported_claims || []).slice(0, 4);
       const reason = String(walidacja.reason || 'validator nie potwierdził odpowiedzi').trim().slice(0, 500);
+      const claimTranslationRepairFeedback = AI_VALIDATOR.zbudujFeedbackTlumaczeniaClaimow(
+        walidacja.diagnostics?.claimSupport?.records,
+      );
       const feedback = [
+        ...(claimTranslationRepairFeedback ? [claimTranslationRepairFeedback] : []),
         'Twoja poprzednia odpowiedź nie przeszła walidacji.',
         `PYTANIE ORYGINALNE — odpowiedz dokładnie na nie: ${String(pytanie || '').slice(0, 1500)}`,
         `POPRZEDNIA ODPOWIEDŹ DO POPRAWY: ${String(odp || '').slice(0, 4000) || '[brak treści]'}`,
@@ -4399,6 +4666,15 @@ Pytanie użytkownika: ${pytanie}`;
         console.warn(`[AI][${requestId}] soft-accepted partial answer rejected by core-intent gate: ${coreMissing.join(', ')}`);
       }
     }
+    if (['accepted', 'soft_accepted'].includes(walidacja.status) && Array.isArray(walidacja.claims)) {
+      zweryfikowaneZrodlaIds = new Set(
+        walidacja.claims
+          .filter(claim => claim?.supported === true && Array.isArray(claim.source_ids))
+          .flatMap(claim => claim.source_ids)
+          .map(String)
+          .filter(sourceId => /^SOURCE \d+$/.test(sourceId))
+      );
+    }
     const validationDecision = decideValidation(walidacja.status, { allowRetry: false });
     aiState.finalStatus = validationDecision.finalStatus;
     odp = finalizeAIPipelineText(odp, validationDecision.finalStatus, {
@@ -4433,8 +4709,8 @@ Pytanie użytkownika: ${pytanie}`;
     }
   }
 
-  // Jedyny etap składający finalny payload. Nic nie jest dopisywane po tej funkcji,
-  // więc validator zawsze ocenia tekst bazowy, a odmowa nie dostaje sprzecznej atrybucji.
+  // Finalizacja ustala treść odpowiedzi po walidacji. Później można dodać wyłącznie
+  // metadane bibliograficzne ze źródeł przypisanych do zaakceptowanych claimów.
   const finalizeResponse = (tekst, status) => finalizeAIPipelineText(tekst, status, {
     rejectedMessage: 'Nie mam wystarczających danych, żeby odpowiedzieć na to pewnie.',
     inconclusiveMessage: 'Chwilowo nie mogę wiarygodnie potwierdzić tej informacji, więc nie będę zgadywać.',
@@ -4458,6 +4734,35 @@ Pytanie użytkownika: ${pytanie}`;
     },
   });
   odp = finalizeResponse(odp, aiState.finalStatus);
+
+  // Publikujemy linki do wszystkich źródeł specjalistycznych wskazanych
+  // przez zaakceptowane claimy. GameLore wymaga dodatkowo informacji o licencji.
+  if (['accepted', 'soft_accepted'].includes(aiState.finalStatus) && zweryfikowaneZrodlaIds.size) {
+    const atrybucjeGameLore = wytnijAtrybucjeGameLoreWszystkie(daneDoWalidacji, zweryfikowaneZrodlaIds);
+    const atrybucjeGameFAQs = wytnijAtrybucjeGameFAQsWszystkie(daneDoWalidacji, zweryfikowaneZrodlaIds);
+    const etykietyZrodel = [
+      ...atrybucjeGameLore.map(zrodlo =>
+        'GameLore: ' + zrodlo.title + ' — ' + zrodlo.url + ' (CC BY-SA)'
+      ),
+      ...atrybucjeGameFAQs.map(zrodlo =>
+        'GameFAQs: ' + zrodlo.title + ' — ' + zrodlo.url
+      ),
+    ];
+    if (etykietyZrodel.length) {
+      const etykietaZrodla = etykietyZrodel.join('; ');
+      const limitOdpowiedzi = 1800;
+      const limitTresci = limitOdpowiedzi - etykietaZrodla.length - 3;
+      if (limitTresci > 120 && odp.length > limitTresci) {
+        odp = ograniczDoPelnychZdanAI(odp, responseCfg.maxSentences, limitTresci, responseCfg.maxWords);
+      }
+      if (odp && etykietaZrodla.length < limitOdpowiedzi - 120) {
+        odp = odp + ' | ' + etykietaZrodla;
+      } else if (etykietaZrodla.length < limitOdpowiedzi) {
+        // Zachowaj pełne linki źródłowe, gdy same zajmują większość limitu wiadomości.
+        odp = etykietaZrodla;
+      }
+    }
+  }
 
   AI_METRYKI[aiState.finalStatus] = (AI_METRYKI[aiState.finalStatus] || 0) + 1;
   // Odpowiedź, którą pipeline wyrzucił w zamian za odmowę. Sam pipeline nie
@@ -4500,15 +4805,9 @@ Pytanie użytkownika: ${pytanie}`;
   if (newMemories.length) await zapiszZweryfikowanaPamiecAI(verifiedMemoryUserId, newMemories);
   historiaRozmowy.push({ role: 'user', content: pytanie }, { role: 'assistant', content: odp });
   zmienWersjeHistorii(historiaRozmowy);
-  ostatnieUzycie[nick] = Date.now();
-  const historiaKlucze = Object.keys(historiaRozmowy);
-  if (historiaKlucze.length > 500) {
-    historiaKlucze.sort((a, b) => (ostatnieUzycie[a] || 0) - (ostatnieUzycie[b] || 0));
-    for (const staryNick of historiaKlucze.slice(0, historiaKlucze.length - 500)) {
-      delete historiaRozmowy[staryNick];
-      delete ostatnieUzycie[staryNick];
-    }
-  }
+  // Historia jest indeksowana kluczem platforma:kanał:użytkownik, nie samym nickiem.
+  oznaczUzycieHistorii(ostatnieUzycie, verifiedMemoryUserId);
+  ograniczHistorieRozmow(historiaRozmowy, ostatnieUzycie, 500);
   await wyslijFn(`@${nick} ${odp}`);
   // Kompresje tego samego nicku są szeregowane, aby nie nadpisać wiadomości z równoległego requestu.
   zaplanujKompresjeHistorii(historiaRozmowy);
@@ -4529,7 +4828,7 @@ function zaplanujKompresjeHistorii(historia) {
   const kolejna = poprzednia
     .catch(() => {})
     .then(() => skompresujHistorie(historia))
-    .catch(err => console.error('[Historia] Błąd w tle:', err.message));
+    .catch(err => console.error('[Historia] Błąd w tle:', sanitizujKomunikatBledu(err.message)));
   historiaKolejki.set(historia, kolejna);
   return kolejna;
 }
@@ -4582,7 +4881,7 @@ async function skompresujHistorie(historiaRozmowy) {
     historiaRozmowy.push(...resztaPelna);
     zmienWersjeHistorii(historiaRozmowy);
   } catch (err) {
-    console.error('[Historia] ❌ Błąd kompresji, awaryjnie obcinam do ostatnich wymian:', err.message);
+    console.error('[Historia] ❌ Błąd kompresji, awaryjnie obcinam do ostatnich wymian:', sanitizujKomunikatBledu(err.message));
     if (/quota|rate.?limit|tokens per day|tokens per minute|TPD|TPM|429/i.test(err.message || '')) {
       groqHistoryCooldownUntil = Date.now() + 15 * 60_000;
     }
@@ -4617,8 +4916,8 @@ const szukajTavily = createTavilySearch({
     if (status?.status === 'cache' || status?.status === 'deduped') AI_METRYKI.tavilyCacheHits++;
   },
 });
-const historiaRozmowy = {};
-const ostatnieUzycie  = {};
+const historiaRozmowy = Object.create(null);
+const ostatnieUzycie  = Object.create(null);
 let botNaPrzerwie = false;
 
 // Globalna ochrona 120B: równoległe requesty nie mogą każdy osobno zużyć
@@ -4674,32 +4973,16 @@ function zablokuj120BGlobalnie(powod = 'limit') {
   console.error(`[AI] 120B global circuit breaker: ${powod}`);
 }
 
-// Kolejka chroni przed jednoczesnym uruchomieniem dużej liczby drogich sekwencji
-// !ai. Zachowujemy wszystkie prośby, ale maksymalnie trzy są obsługiwane naraz.
-const AI_MAX_ROWNOLEGLE = 3;
-const AI_MAX_QUEUED = 20;
-let aiAktywne = 0;
-const aiKolejka = [];
+// Wspólny limit procesu chroni providery przed nadmierną współbieżnością.
+const kolejkaAI = utworzKolejkeAI({
+  maxConcurrent: 3,
+  maxQueued: 20,
+  maxWaitMs: 15000,
+  beforeStart: quotaStateReady,
+});
 
-async function wykonajWKolejceAI(zadanie) {
-  // Do not start provider selection until persisted cooldowns have been restored.
-  await quotaStateReady();
-  if (aiAktywne >= AI_MAX_ROWNOLEGLE) {
-    if (aiKolejka.length >= AI_MAX_QUEUED) {
-      const err = new Error('AI queue full');
-      err.code = 'AI_QUEUE_FULL';
-      throw err;
-    }
-    await new Promise(resolve => aiKolejka.push(resolve));
-  }
-  aiAktywne += 1;
-  try {
-    return await zadanie();
-  } finally {
-    aiAktywne -= 1;
-    const nastepne = aiKolejka.shift();
-    if (nastepne) nastepne();
-  }
+function wykonajWKolejceAI(zadanie) {
+  return kolejkaAI.wykonaj(zadanie);
 }
 
 // =============================================
@@ -5125,9 +5408,9 @@ function ekoStartScheduler(wyslijFn) {
   function zaplanujZaMs(msDocel, fn) {
     if (msDocel > MAX_TIMEOUT) {
       // za długo na raz — czekaj maksymalny możliwy kawałek, potem przelicz resztę
-      setTimeout(() => zaplanujZaMs(msDocel - MAX_TIMEOUT, fn), MAX_TIMEOUT);
+      ustawTimeout(() => zaplanujZaMs(msDocel - MAX_TIMEOUT, fn), MAX_TIMEOUT);
     } else {
-      setTimeout(fn, Math.max(msDocel, 0));
+      ustawTimeout(fn, Math.max(msDocel, 0));
     }
   }
 
@@ -5142,7 +5425,7 @@ function ekoStartScheduler(wyslijFn) {
       console.log(`[Ekonomia] ✅ Scheduler podatkowy zaplanowany za ${Math.round(msDocel / 3600000)} h`);
     } else {
       // Minęła 23:00 ostatniego dnia – odpal za godzinę (edge case)
-      setTimeout(zaplanuj, 60 * 60 * 1000);
+      ustawTimeout(zaplanuj, 60 * 60 * 1000);
     }
   }
 
@@ -5152,7 +5435,7 @@ function ekoStartScheduler(wyslijFn) {
 // Lokaty są przechowywane w Firestore, dlatego po restarcie nie polegamy wyłącznie
 // na dawnym setTimeout. Rozliczenie jest atomowe; drugi timer niczego nie wypłaci ponownie.
 function zaplanujRozliczenieLokaty(nick, waluta, stmt, wyslijFn = null, opoznienieMs = 0) {
-  setTimeout(async () => {
+  ustawTimeout(async () => {
     try {
       const wynik = await stmt.rozliczLokateAtomowo(nick, Date.now(), EKO.lokataOdsetki, EKO.podatek);
       if (!wynik.ok) return;
@@ -5254,14 +5537,16 @@ async function obslugaEkonomii(nick, message, wyslijFn, walutaNadpis = null) {
 
     if (matchDaj) {
       const cel   = matchDaj[1].toLowerCase();
-      const kwota = parseInt(matchDaj[2]);
+      const kwota = Number(matchDaj[2]);
+      if (!czyBezpiecznaKwotaEko(kwota)) return wyslijFn('@' + nick + ' Podaj dodatnią kwotę mieszczącą się w bezpiecznym zakresie.');
       await ekoZapewnijGracza(cel, stmt);
       await stmt.dodaj({ nick: cel, kwota });
       return wyslijFn(`✅ Dodano ${kwota} ${waluta.symbol} dla @${cel}.`);
     }
     if (matchZabierz) {
       const cel   = matchZabierz[1].toLowerCase();
-      const kwota = parseInt(matchZabierz[2]);
+      const kwota = Number(matchZabierz[2]);
+      if (!czyBezpiecznaKwotaEko(kwota)) return wyslijFn('@' + nick + ' Podaj dodatnią kwotę mieszczącą się w bezpiecznym zakresie.');
       await ekoZapewnijGracza(cel, stmt);
       await stmt.zabierz({ kwota, nick: cel });
       return wyslijFn(`✅ Zabrano ${kwota} ${waluta.symbol} od @${cel}.`);
@@ -5323,7 +5608,8 @@ async function obslugaEkonomii(nick, message, wyslijFn, walutaNadpis = null) {
     // Lokata
     const matchLokata = msgL.match(/^!kup lokata (\d+)$/);
     if (matchLokata) {
-      const kwota = parseInt(matchLokata[1]);
+      const kwota = Number(matchLokata[1]);
+      if (!czyBezpiecznaKwotaEko(kwota)) return wyslijFn('@' + nick + ' Podaj prawidłową kwotę lokaty.');
       if (kwota < EKO.lokataKwotaMin) return wyslijFn(`@${nick} Minimalna lokata to ${EKO.lokataKwotaMin}${waluta.symbol}.`);
       const wynikLokata = await stmt.kupLokateAtomowo({ nick, kwota, czasTrwania: EKO.lokataCzas });
       if (!wynikLokata.ok) {
@@ -5353,10 +5639,10 @@ async function obslugaEkonomii(nick, message, wyslijFn, walutaNadpis = null) {
       const wynikMute = await stmt.kupFakeMuteAtomowo({ nick, cena: EKO.fakeMuteCena, podatekStawka: EKO.podatek });
       if (!wynikMute.ok) return wyslijFn(`${await prefix()} @${nick} Potrzebujesz ${EKO.fakeMuteCena}${waluta.symbol}, masz ${wynikMute.saldo}${waluta.symbol}.`);
       await wyslijFn(`@${cel} dostanie mute za 3 sekundy... 🔇`);
-      setTimeout(() => wyslijFn(`3...`), 1500);
-      setTimeout(() => wyslijFn(`2...`), 2500);
-      setTimeout(() => wyslijFn(`1...`), 3500);
-      setTimeout(() => wyslijFn(`ty serio myślałeś że dam ci mute? śmieszny jesteś xD`), 4500);
+      ustawTimeout(() => wyslijFn(`3...`), 1500);
+      ustawTimeout(() => wyslijFn(`2...`), 2500);
+      ustawTimeout(() => wyslijFn(`1...`), 3500);
+      ustawTimeout(() => wyslijFn(`ty serio myślałeś że dam ci mute? śmieszny jesteś xD`), 4500);
       return;
     }
 
@@ -5369,7 +5655,8 @@ async function obslugaEkonomii(nick, message, wyslijFn, walutaNadpis = null) {
   const matchPrzelew = msgL.match(/^!przelej\s+@?(\S+)\s+(\d+)$/);
   if (matchPrzelew) {
     const cel   = matchPrzelew[1].toLowerCase();
-    const kwota = parseInt(matchPrzelew[2]);
+    const kwota = Number(matchPrzelew[2]);
+    if (!czyBezpiecznaKwotaEko(kwota)) return wyslijFn('@' + nick + ' Podaj dodatnią kwotę mieszczącą się w bezpiecznym zakresie.');
     if (cel === nick.toLowerCase()) return wyslijFn(`@${nick} Nie możesz przelać do siebie. 🤦`);
     if (kwota <= 0) return wyslijFn(`@${nick} Kwota musi być większa od 0.`);
     const g = await stmt.getGracz(nick);
@@ -5386,11 +5673,12 @@ async function obslugaEkonomii(nick, message, wyslijFn, walutaNadpis = null) {
   const matchGamble = msgL.match(/^!gamble\s+(\d+|all)$/);
   if (matchGamble) {
     const g     = await stmt.getGracz(nick);
-    let kwota   = matchGamble[1] === 'all' ? g.emeraldy : parseInt(matchGamble[1]);
+    let kwota   = matchGamble[1] === 'all' ? g.emeraldy : Number(matchGamble[1]);
+    if (!czyBezpiecznaKwotaEko(kwota)) return wyslijFn('@' + nick + ' Podaj prawidłową kwotę do gry.');
     if (kwota < EKO.gambleMin) return wyslijFn(`@${nick} Minimum to ${EKO.gambleMin}${waluta.symbol}.`);
     if (g.emeraldy < kwota)    return wyslijFn(`${await prefix()} @${nick} Nie masz tyle! Masz ${g.emeraldy}${waluta.symbol}.`);
 
-    const wygrana = Math.random() < 0.50;
+    const wygrana = wylosujBit() === 0;
     const wynikGamble = await stmt.gambleAtomowo({
       nick, kwota, wygrana, teraz,
       podatekStawka: EKO.podatek,
@@ -5452,7 +5740,8 @@ async function obslugaEkonomii(nick, message, wyslijFn, walutaNadpis = null) {
   const matchDuel = msgL.match(/^!duel\s+@?(\S+)\s+(\d+)$/);
   if (matchDuel) {
     const cel   = matchDuel[1].toLowerCase();
-    const kwota = parseInt(matchDuel[2]);
+    const kwota = Number(matchDuel[2]);
+    if (!czyBezpiecznaKwotaEko(kwota)) return wyslijFn('@' + nick + ' Podaj dodatnią kwotę mieszczącą się w bezpiecznym zakresie.');
     if (cel === nick.toLowerCase()) return wyslijFn(`@${nick} Nie możesz duellować sam ze sobą. 🤦`);
     if (kwota < EKO.duelMin) return wyslijFn(`@${nick} Minimum do duelu to ${EKO.duelMin}${waluta.symbol}.`);
     const g = await stmt.getGracz(nick);
@@ -5462,7 +5751,7 @@ async function obslugaEkonomii(nick, message, wyslijFn, walutaNadpis = null) {
     const istniejace = await stmt.getDuel(cel, cel);
     if (istniejace && istniejace.do === nick.toLowerCase() && Date.now() - istniejace.ts < 60000) {
       // Cel już wyzwał – rozstrzygamy w pojedynczej transakcji Firestore.
-      const wygrany = Math.random() < 0.5 ? nick : cel;
+      const wygrany = wylosujBit() === 0 ? nick : cel;
       const przegrany = wygrany === nick ? cel : nick;
       const wynikDuelu = await stmt.rozstrzygnijDuelAtomowo({
         wyzywajacy: cel,
@@ -5481,7 +5770,7 @@ async function obslugaEkonomii(nick, message, wyslijFn, walutaNadpis = null) {
 
     // Nowe wyzwanie
     await stmt.ustawDuel(nick.toLowerCase(), cel, kwota, Date.now());
-    setTimeout(async () => {
+    ustawTimeout(async () => {
       const d = await stmt.getDuel(nick.toLowerCase(), nick.toLowerCase());
       if (d && d.od === nick.toLowerCase()) await stmt.usunDuel(nick.toLowerCase(), nick.toLowerCase());
     }, 60000);
@@ -5491,7 +5780,7 @@ async function obslugaEkonomii(nick, message, wyslijFn, walutaNadpis = null) {
 
 // Czyszczenie pamięci co godzinę – zapobiega wyciekowi przy długim działaniu bota
 if (process.env.CZITUCHBOT_SKIP_STARTUP_IO !== '1') {
-setInterval(() => {
+ustawInterwal(() => {
   const klucze = Object.keys(historiaRozmowy);
   if (klucze.length > 500) {
     console.log(`[Bot] 🧹 Czyszczę historię rozmów (${klucze.length} nicków)...`);
@@ -5539,7 +5828,7 @@ function usunMarkeryWewnetrzneAI(tekst) {
 }
 
 function czekaj(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
+  return new Promise(resolve => ustawTimeout(resolve, ms));
 }
 
 function zapytaj(pytanie) {
@@ -5607,7 +5896,7 @@ async function pobierzWszystkieTikToki(username) {
 const TIKTOK_OKNO_NADRABIANIA_MS = 48 * 60 * 60 * 1000; // 48h — ile wstecz bot nadrabia przy braku zapisanego stanu
 
 function uruchomSledzenieTikTok(username, wyslijFn, interwalMs = 15 * 60 * 1000) {
-  setInterval(async () => {
+  ustawInterwal(async () => {
     if (!(await ensurePersistentCachesReady())) return;
     const stan  = wczytajStanTikTok();
     const wpisy = await pobierzWszystkieTikToki(username);
@@ -5829,7 +6118,7 @@ async function pobierzPrawdziwyHoroskop(znakEn, znakPl) {
     // typu "Waga: ...tekst o Bliźniętach...".
     const wszystkieNazwyZnakow = [...new Set(Object.values(ZNAKI_ZODIAKU).map(z => z.pl))];
     const zawieraObcyZnak = wszystkieNazwyZnakow.some(nazwa => {
-      const regex = new RegExp(`\\b${nazwa}\\b`, 'i');
+      const regex = utworzRegexPelnejNazwy(nazwa);
       return regex.test(tekstPl);
     });
     if (zawieraObcyZnak) {
@@ -6170,15 +6459,15 @@ async function ensurePersistentCachesReady() {
   persistentCachesReady = Promise.race([
     loadCaches,
     new Promise((_, reject) => {
-      timeout = setTimeout(() => reject(new Error('Przekroczono limit 10 s podczas wczytywania cache z Firestore.')), 10_000);
+      timeout = ustawTimeout(() => reject(new Error('Przekroczono limit 10 s podczas wczytywania cache z Firestore.')), 10_000);
       timeout.unref?.();
     }),
   ]).catch(error => {
     persistentCachesReady = null;
     persistentCachesRetryAfter = Date.now() + 60_000;
-    console.error('[Firestore state] Nie udało się wczytać cache — ponowię próbę za 60 s; pomijam operacje wymagające pełnego stanu:', error.message);
+    console.error('[Firestore state] Nie udało się wczytać cache — ponowię próbę za 60 s; pomijam operacje wymagające pełnego stanu:', sanitizujKomunikatBledu(error?.message));
     return false;
-  }).finally(() => clearTimeout(timeout));
+  }).finally(() => wyczyscTimeout(timeout));
   return persistentCachesReady;
 }
 
@@ -6227,12 +6516,19 @@ async function obslugaWiadomosci(nick, message, platforma, wyslijFn, kanal = nul
   if (platforma === 'youtube' && ARBUZIK_KANALY.includes(kanalNorm) && msgLower !== '!arbuz') {
     return;
   }
-  // Stan użytkownika jest izolowany między platformami i kanałami.
-  const historiaKlucz = `${platforma}:${kanalNorm || 'brak-kanalu'}:${nick.toLowerCase()}`;
-  const cooldownKey = historiaKlucz;
+  const stableUserId = String(nadawca?.userId ?? '').trim();
+  const kluczeUzytkownika = zbudujKluczeUzytkownika(
+    platforma, kanalNorm, stableUserId, nick, crypto.randomUUID?.(),
+  );
+  // Bez stabilnego ID nie współdzielimy historii ani pamięci przez nick.
+  // Losowy klucz ogranicza historię do bieżącej wiadomości; cooldown pozostaje per nick.
+  const historiaKlucz = kluczeUzytkownika.historyKey;
+  const cooldownKey = kluczeUzytkownika.cooldownKey;
+  if (!historiaKlucz) return;
 
   const memoryCommand = parseMemoryCommand(message);
   if (memoryCommand) {
+    if (!kluczeUzytkownika.hasStableId) return await wyslijFn(`@${nick} Pamięć wymaga stabilnego identyfikatora konta z platformy.`);
     const records = await wczytajZweryfikowanaPamiecAI(historiaKlucz);
     if (memoryCommand.type === 'list') return await wyslijFn('@' + nick + ' Zapamiętane informacje:\n' + describeMemories(records));
     const result = forgetMemories(records, memoryCommand.query);
@@ -6310,7 +6606,7 @@ async function obslugaWiadomosci(nick, message, platforma, wyslijFn, kanal = nul
       for (const klucz of Object.keys(arbuzDzienneCache)) {
         if (!klucz.endsWith(`_${dzisiaj}`)) delete arbuzDzienneCache[klucz];
       }
-      arbuz = ARBUZY[Math.floor(Math.random() * ARBUZY.length)];
+      arbuz = ARBUZY[wylosujIndeks(ARBUZY.length)];
       arbuzDzienneCache[cacheKey] = arbuz;
       await zapiszCacheArbuzow(arbuzDzienneCache);
     }
@@ -6344,7 +6640,7 @@ async function obslugaWiadomosci(nick, message, platforma, wyslijFn, kanal = nul
       for (const key of Object.keys(cmStreamCache)) {
         if (key.startsWith(streamPrefix) && !key.startsWith(currentStreamPrefix)) delete cmStreamCache[key];
       }
-      wynik = Math.floor(Math.random() * 30) + 1;
+      wynik = wylosujLiczbe(1, 31);
       cmStreamCache[cacheKey] = wynik;
       await zapiszCacheCm(cmStreamCache);
     }
@@ -6364,7 +6660,7 @@ async function obslugaWiadomosci(nick, message, platforma, wyslijFn, kanal = nul
       for (const klucz of Object.keys(ciastkoDzienneCache)) {
         if (!klucz.endsWith(`_${dzisiaj}`)) delete ciastkoDzienneCache[klucz];
       }
-      ciastko = CIASTKA[Math.floor(Math.random() * CIASTKA.length)];
+      ciastko = CIASTKA[wylosujIndeks(CIASTKA.length)];
       ciastkoDzienneCache[cacheKey] = ciastko;
       await zapiszCacheCiastek(ciastkoDzienneCache);
     }
@@ -6376,13 +6672,13 @@ async function obslugaWiadomosci(nick, message, platforma, wyslijFn, kanal = nul
     ostatnieUzycie[cooldownKey] = teraz;
     const cel = message.split(' ')[1]?.replace(/^@/, '') || nick;
     await wyslijFn(`@${cel} dostanie mute za 3 sekundy... 🔇`);
-    await new Promise(r => setTimeout(r, 1500));
+    await new Promise(r => ustawTimeout(r, 1500));
     await wyslijFn(`3...`);
-    await new Promise(r => setTimeout(r, 1000));
+    await new Promise(r => ustawTimeout(r, 1000));
     await wyslijFn(`2...`);
-    await new Promise(r => setTimeout(r, 1000));
+    await new Promise(r => ustawTimeout(r, 1000));
     await wyslijFn(`1...`);
-    await new Promise(r => setTimeout(r, 1000));
+    await new Promise(r => ustawTimeout(r, 1000));
     await wyslijFn(`żartowałem XD nie mam uprawnień 💀`);
     return;
   }
@@ -6406,7 +6702,7 @@ async function obslugaWiadomosci(nick, message, platforma, wyslijFn, kanal = nul
 
   if (msgLower === '!iq') {
     ostatnieUzycie[cooldownKey] = teraz;
-    const iq = Math.floor(Math.random() * 151) + 50; // 50–200
+    const iq = wylosujLiczbe(50, 201); // 50–200
     const komentarz =
       iq >= 160 ? 'Einstein by się zawstydził 🧬' :
       iq >= 130 ? 'Całkiem nieźle, szkoda że na Kicku siedzisz 😅' :
@@ -6426,14 +6722,14 @@ async function obslugaWiadomosci(nick, message, platforma, wyslijFn, kanal = nul
         'Nie licz na to. 🎱', 'Moje źródła mówią nie. 🎱', 'Perspektywy nie są dobre. 🎱',
         'Bardzo wątpliwe. 🎱', 'Zdecydowanie nie. 🎱',
       ];
-      const odp8ball = odpowiedzi8ball[Math.floor(Math.random() * odpowiedzi8ball.length)];
+      const odp8ball = odpowiedzi8ball[wylosujIndeks(odpowiedzi8ball.length)];
       return await wyslijFn(`@${nick} 🎱 ${odp8ball}`);
     }
 
     if (msgLower.startsWith('!sus')) {
       ostatnieUzycie[cooldownKey] = teraz;
       const cel = message.split(' ')[1]?.replace(/^@/, '') || nick;
-      const procent = Math.floor(Math.random() * 101);
+      const procent = wylosujLiczbe(0, 101);
       const komentarzSus =
         procent === 100 ? 'Przyznaj się. Wszyscy widzieli.' :
         procent >= 81   ? 'GŁOSUJCIE! TO ON!' :
@@ -6446,7 +6742,7 @@ async function obslugaWiadomosci(nick, message, platforma, wyslijFn, kanal = nul
     if (msgLower.startsWith('!simp')) {
       ostatnieUzycie[cooldownKey] = teraz;
       const cel = message.split(' ')[1]?.replace(/^@/, '') || nick;
-      const procent = Math.floor(Math.random() * 101);
+      const procent = wylosujLiczbe(0, 101);
       const komentarzSimp =
         procent === 100 ? 'Absolutny simp. Bez ratunku.' :
         procent >= 81   ? 'Zmieniłby nick na jej/jego imię gdyby mógł.' :
@@ -6460,7 +6756,7 @@ async function obslugaWiadomosci(nick, message, platforma, wyslijFn, kanal = nul
   // ---- !mamdepresje – Kick EdzziLive oraz kanały YouTube Edzzi ----
   if ((platforma === 'youtube' && ['edzzi_minecraft', 'edzzi'].includes(kanalNorm)) && msgLower === '!mamdepresje') {
     ostatnieUzycie[cooldownKey] = teraz;
-    const poziom = Math.floor(Math.random() * 101); // 0-100%
+    const poziom = wylosujLiczbe(0, 101); // 0-100%
 
     const KOMUNIKATY_DEPRESJI = [
       { max: 20, teksty: [
@@ -6487,7 +6783,7 @@ async function obslugaWiadomosci(nick, message, platforma, wyslijFn, kanal = nul
 
     const cel = message.split(' ')[1]?.replace(/^@/, '') || nick;
     const kategoria = KOMUNIKATY_DEPRESJI.find(k => poziom <= k.max);
-    const komunikat = kategoria.teksty[Math.floor(Math.random() * kategoria.teksty.length)];
+    const komunikat = kategoria.teksty[wylosujIndeks(kategoria.teksty.length)];
 
     return await wyslijFn(`@${cel} poziom depresji: ${poziom}% – ${komunikat}`);
   }
@@ -6495,7 +6791,7 @@ async function obslugaWiadomosci(nick, message, platforma, wyslijFn, kanal = nul
   // ---- !californiarz – Kick EdzziLive oraz kanały YouTube Edzzi ----
   if ((platforma === 'youtube' && ['edzzi_minecraft', 'edzzi'].includes(kanalNorm)) && msgLower === '!californiarz') {
     ostatnieUzycie[cooldownKey] = teraz;
-    const procent = Math.floor(Math.random() * 101); // 0-100%
+    const procent = wylosujLiczbe(0, 101); // 0-100%
 
     const komentarzCalifornia =
       procent === 100 ? 'W 100% CERTIFIED CALIFORNIARZ. White 2115 dzwoni żeby zapytać Cię o radę.' :
@@ -6570,10 +6866,10 @@ async function obslugaWiadomosci(nick, message, platforma, wyslijFn, kanal = nul
         : {};
 
     try {
-      await wykonajAIWHistorii(historiaRozmowy[historiaKlucz], () => wykonajWKolejceAI(() => zapytajAI(nick, pytanie, historiaRozmowy[historiaKlucz], prompt, wyslijFn, { temperature: 0.25, max_tokens: 150, aiProfile, tavilyOptions, memoryUserId: historiaKlucz })));
+      await wykonajAIWHistorii(historiaRozmowy[historiaKlucz], () => wykonajWKolejceAI(() => zapytajAI(nick, pytanie, historiaRozmowy[historiaKlucz], prompt, wyslijFn, { temperature: 0.25, max_tokens: 150, aiProfile, tavilyOptions, memoryUserId: historiaKlucz, disableMemory: !kluczeUzytkownika.hasStableId })));
     } catch (err) {
-      console.error('[Groq] Błąd:', err.message);
-      if (err.code === 'AI_QUEUE_FULL') await wyslijFn(`@${nick} AI jest teraz zajęte — spróbuj za chwilę.`);
+      console.error('[Groq] Błąd:', sanitizujKomunikatBledu(err?.message));
+      if (['AI_QUEUE_FULL', 'AI_QUEUE_TIMEOUT'].includes(err.code)) await wyslijFn(`@${nick} AI jest teraz zajęte — spróbuj za chwilę.`);
     }
     return;
   }
@@ -6608,7 +6904,7 @@ async function obslugaWiadomosci(nick, message, platforma, wyslijFn, kanal = nul
         for (const key of Object.keys(cmStreamCache)) {
           if (key.startsWith(streamPrefix) && !key.startsWith(currentStreamPrefix)) delete cmStreamCache[key];
         }
-        wynik = Math.floor(Math.random() * 30) + 1;
+        wynik = wylosujLiczbe(1, 31);
         cmStreamCache[cacheKey] = wynik;
         await zapiszCacheCm(cmStreamCache);
       }
@@ -6649,7 +6945,7 @@ async function obslugaWiadomosci(nick, message, platforma, wyslijFn, kanal = nul
         'Kurwa, nawet się nie pożegnał.',
         'Do zobaczenia… jeśli starczy odwagi.'
       ];
-      const odpowiedz = odpowiedziAngie[Math.floor(Math.random() * odpowiedziAngie.length)];
+      const odpowiedz = odpowiedziAngie[wylosujIndeks(odpowiedziAngie.length)];
       return await wyslijFn(`@${nick} ${odpowiedz}`);
     }
 
@@ -6680,10 +6976,11 @@ async function obslugaWiadomosci(nick, message, platforma, wyslijFn, kanal = nul
           aiProfile: 'angie',
           tavilyOptions: { domains: KONFIGURACJA.tavilyAngieDomains, time_range: KONFIGURACJA.tavilyAngieTimeRange },
           memoryUserId: historiaKlucz,
+          disableMemory: !kluczeUzytkownika.hasStableId,
         })));
       } catch (err) {
-        console.error('[Groq/Angie] Błąd:', err.message);
-        if (err.code === 'AI_QUEUE_FULL') await wyslijFn(`@${nick} AI jest teraz zajęte — spróbuj za chwilę.`);
+        console.error('[Groq/Angie] Błąd:', sanitizujKomunikatBledu(err?.message));
+        if (['AI_QUEUE_FULL', 'AI_QUEUE_TIMEOUT'].includes(err.code)) await wyslijFn(`@${nick} AI jest teraz zajęte — spróbuj za chwilę.`);
       }
     }
 
@@ -6926,45 +7223,19 @@ async function zalogujYouTube() {
   console.log('\n2. Zaloguj się i kliknij "Zezwól"');
   console.log('3. Przeglądarka przekieruje na localhost – poczekaj chwilę.\n');
 
-  const code = await new Promise((resolve, reject) => {
-    const http = require('http');
-    const server = http.createServer((req, res) => {
-      const url = new URL(req.url, 'http://localhost:3000');
-      const callbackState = url.searchParams.get('state');
-      const oauthError = url.searchParams.get('error');
-      const code = url.searchParams.get('code');
-
-      if (!callbackState || callbackState !== oauthState) {
-        res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' });
-        res.end('Nieprawidłowy parametr state. Autoryzacja została odrzucona.');
-        server.close();
-        reject(new Error('Nieprawidłowy parametr state w callbacku OAuth'));
-        return;
-      }
-      if (oauthError) {
-        res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' });
-        res.end('Autoryzacja Google została anulowana lub odrzucona.');
-        server.close();
-        reject(new Error('Google OAuth zwrócił błąd; szczegóły odpowiedzi pominięto.'));
-        return;
-      }
-      if (!code) {
-        res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' });
-        res.end('Brak kodu autoryzacji.');
-        server.close();
-        reject(new Error('Brak kodu w callbacku'));
-        return;
-      }
-
-      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-      res.end('<h2>✅ Zalogowano! Możesz zamknąć tę kartę i wrócić do terminala.</h2>');
-      server.close();
-      resolve(code);
-    });
-    server.on('error', reject);
-    server.listen(3000, () => {
-      console.log('[YT Auth] ⏳ Czekam na autoryzację na porcie 3000...');
-    });
+  const code = await oczekujNaKodOAuth({
+    state: oauthState,
+    port: 3000,
+    host: 'localhost',
+    timeoutMs: 5 * 60 * 1000,
+    onServer: server => {
+      const wyrejestruj = lifecycle.zarejestruj('YouTube OAuth callback', () => new Promise(resolve => {
+        if (!server.listening) return resolve();
+        server.close(() => resolve());
+      }));
+      server.once('close', wyrejestruj);
+    },
+    onListen: () => console.log('[YT Auth] ⏳ Czekam na autoryzację na porcie 3000...'),
   });
 
   const { tokens } = await oauth2Client.getToken({ code, codeVerifier });
@@ -7022,7 +7293,7 @@ async function zGoogleRetry(fn, opis = 'zapytanie YouTube', proby = 3) {
       if (i === proby) break; // wykorzystano wszystkie próby
       const opoznienie = 3000 * i; // 3s, 6s, 9s...
       console.warn(`[YouTube] ⚠️ Przejściowy błąd Google przy "${opis}" (próba ${i}/${proby}), ponawiam za ${opoznienie / 1000}s...`);
-      await new Promise(r => setTimeout(r, opoznienie));
+      await new Promise(r => ustawTimeout(r, opoznienie));
     }
   }
   throw ostatniBlad;
@@ -7256,7 +7527,7 @@ async function wyslijYoutube(tekst, chatId) {
         requestBody: { snippet: { liveChatId: id, type: 'textMessageEvent', textMessageDetails: { messageText: kawalek } } },
       });
       console.log(`[YouTube→Chat] ✅ ${kawalek.substring(0, 60)}`);
-      if (kawalki.length > 1) await new Promise(r => setTimeout(r, 1500)); // odstęp między wiadomościami
+      if (kawalki.length > 1) await new Promise(r => ustawTimeout(r, 1500)); // odstęp między wiadomościami
     } catch (err) { console.error('[YouTube→Chat] Błąd:', err.message); }
   }
 }
@@ -7284,6 +7555,7 @@ async function youtubeLoop(stan) {
           if (nick && message) {
             const nadawca = {
               isMod: item.authorDetails?.isChatModerator === true || item.authorDetails?.isChatOwner === true,
+              userId: item.authorDetails?.channelId || null,
             };
             await obslugaWiadomosci(nick, message, 'youtube', (tekst) => stan.wyslijFn(tekst, stan.liveChatId), stan.nazwaKanalu, nadawca);
             // Ekonomia dla Angie28 na YT
@@ -7420,7 +7692,7 @@ async function youtubeWatcher(nazwaKanalu, wyslijFn) {
 
       // Auto-wiadomość co 30 min dla Angie28
       if (nazwaKanalu === 'Angie28' && !angieAutoMsgInterval) {
-        angieAutoMsgInterval = setInterval(() => {
+        angieAutoMsgInterval = ustawInterwal(() => {
           const msg = `💬 Discord: ${angieLinki.discord} | 🎵 TikTok: ${angieLinki.tiktok} | 📸 Instagram: ${angieLinki.instagram}`;
           wyslijFn(msg, stan.liveChatId).catch(err => console.error('[Angie28/AutoMsg] Błąd:', err.message));
         }, 30 * 60 * 1000);
@@ -7461,7 +7733,7 @@ async function youtubeWatcher(nazwaKanalu, wyslijFn) {
 
     // Wyczyść interwał Angie28 po zakończeniu streamu
     if (nazwaKanalu === 'Angie28' && angieAutoMsgInterval) {
-      clearInterval(angieAutoMsgInterval);
+      wyczyscInterwal(angieAutoMsgInterval);
       angieAutoMsgInterval = null;
       console.log('[Angie28] Auto-wiadomość zatrzymana (stream zakończony)');
     }
@@ -7683,7 +7955,7 @@ function zaplanujOdswiezenieBilly() {
     odswiezTokenBilly().catch(() => {});
   } else {
     console.log(`[Billy Auth] Zaplanowano odświeżenie za ${Math.round(pozostaloMs / 60000)} min`);
-    setTimeout(odswiezTokenBilly, pozostaloMs);
+    ustawTimeout(odswiezTokenBilly, pozostaloMs);
   }
 }
 
@@ -7718,7 +7990,7 @@ async function odswiezTokenBilly() {
       billyTokenDead = false;
       const refreshTime = ((data.expires_in ?? 3600) - 60) * 1000;
       console.log(`[Billy Auth] ✅ Token odświeżony! Następne za ${Math.round(refreshTime / 60000)} min`);
-      setTimeout(odswiezTokenBilly, Math.max(refreshTime, 10000));
+      ustawTimeout(odswiezTokenBilly, Math.max(refreshTime, 10000));
     } catch (err) {
       const trwaleMartwy = err.status === 400 || err.status === 401;
       if (trwaleMartwy) {
@@ -7731,7 +8003,7 @@ async function odswiezTokenBilly() {
         );
       } else {
         console.error('[Billy Auth] ❌ Błąd odświeżania (chwilowy?):', err.message);
-        setTimeout(odswiezTokenBilly, 30000);
+        ustawTimeout(odswiezTokenBilly, 30000);
       }
     } finally {
       billyRefreshPromise = null;
@@ -7758,7 +8030,7 @@ function rozpocznijOdzyskiwanieKickPrzezWorker() {
     'Bot sam wyłapie token po zalogowaniu, w ciągu ~30s.'
   );
 
-  kickOdzyskiwaniePollTimer = setInterval(async () => {
+  kickOdzyskiwaniePollTimer = ustawInterwal(async () => {
     try {
       const res = await fetchZTimeout(`${KONFIGURACJA.kickWorkerUrl}/kick/token`, {
         headers: { 'Authorization': `Bearer ${KONFIGURACJA.kickWorkerSecret}` },
@@ -7772,7 +8044,7 @@ function rozpocznijOdzyskiwanieKickPrzezWorker() {
       await zapiszTokenKick({ access_token: token.access_token, refresh_token: token.refresh_token, expires_in: token.expires_in });
       kickTokenDead = false;
 
-      clearInterval(kickOdzyskiwaniePollTimer);
+      wyczyscInterwal(kickOdzyskiwaniePollTimer);
       kickOdzyskiwaniePollTimer = null;
 
       // Posprzątaj po sobie w KV, żeby ten sam token nie został odebrany dwa razy.
@@ -7785,7 +8057,7 @@ function rozpocznijOdzyskiwanieKickPrzezWorker() {
       wyslijAlertPolishSteamDB('🟢 **CzituchBot – Kick odzyskany.** Bot znów działa normalnie.');
 
       const refreshTime = ((token.expires_in ?? 3600) - 60) * 1000;
-      setTimeout(odswiezTokenKick, Math.max(refreshTime, 10000));
+      ustawTimeout(odswiezTokenKick, Math.max(refreshTime, 10000));
     } catch (err) {
       console.error('[Kick Auth] ⚠️ Błąd pollowania Workera:', err.message);
     }
@@ -7822,7 +8094,7 @@ async function odswiezTokenKick() {
       await zapiszTokenKick(data);
       kickTokenDead = false;
       const refreshTime = (data.expires_in - 60) * 1000;
-      console.log(`[Kick Auth] ✅ Token odświeżony! Następne za ${Math.round(refreshTime / 60000)} min`);      setTimeout(odswiezTokenKick, refreshTime);
+      console.log(`[Kick Auth] ✅ Token odświeżony! Następne za ${Math.round(refreshTime / 60000)} min`);      ustawTimeout(odswiezTokenKick, refreshTime);
     } catch (err) {
       // 400/401 z endpointu tokenowego = refresh token odrzucony (np. invalid_grant) –
       // to NIE jest chwilowy problem sieci, dobijanie się co 30s nic nie da.
@@ -7833,7 +8105,7 @@ async function odswiezTokenKick() {
         rozpocznijOdzyskiwanieKickPrzezWorker();
       } else {
         console.error('[Kick Auth] ❌ Błąd odświeżania (chwilowy?):', err.message);
-        setTimeout(odswiezTokenKick, 30000);
+        ustawTimeout(odswiezTokenKick, 30000);
       }
     } finally {
       kickRefreshPromise = null;
@@ -7923,7 +8195,7 @@ async function ustawRealnyStartKick(broadcasterId, kanalNazwa, proba = 1) {
     return;
   }
   if (proba < 4) {
-    setTimeout(() => ustawRealnyStartKick(broadcasterId, kanalNazwa, proba + 1), 15000);
+    ustawTimeout(() => ustawRealnyStartKick(broadcasterId, kanalNazwa, proba + 1), 15000);
   } else {
     console.warn(`[Kick] ⚠️ Nie udało się pobrać realnego czasu startu dla ${kanalNazwa} po ${proba} próbach – zostaje przybliżony (Date.now() z połączenia WS).`);
   }
@@ -7972,11 +8244,14 @@ async function pobierzPusherConfig() {
 }
 
 async function uruchomKick() {
+  if (lifecycle.czyZamykanie()) return;
   const config  = await pobierzPusherConfig();
+  if (lifecycle.czyZamykanie()) return;
   const key     = config?.key     || '32cbd69e4b950bf97679';
   const cluster = config?.cluster || 'us2';
   const WS_URL  = `wss://ws-${cluster}.pusher.com/app/${key}?protocol=7&client=js&version=7.6.0&flash=false`;
   const ws = new WebSocket(WS_URL);
+  lifecycle.zarejestrujWebSocket(ws, 'Kick Pusher');
 
   ws.on('open', async () => {
     // Ustaw tymczasowo Date.now() dla OBU kanałów (na wypadek gdyby zapytanie do API nie
@@ -8015,6 +8290,7 @@ async function uruchomKick() {
       const badgesNadawcy = data.sender?.identity?.badges ?? [];
       const nadawca = {
         isMod: badgesNadawcy.some(b => b.type === 'moderator' || b.type === 'broadcaster'),
+        userId: data.sender?.id ?? data.sender?.user_id ?? null,
       };
 
       if (kanal === `chatrooms.${KONFIGURACJA.kickChatroomId}.v2`) {
@@ -8033,8 +8309,9 @@ async function uruchomKick() {
   });
 
   ws.on('close', () => {
+    if (lifecycle.czyZamykanie()) return;
     console.warn('[Kick] Połączenie zamknięte, restartuję za 5s...');
-    setTimeout(uruchomKick, 5000);
+    ustawTimeout(uruchomKick, 5000);
   });
 }
 
@@ -8062,15 +8339,14 @@ const TWITCH_CONFIG_BILLYBULKA = {
 
 // App Access Token jest wspólny dla całej aplikacji Twitcha (nie dla konkretnego bota).
 // Nie ma scope'ów i służy m.in. do Get Users/Streams oraz Send Chat Message.
-const twitchAppTokens = {};
+// App Access Token należy do aplikacji Twitch, nie do pojedynczego bota.
+let twitchAppToken = null;
 let twitchAppTokenExpiresAt = 0;
 let twitchAppTokenPromise = null;
 
-async function pobierzTwitchAppToken(config = TWITCH_CONFIG_BILLYBULKA) {
+async function pobierzTwitchAppToken() {
   const teraz = Date.now();
-  if (twitchAppTokens[config.botNick] && teraz < twitchAppTokenExpiresAt - 60_000) {
-    return twitchAppTokens[config.botNick];
-  }
+  if (twitchAppToken && teraz < twitchAppTokenExpiresAt - 60_000) return twitchAppToken;
   if (twitchAppTokenPromise) return twitchAppTokenPromise;
 
   twitchAppTokenPromise = (async () => {
@@ -8084,16 +8360,17 @@ async function pobierzTwitchAppToken(config = TWITCH_CONFIG_BILLYBULKA) {
       }),
     }, 10000);
     if (!res.ok) {
-      throw new Error(`Nie udało się pobrać App Access Tokena: HTTP ${res.status} – ${await res.text()}`);
+      const szczegoly = await res.text().catch(() => '');
+      throw new Error(`Nie udało się pobrać App Access Tokena: HTTP ${res.status} – ${szczegoly.slice(0, 300)}`);
     }
     const data = await res.json();
-    // Jeden App Access Token należy do aplikacji, więc udostępniamy go obu
-    // konfiguracjom botów. Dzięki temu równoległy start michal/edlor nie
-    // powoduje drugiego requestu ani lookupu z pustym tokenem.
-    twitchAppTokens[config.botNick] = data.access_token;
-    twitchAppTokenExpiresAt = Date.now() + (data.expires_in ?? 3600) * 1000;
+    if (typeof data.access_token !== 'string' || !data.access_token || !Number.isFinite(Number(data.expires_in))) {
+      throw new Error('Twitch zwrócił nieprawidłowy App Access Token.');
+    }
+    twitchAppToken = data.access_token;
+    twitchAppTokenExpiresAt = Date.now() + Number(data.expires_in) * 1000;
     console.log('[Twitch API] ✅ Pobrano świeży App Access Token');
-    return data.access_token;
+    return twitchAppToken;
   })();
 
   try {
@@ -8109,7 +8386,7 @@ async function wyslijTwitchHelix(tekst, kanal, config = TWITCH_CONFIG_BILLYBULKA
     const [broadcasterId, senderId, appToken] = await Promise.all([
       pobierzUserId(czystyKanal, config),
       pobierzUserId(config.botNick, config),
-      pobierzTwitchAppToken(config),
+      pobierzTwitchAppToken(),
     ]);
     if (!broadcasterId || !senderId) {
       console.error(`[Twitch Helix] ❌ Brak ID Twitcha: broadcaster=${broadcasterId}, sender=${senderId}`);
@@ -8218,11 +8495,11 @@ async function pobierzStartStreamu(config = TWITCH_CONFIG_BILLYBULKA) {
   try {
     // Zawsze pobieramy świeżą wartość (funkcja jest tania — bez requestu sieciowego),
     // żeby złapać kolejne odświeżenia tokenu zamiast trzymać jednorazowy cache na zawsze.
-    await pobierzTwitchAppToken(config);
+    await pobierzTwitchAppToken();
     const res  = await fetchZTimeout(`https://api.twitch.tv/helix/streams?user_login=${config.kanal}`, {
       headers: {
         'Client-ID':     config.clientId,
-        'Authorization': `Bearer ${twitchAppTokens[config.botNick]}`,
+        'Authorization': `Bearer ${twitchAppToken}`,
       },
     }, 8000);
     const data   = await res.json();
@@ -8268,7 +8545,9 @@ async function obslugaTwitch(nick, message, wyslijFn, config = TWITCH_CONFIG_BIL
   }
 
   const kanalNorm = kanal ? kanal.toLowerCase() : '';
-  const historiaKlucz = `twitch:${kanalNorm || 'brak-kanalu'}:${login}`;
+  const historiaKlucz = tags?.['user-id']
+    ? zbudujKluczHistorii('twitch', kanalNorm, tags['user-id'])
+    : null;
 
   // Komenda !sex — piekarniczy miernik dopasowania.
   if (kanal === 'billybulka' && /^!sex(?:\s|$)/i.test(message.trim())) {
@@ -8308,15 +8587,18 @@ async function obslugaTwitch(nick, message, wyslijFn, config = TWITCH_CONFIG_BIL
       }
 
       ostatnieUzycie[cooldownKey] = teraz;
-      if (!historiaRozmowy[historiaKlucz]) historiaRozmowy[historiaKlucz] = [];
+      // Bez Twitch user-id odpowiedź jest bezstanowa: nie zapisuj historii ani pamięci po loginie.
+      const historiaTwitch = historiaKlucz
+        ? (historiaRozmowy[historiaKlucz] ||= [])
+        : [];
 
       try {
         await wykonajAIWHistorii(
-          historiaRozmowy[historiaKlucz],
+          historiaTwitch,
           () => wykonajWKolejceAI(() => zapytajAI(
             nick,
             pytanie,
-            historiaRozmowy[historiaKlucz],
+            historiaTwitch,
             AI_SYSTEM_PROMPT_BILLY,
             wyslijFn,
             {
@@ -8327,12 +8609,14 @@ async function obslugaTwitch(nick, message, wyslijFn, config = TWITCH_CONFIG_BIL
                 domains: KONFIGURACJA.tavilyBillybulkaDomains,
                 time_range: KONFIGURACJA.tavilyBillybulkaTimeRange,
               },
+              memoryUserId: historiaKlucz,
+              disableMemory: !historiaKlucz,
             }
           ))
         );
       } catch (err) {
-        console.error('[Groq/Billy] Błąd:', err.message);
-        if (err.code === 'AI_QUEUE_FULL') {
+        console.error('[Groq/Billy] Błąd:', sanitizujKomunikatBledu(err?.message));
+        if (['AI_QUEUE_FULL', 'AI_QUEUE_TIMEOUT'].includes(err.code)) {
           await wyslijFn(`@${nick} AI jest teraz zajęte — spróbuj za chwilę.`);
         }
       }
@@ -8343,7 +8627,7 @@ async function obslugaTwitch(nick, message, wyslijFn, config = TWITCH_CONFIG_BIL
       ostatnieUzycie[cooldownKey] = teraz;
 
       const argZnak = message.split(' ')[1]?.toLowerCase().trim();
-      const znak = argZnak ? ZNAKI_ZODIAKU[argZnak] : ZNAKI_UNIKALNE[Math.floor(Math.random() * ZNAKI_UNIKALNE.length)];
+      const znak = argZnak ? ZNAKI_ZODIAKU[argZnak] : ZNAKI_UNIKALNE[wylosujIndeks(ZNAKI_UNIKALNE.length)];
 
       if (!znak) {
         return await wyslijFn(`@${nick} Nie znam takiego znaku. Dostępne: baran, byk, bliźnięta, rak, lew, panna, waga, skorpion, strzelec, koziorożec, wodnik, ryby.`);
@@ -8357,7 +8641,7 @@ async function obslugaTwitch(nick, message, wyslijFn, config = TWITCH_CONFIG_BIL
       }
 
       // Fallback na żartobliwą tabelę, gdy API/tłumaczenie zawiedzie
-      const horoskop = HOROSKOPY[Math.floor(Math.random() * HOROSKOPY.length)];
+      const horoskop = HOROSKOPY[wylosujIndeks(HOROSKOPY.length)];
       return await wyslijFn(`🔮 ${znak.pl} @${nick}: ${horoskop}`);
     }
 
@@ -8381,7 +8665,7 @@ async function obslugaTwitch(nick, message, wyslijFn, config = TWITCH_CONFIG_BIL
         for (const klucz of Object.keys(bulkaDzienneCache)) {
           if (!klucz.endsWith(`_${dzisiaj}`)) delete bulkaDzienneCache[klucz];
         }
-        bulka = BULKI[Math.floor(Math.random() * BULKI.length)];
+        bulka = BULKI[wylosujIndeks(BULKI.length)];
         bulkaDzienneCache[cacheKey] = bulka;
         await zapiszCacheBulek(bulkaDzienneCache);
       }
@@ -8423,11 +8707,11 @@ async function pobierzUserId(login, config = TWITCH_CONFIG_BILLYBULKA) {
   try {
     // Zawsze pobieramy świeżą wartość (funkcja jest tania — bez requestu sieciowego),
     // żeby złapać kolejne odświeżenia tokenu zamiast trzymać jednorazowy cache na zawsze.
-    await pobierzTwitchAppToken(config);
-    const res  = await fetchZTimeout(`https://api.twitch.tv/helix/users?login=${czystyLogin}`, {
+    const appToken = await pobierzTwitchAppToken();
+    const res  = await fetchZTimeout(`https://api.twitch.tv/helix/users?login=${encodeURIComponent(czystyLogin)}`, {
       headers: {
         'Client-ID':     config.clientId,
-        'Authorization': `Bearer ${twitchAppTokens[config.botNick]}`,
+        'Authorization': `Bearer ${appToken}`,
       },
     }, 3000);
     if (res.status === 429) {
@@ -8456,11 +8740,11 @@ async function pobierzAktualneVodTwitch(kanal, config = TWITCH_CONFIG_BILLYBULKA
   try {
     const userId = await pobierzUserId(kanal, config);
     if (!userId) return null;
-    await pobierzTwitchAppToken(config);
+    await pobierzTwitchAppToken();
     const res = await fetchZTimeout(`https://api.twitch.tv/helix/videos?user_id=${userId}&type=archive&first=1`, {
       headers: {
         'Client-ID':     config.clientId,
-        'Authorization': `Bearer ${twitchAppTokens[config.botNick]}`,
+        'Authorization': `Bearer ${twitchAppToken}`,
       },
     }, 8000);
     const data  = await res.json();
@@ -8546,14 +8830,14 @@ function utworzWatchdogEventSub(tag, naTimeout) {
   let timer = null;
   return {
     reset(timeoutMs) {
-      if (timer) clearTimeout(timer);
-      timer = setTimeout(() => {
+      if (timer) wyczyscTimeout(timer);
+      timer = ustawTimeout(() => {
         console.warn(`${tag} ⚠️ Brak jakiejkolwiek wiadomości (w tym keepalive) przez ${Math.round(timeoutMs / 1000)}s — połączenie prawdopodobnie martwe, wymuszam reconnect.`);
         naTimeout();
       }, timeoutMs);
     },
     zatrzymaj() {
-      if (timer) clearTimeout(timer);
+      if (timer) wyczyscTimeout(timer);
       timer = null;
     },
   };
@@ -8575,7 +8859,7 @@ async function subskrybujZRetry(funkcjaSubskrypcji, opis, maxProby = 2, opoznien
         ? retryAfterMs
         : Math.min(opoznienieMs * (2 ** (proba - 1)), 30000);
       console.warn(`[EventSub] ⚠️ Subskrypcja (${opis}) nieudana, próba ${proba}/${maxProby} — ponawiam za ${Math.ceil(opoznienie / 1000)}s...`);
-      await new Promise(r => setTimeout(r, opoznienie));
+      await new Promise(r => ustawTimeout(r, opoznienie));
     }
   }
   console.error(`[EventSub] ❌ Subskrypcja (${opis}) nieudana po ${maxProby} próbach — czekam na pełny reconnect.`);
@@ -8677,6 +8961,7 @@ function podepnijHandleryEventSub(ws, twitchClient, config, userIdsPromise = nul
       adresReconnect.search = bezpiecznyReconnectUrl.search;
       // codeql[js/request-forgery] Host jest stały i nie pochodzi z danych wiadomości.
       const nowyWs = new WebSocket(adresReconnect);
+      lifecycle.zarejestrujWebSocket(nowyWs, 'Twitch EventSub (migracja)');
       stan.ws = nowyWs;
       podepnijHandleryEventSub(nowyWs, twitchClient, config);
     }
@@ -8721,7 +9006,7 @@ function podepnijHandleryEventSub(ws, twitchClient, config, userIdsPromise = nul
 
           // Zatrzymaj interwał Billy
           if (config.kanal === 'billybulka' && billyDiscordInterval) {
-            clearInterval(billyDiscordInterval);
+            wyczyscInterwal(billyDiscordInterval);
             billyDiscordInterval = null;
             console.log('[EventSub] Interwał Billy zatrzymany');
           }
@@ -8740,6 +9025,11 @@ function podepnijHandleryEventSub(ws, twitchClient, config, userIdsPromise = nul
 
   ws.on('close', (code, reason) => {
     watchdog.zatrzymaj();
+    if (lifecycle.czyZamykanie()) {
+      const stan = getEventSubState(config.botNick);
+      if (stan.ws === ws) stan.ws = null;
+      return;
+    }
     const stan = getEventSubState(config.botNick);
     if (stan.ws !== ws) {
       console.log('[EventSub] ℹ️ Poprzedni socket zamknięty po migracji.');
@@ -8754,9 +9044,9 @@ function podepnijHandleryEventSub(ws, twitchClient, config, userIdsPromise = nul
     stan.ws = null;
     stan.sessionId = null;
     stan.reconnectFrom = null;
-    if (stan.retryTimer) clearTimeout(stan.retryTimer);
+    if (stan.retryTimer) wyczyscTimeout(stan.retryTimer);
     console.warn(`[EventSub] ⚠️ Połączenie zamknięte (kod: ${code}) – ponawiam za 10s...`);
-    stan.retryTimer = setTimeout(() => {
+    stan.retryTimer = ustawTimeout(() => {
       stan.retryTimer = null;
       uruchomEventSub(twitchClient, config);
     }, 10000);
@@ -8766,6 +9056,7 @@ function podepnijHandleryEventSub(ws, twitchClient, config, userIdsPromise = nul
 }
 
 function uruchomEventSub(twitchClient, config) {
+  if (lifecycle.czyZamykanie()) return;
   const stan = getEventSubState(config.botNick);
   if (stan.ws && [WebSocket.CONNECTING, WebSocket.OPEN].includes(stan.ws.readyState)) {
     console.log(`[EventSub] ℹ️ Połączenie już działa lub się zestawia (bot: ${config.botNick}); pomijam duplikat.`);
@@ -8778,9 +9069,10 @@ function uruchomEventSub(twitchClient, config) {
     console.error('[EventSub] ❌ Nie udało się przygotować ID kanałów przed welcome:', err.message);
     return loginy.map(login => ({ login, userId: null }));
   });
-  if (stan.retryTimer) { clearTimeout(stan.retryTimer); stan.retryTimer = null; }
+  if (stan.retryTimer) { wyczyscTimeout(stan.retryTimer); stan.retryTimer = null; }
   console.log(`[EventSub] Łączę z wss://eventsub.wss.twitch.tv/ws (bot: ${config.botNick})...`);
   const ws = new WebSocket('wss://eventsub.wss.twitch.tv/ws');
+  lifecycle.zarejestrujWebSocket(ws, 'Twitch EventSub');
   stan.ws = ws;
   podepnijHandleryEventSub(ws, twitchClient, config, userIdsPromise);
 }
@@ -8793,11 +9085,11 @@ async function czyKanalJestLive(login, config = TWITCH_CONFIG_BILLYBULKA) {
   try {
     // Zawsze pobieramy świeżą wartość (funkcja jest tania — bez requestu sieciowego),
     // żeby złapać kolejne odświeżenia tokenu zamiast trzymać jednorazowy cache na zawsze.
-    await pobierzTwitchAppToken(config);
+    await pobierzTwitchAppToken();
     const res  = await fetchZTimeout(`https://api.twitch.tv/helix/streams?user_login=${login}`, {
       headers: {
         'Client-ID':     config.clientId,
-        'Authorization': `Bearer ${twitchAppTokens[config.botNick]}`,
+        'Authorization': `Bearer ${twitchAppToken}`,
       },
     }, 8000);
     if (!res.ok) {
@@ -8817,13 +9109,13 @@ function uruchomBillyDiscordInterval(clientLubTwitchClient, config = TWITCH_CONF
   let kolejneBledyApi = 0;
   const MAX_KOLEJNYCH_BLEDOW = 3; // przy interwale 30 min to 1.5h trwającej awarii Twitcha
 
-  billyDiscordInterval = setInterval(async () => {
+  billyDiscordInterval = ustawInterwal(async () => {
     // Self-check: EventSub 'stream.offline' mógł zostać zgubiony (np. WS się rekonektował
     // w tym momencie), więc zamiast ufać tylko eventom, sprawdzamy realny status za każdym razem.
     const jestLive = await czyKanalJestLive('billybulka', config);
 
     if (jestLive === false) {
-      clearInterval(billyDiscordInterval);
+      wyczyscInterwal(billyDiscordInterval);
       billyDiscordInterval = null;
       console.log('[Twitch/AutoMsg] ⏹️ Kanał nie jest już live (self-check) – interwał Billy zatrzymany');
       return;
@@ -8832,7 +9124,7 @@ function uruchomBillyDiscordInterval(clientLubTwitchClient, config = TWITCH_CONF
     if (jestLive === null) {
       kolejneBledyApi++;
       if (kolejneBledyApi >= MAX_KOLEJNYCH_BLEDOW) {
-        clearInterval(billyDiscordInterval);
+        wyczyscInterwal(billyDiscordInterval);
         billyDiscordInterval = null;
         console.error(`[Twitch/AutoMsg] ⏹️ ${MAX_KOLEJNYCH_BLEDOW} kolejnych błędów API przy self-checku — zatrzymuję interwał zamiast spamować w nieznane. Trzeba będzie go wznowić ręcznie albo poczekać na kolejny stream.online.`);
         return;
@@ -8907,7 +9199,7 @@ function zaplanujOdswiezenieTwitchChat(botKey) {
     odswiezTokenTwitchChat(botKey).catch(() => {});
   } else {
     console.log(`[Twitch Chat/${botKey}] Zaplanowano odświeżenie za ${Math.round(pozostaloMs / 60000)} min`);
-    setTimeout(() => odswiezTokenTwitchChat(botKey), pozostaloMs);
+    ustawTimeout(() => odswiezTokenTwitchChat(botKey), pozostaloMs);
   }
 }
 
@@ -8956,7 +9248,7 @@ async function odswiezTokenTwitchChat(botKey) {
       stan.dead = false;
       const refreshTime = ((data.expires_in ?? 3600) - 60) * 1000;
       console.log(`[Twitch Chat/${botKey}] ✅ Token odświeżony! Następne za ${Math.round(refreshTime / 60000)} min`);
-      setTimeout(() => odswiezTokenTwitchChat(botKey), Math.max(refreshTime, 10000));
+      ustawTimeout(() => odswiezTokenTwitchChat(botKey), Math.max(refreshTime, 10000));
     } catch (err) {
       const trwaleMartwy = err.status === 400 || err.status === 401;
       if (trwaleMartwy) {
@@ -8968,7 +9260,7 @@ async function odswiezTokenTwitchChat(botKey) {
         ).catch(() => {});
       } else {
         console.error(`[Twitch Chat/${botKey}] ❌ Błąd odświeżania (chwilowy?):`, err.message);
-        setTimeout(() => odswiezTokenTwitchChat(botKey), 30000);
+        ustawTimeout(() => odswiezTokenTwitchChat(botKey), 30000);
       }
     } finally {
       stan.refreshPromise = null;
@@ -8989,6 +9281,11 @@ function uruchomTwitch(config) {
     channels: config.obserwowaneKanaly,
   });
 
+  lifecycle.zarejestruj('Twitch IRC ' + config.botNick, async () => {
+    try { await client.disconnect(); } catch (error) {
+      console.warn('[Lifecycle] Twitch IRC nie zamknął się czysto:', error?.message || error);
+    }
+  });
   const joinTracker = createTwitchJoinTracker(config.obserwowaneKanaly);
   let validationRetryTimer = null;
   let periodicValidationRetryTimer = null;
@@ -9059,7 +9356,7 @@ function uruchomTwitch(config) {
 
   const zaplanujPonownaWalidacje = () => {
     if (validationRetryTimer) return;
-    validationRetryTimer = setTimeout(() => {
+    validationRetryTimer = ustawTimeout(() => {
       validationRetryTimer = null;
       uruchomPoWalidacji().catch(obslugaBleduAuth);
     }, 30000);
@@ -9068,7 +9365,7 @@ function uruchomTwitch(config) {
 
   const zaplanujPonownaWalidacjeOkresowa = () => {
     if (periodicValidationRetryTimer) return;
-    periodicValidationRetryTimer = setTimeout(async () => {
+    periodicValidationRetryTimer = ustawTimeout(async () => {
       periodicValidationRetryTimer = null;
       try {
         await walidujTokenCzatu();
@@ -9178,7 +9475,7 @@ function uruchomTwitch(config) {
   });
 
   // Twitch wymaga walidacji tokena przy starcie i cyklicznie w trakcie działania.
-  const validationInterval = setInterval(async () => {
+  const validationInterval = ustawInterwal(async () => {
     try {
       await walidujTokenCzatu();
     } catch (err) {
@@ -9214,6 +9511,7 @@ const YT_KANALY_ARBUZIK = [
 //  START
 // =============================================
 const startBot = async () => {
+  lifecycle.zainstalujObslugeProcesu();
   console.log('🚀 Uruchamiam CzituchBota (YouTube + Twitch)...\n');
   console.log('[Wersja] v24.5 AI hardened — GameLore lore + GameFAQs gameplay RAG + unique Tavily source IDs + claim validator | Twitch przez Helix\n');
 
@@ -9289,6 +9587,10 @@ const startBot = async () => {
 
   // Przenieś cache i stan przed uruchomieniem platform, aby pierwsze wiadomości nie użyły pustych map.
   await ensurePersistentCachesReady();
+  if (lifecycle.czyZamykanie()) {
+    console.warn('[Lifecycle] Przerwano start platform, ponieważ proces jest już zamykany.');
+    return;
+  }
 
   // ---- Uruchom platformy równolegle ----
   // Kick: obsługa kanałów EdzziLive i ArbuzikLive została wyłączona.
@@ -9297,10 +9599,10 @@ const startBot = async () => {
   // zapytaniami OAuth tuż po starcie (patrz komentarz przy getAccessToken wyżej).
   if (youtubeReady) {
     youtubeWatcher(KONFIGURACJA.youtubeTargetKanal, wyslijYoutube);
-    setTimeout(() => youtubeWatcher(KONFIGURACJA.youtubeTargetKanal2, wyslijYoutube), 1000);
-    setTimeout(() => youtubeWatcher(KONFIGURACJA.youtubeTargetKanal4, wyslijYoutube), 2000);
-    setTimeout(() => youtubeWatcher(KONFIGURACJA.youtubeTargetKanal5, wyslijYoutube), 3000);
-    setTimeout(() => youtubeWatcher(KONFIGURACJA.youtubeTargetKanal6, wyslijYoutube), 4000);
+    ustawTimeout(() => youtubeWatcher(KONFIGURACJA.youtubeTargetKanal2, wyslijYoutube), 1000);
+    ustawTimeout(() => youtubeWatcher(KONFIGURACJA.youtubeTargetKanal4, wyslijYoutube), 2000);
+    ustawTimeout(() => youtubeWatcher(KONFIGURACJA.youtubeTargetKanal5, wyslijYoutube), 3000);
+    ustawTimeout(() => youtubeWatcher(KONFIGURACJA.youtubeTargetKanal6, wyslijYoutube), 4000);
   } else {
     console.warn('[YouTube] Watchery nie zostały uruchomione z powodu niedostępnej autoryzacji.');
   }
@@ -9312,7 +9614,7 @@ const startBot = async () => {
 if (require.main === module) {
   startBot().catch(err => {
     console.error('[START] Nieobsłużony błąd startu bota:', err?.stack || err);
-    process.exitCode = 1;
+    void lifecycle.zamknijWszystko('startup-error').finally(() => { process.exitCode = 1; });
   });
 }
 
@@ -9320,6 +9622,7 @@ const moduleExports = { zapytajAI, startBot };
 if (process.env.NODE_ENV === 'test') {
   moduleExports.__validatorTestHooks = {
     zbudujPromptWalidatora,
+    dodatniaLiczbaEnv,
     walidujOdpowiedzGeminiModel,
     walidujOdpowiedzOpenRouter,
     walidujOdpowiedzXKiro,

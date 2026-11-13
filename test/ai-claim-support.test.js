@@ -8,6 +8,27 @@ const {
   summarizeClaimSupportAudits,
 } = require('../ai/claim-support');
 const { extractClaimSupportAudit } = require('../scripts/ai-live-benchmark');
+const validator = require('../ai/validator');
+const claimValidation = require('../ai/claimValidation');
+
+test('walidator wykrywa pominiętą część pytania złożonego', () => {
+  const question = 'Kim jest Wheatley i dlaczego przejął kontrolę?';
+  const identityOnly = validator.sprawdzPokrycieCzesciPytania(question, [
+    { claim: 'Wheatley is a personality core.', supported: true },
+  ]);
+  assert.equal(identityOnly.ok, false);
+  assert.equal(identityOnly.totalParts, 2);
+  assert.equal(identityOnly.coveredParts, 1);
+  assert.match(identityOnly.uncoveredParts[0], /dlaczego|Wheatley/i);
+
+  const complete = validator.sprawdzPokrycieCzesciPytania(question, [
+    { claim: 'Wheatley is a personality core.', supported: true },
+    { claim: 'Wheatley przejął kontrolę, ponieważ nagły przypływ mocy go skorumpował.', supported: true },
+  ]);
+  assert.equal(complete.ok, true);
+  assert.equal(complete.coveredParts, 2);
+});
+
 
 test('claim-support audit distinguishes exact entailment, bounded-context partial support, and unsupported evidence', () => {
   const audit = buildClaimSupportAudit({
@@ -47,6 +68,30 @@ test('claim-support audit distinguishes exact entailment, bounded-context partia
     not_enough_evidence: 1,
     unsupported_by_cited_source: 0,
   });
+});
+
+test('claim-support audit retains claim_en for translation diagnostics', () => {
+  const audit = buildClaimSupportAudit({
+    claims: [{
+      claim: 'Astarion dołączył do drużyny.',
+      claim_en: 'He joined the party.',
+      source_ids: ['SOURCE 1'],
+      evidence_quote: 'He joined the party.',
+      supported: true,
+    }],
+    evidenceEvaluations: [{ ok: false, reason: 'claim_en pomija podmiot' }],
+    evidenceQuoteVerified: [true],
+    evidenceQuotes: ['He joined the party.'],
+  });
+  assert.equal(audit.records[0].claimEn, 'He joined the party.');
+});
+
+test('status epistemiczny można wykrywać wielokrotnie bez wycieku lastIndex regexu', () => {
+  const claim = 'GLaDOS is Caroline.';
+  const evidence = 'A popular fan theory suggests that GLaDOS is Caroline.';
+  for (let i = 0; i < 3; i += 1) {
+    assert.ok(detectOverclaimTypes(claim, evidence).includes('speculation_presented_as_fact'));
+  }
 });
 
 test('claim-support audit flags correlation-to-causation overclaim', () => {
@@ -236,4 +281,259 @@ test('an explicit offer-to-join outcome supports a Polish causal connector', () 
     'Dzięki temu zostaje zrekrutowany jako towarzysz.',
     'Taking him up on this offer will see him officially join your party.',
   ), []);
+});
+
+
+test('fan theories cannot be promoted to established lore facts', () => {
+  assert.ok(detectOverclaimTypes(
+    'GLaDOS is Caroline.',
+    'A popular fan theory suggests that GLaDOS is Caroline.',
+  ).includes('speculation_presented_as_fact'));
+  assert.deepEqual(detectOverclaimTypes(
+    'A fan theory suggests that GLaDOS is Caroline.',
+    'A popular fan theory suggests that GLaDOS is Caroline.',
+  ), []);
+});
+
+test('interpretations remain labelled and are not converted into plot events', () => {
+  assert.ok(detectOverclaimTypes(
+    'The ending means that the protagonist is dead.',
+    'The ending can be interpreted as suggesting that the protagonist is dead.',
+  ).includes('interpretation_presented_as_fact'));
+  assert.deepEqual(detectOverclaimTypes(
+    'One interpretation is that the protagonist is dead.',
+    'The ending can be interpreted as suggesting that the protagonist is dead.',
+  ), []);
+});
+
+test('canonical status must appear in the cited evidence span', () => {
+  assert.ok(detectOverclaimTypes(
+    'To wydarzenie jest kanoniczne.',
+    'The character appears in the final mission.',
+  ).includes('canon_status_not_in_evidence'));
+  assert.deepEqual(detectOverclaimTypes(
+    'To wydarzenie jest kanoniczne.',
+    'This event is part of the official canon.',
+    { sourceAuthority: 'official' },
+  ), []);
+});
+
+
+test('a directly stated symbolic meaning is not misclassified as an unlabeled interpretation', () => {
+  assert.deepEqual(detectOverclaimTypes(
+    'Czerwony kolor symbolizuje niebezpieczeństwo.',
+    'The red color symbolizes danger.',
+  ), []);
+});
+
+test('ordinary official release wording is not confused with canonical status', () => {
+  assert.deepEqual(detectOverclaimTypes(
+    'To oficjalna wersja gry.',
+    'This is the official game release.',
+  ), []);
+});
+
+
+test('negacja teorii fanowskiej nie zmienia potwierdzonego faktu w spekulację', () => {
+  assert.deepEqual(detectOverclaimTypes(
+    'GLaDOS is Caroline.',
+    'This is not a fan theory: the developers confirmed that GLaDOS is Caroline.',
+  ), []);
+  assert.deepEqual(detectOverclaimTypes(
+    'GLaDOS jest Caroline.',
+    'To nie jest teoria fanowska; twórcy potwierdzili, że GLaDOS jest Caroline.',
+  ), []);
+});
+
+test('ogólne słowo theory nie jest automatycznie teorią fanowską', () => {
+  assert.deepEqual(detectOverclaimTypes(
+    'The theory of the game world is described here.',
+    'The theory of the game world explains the timeline.',
+  ), []);
+});
+
+test('modalna interpretacja nie może zostać zamieniona w kategoryczne znaczenie', () => {
+  assert.ok(detectOverclaimTypes(
+    'The red color symbolizes danger.',
+    'The red color may symbolize danger.',
+  ).includes('interpretation_presented_as_fact'));
+  assert.deepEqual(detectOverclaimTypes(
+    'One interpretation is that the red color symbolizes danger.',
+    'The red color may symbolize danger.',
+  ), []);
+});
+
+test('kanon i niekanoniczność muszą mieć zgodny status w cytowanym dowodzie', () => {
+  assert.ok(detectOverclaimTypes(
+    'To wydarzenie jest kanoniczne.',
+    'This event is non-canonical.',
+  ).includes('canon_status_conflict'));
+  assert.ok(detectOverclaimTypes(
+    'To wydarzenie nie jest kanoniczne.',
+    'This event is part of the official canon.',
+  ).includes('canon_status_conflict'));
+  assert.ok(detectOverclaimTypes(
+    'This event is non-canonical.',
+    'The character appears in the final mission.',
+  ).includes('canon_status_not_in_evidence'));
+});
+
+
+test('wykrywanie statusu pomija zanegowany marker, ale analizuje dalszą część cytatu', () => {
+  assert.ok(detectOverclaimTypes(
+    'GLaDOS is Caroline.',
+    'This is not a fan theory, but fans speculate that GLaDOS is Caroline.',
+  ).includes('speculation_presented_as_fact'));
+  assert.ok(detectOverclaimTypes(
+    'The ending means the protagonist is dead.',
+    'This is not an interpretation; it may symbolize the protagonist’s death.',
+  ).includes('interpretation_presented_as_fact'));
+});
+
+test('sformułowanie „theory suggests” zachowuje status hipotezy', () => {
+  assert.ok(detectOverclaimTypes(
+    'The facility was built by the founders.',
+    'A theory suggests that the facility was built by the founders.',
+  ).includes('speculation_presented_as_fact'));
+});
+
+
+test('status kanoniczny wymaga źródła pierwotnego, nie tylko wyspecjalizowanej wiki', () => {
+  const input = {
+    claims: [{
+      claim: 'To wydarzenie jest kanoniczne.',
+      source_ids: ['SOURCE 1'],
+      evidence_quote: 'This event is part of the official canon.',
+      supported: true,
+    }],
+    evidenceEvaluations: [{ ok: true, mode: 'exact_quote', reason: 'exact quote' }],
+    evidenceQuoteVerified: [true],
+    evidenceQuotes: ['This event is part of the official canon.'],
+  };
+  const communityWiki = buildClaimSupportAudit({ ...input, evidenceAuthorities: ['specialized'] });
+  assert.equal(communityWiki.records[0].verdict, 'unsupported');
+  assert.ok(communityWiki.records[0].overclaimTypes.includes('canon_status_not_official_source'));
+  assert.equal(communityWiki.records[0].sourceAuthority, 'specialized');
+
+  const officialSource = buildClaimSupportAudit({ ...input, evidenceAuthorities: ['official'] });
+  assert.equal(officialSource.records[0].verdict, 'entailed');
+  assert.deepEqual(officialSource.records[0].overclaimTypes, []);
+});
+
+
+test('unknown source authority cannot establish canonical status', () => {
+  const claim = 'This event is canonical.';
+  const evidence = 'This event is part of the official canon.';
+
+  for (const sourceAuthority of [undefined, null, 'unknown', 'general', 'guide', 'reference', 'specialized']) {
+    assert.ok(
+      detectOverclaimTypes(claim, evidence, { sourceAuthority }).includes('canon_status_not_official_source'),
+      String(sourceAuthority),
+    );
+  }
+
+  assert.deepEqual(
+    detectOverclaimTypes(claim, evidence, { sourceAuthority: 'official' }),
+    [],
+  );
+});
+
+test('walidator wiąże status kanoniczny z autorytetem dokładnie cytowanego źródła', () => {
+  const claim = 'To wydarzenie jest kanoniczne.';
+  const payload = {
+    valid: true,
+    reason: 'claim poparty cytatem',
+    confidence: 0.99,
+    supported: true,
+    relevant: true,
+    complete: true,
+    hallucination: false,
+    unsupported_claims: [],
+    claims: [{
+      claim,
+      supported: true,
+      source_ids: ['SOURCE 1'],
+      evidence_quote: claim,
+      claim_en: '',
+      reason: 'dokładny cytat',
+    }],
+  };
+  const sprawdz = url => validator.normalizujWynikWalidatora(
+    payload,
+    'test-model',
+    'gemini',
+    new Set(['SOURCE 1']),
+    '[SOURCE 1]\nURL: ' + url + '\nTYTUŁ: Status wydarzenia\nTREŚĆ:\n' + claim,
+    claim,
+  );
+
+  const wiki = sprawdz('https://gamelore.fandom.com/wiki/Example');
+  assert.equal(wiki.diagnostics.claimSupport.records[0].sourceAuthority, 'specialized');
+  assert.ok(wiki.diagnostics.hardOverclaimClaimIndexes.includes(0));
+  assert.ok(wiki.diagnostics.claimSupport.records[0].overclaimTypes.includes('canon_status_not_official_source'));
+
+  const official = sprawdz('https://www.naughtydog.com/blog/example');
+  assert.equal(official.diagnostics.claimSupport.records[0].sourceAuthority, 'official');
+  assert.ok(!official.diagnostics.claimSupport.records[0].overclaimTypes.includes('canon_status_not_official_source'));
+
+  const multiSourcePayload = {
+    ...payload,
+    claims: [{ ...payload.claims[0], source_ids: ['SOURCE 1', 'SOURCE 2'] }],
+  };
+  const mixed = validator.normalizujWynikWalidatora(
+    multiSourcePayload,
+    'test-model',
+    'gemini',
+    new Set(['SOURCE 1', 'SOURCE 2']),
+    '[SOURCE 1]\nURL: https://gamelore.fandom.com/wiki/Example\nTYTUŁ: Wiki\nTREŚĆ:\n' + claim
+      + '\n[SOURCE 2]\nURL: https://www.naughtydog.com/blog/example\nTYTUŁ: Oficjalne źródło\nTREŚĆ:\n' + claim,
+    claim,
+  );
+  assert.equal(mixed.diagnostics.claimSupport.records[0].sourceAuthority, 'official');
+  assert.ok(!mixed.diagnostics.claimSupport.records[0].overclaimTypes.includes('canon_status_not_official_source'));
+});
+
+test('oversized optional context cannot bypass the bounded causal evidence check', () => {
+  const claim = 'The transfer caused the outcome.';
+  const quote = 'The transfer occurred.';
+  const oversizedContext = 'The transfer occurred, causing the outcome. ' + 'x'.repeat(2500);
+
+  assert.ok(detectOverclaimTypes(claim, quote, {
+    context: oversizedContext,
+    allowContextForCausality: true,
+  }).includes('correlation_to_causation'));
+});
+
+test('adjacent entity names use literal matching with Unicode-safe boundaries', () => {
+  assert.equal(claimValidation.czyNazwySasiaduja('Wheatley, Control', 'Wheatley', 'Control'), true);
+  assert.equal(claimValidation.czyNazwySasiaduja('SuperWheatley Control', 'Wheatley', 'Control'), false);
+  assert.equal(claimValidation.czyNazwySasiaduja('Wheatley Controller', 'Wheatley', 'Control'), false);
+  assert.equal(claimValidation.czyNazwySasiaduja('中Wheatley Control', 'Wheatley', 'Control'), false);
+  assert.equal(claimValidation.czyNazwySasiaduja('Wheatley Control中', 'Wheatley', 'Control'), false);
+});
+
+test('obca relacja przyczynowa z innego źródła nie blokuje ograniczenia epistemicznego', () => {
+  const evidence = [
+    '[SOURCE 1]',
+    'TYTUŁ: Portal 2 — Wheatley',
+    'TREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>',
+    'Wheatley is a personality core in Portal 2.',
+    '<<<END_UNTRUSTED_SOURCE_CONTENT>>>',
+    '[SOURCE 2]',
+    'TYTUŁ: Portal 2 — GLaDOS',
+    'TREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>',
+    'GLaDOS caused the facility shutdown after the core transfer.',
+    '<<<END_UNTRUSTED_SOURCE_CONTENT>>>',
+  ].join('\n');
+  const result = validator.normalizujWynikWalidatora({
+    valid: true,
+    reason: 'The retrieved sources do not establish why Wheatley took control.',
+    confidence: 0.95,
+    unsupported_claims: [],
+    claims: [],
+  }, 'test-model', 'xkiro', new Set(['SOURCE 1', 'SOURCE 2']), evidence,
+  'Źródła nie potwierdzają przyczyny, dla której Wheatley przejął kontrolę nad placówką.',
+  { question: 'Dlaczego Wheatley przejął kontrolę nad placówką?' });
+
+  assert.equal(result.status, 'accepted');
 });

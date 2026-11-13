@@ -30,6 +30,7 @@ const ENTITY_ALIAS_GROUPS = Object.freeze([
   // Zweryfikowane nazwy przedmiotow i lokacji z Wiedzmina 3 (PL/EN).
   { canonical: 'feline armor', names: ['Feline Armor', 'Feline Gear', 'Feline Gear Set', 'Cat School Gear', 'Zbroja Szkoły Kota', 'Zbroja wiedźmińskiego cechu kota', 'Rynsztunek Szkoły Kota', 'Rynsztunek Kociej Szkoły'] },
   { canonical: 'temple isle', names: ['Temple Isle', 'Wyspa Świątynna'] },
+  { canonical: 'white orchard', names: ['White Orchard', 'Biały Sad', 'Białym Sadzie', 'Białym Sadu', 'Białego Sadu', 'Bialy Sad', 'Bialym Sadzie', 'Bialym Sadu', 'Bialego Sadu'] },
   { canonical: 'eye of nehaleni', names: ['Eye of Nehaleni', 'Oko Nehaleni'] },
   // Keep the Skyrim item separate from Dragonrend; only the English item name is unambiguous.
   { canonical: 'dragonbane', names: ['Dragonbane'] },
@@ -88,19 +89,34 @@ function tokenPattern(token) {
   return `${[...base].map(letterClass).join('')}(?:${ENDINGS})?`;
 }
 
+const MAX_ALIAS_GROUPS = 100;
+const MAX_ALIAS_NAMES_PER_GROUP = 32;
+const MAX_ALIAS_NAME_LENGTH = 120;
+const MAX_ALIAS_TOKENS = 8;
+
 function buildAliasPattern(names) {
-  const alternatives = (Array.isArray(names) ? names : [])
-    .map(name => String(name || '').trim().split(/\s+/u).map(tokenPattern).filter(Boolean))
-    .filter(tokens => tokens.length)
-    .map(tokens => tokens.join('[\\s\\-]+'));
-  if (!alternatives.length) return null;
-  return new RegExp(`(?<![\\p{L}\\p{N}])(?:${alternatives.join('|')})(?![\\p{L}\\p{N}])`, 'iu');
+  if (!Array.isArray(names) || !names.length || names.length > MAX_ALIAS_NAMES_PER_GROUP) return null;
+  const alternatives = [];
+  for (const name of names) {
+    if (typeof name !== 'string') return null;
+    const normalized = name.trim();
+    if (!normalized || normalized.length > MAX_ALIAS_NAME_LENGTH) return null;
+    const tokens = normalized.split(/\s+/u);
+    if (!tokens.length || tokens.length > MAX_ALIAS_TOKENS) return null;
+    const patternTokens = tokens.map(tokenPattern);
+    if (patternTokens.some(token => !token)) return null;
+    alternatives.push(patternTokens.join('[\\s\\-]+'));
+  }
+  const source = '(?<![\\p{L}\\p{N}])(?:' + alternatives.join('|') + ')(?![\\p{L}\\p{N}])';
+  if (source.length > 16_384) return null;
+  return new RegExp(source, 'iu');
 }
 
 function buildEntityAliasPatterns(groups = ENTITY_ALIAS_GROUPS) {
-  return (Array.isArray(groups) ? groups : [])
-    .map(group => ({ canonical: stripDiacritics(group?.canonical).replace(/\s+/g, ' ').trim(), pattern: buildAliasPattern(group?.names) }))
+  if (!Array.isArray(groups) || groups.length > MAX_ALIAS_GROUPS) return [];
+  return groups
+    .filter(group => typeof group?.canonical === 'string' && group.canonical.trim().length <= MAX_ALIAS_NAME_LENGTH)
+    .map(group => ({ canonical: stripDiacritics(group.canonical).replace(/\s+/g, ' ').trim(), pattern: buildAliasPattern(group.names) }))
     .filter(entry => entry.canonical && entry.pattern);
 }
-
 module.exports = { ENTITY_ALIAS_GROUPS, buildAliasPattern, buildEntityAliasPatterns };

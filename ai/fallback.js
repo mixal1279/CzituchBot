@@ -129,6 +129,16 @@ function configuredMaxFallbackSteps(value = process.env.AI_MAX_FALLBACK_STEPS) {
   return Number.isFinite(parsed) ? Math.max(0, Math.floor(parsed)) : GENERATION_FALLBACK_CHAIN.length;
 }
 
+const MAX_PROVIDER_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
+
+function boundedProviderCooldownMs(value, fallback = 60_000) {
+  const duration = Number(value);
+  if (!Number.isFinite(duration)) {
+    return duration === Infinity ? MAX_PROVIDER_COOLDOWN_MS : fallback;
+  }
+  return Math.min(MAX_PROVIDER_COOLDOWN_MS, Math.max(1_000, duration));
+}
+
 const quotaBlockedUntil = new Map();
 let quotaPersistence = null;
 let quotaPersistenceQueue = Promise.resolve();
@@ -172,8 +182,16 @@ function configureProviderQuotaPersistence(store) {
       for (const item of saved.entries) {
         if (!Array.isArray(item) || item.length !== 2) continue;
         const [key, until] = item;
-        if (typeof key === 'string' && Number.isFinite(Number(until)) && Number(until) > now) {
-          quotaBlockedUntil.set(key, Math.max(quotaBlockedUntil.get(key) || 0, Number(until)));
+        const normalizedKey = typeof key === 'string' ? normalizeProviderEndpoint(key) : '';
+        const validProviderScope = typeof key === 'string' && /^(?:groq|gemini|xkiro|openrouter):\*$/.test(key);
+        const expiresAt = Number(until);
+        // Odrzuć uszkodzone lub nieznane wpisy oraz daty wykraczające poza
+        // maksymalny cooldown. Nie przedłużaj ich przy każdym restarcie.
+        if ((normalizedKey === key || validProviderScope)
+          && Number.isFinite(expiresAt)
+          && expiresAt > now
+          && expiresAt <= now + MAX_PROVIDER_COOLDOWN_MS) {
+          quotaBlockedUntil.set(key, Math.max(quotaBlockedUntil.get(key) || 0, expiresAt));
         }
       }
       return true;
@@ -201,12 +219,17 @@ function geminiGenerationCooldownMsFromError(error) {
     return 24 * 60 * 60 * 1000;
   }
 
-  // Honor Retry-After when it is available (including the normalized string
-  // attached by retryAfterHint); otherwise distinguish daily quota from bursts.
+  // Honor raw response headers before falling back to message-based hints.
+  const headerRetryAfter = retryAfterSecondsFromHeaders(error);
+  if (headerRetryAfter !== null) return boundedProviderCooldownMs(headerRetryAfter * 1000);
   const retryAfter = message.match(/retry[- ]after\s*[=:]\s*(\d+(?:\.\d+)?)\s*(?:s|sec(?:ond)?s?)?/i);
-  if (retryAfter) return Math.max(1_000, Math.ceil(Number(retryAfter[1]) * 1000));
+  if (retryAfter) return boundedProviderCooldownMs(Number(retryAfter[1]) * 1000);
 
-  const dailyQuota = /(?:tokens?\s*(?:per|\/)\s*day|\bTPD\b|daily (?:token|usage|request) (?:allowance|quota|limit)|daily allowance exhausted)/i.test(message);
+  const metadata = error?.metadata && typeof error.metadata === 'object' ? error.metadata : {};
+  const quotaCode = [error?.code, error?.type, metadata.error_type, metadata.limit_source]
+    .filter(Boolean).join(' ');
+  const dailyQuota = /(?:tokens?\s*(?:per|\/)\s*day|\bTPD\b|daily (?:token|usage|request) (?:allowance|quota|limit)|daily allowance exhausted|daily[_ -]quota[_ -]exceeded|free[_ -]tokens[_ -]exhausted)/i.test(message)
+    || /(?:daily_quota_exceeded|free_tokens_exhausted)/i.test(quotaCode);
   if (dailyQuota) return 24 * 60 * 60 * 1000;
 
   if (status === 429 || /(?:HTTP\s*429|\b429\b|quota|rate.?limit|resource.?exhausted|limit:)/i.test(message)) return 90_000;
@@ -228,20 +251,36 @@ function openRouterErrorMessage(httpStatus, data, retryAfter = '') {
   return parts.join('; ');
 }
 
-function retryAfterHint(source, now = Date.now()) {
-  const headers = source?.headers || source?.response?.headers || source;
-  let raw = null;
-  try { raw = headers?.get?.('retry-after') ?? headers?.get?.('Retry-After') ?? null; } catch (_) {}
-  if (raw == null && headers && typeof headers === 'object') {
-    raw = headers['retry-after'] ?? headers['Retry-After'] ?? headers.retryAfter ?? null;
+function retryAfterSecondsFromHeaders(source, now = Date.now()) {
+  const candidates = [source?.headers, source?.response?.headers, source];
+  for (const headers of candidates) {
+    if (!headers) continue;
+    let raw = null;
+    try {
+      raw = headers.get?.('retry-after') ?? headers.get?.('Retry-After') ?? null;
+    } catch (_) {}
+    if (raw == null && typeof headers === 'object') {
+      const key = Object.keys(headers).find(name => name.toLowerCase() === 'retry-after');
+      if (key) raw = headers[key];
+      else raw = headers.retryAfter ?? null;
+    }
+    if (raw == null || String(raw).trim() === '') continue;
+    const value = String(raw).trim();
+    const parsedDate = Date.parse(value);
+    const seconds = /^\d+(?:\.\d+)?$/.test(value)
+      ? Number(value)
+      : (Number.isFinite(parsedDate) ? Math.max(0, (parsedDate - now) / 1000) : NaN);
+    // Bardzo duże, ale poprawne wartości sekund mogą przepełnić Number do
+    // Infinity. Traktuj je jako maksymalny cooldown zamiast ignorować nagłówek.
+    if (seconds === Infinity) return MAX_PROVIDER_COOLDOWN_MS / 1000;
+    if (Number.isFinite(seconds)) return Math.min(MAX_PROVIDER_COOLDOWN_MS / 1000, Math.max(0, seconds));
   }
-  if (raw == null || String(raw).trim() === '') return '';
-  const value = String(raw).trim();
-  const parsedDate = Date.parse(value);
-  const seconds = /^\d+(?:\.\d+)?$/.test(value)
-    ? Number(value)
-    : (Number.isFinite(parsedDate) ? Math.max(0, (parsedDate - now) / 1000) : NaN);
-  return Number.isFinite(seconds) ? `Retry-After=${Math.max(0, seconds)}s` : '';
+  return null;
+}
+
+function retryAfterHint(source, now = Date.now()) {
+  const seconds = retryAfterSecondsFromHeaders(source, now);
+  return seconds === null ? '' : `Retry-After=${seconds}s`;
 }
 
 function quotaCooldownMsFromError(error) {
@@ -253,21 +292,13 @@ function quotaCooldownMsFromError(error) {
   let retryAfterMs = null;
   let hasRetryAfterHeader = false;
 
-  // First, honor any Retry-After coming from headers on the error/response object.
-  try {
-    const headers = error?.headers || error?.response?.headers || error;
-    let rawHeader = null;
-    if (headers) {
-      if (typeof headers.get === 'function') rawHeader = headers.get('retry-after') ?? headers.get('Retry-After') ?? null;
-      else if (typeof headers === 'object') rawHeader = headers['retry-after'] ?? headers['Retry-After'] ?? headers.retryAfter ?? null;
-    }
-    if (rawHeader != null && String(rawHeader).trim() !== '') {
-      const v = String(rawHeader).trim();
-      const parsedDate = Date.parse(v);
-      const seconds = /^\d+(?:\.\d+)?$/.test(v) ? Number(v) : (Number.isFinite(parsedDate) ? Math.max(0, (parsedDate - Date.now()) / 1000) : NaN);
-      if (Number.isFinite(seconds)) { retryAfterMs = Math.max(0, seconds * 1000); hasRetryAfterHeader = true; }
-    }
-  } catch (_) {}
+  // Sprawdź osobno nagłówki błędu i odpowiedzi: puste error.headers nie
+  // mogą zasłonić poprawnego response.headers.
+  const headerSeconds = retryAfterSecondsFromHeaders(error);
+  if (headerSeconds !== null) {
+    retryAfterMs = headerSeconds * 1000;
+    hasRetryAfterHeader = true;
+  }
 
   // Message-based 'retry-after' tokens (some providers embed this in text)
   const retryAfterMatch = message.match(/retry[- ]after\s*[=:]\s*(\d+(?:\.\d+)?)\s*(?:s|sec(?:ond)?s?)?/i);
@@ -298,15 +329,18 @@ function quotaCooldownMsFromError(error) {
   // exhausted. If the response did not provide an authoritative Retry-After,
   // suppress repeated calls instead of probing the same exhausted allowance
   // every minute. Burst/rate-limit 429s retain the short configurable cooldown.
-  const dailyQuota = /(?:tokens?\s*(?:per|\/)\s*day|\bTPD\b|daily (?:token|usage|request) (?:allowance|quota|limit)|daily allowance exhausted)/i.test(message)
-    || /(?:quota_exceeded|daily_quota_exceeded|free_tokens_exhausted)/i.test(String(error?.code || error?.type || ''));
+  const metadata = error?.metadata && typeof error.metadata === 'object' ? error.metadata : {};
+  const quotaCode = [error?.code, error?.type, metadata.error_type, metadata.limit_source]
+    .filter(Boolean).join(' ');
+  const dailyQuota = /(?:tokens?\s*(?:per|\/)\s*day|\bTPD\b|daily (?:token|usage|request) (?:allowance|quota|limit)|daily allowance exhausted|daily[_ -]quota[_ -]exceeded|free[_ -]tokens[_ -]exhausted)/i.test(message)
+    || /(?:quota_exceeded|daily_quota_exceeded|free_tokens_exhausted)/i.test(quotaCode);
   if (dailyQuota && retryAfterMs === null) return 24 * 60 * 60 * 1000;
   if (retryAfterMs !== null) {
     // A valid provider Retry-After is authoritative for retryable responses.
     // Do not silently extend a short wait to the local 60s default.
-    return Math.max(1_000, Math.ceil(retryAfterMs));
+    return boundedProviderCooldownMs(retryAfterMs);
   }
-  return isOverload ? 60_000 : configured;
+  return boundedProviderCooldownMs(isOverload ? 60_000 : configured);
 }
 
 function normalizeProviderEndpoint(provider) {
@@ -317,7 +351,7 @@ function normalizeProviderEndpoint(provider) {
   let model = endpoint.slice(separator + 1).trim();
   if (!['groq', 'gemini', 'xkiro', 'openrouter'].includes(providerName) || !model) return '';
   if (model === 'default' && providerName === 'xkiro') {
-    model = process.env.XKIRO_MODEL || 'qwen/qwen3.5-397b-a17b:free';
+    model = process.env.XKIRO_MODEL || 'cohere/command-a-reasoning';
   } else if (model === 'default' && providerName === 'openrouter') {
     model = process.env.OPENROUTER_GENERATOR_MODEL || process.env.AI_GENERATOR_MODEL || 'openai/gpt-oss-120b';
   }
@@ -330,7 +364,7 @@ function markProviderQuota(provider, cooldownMs = Number(process.env.AI_PROVIDER
   const providerName = endpoint.slice(0, endpoint.indexOf(':'));
   const scope = options?.scope === 'provider' ? 'provider' : 'endpoint';
   const key = scope === 'provider' ? `${providerName}:*` : endpoint;
-  const duration = Math.max(1_000, Number(cooldownMs) || 60_000);
+  const duration = boundedProviderCooldownMs(Number(cooldownMs) || 60_000);
   const until = Math.max(quotaBlockedUntil.get(key) || 0, Date.now() + duration);
   quotaBlockedUntil.set(key, until);
   void persistQuotaState();
@@ -342,8 +376,9 @@ function shouldBlockProviderQuotaWide(provider, error) {
   if (!endpoint) return false;
   const providerName = endpoint.slice(0, endpoint.indexOf(':'));
   const message = String(error?.message || error?.reason || error?.error || error || '');
-  const code = String(error?.code || error?.type || '').toLowerCase();
   const metadata = error?.metadata && typeof error.metadata === 'object' ? error.metadata : {};
+  const code = [error?.code, error?.type, metadata.error_type, metadata.provider_code]
+    .filter(Boolean).join(' ').toLowerCase();
   const limitSource = String(metadata.limit_source || error?.limit_source || '').toLowerCase();
   const httpStatus = Number(error?.status ?? error?.statusCode ?? error?.response?.status ?? 0);
   const paymentOrCreditExhaustion = httpStatus === 402
@@ -353,11 +388,19 @@ function shouldBlockProviderQuotaWide(provider, error) {
   // organization/project/account limits do. Provider-specific daily free-tier
   // codes are treated as shared only when the provider explicitly identifies
   // the allowance as account/key/project scoped.
-  const explicitAccountScope = /(?:organization|account|project|api.?key|subscription|billing).{0,50}(?:quota|rate.?limit|limit|exhaust|deplet)|(?:quota|rate.?limit|limit|exhaust|deplet).{0,50}(?:organization|account|project|api.?key|subscription|billing)/i.test(message)
-    || /^(?:account|key|project|organization|subscription)$/.test(limitSource);
+  // Groq raportuje także limity przypisane do konkretnego modelu
+  // (np. "Rate limit reached for model ... TPM"). Taki błąd blokuje
+  // tylko endpoint; nie może wyłączać modeli siostrzanych.
+  const modelScopedGroqLimit = providerName === 'groq'
+    && /\bfor model\s+[\x60'"]?[^ \x60'"]+[\x60'"]?/i.test(message);
+  const explicitAccountScope = !modelScopedGroqLimit && (
+    /(?:organization|account|project|api.?key|subscription|billing).{0,50}(?:quota|rate.?limit|limit|exhaust|deplet)|(?:quota|rate.?limit|limit|exhaust|deplet).{0,50}(?:organization|account|project|api.?key|subscription|billing)/i.test(message)
+    || /^(?:account|key|project|organization|subscription)$/.test(limitSource)
+  );
   const dailySharedCode = providerName === 'xkiro'
     && /^(?:quota_exceeded|daily_quota_exceeded|free_tokens_exhausted)$/.test(code);
   const sharedTokenWindow = providerName === 'groq'
+    && !modelScopedGroqLimit
     && /tokens?\s*(?:per|\/)\s*(?:minute|day)|\bTP[MD]\b/i.test(message);
   const providerSharedDaily = providerName === 'gemini'
     && /(?:project|account).{0,40}(?:daily|quota|limit)|(?:daily|quota|limit).{0,40}(?:project|account)/i.test(message);
@@ -402,15 +445,19 @@ function nextFallbacks({ failure = 'unknown', attempted = [], failedProviders = 
   return remaining.slice(0, limit);
 }
 
-function selectRepairFallbacks({ failedProviders = [], exclude = [], availableProviders = null, maxFallbacks = 1 } = {}) {
+function selectRepairFallbacks({ failedProviders = [], exclude = [], availableProviders = null, allowedProviders = null, maxFallbacks = 1 } = {}) {
   const blocked = new Set([...(failedProviders || []), ...(exclude || [])]);
   const available = Array.isArray(availableProviders) ? new Set(availableProviders) : null;
+  // Ograniczenie benchmarku do konkretnego generatora musi zadziałać PRZED
+  // sortowaniem i limitem. Filtrowanie już przyciętej listy mogło usunąć
+  // jedyny dozwolony model, bo wyżej w rankingu stał zwykły fallback Groq.
+  const allowed = Array.isArray(allowedProviders) ? new Set(allowedProviders) : null;
   const candidates = nextFallbacks({
     failure: 'grounded_reject',
     failedProviders: [...blocked],
     maxFallbacks: GENERATION_FALLBACK_CHAIN.length,
   })
-    .filter(provider => !available || available.has(provider));
+    .filter(provider => (!available || available.has(provider)) && (!allowed || allowed.has(provider)));
   const preference = new Map(REPAIR_FALLBACK_PREFERENCE.map((provider, index) => [provider, index]));
   return candidates
     .sort((a, b) => (preference.get(a) ?? REPAIR_FALLBACK_PREFERENCE.length) - (preference.get(b) ?? REPAIR_FALLBACK_PREFERENCE.length))
@@ -454,8 +501,21 @@ function shouldOpenQuotaCircuit(error) {
   // trigger the long breaker. Open it only for billing or clearly daily quota.
   // OpenRouter's documented retryable in-flight budget 402 is also excluded.
   const text = String(error?.message || error || '');
-  if (/openrouter_in_flight_budget/i.test(text) && /retry[- ]after/i.test(text)) return false;
-  return /(?:"status"\s*:\s*402|HTTP\s*402|payment required|insufficient (?:credits?|quota)|credit balance.{0,40}(?:deplet|exhaust|insufficient)|tokens? per day|\bTPD\b|daily (?:token|request|usage) quota|quota exceeded)/i.test(text);
+  const status = Number(error?.status ?? error?.statusCode ?? error?.response?.status ?? 0);
+  const metadata = error?.metadata && typeof error.metadata === 'object' ? error.metadata : {};
+  const details = [
+    text,
+    error?.code,
+    error?.type,
+    metadata.limit_source,
+    metadata.error_type,
+    metadata.provider_code,
+  ].filter(Boolean).join(' ');
+  const retryableInFlightBudget = /openrouter_in_flight_budget/i.test(details)
+    && (/retry[- ]after/i.test(details) || Boolean(retryAfterHint(error)));
+  if (retryableInFlightBudget) return false;
+  return status === 402
+    || /(?:"status"\s*:\s*402|HTTP\s*402|payment required|insufficient (?:credits?|quota)|credit balance.{0,40}(?:deplet|exhaust|insufficient)|tokens? per day|\bTPD\b|daily (?:token|request|usage) quota|quota exceeded|daily[_ -]quota[_ -]exceeded|free[_ -]tokens[_ -]exhausted)/i.test(details);
 }
 
 function shouldRetryFailure(failure) {

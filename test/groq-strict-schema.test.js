@@ -42,7 +42,7 @@ test('Groq strict mode is enabled only for documented model IDs', () => {
     assert.equal(format.type, 'json_schema');
     assert.equal(format.json_schema.strict, true);
   }
-  for (const model of ['llama-3.3-70b-versatile', 'qwen/qwen3.5-397b-a17b:free', '']) {
+  for (const model of ['llama-3.3-70b-versatile', 'cohere/command-a-reasoning', '']) {
     assert.deepEqual(buildGroqValidatorResponseFormat(model), { type: 'json_object' });
   }
 });

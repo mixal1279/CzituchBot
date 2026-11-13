@@ -4,7 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { normalizujWynikWalidatora } = require('../ai/validator');
+const { normalizujWynikWalidatora, zbudujFeedbackTlumaczeniaClaimow } = require('../ai/validator');
 
 function makeResult(claim, claimEn, answer) {
   const quote = 'Wheatley took control of the facility after the core transfer.';
@@ -88,4 +88,42 @@ test('validator system prompt documents the claim-language contract', () => {
   const source = fs.readFileSync(path.join(__dirname, '..', 'czituch_bot.js'), 'utf8');
   assert.match(source, /claim.*tym samym języku co ODPOWIEDŹ DO SPRAWDZENIA/i);
   assert.match(source, /claim_en.*wiernym angielskim tłumaczeniem pola "claim"/i);
+});
+
+test('repair feedback includes exact claim translation failures as bounded data', () => {
+  const feedback = zbudujFeedbackTlumaczeniaClaimow([
+    {
+      claimIndex: 2,
+      claim: 'Astarion był wrogo nastawiony na początku.',
+      claimEn: 'He was hostile at first.',
+      evidenceQuote: 'He was hostile at first, but agreed to join us.',
+      reason: 'tłumaczenie claimu gubi nazwy własne: astarion',
+    },
+    {
+      claimIndex: 3,
+      claim: 'Wheatley prowadzi Chell przez Enrichment Center.',
+      claimEn: 'He guides Chell through the Enrichment Center.',
+      evidenceQuote: 'He guides Chell through the Enrichment Center.',
+      reason: 'claim_en kopiuje cytat, ale nie odpowiada treści claimu',
+    },
+    {
+      claimIndex: 4,
+      claim: 'Niepotwierdzona teza.',
+      claimEn: 'Unconfirmed claim.',
+      evidenceQuote: 'Unconfirmed claim.',
+      reason: 'inna przyczyna odrzucenia',
+    },
+  ]);
+
+  assert.match(feedback, /Astarion był wrogo nastawiony/);
+  assert.match(feedback, /claim_en kopiuje cytat/);
+  assert.match(feedback, /nie usuwaj nazwy własnej/i);
+  assert.doesNotMatch(feedback, /Niepotwierdzona teza/);
+  assert.match(feedback, /UNTRUSTED DATA/);
+});
+
+test('repair feedback is empty when there are no translation-specific failures', () => {
+  assert.equal(zbudujFeedbackTlumaczeniaClaimow([
+    { claim: 'Fakt.', claimEn: 'A fact.', reason: 'brak dowodu' },
+  ]), '');
 });

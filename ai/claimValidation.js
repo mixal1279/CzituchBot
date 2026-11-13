@@ -2,8 +2,8 @@
 
 const { ENTITY_ALIAS_GROUPS, buildEntityAliasPatterns } = require('./entityAliases');
 const { slowaLiczbowe } = require('./polishNumbers');
-const { GAME_ALIASES } = require('./entities');
-const { findQuotePrefix } = require('./evidence');
+const { GAME_ALIASES, CHARACTER_ALIASES } = require('./entities');
+const { findQuotePrefix, findQuoteSentencePrefix } = require('./evidence');
 
 const NEGATION_RE = /(?<![\p{L}])(?:nie|nigdy|brak|bez|zaden|zadna|zadne|never|no|not|cannot|without|lack\s+of|absence\s+of|unable|neither|nor|fails?\s+to|\p{L}+n['\u2019]t)(?![\p{L}])/iu;
 // Ta sama lista bez gołego „no”: „no damage” to kwantyfikator zerowy, a nie zaprzeczenie czasownika.
@@ -31,6 +31,10 @@ const CROSS_LANGUAGE_CONCEPTS = [
   ['konflikt', /conflict\w*|feud\w*|fight\w*|\bwar\w*|hatred|hate\w*|konflikt\w*|walcz\w*|wojn\w*/i],
   ['zwiazek', /relationship\w*|girlfriend\w*|boyfriend\w*|partner\w*|romanc\w*|romantic\w*|involved|zwi[aa]zk\w*|zwiaz\w*|relacj\w*|dziewczyn\w*|chlopak\w*/i],
   ['pomoc', /help\w*|assist\w*|save\w*|rescu\w*|pomog\w*|pomaga\w*|urat\w*|ocal\w*/i],
+  // Dodane po przypadku benchmarkowym who-225 (Astarion): cytat 'freed him
+  // from his bonds' nie byl rozpoznawany jako potwierdzenie claimu 'zostal
+  // uwolniony', bo zadne pojecie nie lapalo pary freed/uwolniony.
+  ['uwolnienie', /\bfree(?:d|s|ing)?\b|liberat\w*|uwolni\w*|wyzwoli\w*/i],
   // Granica slowa przed „appear”: „disappears” oznacza przeciwna akcje i nie moze byc uznane za „appears”.
   ['wystepowanie', /\b(?:appear\w*|pojaw\w*|wystep\w*)/i],
   ['kontrola', /control\w*|take[s]?\s+over|command\w*|manipulat\w*|kontrol\w*|przej[a]l\w*|manipul\w*|removed?\s+from\s+power|los[et]\s+control/i],
@@ -54,9 +58,9 @@ const CROSS_LANGUAGE_CONCEPTS = [
   ['lokalizacja', /found|find\w*|locat\w*|location\w*|znalezc\w*|znajduj\w*|lokaliz\w*|lezy|polozen\w*/i],
   ['wydanie', /release\w*|launch\w*|publish\w*|premier\w*|wydan\w*|ukaz\w*|debiut\w*/i],
   ['podroz', /travel\w*|arriv\w*|visit\w*|reach\w*|journey\w*|get there|follow\w*\s+(?:the\s+)?(?:road|route|path)|head\w*\s+to|udaj\w*\s+si[ee]|dotrze\w*|dotrz\w*|pod[aa][zz]\w*|szlak\w*|odwiedz\w*|przybyw\w*/i],
-  ['rodzina', /family|families|wife|daughter|son|missing\s+(?:wife|daughter|son|family)|rodzin\w*|zaginion\w*|zona|corka|syn\w*/i],
+  ['rodzina', /(?<![\p{L}])(?:family|families|wife|daughter|son|missing\s+(?:wife|daughter|son|family)|rodzin\w*|zaginion\w*|zona|corka|syn\w*)(?![\p{L}])/iu],
   ['wymiana_informacji', /in\s+exchange\s+for|in\s+return\s+for|exchange\w*|w\s+zamian\s+za|w\s+zamian\w*|wzajemn\w*/i],
-  ['poscig', /chas\w*|pursu\w*|hunt(?:ed|ing|s)\b|flee\w*|escap\w*|uciek\w*|uciec\b|gonil\w*|scig\w*|ucieczk\w*/i],
+  ['poscig', /chas\w*|pursu\w*|hunt(?:ed|ing|s)\b|flee\w*|escap\w*|uciek\w*|uciec\b|gonil\w*|scig\w*|ucieczk\w*|uciecz\w*/i],
   ['schronienie', /shelter\w*|refuge\w*|seek\w*\s+shelter|schron\w*|azyl\w*/i],
   ['informacja', /information\w*|informacj\w*|wiadomos\w*/i],
   ['ogien', /fire\w*|flame\w*|ogn\w*|plomien\w*/i],
@@ -141,7 +145,7 @@ const KNOWN_ENTITY_ALIAS_PATTERNS = [
 // Aliasy z tabeli danych (ai/entityAliases.js) laczymy z legacy regexami.
 // Nie pomijamy grupy tylko dlatego, ze jej kanoniczna nazwa juz istnieje:
 // starszy regex moze nie obslugiwac odmiany polskiej (np. „Krwawym Baronem”).
-for (const entry of buildEntityAliasPatterns(ENTITY_ALIAS_GROUPS)) {
+for (const entry of buildEntityAliasPatterns([...ENTITY_ALIAS_GROUPS, ...GAME_ALIASES.filter(entry => !String(entry.name || '').includes(' ')), ...CHARACTER_ALIASES.filter(entry => !String(entry.name || '').includes(' '))].map(entry => ({ canonical: entry.canonical || entry.name, names: entry.names || [entry.name, ...(entry.aliases || [])] })))) {
   const existing = KNOWN_ENTITY_ALIAS_PATTERNS.find(item => item.canonical === entry.canonical);
   if (!existing) {
     KNOWN_ENTITY_ALIAS_PATTERNS.push(entry);
@@ -149,8 +153,46 @@ for (const entry of buildEntityAliasPatterns(ENTITY_ALIAS_GROUPS)) {
   }
   existing.pattern = new RegExp(`(?:${existing.pattern.source})|(?:${entry.pattern.source})`, 'iu');
 }
+function czyZnakSlowaUnicode(znak) {
+  return Boolean(znak) && /[\p{L}\p{N}_]/u.test(znak);
+}
+
+function znakPrzed(tekst, indeks) {
+  if (indeks <= 0) return '';
+  let poczatek = indeks - 1;
+  const kod = tekst.charCodeAt(poczatek);
+  if (kod >= 0xDC00 && kod <= 0xDFFF && poczatek > 0) poczatek--;
+  return tekst.slice(poczatek, indeks);
+}
+
+function znakPo(tekst, indeks) {
+  if (indeks >= tekst.length) return '';
+  return String.fromCodePoint(tekst.codePointAt(indeks));
+}
+
+function czyNazwySasiaduja(tekst, pierwsza, druga) {
+  const lewa = normalizujClaim(pierwsza);
+  const prawa = normalizujClaim(druga);
+  if (!lewa || !prawa || lewa.length > 120 || prawa.length > 120) return false;
+
+  // normalizujClaim sprowadza separatory i wielokrotne odstępy do jednej spacji.
+  // Szukamy dosłownego ciągu, bez budowania RegExp z nazw pochodzących z danych.
+  const znormalizowany = normalizujClaim(tekst);
+  const szukany = lewa + ' ' + prawa;
+  let pozycja = znormalizowany.indexOf(szukany);
+  while (pozycja !== -1) {
+    const koniec = pozycja + szukany.length;
+    if (
+      !czyZnakSlowaUnicode(znakPrzed(znormalizowany, pozycja))
+      && !czyZnakSlowaUnicode(znakPo(znormalizowany, koniec))
+    ) return true;
+    pozycja = znormalizowany.indexOf(szukany, pozycja + 1);
+  }
+  return false;
+}
+
 function normalizujClaim(value) {
-  return String(value || '')
+  return String(value || '').slice(0, 12000)
     .replace(/\bdoesn['\u2019]t\b/giu, 'does not')
     .replace(/\bisn['\u2019]t\b/giu, 'is not')
     .replace(/\baren['\u2019]t\b/giu, 'are not')
@@ -251,13 +293,13 @@ function rzymskieNaArabskie(s) {
 function wyodrebnijLiczbyIDaty(value) {
   // Keep decimal separators until numeric extraction; normalizujClaim intentionally
   // removes punctuation and would turn 2.50 into two unrelated integers (2 and 50).
-  const raw = String(value || '');
+  const raw = String(value || '').slice(0, 12000);
   // Rozroznia separator tysiecy od dziesietnego:
   // 50,000 / 50.000 / 50 000 => 50000, ale 2,5 / 2.50 => 2.5.
   // Nie zmieniamy tekstu zrodlowego poza normalizacja samych tokenow liczbowych.
   let text = raw.toLocaleLowerCase('pl-PL')
     .replace(/(?<=\d)[\s\u00a0\u202f](?=\d{3}(?:\D|$))/gu, '')
-    .replace(/(\d)[,.](\d{3})(?=\D|$)/gu, '$1$2')
+    .replace(/\b([1-9]\d{0,2})[,.](000)(?=\D|$)/gu, '$1$2')
     .replace(/,/g, '.');
   const decadeFacts = [];
   // Dekada liczona numerycznie z roku (1980, 2000, 2010). Sklejanie cyfry wieku z cyfra dekady
@@ -338,7 +380,7 @@ const UNIT_ALIASES = new Map([
   ['°c','celsius'], ['°f','fahrenheit'], ['zl','pln'], ['zł','pln'], ['pln','pln'], ['usd','usd'], ['eur','eur'], ['%','percent'],
 ]);
 function wyodrebnijJednostkoweWartosci(value) {
-  const text = String(value || '').toLocaleLowerCase('pl-PL').replace(/,/g, '.')
+  const text = String(value || '').slice(0, 12000).toLocaleLowerCase('pl-PL').replace(/,/g, '.')
     // Dekada nie jest iloscia lat: porownuje ja wyodrebnianie dat powyzej.
     .replace(/\b(?:19|20)\d{2}\s*s\b/gu, ' ')
     // „lata 2000.” / „w latach 2012” to data, nie „2000 lat”: alias „lata” dawal falszywa jednostke 2000:year.
@@ -347,11 +389,13 @@ function wyodrebnijJednostkoweWartosci(value) {
     .replace(/\b['\u2019]\d{2}\s*s\b/gu, ' ');
   const unitPattern = '(?:' + [...UNIT_ALIASES.keys()].filter(k => k !== 'm' && k !== 's').sort((a, b) => b.length - a.length).map(k => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|') + ')';
   const out = [];
-  const re = new RegExp(`(?:\\b(\\d+(?:\\.\\d+)?)\\s*(${unitPattern})(?=$|[^\\p{L}\\p{N}])|(${unitPattern})(?=$|[^\\p{L}\\p{N}])\\s*(\\d+(?:\\.\\d+)?))`, 'giu');
+  const re = new RegExp(`(?:\\b(?:(\\d+(?:\\.\\d+)?)\\s*(?:[-\\u2013\\u2014]|do|to|and|a)\\s*)?(\\d+(?:\\.\\d+)?)\\s*(${unitPattern})(?=$|[^\\p{L}\\p{N}])|(${unitPattern})(?=$|[^\\p{L}\\p{N}])\\s*(\\d+(?:\\.\\d+)?))`, 'giu');
   for (const m of text.matchAll(re)) {
-    const amount = Number(m[1] || m[4]);
-    const rawUnit = String(m[2] || m[3] || '').toLocaleLowerCase('pl-PL');
+    const rangeStart = m[1] ? Number(m[1]) : NaN;
+    const amount = Number(m[2] || m[5]);
+    const rawUnit = String(m[3] || m[4] || '').toLocaleLowerCase('pl-PL');
     const unit = UNIT_ALIASES.get(rawUnit);
+    if (Number.isFinite(rangeStart) && unit) out.push(`${rangeStart}:${unit}`);
     if (Number.isFinite(amount) && unit) out.push(`${amount}:${unit}`);
   }
   // Granice jednostki „m”/„s” musza rozumiec polskie litery: \b traktuje „a/e/o…” jako nie-litery,
@@ -365,7 +409,7 @@ function wyodrebnijJednostkoweWartosci(value) {
   return [...new Set(out)];
 }
 function wyodrebnijNazwyWlasne(value, options = {}) {
-  const raw = String(value || '');
+  const raw = String(value || '').slice(0, 12000);
   // Pomijamy czeste slowa opisowe na poczatku zdania, ale nie imiona.
   // Wczesniejsze wykluczenie Artur/Arthur odrzucalo poprawne nazwy wlasne.
   const genericFirstWords = new Set([
@@ -416,7 +460,10 @@ function wyodrebnijNazwyWlasne(value, options = {}) {
     // Zwykle slowa otwierajace zdanie z przypadkow false-rejection.
     // „Statki End…”: obok stoi nazwa pisana wielka litera, wiec sygnal „nazwa wielowyrazowa” nie
     // odrozni rzeczownika pospolitego od imienia i slowo musi byc na liscie.
-    'materialy', 'dostepne', 'dostepnych', 'danych', 'jedynym', 'jedyna', 'jedynie', 'ponadto', 'dodatkowo', 'aby', 'jesli', 'relacja', 'relacji', 'relacje', 'poznanie', 'poznania', 'statki', 'statek', 'statku', 'statkiem'
+    'materialy', 'dostepne', 'dostepnych', 'danych', 'jedynym', 'jedyna', 'jedynie', 'ponadto', 'dodatkowo', 'aby', 'jesli', 'relacja', 'relacji', 'relacje', 'poznanie', 'poznania', 'statki', 'statek', 'statku', 'statkiem',
+    // Odmiany rzeczownika „głos” nie mogą być mylone z nazwą własną w claimach o aktorach.
+    'glos', 'glosu', 'glosowi', 'glosie', 'glosami', 'glosow',
+    'pelni', 'zarowno', 'sredni', 'srednia', 'srednie', 'sredniego', 'sredniej', 'pozeracz', 'swiata', 'wprowadzona', 'wprowadzony', 'wprowadzone', 'wprowadzenie'
   ].map(normalizujClaim));
   const candidates = [];
   const aliasSpans = [];
@@ -427,6 +474,19 @@ function wyodrebnijNazwyWlasne(value, options = {}) {
       aliasSpans.push({ start, end: start + match[0].length });
       candidates.push({ token: alias.canonical, offset: start });
     }
+  }
+  // Nazwa w nawiasie bezpośrednio po rozpoznanej encji jest zwykle jej
+  // aliasem/objaśnieniem (np. Wheatley (Intelligence Dampening Sphere)),
+  // a nie zbiorem trzech niezależnych encji do osobnego potwierdzania.
+  const aliasParentheticalSpans = [];
+  for (const match of raw.matchAll(/\(([^()]{1,120})\)/gu)) {
+    const start = Number(match.index || 0);
+    const prefix = raw.slice(Math.max(0, start - 140), start);
+    const belongsToKnownEntity = KNOWN_ENTITY_ALIAS_PATTERNS.some(alias => {
+      const found = [...prefix.matchAll(new RegExp(alias.pattern.source, 'giu'))];
+      return found.length > 0 && !/[.!?;]/u.test(prefix.slice(found[found.length - 1].index + found[found.length - 1][0].length));
+    });
+    if (belongsToKnownEntity) aliasParentheticalSpans.push({ start, end: start + match[0].length });
   }
   // Tytul gry powtorzony w claimie to kontekst pytania, nie fakt do potwierdzenia w cytacie
   // (patrz TYTULY_GIER). Zwalniamy go z wymogu obecnosci w dowodzie tylko na zadanie wywolujacego;
@@ -464,6 +524,7 @@ function wyodrebnijNazwyWlasne(value, options = {}) {
       const token = match[0];
       const tokenOffset = Number(match.index || 0);
       if (aliasSpans.some(span => tokenOffset >= span.start && tokenOffset < span.end)) continue;
+      if (aliasParentheticalSpans.some(span => (Number(sentenceMatch.index || 0) + String(sentenceMatch[1] || '').length + tokenOffset) >= span.start && (Number(sentenceMatch.index || 0) + String(sentenceMatch[1] || '').length + tokenOffset) < span.end)) continue;
       const absoluteTokenOffset = sentenceOffset + tokenOffset;
       if (titleSpans.some(span => absoluteTokenOffset >= span.start && absoluteTokenOffset < span.end)) continue;
       const before = sentence.slice(0, tokenOffset);
@@ -487,7 +548,7 @@ function wyodrebnijNazwyWlasne(value, options = {}) {
           && /^\s+$/u.test(sentence.slice(tokenOffset + token.length, Number(next.index || 0)));
         const hasMidSentenceOccurrence = capitalizedInMiddle.has(normalizedToken);
         const tokenVariants = new Set([normalizedToken, ...wariantyNazwyDoDopasowania(token).map(normalizujTokenWyroczni)]);
-        const isInNameOracle = [...tokenVariants].some(variant => options.nameOracle.has(variant));
+        const isInNameOracle = options.nameOracle instanceof Set && [...tokenVariants].some(variant => options.nameOracle.has(variant));
         if (!(isKnownAlias || hasInternalCapitalOrDigit || hasCapitalizedNextToken || hasMidSentenceOccurrence || isInNameOracle)) {
           // Swiadomy kompromis: wymyslona nazwa wystepujaca wylacznie na poczatku claimu
           // i nieobecna w zrodlach moze zostac pominieta. Inne kontrole pozostaja aktywne;
@@ -521,7 +582,7 @@ function tekstDoWykrywaniaNegacji(value) {
   // to nie twierdzenie o tym, ze Astarion NIE wystepuje w grze. Usuwamy taka
   // wprowadzajaca fraze PRZED normalizacja, bo normalizacja zamienia przecinki
   // na spacje i rozmywa granice zdania podrzednego.
-  let cleaned = String(value || '');
+  let cleaned = String(value || '').slice(0, 12000);
   cleaned = cleaned.replace(/\b(?:if|when)\s+not\s+[^,.!?;:]*?\s*[,;:]/giu, ' ');
   cleaned = cleaned.replace(/\bunless\s+[^,.!?;:]*?\s*[,;:]/giu, ' ');
   cleaned = cleaned.replace(/\b(?:jesli|jeśli|jezeli|jeżeli|gdy|kiedy)\s+nie\s+[^,.!?;:]*?\s*(?:[,;:]|\sto\s)/giu, ' ');
@@ -532,6 +593,13 @@ function tekstDoWykrywaniaNegacji(value) {
   // opisuje rownolegly, dodatkowy cel. Dotyczy to tylko fraz wprowadzonych
   // przez „and ... without ...” (nie samego poczatku zdania), wiec zwykle
   // „X did not do Y” nadal jest wykrywane jako negacja glownego twierdzenia.
+  // Fraza kontrastowa 'X, a nie Y, ...' poprawia/precyzuje encje, a nie neguje
+  // glownego orzeczenia zdania, np. 'W grze Portal, a nie Portal 2, Chell budzi
+  // sie w Aperture Science' to twierdzenie POZYTYWNE o Portalu, nie zaprzeczenie.
+  // Bez tego wyciecia samo 'nie' w dopowiedzeniu falszywie oznaczalo caly claim
+  // jako zanegowany (benchmark: przypadek when-115 / Chell).
+  cleaned = cleaned.replace(/,?\s*a\s+nie\s+[^,.!?;:]+(?=[,.!?;:]|$)/giu, ' ');
+  cleaned = cleaned.replace(/\bnot\s+[^,.!?;:]+?,\s*(?:but|rather)\s+/giu, ' ');
   cleaned = cleaned.replace(/\band\s+[^,.!?;:]*?\bwithout\s+[^,.!?;:]*/giu, (match) => {
     const beforeWithout = match.replace(/^\band\s+/iu, '').replace(/\bwithout\b[\s\S]*$/iu, '');
     return NEGATION_RE.test(beforeWithout) ? match : ' ';
@@ -668,7 +736,7 @@ function czyNazwaWlasnaWystepuje(entity, evidenceNormalized) {
     const normalized = String(variant || '').split(' ').filter(Boolean);
     if (!normalized.length || normalized.length > evidenceTokens.length) return false;
     for (let start = 0; start <= evidenceTokens.length - normalized.length; start++) {
-      if (normalized.every((token, offset) => evidenceTokens[start + offset] === token)) return true;
+      if (normalized.every((token, offset) => evidenceTokens[start + offset] === token)) return true; // njsscan-ignore: node_timing_attack — public evidence tokens
     }
     return false;
   });
@@ -746,13 +814,23 @@ function sprawdzTwardeKonflikty(evidence, claim, options = {}) {
   // negates the explanation, not event X. A document-level negation scan used
   // to reject a positive claim about X because an unrelated subordinate clause
   // contained “never”. Keep the hard gate for negation of the actual event.
-  const evidenceForNegation = wybierzKlausuleDowoduDlaClaimu(e, c).replace(
+  // Negacja musi pochodzić z cytatu stanowiącego dowód, a nie z sąsiedniego
+  // tekstu strony. Pełny kontekst nadal służy pozostałym kontrolom.
+  const polaritySource = String(options.evidenceQuote || '').trim()
+    || wybierzKlausuleDowoduDlaClaimu(e, c);
+  const evidenceForNegation = polaritySource.replace(
     /\b(?:although|though|while)\s+(?:it|this|that)\s+(?:was|is|has been)\s+never\s+explained\b[,;:]?\s*/giu,
     ' ',
   );
-  const evidenceNegated = wyodrebnijMarkery(evidenceForNegation, NEGATION_RE);
+  // Portugalskie „no” jest zrostem przyimka „em” z rodzajnikiem,
+  // a nie negacją. Usuwamy je tylko wtedy, gdy fragment ma wyraźne
+  // sygnały portugalskiego; angielskie „no siblings/no damage” pozostaje negacją.
+  const evidenceForPolarity = /(?:\b(?:é|uma|um|das|dos|para|com|não|nas|nos|pela|pelo|que|jogador|padrão)\b)/iu.test(evidenceForNegation)
+    ? evidenceForNegation.replace(/(?<![\p{L}])no(?![\p{L}])/giu, ' ')
+    : evidenceForNegation;
+  const evidenceNegated = wyodrebnijMarkery(evidenceForPolarity, NEGATION_RE);
   const claimNegated = wyodrebnijMarkery(c, NEGATION_RE);
-  if (!options.ignoreNegation && !options.allowDistributedEvidence && claimNegated !== evidenceNegated) {
+  if (!options.ignoreNegation && !options.allowDistributedEvidence && !czyOgraniczenieDowodowe(c) && claimNegated !== evidenceNegated) {
     // „take no damage” (kwantyfikator zerowy, bez zadnego innego zaprzeczenia w dowodzie) potwierdza pozytywny
     // claim o redukcji („zmniejsza obrazenia”). Kazde inne rozjechanie negacji nadal jest twardym konfliktem.
     const zerowyKwantyfikator = !claimNegated && evidenceNegated
@@ -932,7 +1010,6 @@ function zgodnoscStrukturalna(evidence, claim, options = {}) {
   const entityCoverage = claimEntities.length
     ? claimEntities.filter(entity => czyNazwaWlasnaWystepuje(entity, normalizedEvidence)).length / claimEntities.length
     : 1;
-
   // Akceptujemy sensowna parafraze, ale tylko po przejsciu twardych
   // konfliktow/liczb/jednostek. To naprawia false rejecti bez otwierania
   // walidatora na dowolne podobienstwo tekstowe.
@@ -1012,11 +1089,27 @@ function tokenyPokrywajaSie(a, b) {
 }
 function czyOgraniczenieDowodowe(sentence) {
   const text = normalizujClaim(sentence);
+  const sourceMention = /\b(?:zrodla?\w*|material\w*|dan\w*|sources?|evidence|informacj\w*)\b/u.test(text);
+  // Twierdzenia o tym, czego materiały nie opisują, są oceną zakresu
+  // retrieval, a nie negacją zdarzenia w świecie. Nie wolno klasyfikować ich
+  // jako sprzeczności tylko dlatego, że cytat zawiera inną negację.
+  const metaAbsence = sourceMention && /\b(?:nie\s+(?:podaj\w*|opisuj\w*|wspomin\w*|wyjasni\w*|okresl\w*|potwierdz\w*|zawier\w*)|brak\s+(?:(?:wystarczajac\w*|dokladn\w*|pelnych?)\s+)?(?:informacj\w*|danych|wzmian\w*))\b/u.test(text)
+    && /\b(?:co\s+stal\w*|dlaczeg\w*|los\w*|wydarz\w*|informacj\w*|szczegol\w*|przyczyn\w*|powod\w*|dat\w*|moment\w*|czas\w*|metod\w*|sposob\w*|lokalizacj\w*)\b/u.test(text);
+  if (metaAbsence) return true;
+
+  // Oświadczenie epistemiczne modelu/użytkownika („nie posiadam wystarczających
+  // danych”) również opisuje ograniczenie aktualnego retrieval, a nie negację
+  // faktu ze świata. Rozpoznajemy je niezależnie od tego, czy zdanie wymienia
+  // nazwę źródła.
+  const epistemicAbsence = /\b(?:model|bot|odpowiedz|dostepne dane|dane referencyjne|zebrane materialy|dostepne zrodla)\b/u.test(text)
+    && /\bnie\s+(?:posiad\w*|ma|mam|mamy|zawier\w*|dostarcz\w*|pozwal\w*|wskaz\w*|okresl\w*|potwierdz\w*)\b/u.test(text)
+    && /\b(?:dan\w*|informacj\w*|dowod\w*|lokalizacj\w*|moment\w*|czas\w*|szczegol\w*|przyczyn\w*|powod\w*)\b/u.test(text);
+  const firstPersonAbsence = /\bnie\s+(?:posiad\w*|mam|mamy)\s+(?:wystarczajac\w*\s+)?(?:dan\w*|informacj\w*|dowod\w*)\b/u.test(text);
+  if (epistemicAbsence || firstPersonAbsence) return true;
+  if (/\bbrak(?:uje)?\s+(?:wystarczajac\w*\s+|odpowiedni\w*\s+)?(?:danych|informacji|zrodel|dowodow|materialow)\b/u.test(text)) return true;
+
   const limitation = /\b(?:nie\s+(?:potwierdz\w*|podaj\w*|precyz\w*|okresl\w*|wskaz\w*|zawier\w*|znalazl\w*|znaleziono)|brak\s+(?:dokladn\w*\s+)?(?:dat\w*|moment\w*|czas\w*|potwierdzon\w*\s+(?:przyczyn\w*|powod\w*)))\b/u.test(text);
-  // „metod\w*” i „sposob\w*”: zastrzezenie o braku dodatkowych metod w zrodlach („Zrodla nie podaja
-  // dodatkowych metod zdobycia…”) jest tak samo zakresem zrodla jak brak daty, a nie faktem o swiecie.
   const scopedTopic = /\b(?:dat\w*|moment\w*|czas\w*|rok\w*|przyczyn\w*|powod\w*|metod\w*|sposob\w*)\b/u.test(text);
-  const sourceMention = /\b(?:zrodla?\w*|materialy|dane|sources?|evidence)\b/u.test(text);
   const inheritedSourceScope = /^\s*(?:ale|jednak)?\s*nie\b/u.test(text);
   return limitation && scopedTopic && (sourceMention || inheritedSourceScope);
 }
@@ -1035,6 +1128,10 @@ function usunEtykietyDowodow(text) {
 }
 
 function sprawdzPokrycieClaimamiOdpowiedzi(answer, claims) {
+  const claimList = Array.isArray(claims) ? claims : [];
+  if (String(answer || '').length > 12000 || claimList.length > 40 || claimList.some(item => String(item?.claim || '').length > 1000)) {
+    return { ok: false, totalSentences: 0, checkedSentences: 0, uncoveredSentenceIndexes: [], uncovered: ['input_too_long'] };
+  }
   const sourceSentences = usunEtykietyDowodow(answer).split(/(?<=[.!?])\s+|\n+/).map(x => x.trim()).filter(Boolean);
   const sentences = sourceSentences.flatMap((sentence, sourceSentenceIndex) => {
     // Wskazanie zrodla w nawiasie („(Zrodlo: opis lokalizacji…)”) to metadane,
@@ -1061,7 +1158,7 @@ function sprawdzPokrycieClaimamiOdpowiedzi(answer, claims) {
     }
     return [{ text: base, sourceSentenceIndex }];
   });
-  const claimRows = (Array.isArray(claims) ? claims : [])
+  const claimRows = claimList
     .map(c => ({
       tokens: tokenyPokrycia(c?.claim || ''),
       concepts: pojeciaCrossLanguage(c?.claim || ''),
@@ -1189,6 +1286,7 @@ function sprawdzPokrycieClaimamiOdpowiedzi(answer, claims) {
 }
 
 function czyDowodSemantyczniePokrywaClaim(evidence, claim, options = {}) {
+  if (String(evidence || '').length > 12000 || String(claim || '').length > 1000) return false;
   return zgodnoscStrukturalna(evidence, claim, options).ok;
 }
 // --- Tlumaczenie claimu (claim_en) -------------------------------------------------------------
@@ -1329,12 +1427,106 @@ function czyTlumaczenieOdwracaRelacjeKorupcjiWheatleya(claimPl, claimEn) {
   return /\bcontrol\w*[^.!?]{0,100}\b(?:which|that|and|because|since|as)\s+(?:he\s+|it\s+|this\s+|that\s+)?corrupt(?:s|ed|ing)\b/u.test(en);
 }
 
+
+/**
+ * Wykrywa zamianę podmiotu w prostych zdaniach czynnych.
+ * Reguła działa wyłącznie, gdy obie wersje zaczynają się od rozpoznanej encji,
+ * obie używają jawnego czasownika czynnego i obie wymieniają te same co najmniej
+ * dwie encje. Zdania bierne i konstrukcje z niejednoznacznym szykiem pomijamy.
+ */
+function wykryjPodmianePodmiotu(claimPl, claimEn) {
+  const aktywneCzasowniki = /^(?:takes?|took|controls?|controlled|captur(?:e|es|ed)|killed|kills|destroy(?:s|ed)|betray(?:s|ed)|rescu(?:e|es|ed)|attack(?:s|ed)|help(?:s|ed)|join(?:s|ed)|leaves?|left|gives?|gave|sends?|sent|causes?|caused|triggers?|triggered|corrupts?|corrupted|forces?|forced|enables?|enabled|leads?|led|results?|resulted|skorumpowal|skorumpowala|korumpuje|spowodowal|spowodowala|spowodowalo|doprowadzil|doprowadzila|umozliwil|umozliwila|zmusil|zmusila|przejal|przejela|przejelo|przejeli|przejmuje|kontroluje|schwytal|schwycila|porwal|porwala|zabil|zabila|zniszczyl|zniszczyla|zdradzil|zdradzila|uratowal|uratowala|zaatakowal|zaatakowala|pomogl|pomogla|dolaczyl|dolaczyla|opuscil|opuscila|wyslal|wyslala)\b/u;
+  const slowaPospolite = new Set([
+    'the', 'a', 'an', 'this', 'that', 'these', 'those', 'in', 'on', 'after',
+    'before', 'during', 'when', 'while', 'because', 'however', 'therefore',
+    'w', 'na', 'po', 'przed', 'podczas', 'gdy', 'kiedy', 'poniewaz',
+    'postac', 'bohater', 'gracz', 'gra',
+  ]);
+  const znajdzPodmiot = tekst => {
+    const normalized = normalizujClaim(tekst);
+    const prefixMatch = normalized.match(/^(?:(?:w grze|in the game|the character|postac|bohater)\s+)?/u);
+    const offset = prefixMatch ? prefixMatch[0].length : 0;
+    const tail = normalized.slice(offset);
+    const first = tail.match(/^([\p{L}][\p{L}\p{N}'’.-]*)\s+/u);
+    if (!first || slowaPospolite.has(first[1])) return null;
+    const verb = tail.slice(first[0].length).match(aktywneCzasowniki);
+    if (!verb) return null;
+
+    // Zbieramy wielkimi literami zapisane nazwy z obu wersji, niezależnie
+    // od heurystyk wyodrębniania nazw na początku zdania.
+    const names = [...new Set([...String(tekst).matchAll(/(?<![\p{L}\p{N}_])[A-ZĄĆĘŁŃÓŚŹŻ][\p{L}\p{N}'’.-]*/gu)]
+      .map(match => normalizujClaim(match[0]))
+      .filter(name => name.length >= 3 && !slowaPospolite.has(name)))];
+    return { name: normalizujClaim(first[1]), names, verb: verb[0] };
+  };
+
+  const pl = znajdzPodmiot(claimPl);
+  const en = znajdzPodmiot(claimEn);
+  if (!pl || !en || pl.name === en.name) return { ok: true };
+
+  const wspolneEncje = pl.names.filter(name => en.names.includes(name));
+  if (wspolneEncje.length < 2) return { ok: true };
+
+  return {
+    ok: false,
+    reason: 'tłumaczenie claimu zmienia podmiot działania',
+    polishSubject: pl.name,
+    englishSubject: en.name,
+  };
+}
+
+function czyOgraniczenieEpistemiczneAngielskie(sentence) {
+  const text = normalizujClaim(sentence);
+  const uncertainty = /\b(?:insufficient|not enough|lack of|no|without|unable to)\b.{0,55}\b(?:data|information|evidence|sources?)\b|\b(?:data|information|evidence|sources?)\b.{0,70}\b(?:insufficient|unavailable|not enough|do not contain|does not contain|cannot establish|cannot determine|does not explain|no information)\b/u.test(text);
+  const scope = /\b(?:source|sources|evidence|available|provided|determine|establish|confirm|explain|identify|reason|why|when|where|what)\b/u.test(text);
+  return uncertainty && scope;
+}
+
 function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
   const pl = String(claimPl || '').trim();
-  const en = String(claimEn || '').trim();
+  let en = String(claimEn || '').trim();
+  if (pl.length > 1000 || en.length > 1000) return { ok: false, reason: 'claim przekracza limit długości' };
   if (!pl || !en) return { ok: false, reason: 'brak tlumaczenia claimu' };
   if (en.length > pl.length * 3 + 60) return { ok: false, reason: 'tlumaczenie claimu jest nieproporcjonalnie dlugie' };
   if (!wygladaNaAngielski(en)) return { ok: false, reason: 'claim_en nie wyglada na tekst angielski' };
+  // Jeśli źródło używa zaimka na początku cytatu, tłumaczenie claimu nadal
+  // musi zachować jawny podmiot z polskiego claimu. Wolno to zrobić tylko,
+  // gdy nazwa występuje w bezpośrednim kontekście tego samego źródła.
+  const pierwszyPodmiot = wyodrebnijNazwyWlasne(pl).find(nazwa => {
+    const nazwaNorm = normalizujClaim(nazwa);
+    return nazwaNorm && normalizujClaim(pl).startsWith(nazwaNorm + ' ');
+  });
+  const kontekstDowodu = String(options.evidenceContext || '');
+  const prefiksTegoSamegoZdania = options.evidenceQuote
+    ? (findQuoteSentencePrefix(kontekstDowodu, options.evidenceQuote) || '')
+    : '';
+  const inneMozliwePodmioty = prefiksTegoSamegoZdania
+    ? [
+        ...wyodrebnijNazwyWlasne(prefiksTegoSamegoZdania),
+        ...KNOWN_ENTITY_ALIAS_PATTERNS
+          .map(alias => alias.canonical)
+          .filter(nazwa => czyNazwaWlasnaWystepuje(nazwa, prefiksTegoSamegoZdania)),
+        // Nazwy stworzeń zapisane małą literą (np. „an enderman”) są również
+        // możliwymi referentami. W razie wątpliwości blokujemy automatyczne
+        // dopisanie podmiotu zamiast zgadywać, do kogo odnosi się zaimek.
+        ...[...prefiksTegoSamegoZdania.matchAll(/\b(?:a|an|the)\s+([\p{L}][\p{L}'’\-]{2,})/giu)]
+          .map(match => match[1])
+          .filter(nazwa => !czyNazwaWlasnaWystepuje(pierwszyPodmiot || '', nazwa)),
+      ].filter((nazwa, index, lista) =>
+        normalizujClaim(nazwa) !== normalizujClaim(pierwszyPodmiot || '')
+        && lista.findIndex(inna => normalizujClaim(inna) === normalizujClaim(nazwa)) === index
+      )
+    : [];
+  if (pierwszyPodmiot
+    && czyNazwaWlasnaWystepuje(pierwszyPodmiot, kontekstDowodu)
+    && inneMozliwePodmioty.length === 0) {
+    const zaimek = en.match(/^(he|she|they|it|his|her|their|its)\b/i);
+    if (zaimek) {
+      const nazwa = pierwszyPodmiot.charAt(0).toLocaleUpperCase('en-US') + pierwszyPodmiot.slice(1);
+      const podmiot = /^(?:his|her|their|its)$/i.test(zaimek[0]) ? nazwa + "'s" : nazwa;
+      en = podmiot + en.slice(zaimek[0].length);
+    }
+  }
   // Zbieznosc claim_en z cytatem sama w sobie nie dowodzi bledu: poprawny claim
   // moze byc wiernym tlumaczeniem zdania zrodlowego. Jesli jednak model skopiowal
   // caly cytat, wymagamy tez pozytywnej zgodnosci semantycznej PL→EN; inaczej
@@ -1461,7 +1653,10 @@ function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
     && !zbiorRowny(polishUnits, wyodrebnijJednostkoweWartosci(enLiczbowo))) {
     return { ok: false, reason: 'tlumaczenie claimu zmienia jednostki lub wartosci' };
   }
-  if (wyodrebnijMarkery(pl, NEGATION_RE) !== wyodrebnijMarkery(en, NEGATION_RE)) {
+  const equivalentEpistemicAbsence = czyOgraniczenieDowodowe(pl)
+    && czyOgraniczenieEpistemiczneAngielskie(en);
+  if (wyodrebnijMarkery(pl, NEGATION_RE) !== wyodrebnijMarkery(en, NEGATION_RE)
+    && !equivalentEpistemicAbsence) {
     return { ok: false, reason: 'tlumaczenie claimu zmienia negacje' };
   }
   // Zmiane zdarzenia (np. „przejal kontrole” → „destroyed”) wykrywaja ogolne pary
@@ -1471,6 +1666,10 @@ function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
   }
   if (czyTlumaczenieOdwracaRelacjeKorupcjiWheatleya(pl, en)) {
     return { ok: false, reason: 'tłumaczenie claimu odwraca relację między skorumpowaniem Wheatleya a przejęciem kontroli' };
+  }
+  const subjectConflict = wykryjPodmianePodmiotu(pl, en);
+  if (!subjectConflict.ok) {
+    return { ok: false, reason: subjectConflict.reason };
   }
   const semanticConflict = sprawdzSprzecznosciSemantyczne(pl, en);
   if (!semanticConflict.ok) return { ok: false, reason: 'tlumaczenie claimu zmienia zdarzenie lub relacje' };
@@ -1555,7 +1754,7 @@ function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
     const retainedNames = claimNames.filter(name => !missing.includes(name) && czyNazwaWlasnaWystepuje(name, enNormalized));
     // Zachowana czesc musi sasiadowac z brakujaca w polskim claimie.
     const adjacentRetainedNames = retainedNames.filter(retained => missing.some(name =>
-      new RegExp(`\\b${normalizujClaim(retained)}\\s+${normalizujClaim(name)}\\b`, 'u').test(normalizujClaim(pl))
+      czyNazwySasiaduja(pl, retained, name)
     ));
     const hasRetainedEntity = adjacentRetainedNames.length > 0 && adjacentRetainedNames.every(retained =>
       czyNazwaWlasnaWystepuje(retained, quoteText)
@@ -1582,16 +1781,33 @@ function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
     // Reuse quoteExists' punctuation/whitespace normalization; raw indexOf()
     // rejected valid quotes when extraction normalized spacing or punctuation.
     const quotePrefix = evidenceQuote ? findQuotePrefix(evidenceContext, evidenceQuote) : null;
-    const anaphoricEn = ['who ', 'which ', 'that ', 'he ', 'she ', 'it ', 'they ', 'his ', 'her ', 'their ', 'its ']
-      .some(prefix => enNormalized.startsWith(prefix));
-    // Only the sentence containing the quote may supply the omitted subject.
-    const sameSentencePrefix = quotePrefix !== null
-      ? (quotePrefix.split(/\bsentenceboundarytoken\b/u).at(-1) || '')
-      : '';
+    const genericCharacterReference = /^(?:the|this|that)\s+(?:character|figure|person)\b/u.test(enNormalized);
+    const anaphoricEn = genericCharacterReference
+      || ['who ', 'which ', 'that ', 'he ', 'she ', 'it ', 'they ', 'his ', 'her ', 'their ', 'its ']
+        .some(prefix => enNormalized.startsWith(prefix));
+    // Zwykły rzeczownik anaforyczny („the character”) może odwoływać się do
+    // postaci nazwanej w bezpośrednio poprzednim zdaniu tego samego źródła.
+    // Dopuszczamy to tylko przy jednym rozpoznanym referencie postaci; nie
+    // przenosimy podmiotu przez niejednoznaczny akapit ani między postaciami.
+    const quoteSegments = quotePrefix !== null
+      ? quotePrefix.split(/\bsentenceboundarytoken\b/u)
+      : [];
+    const sameSentencePrefix = quoteSegments.at(-1) || '';
+    const previousSentencePrefix = quoteSegments.at(-2) || '';
     const normalizedPrefix = ' ' + sameSentencePrefix + ' ';
+    const sameSentenceBound = missingFromTranslation.every(name =>
+      normalizedPrefix.includes(' ' + normalizujClaim(name) + ' ')
+    );
+    const previousCharacterNames = genericCharacterReference
+      ? CHARACTER_ALIASES
+        .filter(entry => czyNazwaWlasnaWystepuje(entry.name, previousSentencePrefix))
+        .map(entry => normalizujClaim(entry.name))
+      : [];
+    const uniquePreviousCharacter = previousCharacterNames.length === 1
+      && missingFromTranslation.every(name => normalizujClaim(name) === previousCharacterNames[0]);
     const missingEntitiesBound = quotePrefix !== null
       && anaphoricEn
-      && missingFromTranslation.every(name => normalizedPrefix.includes(' ' + normalizujClaim(name) + ' '));
+      && (sameSentenceBound || uniquePreviousCharacter);
     if (!missingEntitiesBound) {
       return { ok: false, reason: 'tłumaczenie claimu gubi nazwy własne: ' + missingFromTranslation.slice(0, 3).join(', ') };
     }
@@ -1599,4 +1815,19 @@ function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
   return { ok: true };
 }
 
-module.exports = { KNOWN_ENTITY_ALIAS_PATTERNS, pojeciaCrossLanguage, CAUSAL_RE, CAUSAL_EVIDENCE_RE, wyglądaNaAngielski, wygladaNaAngielski, spojnoscTlumaczeniaClaimu, czyTlumaczenieOdwracaRelacjeKorupcjiWheatleya, czyOgraniczenieDowodowe, normalizujClaim, tokenyClaim, liczbyDoPorownania, czyRelacjaPrzyczynowaPokrywaClaim, wyodrebnijLiczbyIDaty, wyodrebnijJednostkoweWartosci, wyodrebnijNazwyWlasne, zbudujWyroczniaNazw, zgodnoscStrukturalna, sprawdzTwardeKonflikty, sprawdzSprzecznosciSemantyczne, dopasowanieSemantyczne, sprawdzPokrycieClaimamiOdpowiedzi, czyDowodSemantyczniePokrywaClaim, tokenyPokrywajaSie, czyNazwaWlasnaWystepuje, usunEtykietyDowodow };
+function czyCzesciowaOdpowiedzMaKotwiceEncji(question, answer) {
+  const pytanie = String(question || '');
+  const tresc = String(answer || '');
+  const postacieZPytania = CHARACTER_ALIASES.filter(entry =>
+    [entry.name, ...(entry.aliases || [])].some(alias => czyNazwaWlasnaWystepuje(alias, pytanie))
+  );
+  // Gdy pytanie dotyczy rozpoznanej postaci, częściowa odpowiedź musi
+  // zachować jej nazwę. Samo „jest także rewolucjonistą” nie odpowiada
+  // na „Kim jest Johnny Silverhand?”, nawet jeśli cytat potwierdza cechę.
+  if (!postacieZPytania.length) return true;
+  return postacieZPytania.some(entry =>
+    [entry.name, ...(entry.aliases || [])].some(alias => czyNazwaWlasnaWystepuje(alias, tresc))
+  );
+}
+
+module.exports = { KNOWN_ENTITY_ALIAS_PATTERNS, pojeciaCrossLanguage, CAUSAL_RE, CAUSAL_EVIDENCE_RE, wyglądaNaAngielski, wygladaNaAngielski, spojnoscTlumaczeniaClaimu, czyTlumaczenieOdwracaRelacjeKorupcjiWheatleya, czyOgraniczenieDowodowe, normalizujClaim, tokenyClaim, liczbyDoPorownania, czyRelacjaPrzyczynowaPokrywaClaim, wyodrebnijLiczbyIDaty, wyodrebnijJednostkoweWartosci, wyodrebnijNazwyWlasne, zbudujWyroczniaNazw, zgodnoscStrukturalna, sprawdzTwardeKonflikty, sprawdzSprzecznosciSemantyczne, dopasowanieSemantyczne, sprawdzPokrycieClaimamiOdpowiedzi, czyDowodSemantyczniePokrywaClaim, tokenyPokrywajaSie, czyNazwaWlasnaWystepuje, czyNazwySasiaduja, czyCzesciowaOdpowiedzMaKotwiceEncji, usunEtykietyDowodow };

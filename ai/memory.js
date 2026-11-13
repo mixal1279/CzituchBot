@@ -28,11 +28,14 @@ function normalizeUserId(value) {
   return String(value || '').trim().slice(0, 128) || 'unknown';
 }
 
+const MEMORY_REJECTED_PREFIXES = /^(?:nie\b|tutaj\b|tak\b|jak\b|teraz\b|zawsze\b|chyba\b|mo[żz]e\b|wcale\b|nikt\b|nic\b|brak\b)/iu;
+
 function normalizeValue(key, value) {
   const policy = MEMORY_POLICIES[key];
   if (!policy) return null;
   const cleaned = cleanValue(value, policy.maxLength);
   if (!cleaned || cleaned.length < 2 || looksLikeInjection(cleaned)) return null;
+  if (MEMORY_REJECTED_PREFIXES.test(cleaned)) return null;
   if (key === 'preferred_language') {
     const lang = cleaned.toLocaleLowerCase('pl-PL');
     if (!/^(?:polski|polish|pl|angielski|english|en)$/.test(lang)) return null;
@@ -66,7 +69,7 @@ function makeRecord({ key, value, userId, sourceMessageId, now = Date.now() }) {
 function extractExplicitUserMemories(text, options = {}) {
   if (options.sourceRole && options.sourceRole !== 'user') return [];
   const input = String(text || '').replace(/\s+/g, ' ').trim();
-  if (!input || input.length > 500 || looksLikeInjection(input)) return [];
+  if (!input || input.length > 500 || input.endsWith('?') || looksLikeInjection(input)) return [];
 
   const patterns = [
     { key: 'nickname', re: /(?:m[oó]j\s+nick|nazywam\s+si[eę]|mam\s+na\s+imi[eę])\s*(?:to|jest)?\s*[:=-]?\s*([\p{L}\p{N}_.-]{2,32}?)(?=[.!?,\s]|$)/iu },
