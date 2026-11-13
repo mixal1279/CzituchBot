@@ -348,6 +348,7 @@ function rankEvidenceForClaim(claim, blocks, allowedSourceIds = null, limit = 3)
       if (!hasEllipsis && sentences[i + 1]) windows.push(sentences[i] + ' ' + sentences[i + 1]);
       for (const quote of windows) {
         if (!quote || quote.length > 350 || /\[\s*(?:\.{3}|…)\s*\]|\.{3}|…/u.test(quote)) continue;
+        if (/(?:\[\s*(?:…|\.\.\.)\s*\]|…|\.\.\.)/u.test(quote)) continue;
         const lexical = tokenOverlap(claim, quote);
         const semanticMatches = sharedEvidenceConceptCount(claim, quote);
         if (lexical <= 0 && semanticMatches === 0) continue;
