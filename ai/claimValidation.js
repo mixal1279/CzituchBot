@@ -857,9 +857,16 @@ function sprawdzTwardeKonflikty(evidence, claim, options = {}) {
   const evidenceTemporal = wyodrebnijMarkery(e, TEMPORAL_RE);
   if (claimTemporal && !evidenceTemporal && claimNumbers.length === 0) {
     // Dopuszczamy marker z pełnego, tego samego źródła; nie łączymy różnych dokumentów.
-    const fullEvidenceTemporal = options.fullEvidenceText
-      ? wyodrebnijMarkery(options.fullEvidenceText, TEMPORAL_RE)
-      : false;
+    const claimEntities = wyodrebnijNazwyWlasne(cBezTytulow);
+    const claimTokens = tokenyClaim(cBezTytulow).filter(token => token.length >= 4);
+    const fullEvidenceTemporal = String(options.fullEvidenceText || '')
+      .split(/(?<=[.!?])\\s+/u)
+      .some(sentence => {
+        if (!wyodrebnijMarkery(sentence, TEMPORAL_RE)) return false;
+        const normalizedSentence = normalizujClaim(sentence);
+        if (claimEntities.length) return claimEntities.some(entity => normalizedSentence.includes(normalizujClaim(entity)));
+        return claimTokens.filter(token => normalizedSentence.includes(token)).length >= 2;
+      });
     if (!fullEvidenceTemporal) return { ok: false, reason: 'claim zawiera sygnal czasowy nieobecny w dowodzie' };
   }
   return { ok: true };

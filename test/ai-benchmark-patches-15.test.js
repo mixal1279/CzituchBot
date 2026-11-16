@@ -29,6 +29,13 @@ test('validator outage publishes only a clearly marked unverified answer', () =>
   });
   assert.equal(result, '⚠️ Odpowiedź niezweryfikowana — walidator niedostępny. Przykładowa odpowiedź.');
   assert.equal(isFailureText(result), false);
+  const evaluation = require('../scripts/ai-live-benchmark').evaluateBenchmarkAnswer(result, {
+    question: 'Kim jest Geralt?', game: 'The Witcher 3',
+  });
+  assert.equal(evaluation.answered, true);
+  assert.equal(evaluation.unverified, true);
+  assert.equal(evaluation.judgeStatus, 'unverified');
+  assert.equal(evaluation.completeness, 0);
   assert.match(finalText('', STATUS.UNVERIFIED), /nie będę zgadywać/);
 });
 
@@ -46,6 +53,6 @@ test('temporal markers may be checked against the same full source block', () =>
   const claim = 'Geralt arrived in Novigrad in August.';
   assert.equal(sprawdzTwardeKonflikty(quote, claim).ok, false);
   assert.equal(sprawdzTwardeKonflikty(quote, claim, {
-    fullEvidenceText: 'Geralt arrived in Novigrad. This happened in August.',
+    fullEvidenceText: 'Geralt arrived in Novigrad in August.',
   }).ok, true);
 });

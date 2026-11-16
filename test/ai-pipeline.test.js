@@ -145,11 +145,11 @@ test('pipeline finalText replaces terminal failure output and sanitizes accepted
   let sanitizeCalled = false;
   assert.equal(
     finalText('odpowiedź robocza', STATUS.UNVERIFIED, {
-      sanitizeResponse: () => { sanitizeCalled = true; return 'nie powinno zostać pokazane'; },
+      sanitizeResponse: () => { sanitizeCalled = true; return 'odpowiedź oczyszczona'; },
     }),
-    'Chwilowo nie mogę potwierdzić tej informacji, więc nie będę zgadywać.',
+    '⚠️ Odpowiedź niezweryfikowana — walidator niedostępny. odpowiedź oczyszczona',
   );
-  assert.equal(sanitizeCalled, false, 'unverified generated text must not reach the output sanitizer');
+  assert.equal(sanitizeCalled, true, 'unverified output must pass through response sanitization');
   assert.equal(finalText('', STATUS.UNVERIFIED), 'Chwilowo nie mogę potwierdzić tej informacji, więc nie będę zgadywać.');
   assert.equal(finalText('  poprawna odpowiedź  ', STATUS.ACCEPTED, {
     sanitizeResponse: value => value.replace(/\s+/g, ' '),
