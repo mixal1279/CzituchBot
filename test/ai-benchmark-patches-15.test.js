@@ -50,9 +50,9 @@ test('expanded limitation language is classified as source-scope uncertainty', (
 
 test('temporal markers may be checked against the same full source block', () => {
   const quote = 'Geralt arrived in Novigrad.';
-  const claim = 'Geralt arrived in Novigrad in August.';
+  const claim = 'Geralt arrived in Novigrad today.';
   assert.equal(sprawdzTwardeKonflikty(quote, claim).ok, false);
   assert.equal(sprawdzTwardeKonflikty(quote, claim, {
-    fullEvidenceText: 'Geralt arrived in Novigrad in August.',
+    fullEvidenceText: 'Geralt arrived in Novigrad today.',
   }).ok, true);
 });

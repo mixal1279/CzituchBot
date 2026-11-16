@@ -724,7 +724,7 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
 
   const allowed = allowedSourceIds instanceof Set ? allowedSourceIds : null;
   const evidenceQuestion = String(options.question || answer || '');
-  const causalQuestion = Boolean(options.routing?.causal || options.routing?.intent === 'why')
+  const evidenceCausalQuestion = Boolean(options.routing?.causal || options.routing?.intent === 'why')
     || /\b(?:dlaczego|czemu|z jakiego powodu|jaka byla przyczyna|co spowodowalo|why|how come|what caused|what was the reason)\b/u.test(normalizujClaim(evidenceQuestion));
   const evidenceAssessment = assessEvidence(parseEvidenceBlocks(dane), evidenceQuestion, {
     intent: 'web_fact',
@@ -776,7 +776,7 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
         nameOracle,
         defaultSubject: index > 0 ? firstClaimSubject : '',
         question: evidenceQuestion,
-        causalQuestion,
+        causalQuestion: evidenceCausalQuestion,
       }),
     }));
     const authorityRank = { unknown: 0, general: 1, guide: 2, reference: 3, specialized: 4, official: 5 };
