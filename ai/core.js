@@ -517,8 +517,8 @@ function assessEvidence(results = [], question, routing = {}, options = {}) {
         const seenHosts = new Set();
         for (const item of ranked) {
           let host = '';
-          try { host = new URL(item.source.url).hostname.toLowerCase().replace(/^www\\./, ''); } catch {}
-          if (host && seenHosts.has(host)) continue;
+          try { host = new URL(item.source.url).hostname.toLowerCase().replace(/^www\./, ''); } catch {}
+          if ((host && seenHosts.has(host)) || (!host && selected.length > 0)) continue;
           selected.push(item.source);
           if (host) seenHosts.add(host);
           if (selected.length >= 2) break;

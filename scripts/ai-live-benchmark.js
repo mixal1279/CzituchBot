@@ -203,7 +203,7 @@ function isFailureText(text) {
   const normalized = normalizeFactText(text);
   // Jawnie oznaczona odpowiedź niezweryfikowana nie jest odmową, ale jej status
   // pozostaje widoczny w raporcie i nie jest liczony jako pełna walidacja.
-  if (/^odpowiedz niezweryfikowana walidator niedostepny\\b/i.test(normalized)) return false;
+  if (/^odpowiedz niezweryfikowana walidator niedostepny\b/i.test(normalized)) return false;
   const refusalPatterns = [
     /^(?:benchmark\s+)?nie mam wystarczajacych danych(?:\s+(?:zeby|aby) odpowiedziec(?: na to)?(?: pewnie)?)?$/i,
     /^(?:benchmark\s+)?nie moge(?: wiarygodnie)? potwierdzic(?: tej informacji)?(?: wiec nie bede zgadywac)?$/i,
@@ -241,9 +241,9 @@ function wybierzOdrzuconaOdpowiedz(summary, answered) {
 function evaluateBenchmarkAnswer(answer, item) {
   const text = String(answer || '');
   const plan = buildAnswerPlan(item.question, { ...item.routing, game: item.game });
-  const unverified = /^⚠️\\s*Odpowiedź niezweryfikowana\\s*[—-]\\s*walidator niedostępny\\.\\s*/iu.test(text);
+  const unverified = /^⚠️\s*Odpowiedź niezweryfikowana\s*[—-]\s*walidator niedostępny\.\s*/iu.test(text);
   const judgeText = unverified
-    ? text.replace(/^⚠️\\s*Odpowiedź niezweryfikowana\\s*[—-]\\s*walidator niedostępny\\.\\s*/iu, '').trim()
+    ? text.replace(/^⚠️\s*Odpowiedź niezweryfikowana\s*[—-]\s*walidator niedostępny\.\s*/iu, '').trim()
     : text;
   const judge = judgeAnswer(judgeText, plan);
   const answered = Boolean(text.trim()) && !isFailureText(text);

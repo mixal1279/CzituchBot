@@ -860,7 +860,7 @@ function sprawdzTwardeKonflikty(evidence, claim, options = {}) {
     const claimEntities = wyodrebnijNazwyWlasne(cBezTytulow);
     const claimTokens = tokenyClaim(cBezTytulow).filter(token => token.length >= 4);
     const fullEvidenceTemporal = String(options.fullEvidenceText || '')
-      .split(/(?<=[.!?])\\s+/u)
+      .split(/(?<=[.!?])\s+/u)
       .some(sentence => {
         if (!wyodrebnijMarkery(sentence, TEMPORAL_RE)) return false;
         const normalizedSentence = normalizujClaim(sentence);
@@ -1127,7 +1127,7 @@ function czyOgraniczenieDowodowe(sentence) {
   if (epistemicAbsence || firstPersonAbsence) return true;
   if (/\bbrak(?:uje)?\s+(?:wystarczajac\w*\s+|odpowiedni\w*\s+)?(?:danych|informacji|zrodel|dowodow|materialow)\b/u.test(text)) return true;
 
-  const limitation = /\b(?:nie\s+(?:potwierdz\w*|podaj\w*|precyz\w*|okresl\w*|wskaz\w*|zawier\w*|znalazl\w*|znaleziono)|brak\s+(?:dokladn\w*\s+)?(?:dat\w*|moment\w*|czas\w*|potwierdzon\w*\s+(?:przyczyn\w*|powod\w*)))\b/u.test(text);
+  const limitation = /\b(?:nie\s+(?:potwierdz\w*|podaj\w*|precyz\w*|okresl\w*|wskaz\w*|zawier\w*|znalazl\w*|znaleziono|jest\s+dostepn\w*|sa\s+dostepn\w*|udalo\s+sie\s+ustalic)|brak\s+(?:dokladn\w*\s+)?(?:dat\w*|moment\w*|czas\w*|potwierdzon\w*\s+(?:przyczyn\w*|powod\w*))|niestety\s+\w+(?:\s+\w+){0,4}\s+(?:nie\s+(?:jest|sa|zostal\w*)\s+dostepn\w*|brak))\b/u.test(text);
   const scopedTopic = /\b(?:dat\w*|moment\w*|czas\w*|rok\w*|przyczyn\w*|powod\w*|metod\w*|sposob\w*)\b/u.test(text);
   const inheritedSourceScope = /^\s*(?:ale|jednak)?\s*nie\b/u.test(text);
   return limitation && scopedTopic && (sourceMention || inheritedSourceScope);
