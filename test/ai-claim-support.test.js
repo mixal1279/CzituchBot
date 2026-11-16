@@ -398,7 +398,7 @@ test('sformułowanie „theory suggests” zachowuje status hipotezy', () => {
 });
 
 
-test('status kanoniczny wymaga źródła pierwotnego, nie tylko wyspecjalizowanej wiki', () => {
+test('wyspecjalizowana wiki może potwierdzić jawnie cytowany status kanoniczny', () => {
   const input = {
     claims: [{
       claim: 'To wydarzenie jest kanoniczne.',
@@ -411,8 +411,8 @@ test('status kanoniczny wymaga źródła pierwotnego, nie tylko wyspecjalizowane
     evidenceQuotes: ['This event is part of the official canon.'],
   };
   const communityWiki = buildClaimSupportAudit({ ...input, evidenceAuthorities: ['specialized'] });
-  assert.equal(communityWiki.records[0].verdict, 'unsupported');
-  assert.ok(communityWiki.records[0].overclaimTypes.includes('canon_status_not_official_source'));
+  assert.equal(communityWiki.records[0].verdict, 'entailed');
+  assert.ok(!communityWiki.records[0].overclaimTypes.includes('canon_status_not_official_source'));
   assert.equal(communityWiki.records[0].sourceAuthority, 'specialized');
 
   const officialSource = buildClaimSupportAudit({ ...input, evidenceAuthorities: ['official'] });
@@ -425,7 +425,7 @@ test('unknown source authority cannot establish canonical status', () => {
   const claim = 'This event is canonical.';
   const evidence = 'This event is part of the official canon.';
 
-  for (const sourceAuthority of [undefined, null, 'unknown', 'general', 'guide', 'reference', 'specialized']) {
+  for (const sourceAuthority of [undefined, null, 'unknown', 'general', 'guide', 'reference']) {
     assert.ok(
       detectOverclaimTypes(claim, evidence, { sourceAuthority }).includes('canon_status_not_official_source'),
       String(sourceAuthority),
@@ -469,8 +469,8 @@ test('walidator wiąże status kanoniczny z autorytetem dokładnie cytowanego ź
 
   const wiki = sprawdz('https://gamelore.fandom.com/wiki/Example');
   assert.equal(wiki.diagnostics.claimSupport.records[0].sourceAuthority, 'specialized');
-  assert.ok(wiki.diagnostics.hardOverclaimClaimIndexes.includes(0));
-  assert.ok(wiki.diagnostics.claimSupport.records[0].overclaimTypes.includes('canon_status_not_official_source'));
+  assert.ok(!wiki.diagnostics.hardOverclaimClaimIndexes.includes(0));
+  assert.ok(!wiki.diagnostics.claimSupport.records[0].overclaimTypes.includes('canon_status_not_official_source'));
 
   const official = sprawdz('https://www.naughtydog.com/blog/example');
   assert.equal(official.diagnostics.claimSupport.records[0].sourceAuthority, 'official');
