@@ -354,7 +354,7 @@ function rankEvidenceForClaim(claim, blocks, allowedSourceIds = null, limit = 3)
         if (lexical <= 0 && semanticMatches === 0) continue;
         const signals = evidenceRelationSignals(quote);
         let score = lexical + Math.min(0.36, semanticMatches * 0.12);
-        if (claimType === 'causal') score += signals.causal ? 0.35 : -0.25;
+        if (claimType === 'causal') score += signals.causal ? 0.35 : 0;
         if (claimType === 'procedural') score += signals.procedural ? 0.18 : -0.08;
         if (claimType === 'temporal') score += signals.temporal ? 0.15 : -0.05;
         if (claimType === 'location') score += signals.location ? 0.12 : 0;

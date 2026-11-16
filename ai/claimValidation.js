@@ -855,7 +855,13 @@ function sprawdzTwardeKonflikty(evidence, claim, options = {}) {
 
   const claimTemporal = wyodrebnijMarkery(cBezTytulow, TEMPORAL_RE);
   const evidenceTemporal = wyodrebnijMarkery(e, TEMPORAL_RE);
-  if (claimTemporal && !evidenceTemporal && claimNumbers.length === 0) return { ok: false, reason: 'claim zawiera sygnal czasowy nieobecny w dowodzie' };
+  if (claimTemporal && !evidenceTemporal && claimNumbers.length === 0) {
+    // Dopuszczamy marker z pełnego, tego samego źródła; nie łączymy różnych dokumentów.
+    const fullEvidenceTemporal = options.fullEvidenceText
+      ? wyodrebnijMarkery(options.fullEvidenceText, TEMPORAL_RE)
+      : false;
+    if (!fullEvidenceTemporal) return { ok: false, reason: 'claim zawiera sygnal czasowy nieobecny w dowodzie' };
+  }
   return { ok: true };
 }
 
@@ -991,7 +997,13 @@ function zgodnoscStrukturalna(evidence, claim, options = {}) {
 
   const claimCausal = wyodrebnijMarkery(c, CAUSAL_RE);
   const evidenceCausal = wyodrebnijMarkery(e, CAUSAL_EVIDENCE_RE);
-  if (claimCausal && !evidenceCausal && !options.allowDistributedEvidence) {
+  const fullEvidenceText = String(options.fullEvidenceText || '');
+  const fullEvidenceCausal = Boolean(fullEvidenceText) && wyodrebnijMarkery(fullEvidenceText, CAUSAL_EVIDENCE_RE);
+  // Pełny tekst wolno wykorzystać tylko wtedy, gdy ten sam blok wiąże relację z claimem.
+  const fullEvidenceCausalLinked = Boolean(fullEvidenceCausal)
+    && czyRelacjaPrzyczynowaPokrywaClaim(fullEvidenceText, c, options);
+  if (claimCausal && !evidenceCausal && !options.allowDistributedEvidence && !fullEvidenceCausalLinked) {
+    if (options.causalQuestion && options.diagnostics) options.diagnostics.causalEvidenceWeak = true;
     return { ok: false, reason: 'claim dodaje relację przyczynową nieobecną w dowodzie' };
   }
 

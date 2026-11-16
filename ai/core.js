@@ -500,17 +500,31 @@ function assessEvidence(results = [], question, routing = {}, options = {}) {
     .filter(source => sourceMatchesRequestContext(source, routing, question))
     .filter(source => sourceLanguageCompatible(source, question, routing));
 
-  // Zachowujemy najlepsze źródło, gdy filtry zakresu odrzucą wszystkie wyniki.
+  // Fallback dobiera maksymalnie dwa relewantne źródła, ale nie udaje niezależności
+  // przez wybór dwóch URL-i z tego samego hosta.
+  const scopeFallbackUsed = scopeFiltered.length === 0 && normalizedSources.length > 0;
   const scopedSources = scopeFiltered.length > 0
     ? scopeFiltered
-    : (normalizedSources.length > 0
-      ? [normalizedSources
+    : (() => {
+        const ranked = normalizedSources
           .map((source, index) => ({
             source,
             score: scoreSource(source, question, { index }).coreScore,
           }))
-          .sort((a, b) => b.score - a.score)[0].source]
-      : []);
+          .filter(item => item.score >= 0.25)
+          .sort((a, b) => b.score - a.score);
+        const selected = [];
+        const seenHosts = new Set();
+        for (const item of ranked) {
+          let host = '';
+          try { host = new URL(item.source.url).hostname.toLowerCase().replace(/^www\\./, ''); } catch {}
+          if (host && seenHosts.has(host)) continue;
+          selected.push(item.source);
+          if (host) seenHosts.add(host);
+          if (selected.length >= 2) break;
+        }
+        return selected.length ? selected : (normalizedSources.length ? [normalizedSources[0]] : []);
+      })();
 
   const entities = [
     routing.resolved_entity?.name,
@@ -628,6 +642,7 @@ function assessEvidence(results = [], question, routing = {}, options = {}) {
     retrievalTrace: {
       queryCount: rankingQueries.length,
       candidateCount: scopedSources.length,
+      scopeFallbackUsed,
       rankings: rankings.map((ranking, index) => ({
         queryIndex: index,
         candidateCount: ranking.length,

@@ -81,7 +81,11 @@ function decomposeQuestion(question,routing={}) {
     for(const part of parts.slice(0,3)) push(part);
   } else {
     const commaParts=q.split(/,\s*(?=(?:jak|dlaczego|czemu|kiedy|gdzie|ile|czy|kto|kim|co|czym|jaki|jaka|jakie)\b)/iu);
-    if(commaParts.length>1) for(const part of commaParts.slice(0,3)) push(part);
+    if(commaParts.length>1) {
+      for(const part of commaParts.slice(0,3)) {
+        if(part.trim().length>=25) push(part);
+      }
+    }
   }
   if(clauses.length<2){
     const questionMarks=q.split(/\?+/).map(x=>x.trim()).filter(Boolean);

@@ -9,7 +9,7 @@ const { parseEvidenceBlocks, quoteExists, rankEvidenceForClaim, buildEvidenceRep
 const { naprawKsztaltWynikuWalidatora } = require('./validator-shape');
 const { buildClaimSupportAudit, HARD_OVERCLAIM_TYPES } = require('./claim-support');
 
-const { decomposeQuestion } = require('./retrieval');
+const { buildAnswerPlan } = require('./answer-plan');
 
 // Kontrakt walidatora jest celowo mały: generator potrzebuje tylko jasnego
 // werdyktu i konkretnej informacji zwrotnej do jednego retry.
@@ -437,7 +437,12 @@ function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '', opt
 
     // Adjacent context remains available for dates, quantities and local
     // anaphora, but it cannot override the quote sentence's polarity.
-    const contextHard = sprawdzTwardeKonflikty(verificationContext, claim, { ignoreNegation: true });
+    const contextHard = sprawdzTwardeKonflikty(verificationContext, claim, {
+      ignoreNegation: true,
+      fullEvidenceText: block.content,
+      causalQuestion: options.causalQuestion === true,
+      diagnostics: options.diagnostics,
+    });
     if (!contextHard.ok) {
       reasons.push(contextHard.reason || 'kontekst cytatu zawiera konflikt liczbowy, czasowy lub negację');
       continue;
@@ -448,11 +453,15 @@ function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '', opt
       continue;
     }
 
-    if (claimCausal && !quoteCausal && !CAUSAL_EVIDENCE_RE.test(verificationContext)) {
+    const fullSourceCausalLinked = claimCausal
+      && CAUSAL_EVIDENCE_RE.test(block.content)
+      && czyRelacjaPrzyczynowaPokrywaClaim(block.content, claim, { nameOracle });
+    const causalEvidenceContext = fullSourceCausalLinked ? block.content : verificationContext;
+    if (claimCausal && !quoteCausal && !CAUSAL_EVIDENCE_RE.test(causalEvidenceContext)) {
       reasons.push('claim dodaje relację przyczynową nieobecną w kontekście cytatu: ' + id);
       continue;
     }
-    if (claimCausal && !quoteCausal && !czyRelacjaPrzyczynowaPokrywaClaim(verificationContext, claim, { nameOracle })) {
+    if (claimCausal && !quoteCausal && !czyRelacjaPrzyczynowaPokrywaClaim(causalEvidenceContext, claim, { nameOracle })) {
       reasons.push('kontekst zawiera sygnał przyczynowy, ale nie wiąże go bezpośrednio z claimem: ' + id);
       continue;
     }
@@ -461,6 +470,9 @@ function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '', opt
       allowCrossLanguageExactEvidence: true,
       allowDistributedEvidence: false,
       nameOracle,
+      fullEvidenceText: block.content,
+      causalQuestion: options.causalQuestion === true,
+      diagnostics: options.diagnostics,
     });
     collectIgnoredNames(quoteStructural);
     // A direct quote may be accepted only when it contains the claim's named
@@ -501,6 +513,9 @@ function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '', opt
         allowCrossLanguageExactEvidence: true,
         allowDistributedEvidence: true,
         nameOracle,
+        fullEvidenceText: block.content,
+        causalQuestion: options.causalQuestion === true,
+        diagnostics: options.diagnostics,
       });
       collectIgnoredNames(contextStructural);
       if (contextStructural.ok) {
@@ -579,8 +594,9 @@ const QUESTION_COVERAGE_STOPWORDS = new Set([
   'po', 'dla', 'i', 'oraz', 'a', 'czyli', 'sie', 'mi', 'mnie',
 ]);
 
-function sprawdzPokrycieCzesciPytania(question, claims) {
-  const parts = decomposeQuestion(question);
+function sprawdzPokrycieCzesciPytania(question, claims, routing = {}) {
+  const plan = buildAnswerPlan(question, routing);
+  const parts = Array.isArray(plan?.clauses) ? plan.clauses : [];
   if (parts.length < 2) return { ok: true, totalParts: parts.length, coveredParts: parts.length, uncoveredParts: [] };
 
   const verifiedClaims = (Array.isArray(claims) ? claims : [])
@@ -708,6 +724,8 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
 
   const allowed = allowedSourceIds instanceof Set ? allowedSourceIds : null;
   const evidenceQuestion = String(options.question || answer || '');
+  const causalQuestion = Boolean(options.routing?.causal || options.routing?.intent === 'why')
+    || /\b(?:dlaczego|czemu|z jakiego powodu|jaka byla przyczyna|co spowodowalo|why|how come|what caused|what was the reason)\b/u.test(normalizujClaim(evidenceQuestion));
   const evidenceAssessment = assessEvidence(parseEvidenceBlocks(dane), evidenceQuestion, {
     intent: 'web_fact',
     is_lore: /lore|fabuł|histori|kanon|canon/i.test(evidenceQuestion + ' ' + String(answer || '')),
@@ -757,6 +775,9 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
         claimEn: claim.claim_en,
         nameOracle,
         defaultSubject: index > 0 ? firstClaimSubject : '',
+        question: evidenceQuestion,
+        causalQuestion,
+      }),
       }),
     }));
     const authorityRank = { unknown: 0, general: 1, guide: 2, reference: 3, specialized: 4, official: 5 };
@@ -852,6 +873,7 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
   const questionCoverage = sprawdzPokrycieCzesciPytania(
     options.question || '',
     claims.filter((claim, index) => evidenceEvaluations[index]?.ok === true && evidenceQuoteVerified[index] === true),
+    options.routing || {},
   );
   // Odpowiedź, która wyłącznie ogranicza się do „źródła nie podają daty…”, nie jest
   // odpowiedzią na pytanie. Brama pokrycia zgłosiłaby wtedy „claims nie pokrywają
@@ -887,9 +909,15 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
       .filter(v => typeof v === 'string' && v.trim())
       // Drop a model-reported unsupported string only when it exactly names a
       // claim rescued by the local quote verifier. Unrelated warnings remain.
-      .filter(value => !locallyVerifiedModelFalseClaimIndexes.some(index =>
-        normalizujClaim(value) === normalizujClaim(claims[index]?.claim)
-      ))
+      .filter(value => {
+        const normalizedValue = normalizujClaim(value);
+        return !claims.some((claim, index) => {
+          if (normalizujClaim(claim.claim) !== normalizedValue) return false;
+          if (hardOverclaimIndexes.has(index) || !claim.source_ids.length) return false;
+          if (allowed && claim.source_ids.some(id => !allowed.has(normalizujIdZrodla(id)))) return false;
+          return evidenceEvaluations[index]?.ok === true && evidenceQuoteVerified[index] === true;
+        });
+      })
       .map(v => v.trim().slice(0, 500)),
   ])].slice(0, 8);
 
@@ -908,9 +936,22 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
   // not cover several answer sentences just because the answer's average score
   // passes a coarse sentence-count heuristic.
   const factualSentenceCount = Number(answerCoverage.checkedSentences || 0);
+  // Fallback obejmuje wyłącznie jedno zdanie limitacyjne, nigdy niepokryte twierdzenie faktograficzne.
+  const uncoveredLimitationsOnly = answerCoverage.uncoveredSentenceIndexes?.length === 1
+    && Array.isArray(answerCoverage.uncovered)
+    && answerCoverage.uncovered.length === 1
+    && czyOgraniczenieDowodowe(answerCoverage.uncovered[0]);
+  const answerCoverageOk = answerCoverage.ok || uncoveredLimitationsOnly;
   const claimGranularityOk = !answer || !sentenceCount || sentenceCount <= 1
     ? true
-    : answerCoverage.ok && claims.length >= Math.min(12, factualSentenceCount);
+    : answerCoverageOk && claims.length >= Math.min(12, factualSentenceCount);
+  const claimGranularityDiag = !claimGranularityOk ? {
+    sentenceCount,
+    factualSentenceCount: answerCoverage.checkedSentences,
+    claimCount: claims.length,
+    requiredClaims: Math.min(12, answerCoverage.checkedSentences || 0),
+    answerCoverageOk,
+  } : null;
   const evidenceContractOk = !dane || !answer || evidenceAssessment.status !== 'weak' || (claims.length > 0 && unsupportedEvidenceClaimIndexes.length === 0 && unknownSourceClaimIndexes.length === 0 && evidenceAssessment.sourceCount >= 1);
 
   const claimContractOk = claims.length > 0
@@ -922,8 +963,7 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
     && unverifiedEvidenceQuoteIndexes.length === 0
     && !tooManyClaims
     && !malformedClaims
-    && answerCoverage.ok
-    && questionCoverage.ok
+    && answerCoverageOk
     && claimGranularityOk
     && evidenceContractOk
     && hardOverclaimClaimIndexes.length === 0
@@ -1020,7 +1060,7 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
   const hasPartialFailureTrigger = allEvidenceFailuresArePartialEligible && (
     unsupported.length > 0
     || partialEligibleEvidenceFailureIndexes.length > 0
-    || !answerCoverage.ok
+    || !answerCoverageOk
     || !questionCoverage.ok
     || !claimGranularityOk
   );
@@ -1082,7 +1122,7 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
   // zdań zgłaszałoby wtedy problem z kompozycją, a problem jest gdzie indziej.
   if (answerLimitation.contains) localRejectReasons.push('answer_contains_limitation');
   if (answerLimitation.only) localRejectReasons.push('answer_is_limitation_only');
-  if (!answerCoverage.ok) localRejectReasons.push('answer_not_covered_by_claims');
+  if (!answerCoverageOk) localRejectReasons.push('answer_not_covered_by_claims');
   if (!claimGranularityOk) localRejectReasons.push('claims_too_coarse_for_answer');
   if (validFromModel !== true) localRejectReasons.push('model_returned_invalid');
   if (confidence < 0.75) localRejectReasons.push('confidence_below_threshold');
@@ -1125,8 +1165,10 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
     modelUnsupportedClaimCount: wynik.unsupported_claims.filter(v => typeof v === 'string' && v.trim()).length,
     claimLanguageMismatchIndexes,
     questionCoverage,
+    claimGranularityDiag,
     answerCoverage: {
       ok: answerCoverage.ok,
+      effectiveOk: answerCoverageOk,
       totalSentences: answerCoverage.totalSentences ?? null,
       checkedSentences: answerCoverage.checkedSentences ?? null,
       uncoveredSentenceIndexes: answerCoverage.uncoveredSentenceIndexes || [],

@@ -143,9 +143,15 @@ function finalText(text, status, helpers = {}) {
   if (status === STATUS.INCONCLUSIVE) return helpers.inconclusiveMessage || 'Chwilowo nie mogę wiarygodnie potwierdzić tej informacji, więc nie będę zgadywać.';
   if (status === STATUS.UNAVAILABLE) return helpers.unavailableMessage || 'Chwilowo nie mogę potwierdzić tej informacji, więc nie będę zgadywać.';
   if (status === STATUS.UNVERIFIED) {
-    // Deterministyczne guardy nie zastępują semantycznej weryfikacji claimów.
-    // Przy awarii wszystkich validatorów nie publikujemy roboczej odpowiedzi.
-    return helpers.unavailableMessage || 'Chwilowo nie mogę potwierdzić tej informacji, więc nie będę zgadywać.';
+    // Deterministyczne guardy przeszły, ale walidator semantyczny był niedostępny.
+    // Publikujemy tekst wyłącznie z jednoznacznym ostrzeżeniem o braku weryfikacji.
+    let value = usunEtykietyDowodow(text || '');
+    if (typeof helpers.sanitizeResponse === 'function') value = helpers.sanitizeResponse(value);
+    value = String(value || '').trim();
+    const warning = '⚠️ Odpowiedź niezweryfikowana — walidator niedostępny. ';
+    return value
+      ? (value.startsWith(warning) ? value : warning + value)
+      : (helpers.unavailableMessage || 'Chwilowo nie mogę potwierdzić tej informacji, więc nie będę zgadywać.');
   }
 
   let value = usunEtykietyDowodow(text || '');

@@ -201,6 +201,9 @@ function buildQuestionForBot(item) {
 
 function isFailureText(text) {
   const normalized = normalizeFactText(text);
+  // Jawnie oznaczona odpowiedź niezweryfikowana nie jest odmową, ale jej status
+  // pozostaje widoczny w raporcie i nie jest liczony jako pełna walidacja.
+  if (/^odpowiedz niezweryfikowana walidator jest niedostepny\\b/i.test(normalized)) return false;
   const refusalPatterns = [
     /^(?:benchmark\s+)?nie mam wystarczajacych danych(?:\s+(?:zeby|aby) odpowiedziec(?: na to)?(?: pewnie)?)?$/i,
     /^(?:benchmark\s+)?nie moge(?: wiarygodnie)? potwierdzic(?: tej informacji)?(?: wiec nie bede zgadywac)?$/i,
@@ -636,7 +639,10 @@ async function run() {
           aiProfile: 'generic',
           memoryUserId: 'ai-benchmark',
           temperature: 0.2,
-          max_tokens: 300,
+          max_tokens: (() => {
+            const configured = Number(process.env.AI_BENCHMARK_MAX_TOKENS);
+            return Number.isInteger(configured) && configured >= 128 && configured <= 2000 ? configured : 500;
+          })(),
           __testDeps: {
             onSummary: value => { summary = value; },
           },
@@ -870,7 +876,22 @@ async function run() {
     process.exitCode = 3;
     return;
   }
-  if (process.env.AI_BENCHMARK_REQUIRE_PERFECT === '1') {
+  const minAnswered = Number(process.env.AI_BENCHMARK_MIN_ANSWERED) || 0;
+  const minComplete = Number(process.env.AI_BENCHMARK_MIN_COMPLETE) || 0;
+  const minFactual = Number(process.env.AI_BENCHMARK_MIN_FACTUAL) || 0;
+  if (minAnswered > 0 || minComplete > 0 || minFactual > 0) {
+    const factualRate = factualCases.length > 0 ? factualPassed / factualCases.length : 1;
+    const gateReasons = [];
+    if (Number.isFinite(minAnswered) && minAnswered >= 0 && answered < minAnswered) gateReasons.push(`odpowiedzi ${answered}/${results.length} < wymagane ${minAnswered}`);
+    if (Number.isFinite(minComplete) && minComplete >= 0 && complete < minComplete) gateReasons.push(`kompletne ${complete}/${results.length} < wymagane ${minComplete}`);
+    if (Number.isFinite(minFactual) && minFactual >= 0 && minFactual <= 1 && factualRate < minFactual) gateReasons.push(`gold facts ${factualRate.toFixed(2)} < wymagane ${minFactual}`);
+    if (gateReasons.length) {
+      console.error(`[LIVE BENCHMARK] PRÓG NIEOSIĄGNIĘTY: ${gateReasons.join('; ')}`);
+      for (const line of formatBenchmarkFailureDiagnostics(results)) console.error(line);
+      process.exitCode = 1;
+    }
+  }
+  if (process.env.AI_BENCHMARK_REQUIRE_PERFECT === '1')
     // Tylko wybrane przypadki mają gold facts. Przy rotacji ziarnem może ich nie być w próbce.
     const factualOk = factualCases.length > 0 && factualPassed === factualCases.length;
     if (answered !== results.length || complete !== results.length || !factualOk) {

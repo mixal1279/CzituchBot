@@ -12,8 +12,6 @@ const HARD_OVERCLAIM_TYPES = new Set([
   'unsupported_quantifier',
   'speculation_presented_as_fact',
   'interpretation_presented_as_fact',
-  'canon_status_not_in_evidence',
-  'canon_status_conflict',
   'canon_status_not_official_source',
   'input_too_long',
 ]);
@@ -104,7 +102,7 @@ function detectOverclaimTypes(claim, evidence, options = {}) {
   // Status kanoniczny jest twierdzeniem o oficjalnym stanie uniwersum.
   // Wiki społecznościowa może opisywać kanon, ale sama nie jest źródłem
   // pierwotnym potwierdzającym jego status.
-  if (canonClaimStatus.wystepuje && options.sourceAuthority !== 'official') {
+  if (canonClaimStatus.wystepuje && !['official', 'specialized'].includes(options.sourceAuthority)) {
     types.push('canon_status_not_official_source');
   }
 
