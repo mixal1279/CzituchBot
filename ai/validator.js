@@ -778,7 +778,6 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
         question: evidenceQuestion,
         causalQuestion,
       }),
-      }),
     }));
     const authorityRank = { unknown: 0, general: 1, guide: 2, reference: 3, specialized: 4, official: 5 };
     const verified = evaluations

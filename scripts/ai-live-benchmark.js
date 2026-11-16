@@ -896,7 +896,7 @@ async function run() {
       process.exitCode = 1;
     }
   }
-  if (process.env.AI_BENCHMARK_REQUIRE_PERFECT === '1')
+  if (process.env.AI_BENCHMARK_REQUIRE_PERFECT === '1') {
     // Tylko wybrane przypadki mają gold facts. Przy rotacji ziarnem może ich nie być w próbce.
     const factualOk = factualCases.length > 0 && factualPassed === factualCases.length;
     if (answered !== results.length || complete !== results.length || !factualOk) {
