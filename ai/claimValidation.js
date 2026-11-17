@@ -103,7 +103,7 @@ const GENERIC_CAPITALIZED_WORDS = new Set([
   'droga', 'drogi', 'droge', 'road', 'route', 'path',
   'pojawia', 'pojawilo', 'pojawil', 'pojawila', 'pojawiaja', 'appears', 'appeared', 'appear',
   'pomaga', 'pomagal', 'pomogla', 'pomogli', 'pomagaja', 'helps', 'helped', 'help',
-  'centrum', 'rozbudowy', 'center', 'centre', 'expansion', 'facility',
+  'centrum', 'rozbudowy', 'center', 'centre', 'expansion', 'facility', 'obiekt', 'obiektu', 'obiekcie', 'obiektem', 'osrodek', 'osrodka', 'wzbogacania',
   'kampanii', 'kampania', 'campaign', 'gra', 'gry', 'game', 'games',
   'wioska', 'wioski', 'village', 'villages', 'kierunku', 'direction',
   'czesc', 'czesci', 'part', 'first', 'main', 'glowna', 'glownej',
@@ -114,6 +114,10 @@ const GENERIC_CAPITALIZED_WORDS = new Set([
   'znajduje', 'located', 'lezy', 'prowadzi',
 ].map(normalizujClaim));
 const KNOWN_ENTITY_ALIAS_PATTERNS = [
+  { canonical: 'usa', pattern: /\b(?:usa|u\.s\.a\.?|united\s+states(?:\s+of\s+america)?|us\s+(?:government|army|military|president)|american\s+government|stan(?:y|ow|ach|ami)\s+zjednoczon\p{L}*)\b/iu },
+  { canonical: 'intelligence dampening sphere', pattern: /\b(?:intelligence\s+dampening\s+sphere|sfer\p{L}{0,2}\s+ograniczaj\p{L}*\s+inteligencj\p{L}*)\b/iu },
+  { canonical: 'enrichment center', pattern: /\b(?:enrichment\s+center|centrum\s+wzbogaca\p{L}*)\b/iu },
+  { canonical: 'relaxation center', pattern: /\b(?:relaxation\s+center|centrum\s+rozlu\p{L}*)\b/iu },
   { canonical: 'greatsword', pattern: /\b(?:greatsword|wielk(?:i|iego|iemu|im|imi)\s+miec(?:z|za|zem|zowi|zu))\b/iu },
   // Accept the benchmark source's one-letter misspelling `drgon bane` only for the known item.
   { canonical: 'dragonbane', pattern: /\bdr(?:a)?gon\s*bane\b/iu },
@@ -599,11 +603,15 @@ function tekstDoWykrywaniaNegacji(value) {
   // Bez tego wyciecia samo 'nie' w dopowiedzeniu falszywie oznaczalo caly claim
   // jako zanegowany (benchmark: przypadek when-115 / Chell).
   cleaned = cleaned.replace(/,?\s*a\s+nie\s+[^,.!?;:]+(?=[,.!?;:]|$)/giu, ' ');
-  cleaned = cleaned.replace(/\bnot\s+[^,.!?;:]+?,\s*(?:but|rather)\s+/giu, ' ');
-  cleaned = cleaned.replace(/\band\s+[^,.!?;:]*?\bwithout\s+[^,.!?;:]*/giu, (match) => {
+  if (/\b(?:but|rather)\b/iu.test(cleaned)) {
+    cleaned = cleaned.replace(/\bnot\s+[^,.!?;:]{1,160}?,\s*(?:but|rather)\s+/giu, ' ');
+  }
+  if (/\bwithout\b/iu.test(cleaned)) {
+    cleaned = cleaned.replace(/\band\s+[^,.!?;:]{0,160}?\bwithout\s+[^,.!?;:]{0,160}/giu, (match) => {
     const beforeWithout = match.replace(/^\band\s+/iu, '').replace(/\bwithout\b[\s\S]*$/iu, '');
     return NEGATION_RE.test(beforeWithout) ? match : ' ';
-  });
+    });
+  }
 
   let text = normalizujClaim(cleaned);
 
@@ -706,6 +714,12 @@ function wariantyNazwyDoDopasowania(entity) {
   const alternations = [['scie', 'st'], ['scie', 'st'], ['dzie', 'd'], ['cie', 't'], ['rze', 'r'], ['sie', 's'], ['zie', 'g']];
   for (const [from, to] of alternations) {
     if (token.endsWith(from) && token.length - from.length >= 4) variants.add(token.slice(0, -from.length) + to);
+  }
+  // Johnny -> Johnnym / Johnnemu / Johnnego: koncowka zastepuje koncowe „y” rdzenia.
+  for (const suffix of ['ymi', 'ych', 'emu', 'ego', 'ym', 'em']) {
+    if (token.endsWith(suffix) && token.length - suffix.length >= 4) {
+      variants.add(token.slice(0, -suffix.length) + 'y');
+    }
   }
   return [...variants];
 }
@@ -1151,7 +1165,7 @@ function sprawdzPokrycieClaimamiOdpowiedzi(answer, claims) {
   if (String(answer || '').length > 12000 || claimList.length > 40 || claimList.some(item => String(item?.claim || '').length > 1000)) {
     return { ok: false, totalSentences: 0, checkedSentences: 0, uncoveredSentenceIndexes: [], uncovered: ['input_too_long'] };
   }
-  const sourceSentences = usunEtykietyDowodow(answer).split(/(?<=[.!?])\s+|\n+/).map(x => x.trim()).filter(Boolean);
+  const sourceSentences = usunEtykietyDowodow(answer).replace(/\b(?:tzw|np|ok|m\.in|itd|itp|tj|tzn|wg|ang|pol)\.\s+/giu, m => m.replace(/\./g, '\u2024')).split(/(?<=[.!?])\s+|\n+/).map(x => x.replace(/\u2024/g, '.').trim()).filter(Boolean);
   const sentences = sourceSentences.flatMap((sentence, sourceSentenceIndex) => {
     // Wskazanie zrodla w nawiasie („(Zrodlo: opis lokalizacji…)”) to metadane,
     // nie twierdzenie o swiecie. Bez tego zdanie nigdy nie ma pokrycia, bo

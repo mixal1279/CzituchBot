@@ -1,0 +1,17 @@
+{
+  "portal 2": {
+    "nazwa": "Portal 2",
+    "hltbId": 7231,
+    "obraz": "https://howlongtobeat.com/games/Portal2cover.jpg",
+    "link": "https://howlongtobeat.com/game/7231",
+    "glownyWatek": 8.54,
+    "glownyExtra": 13.74,
+    "komplet": 22.59,
+    "wszystkieStyle": null,
+    "glownyWatekStr": "8h 32min",
+    "glownyExtraStr": "13h 44min",
+    "kompletStr": "22h 35min",
+    "wszystkieStyleStr": null,
+    "zrodlo": "HowLongToBeat"
+  }
+}

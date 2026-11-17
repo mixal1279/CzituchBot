@@ -316,6 +316,12 @@ function sourceMatchesRequestContext(source = {}, routing = {}, question = '') {
 
   const gameName = gameNameForScope;
   if (gameName && czyZrodloDotyczyInnejCzesciGry(source, gameName, routing)) return false;
+  if (gameName && !/\b(?:serial|netflix|sezon|season|show|series)\b/iu.test(question)) {
+    const urlAndTitle = [source.url, source.title].filter(Boolean).join(" ");
+    if (/\b(?:tv-shows|netflix-series|season-[1-9]|season\s+[1-9]|netflix\s+series)\b/iu.test(urlAndTitle) && !containsAlias(source.title || "", gameName)) {
+      return false;
+    }
+  }
   if (characterScoped) {
     const matchesAllCharacters = requestedCharacters.every(characterName => {
       const characterAliases = aliasesFor(CHARACTER_ALIASES, characterName);
