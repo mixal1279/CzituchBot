@@ -13,3 +13,5 @@ node_modules/
 .youtube-search-quota.json
 .youtube-search-quota.json.*.tmp
 .env
+m.env
+.env
