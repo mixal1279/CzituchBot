@@ -166,6 +166,25 @@ function buildSupplementalRetrievalQuery(question, routing = {}, causalQuestion 
   return [anchor, q, intent].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim().slice(0, 300);
 }
 
+// Modelowe tlumaczenie pytania na angielskie zapytanie wyszukiwarkowe. To tylko query do
+// Tavily (dowody i tak przechodza przez validator), ale odpowiedz modelu jest nieufna:
+// bierzemy pierwsza linie, odrzucamy puste/NONE, zbyt krotkie/dlugie i nieprzetlumaczone
+// (polskie znaki diakrytyczne) wyniki. Nazwe gry doklejamy, jesli jej brakuje.
+function normalizeTranslatedSearchQuery(raw, game = '') {
+  const line = String(raw || '').split(/\r?\n/).map(x => x.trim()).find(Boolean) || '';
+  const text = line
+    .replace(/^(?:query|zapytanie|search\s*query)\s*:\s*/iu, '')
+    .replace(/^[\s"'`„”«»]+|[\s"'`„”«»]+$/gu, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (text.length < 8 || text.length > 200) return null;
+  if (/^none$/i.test(text)) return null;
+  if (/[ąćęłńóśźż]/iu.test(text)) return null;
+  const gameName = String(game || '').replace(/\s+/g, ' ').trim();
+  const hasGame = gameName && normalizujToken(text).includes(normalizujToken(gameName));
+  return [gameName && !hasGame ? gameName : '', text].filter(Boolean).join(' ').slice(0, 300);
+}
+
 function sourceHost(url){try{return new URL(url).hostname.toLowerCase().replace(/^www\./,'');}catch(_){return '';}}
 function sourceQualityScore(source = {}) {
   const score = Number(source.score);
@@ -204,4 +223,4 @@ function selectGameSpecificRetrievalDomains(game, question = '', baseDomains = n
   return [...new Set([...base, ...additions])];
 }
 
-module.exports={decomposeQuestion,isMultiPartQuestion,extractCarryoverEntities,buildAdvancedRetrievalPlan,buildSupplementalRetrievalQuery,selectRetrievalQueries,selectRetrievalDomains,selectGameSpecificRetrievalDomains,initialRetrievalQueryLimit,shouldRunAdditionalRetrieval,rankRetrievalNeed,sourceDiversity,sourceQualityScore,normalizujToken};
+module.exports={decomposeQuestion,isMultiPartQuestion,extractCarryoverEntities,buildAdvancedRetrievalPlan,buildSupplementalRetrievalQuery,normalizeTranslatedSearchQuery,selectRetrievalQueries,selectRetrievalDomains,selectGameSpecificRetrievalDomains,initialRetrievalQueryLimit,shouldRunAdditionalRetrieval,rankRetrievalNeed,sourceDiversity,sourceQualityScore,normalizujToken};

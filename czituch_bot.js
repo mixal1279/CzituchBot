@@ -124,7 +124,7 @@ const { ucieknijRegex, utworzRegexPelnejNazwy } = require('./ai/regex-utils');
 const igdbSearchCache = utworzCacheIGDB({ maxEntries: 100, ttlMs: 30 * 60 * 1000, negativeTtlMs: 5 * 60 * 1000 });
 const { extractExplicitUserMemories, mergeMemoryRecords, buildVerifiedMemoryContext, pruneExpiredMemories } = require('./ai/memory');
 const { parseMemoryCommand, forgetMemories, describeMemories } = require('./ai/memory_manager');
-const { decomposeQuestion, isMultiPartQuestion, buildAdvancedRetrievalPlan, buildSupplementalRetrievalQuery, selectRetrievalQueries, selectRetrievalDomains, selectGameSpecificRetrievalDomains, initialRetrievalQueryLimit } = require('./ai/retrieval');
+const { decomposeQuestion, isMultiPartQuestion, buildAdvancedRetrievalPlan, buildSupplementalRetrievalQuery, normalizeTranslatedSearchQuery, selectRetrievalQueries, selectRetrievalDomains, selectGameSpecificRetrievalDomains, initialRetrievalQueryLimit } = require('./ai/retrieval');
 const { configureProviderQuotaPersistence, quotaStateReady, classifyFailure, nextFallbacks, selectRepairFallbacks, filterAvailableFallbacks, repairBudgetBlockReason, GENERATION_FALLBACK_CHAIN, configuredMaxFallbackSteps, markProviderQuota, isProviderQuotaBlocked, shouldBlockProviderQuotaWide, quotaCooldownMsFromError, geminiGenerationCooldownMsFromError, retryAfterHint, openRouterErrorMessage, shouldOpenQuotaCircuit } = require('./ai/fallback');
 const { normalizeGroqBaseUrl, parseOpenAICompatibleCompletion, createGroqCompletion, createGroqCompletionWithSchemaFallback, awaitWithAbortTimeout, computeValidatorTimeout, computeValidatorReserveMs, computeGenerationTimeout, normalizeGroqSdkBaseUrl, INITIAL_VALIDATOR_REPAIR_RESERVE_MS, shouldAttemptUnavailableRepair } = require('./ai/provider-runtime');
 const { createAIMetrics, recordAIMetric, snapshotAIMetrics } = require('./ai/metrics');
@@ -3640,6 +3640,40 @@ Pytanie użytkownika: ${pytanie}`
     );
     if (!queryUzupelniajace) return false;
 
+    // Polskie pytanie kontra angielskie wiki (UESP, Fandom, GameFAQs) daje slabe trafienia:
+    // pierwsze wyszukanie czesto zwraca 1-2 przypadkowe strony i odpowiedz konczy sie
+    // zastrzezeniem o braku danych. Dopiero tutaj (odpowiedz juz odrzucona) placimy jedno
+    // wywolanie modelu na angielskie query; przy bledzie/timeoucie zostaje dotychczasowe.
+    let queryDoTavily = queryUzupelniajace;
+    const budzetNaTlumaczenieMs = pozostalyCzasMs() - validationReserveMs - 6000;
+    if (Number.isFinite(budzetNaTlumaczenieMs) && budzetNaTlumaczenieMs >= 1500 && zarezerwujModel('search-translate')) {
+      const translateController = new AbortController();
+      try {
+        const translateResult = await awaitWithAbortTimeout(
+          createGroqCompletion(groqClient, {
+            model: AI_MODELS.queryRewrite,
+            max_tokens: 220, reasoning_effort: 'low', include_reasoning: false, temperature: 0,
+            messages: [
+              { role: 'system', content: 'Przetłumacz pytanie o grę na krótkie angielskie zapytanie do wyszukiwarki. Używaj oficjalnych angielskich nazw przedmiotów, postaci, lokacji i questów z danej gry. Zwróć wyłącznie zapytanie w jednej linii, bez cudzysłowów i komentarzy. Nie dodawaj faktów, których nie ma w pytaniu.' },
+              { role: 'user', content: `Gra: ${gameAnchor || 'nieznana'}\nPytanie: ${pytanie}` },
+            ],
+          }, { signal: translateController.signal }),
+          Math.min(2500, budzetNaTlumaczenieMs),
+          translateController,
+          'search translate',
+        );
+        const english = normalizeTranslatedSearchQuery(translateResult?.choices?.[0]?.message?.content, gameAnchor);
+        if (english) {
+          queryDoTavily = english;
+          console.log(`[Tavily] 🌐 Angielskie query uzupełniające: "${english}"`);
+        } else {
+          console.log('[Tavily] 🌐 Tłumaczenie query odrzucone — używam dotychczasowego query uzupełniającego.');
+        }
+      } catch (error) {
+        console.warn(`[Tavily] ⏱️ Tłumaczenie query pominięte (${sanitizujKomunikatBledu(error?.message || error)}); używam dotychczasowego query.`);
+      }
+    }
+
     // Zostawiamy co najmniej 12 s na ponowną walidację. Jeśli po przygotowaniu
     // query nie ma już miejsca na wyszukiwanie i końcowy validator, pomijamy repair.
     const remainingBeforeSearch = pozostalyCzasMs();
@@ -3662,10 +3696,10 @@ Pytanie użytkownika: ${pytanie}`
     // Drugi request Tavily zaczyna numerację po już istniejących źródłach.
     const sourceStartIndex = (daneDoWalidacji.match(/\[SOURCE \d+\]/g) || []).length;
 
-    console.log(`[Tavily] 🔎 Uzupełniające wyszukanie po validatorze: "${queryUzupelniajace}" | Domeny: ${JSON.stringify(domenyUzupelniajace)}`);
+    console.log(`[Tavily] 🔎 Uzupełniające wyszukanie po validatorze: "${queryDoTavily}" | Domeny: ${JSON.stringify(domenyUzupelniajace)}`);
 
     if (!aiState.reserveTavily('supplemental-retrieval')) return false;
-    const uzupelnienie = await searchTavilyFn(queryUzupelniajace, {
+    const uzupelnienie = await searchTavilyFn(queryDoTavily, {
       domains: domenyUzupelniajace,
       time_range: aiPlan.retrievalTimeRange || zakresTavilyDlaPytania(pytanie, null),
       _skipRewrite: true,
