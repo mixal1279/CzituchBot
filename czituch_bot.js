@@ -3699,15 +3699,42 @@ Pytanie użytkownika: ${pytanie}`
     console.log(`[Tavily] 🔎 Uzupełniające wyszukanie po validatorze: "${queryDoTavily}" | Domeny: ${JSON.stringify(domenyUzupelniajace)}`);
 
     if (!aiState.reserveTavily('supplemental-retrieval')) return false;
-    const uzupelnienie = await searchTavilyFn(queryDoTavily, {
-      domains: domenyUzupelniajace,
+    const opcjeUzupelnienia = {
       time_range: aiPlan.retrievalTimeRange || zakresTavilyDlaPytania(pytanie, null),
       _skipRewrite: true,
       sourceStartIndex,
       requestState: aiState,
-      remainingMs: searchBudgetMs,
       returnMeta: true,
+    };
+    let uzupelnienie = await searchTavilyFn(queryDoTavily, {
+      ...opcjeUzupelnienia,
+      domains: domenyUzupelniajace,
+      remainingMs: searchBudgetMs,
     });
+
+    // GameFAQs potrafi zapełnić wszystkie wyniki wątkami Boards/Q&A, które lokalny filtr
+    // Tavily celowo odrzuca; UESP/Fandom nie dostają wtedy miejsca (benchmark: Skyrim,
+    // 5 z 5 wyników z gamefaqs odrzuconych). Gdy nic nie zostało, jedna ponowna próba
+    // bez GameFAQs. Dowody nadal przechodzą ten sam filtr, walidator i kontrakt cytatów.
+    const GAMEFAQS_HOST = 'gamefaqs.gamespot.com';
+    const domenyBezGameFaqs = Array.isArray(domenyUzupelniajace)
+      ? domenyUzupelniajace.filter(domena => domena !== GAMEFAQS_HOST)
+      : [];
+    const budzetPonowieniaMs = pozostalyCzasMs() - validationReserveMs;
+    if (!uzupelnienie?.text
+      && (uzupelnienie?.status || 'empty') === 'empty'
+      && Array.isArray(domenyUzupelniajace)
+      && domenyBezGameFaqs.length > 0
+      && domenyBezGameFaqs.length < domenyUzupelniajace.length
+      && Number.isFinite(budzetPonowieniaMs) && budzetPonowieniaMs >= 8000
+      && aiState.reserveTavily('supplemental-retrieval-retry')) {
+      console.log(`[Tavily] 🔁 Wszystkie wyniki odpadły (GameFAQs) — ponawiam bez GameFAQs: ${JSON.stringify(domenyBezGameFaqs)}`);
+      uzupelnienie = await searchTavilyFn(queryDoTavily, {
+        ...opcjeUzupelnienia,
+        domains: domenyBezGameFaqs,
+        remainingMs: budzetPonowieniaMs,
+      });
+    }
 
     const statusUzupelnienia = uzupelnienie?.status || (uzupelnienie ? 'ok' : 'error');
     const tekstUzupelnienia = uzupelnienie?.text || '';
