@@ -18,6 +18,12 @@ const PAIRS = [
     'In some endings, V can choose to cooperate with Johnny.'],
   ['W innym zakończeniu V może pozwolić Johnnemu przejąć kontrolę nad swoim ciałem.',
     'In another ending, V can let Johnny take control of their body.'],
+  ["Wheatley to sferyczna osobowość sztucznej inteligencji w grze Portal 2, znany jako 'Sfera Zmniejszająca Inteligencję'.",
+    "Wheatley is a spherical artificial intelligence personality in Portal 2, known as the 'Intelligence Dampening Sphere'."],
+  ['Johnny Silverhand to weteran konfliktu w Ameryce Środkowej.',
+    'Johnny Silverhand is a veteran of the Central American Conflict.'],
+  ['Jackie Welles jest kluczową postacią w Akcie 1 jako sojusznik V.',
+    'Jackie Welles is a key character in Act 1 as an ally of V.'],
 ];
 
 for (const [pl, en] of PAIRS) {

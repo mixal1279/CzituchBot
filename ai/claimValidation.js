@@ -115,8 +115,10 @@ const GENERIC_CAPITALIZED_WORDS = new Set([
 ].map(normalizujClaim));
 const KNOWN_ENTITY_ALIAS_PATTERNS = [
   { canonical: 'usa', pattern: /\b(?:usa|u\.s\.a\.?|united\s+states(?:\s+of\s+america)?|us\s+(?:government|army|military|president)|american\s+government|stan(?:y|ow|ach|ami)\s+zjednoczon\p{L}*)\b/iu },
-  { canonical: 'intelligence dampening sphere', pattern: /\b(?:intelligence\s+dampening\s+sphere|sfer\p{L}{0,2}\s+ograniczaj\p{L}*\s+inteligencj\p{L}*)\b/iu },
+  { canonical: 'intelligence dampening sphere', pattern: /\b(?:intelligence\s+dampening\s+sphere|sfer\p{L}{0,2}\s+\p{L}+\s+inteligencj\p{L}*)\b/iu },
   { canonical: 'enrichment center', pattern: /\b(?:enrichment\s+center|centrum\s+wzbogaca\p{L}*)\b/iu },
+  { canonical: 'central america', pattern: /\b(?:central\s+americ\p{L}*|amery[ck]\p{L}*\s+[sś]rodkow\p{L}*|[sś]rodkowoamery[ck]\p{L}*)\b/iu },
+  { canonical: 'act', pattern: /\b(?:act\s+(?:\d+|[ivx]+)|akt(?:u|em|cie|ach|y|ow)?\s+(?:\d+|[ivx]+)|akcie\s+(?:\d+|[ivx]+))\b/iu },
   { canonical: 'relaxation center', pattern: /\b(?:relaxation\s+center|centrum\s+rozlu\p{L}*)\b/iu },
   { canonical: 'greatsword', pattern: /\b(?:greatsword|wielk(?:i|iego|iemu|im|imi)\s+miec(?:z|za|zem|zowi|zu))\b/iu },
   // Accept the benchmark source's one-letter misspelling `drgon bane` only for the known item.

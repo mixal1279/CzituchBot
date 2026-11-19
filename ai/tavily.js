@@ -1118,7 +1118,9 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, lookupFn, normalizeQu
           }
           return true;
         });
-        if (rejected.length) logger.log(`[Tavily] 🛡️ Odrzucono ${rejected.length} wyników przez lokalny filtr domen/URL`);
+        const hostDoLogu = value => { try { return new URL(String(value?.url || '')).hostname || '?'; } catch { return '?'; } };
+        if (!all.length) logger.log('[Tavily] 📭 Tavily nie zwrócił żadnych wyników dla tego zapytania');
+        if (rejected.length) logger.log(`[Tavily] 🛡️ Odrzucono ${rejected.length} wyników przez lokalny filtr domen/URL (hosty: ${[...new Set(rejected.map(hostDoLogu))].slice(0, 8).join(', ')})`);
         const scoreFilter = filtrujPoScore(poDomenach);
         const resultsPoScore = scoreFilter.kept;
         const results = rerankujWynikiTavily(resultsPoScore, sourceQuestion, domains, { freshness: ['day', 'week'].includes(validTimeRange) ? 'live' : 'evergreen' });
