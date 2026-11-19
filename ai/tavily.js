@@ -263,15 +263,17 @@ function sanityzujTrescZrodlaTavily(material) {
   return sanitizeUntrustedText(material);
 }
 
-function filtrujMaterialPoSlowachTavily(material, pytanie) {
+function filtrujMaterialPoSlowachTavily(material, pytanie, stats = null) {
   const text = String(material || '').trim();
   const keywords = slowaKluczoweTavily(pytanie);
+  if (stats) { stats.keywords = keywords.length; stats.matchedKeywords = 0; stats.sentences = 0; stats.relevantSentences = 0; }
   if (!text || keywords.length < 1) return text;
 
   const sentences = text
     .split(/(?<=[.!?])\s+|\n+/)
     .map(s => s.trim())
     .filter(Boolean);
+  if (stats) stats.sentences = sentences.length;
   if (sentences.length <= 2) return text;
 
   const scored = sentences.map((sentence, index) => {
@@ -285,6 +287,11 @@ function filtrujMaterialPoSlowachTavily(material, pytanie) {
   });
 
   const relevant = scored.filter(x => x.score > 0).sort((a, b) => b.score - a.score || a.index - b.index);
+  if (stats) {
+    stats.relevantSentences = relevant.length;
+    const normalizedSentences = sentences.map(normalizujTokenTavily);
+    stats.matchedKeywords = keywords.filter(keyword => normalizedSentences.some(sentence => sentence.includes(keyword))).length;
+  }
   if (!relevant.length) return text;
 
   // Keep fewer primary matches and their adjacent sentences. Explanations often
@@ -1163,7 +1170,9 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, lookupFn, normalizeQu
               const content = String(r.raw_content || '').trim();
               const materialRaw = content.substring(0, 25000)
                 .split('\n').map(line => line.trim()).filter(Boolean).join('\n');
-              const material = sanityzujTrescZrodlaTavily(filtrujMaterialPoSlowachTavily(materialRaw, sourceQuestion).substring(0, depth === 'advanced' ? 4200 : 1800));
+              const filterStats = {};
+              const material = sanityzujTrescZrodlaTavily(filtrujMaterialPoSlowachTavily(materialRaw, sourceQuestion, filterStats).substring(0, depth === 'advanced' ? 4200 : 1800));
+              try { logger.log(`[Tavily] 🔬 Filtr treści ${new URL(r.url).hostname}: słowa kluczowe ${filterStats.matchedKeywords}/${filterStats.keywords}, zdania z dopasowaniem ${filterStats.relevantSentences}/${filterStats.sentences}, pytanie: "${String(sourceQuestion || '').slice(0, 60)}"`); } catch (_) {}
               const host = (() => { try { return new URL(r.url).hostname; } catch (_) { return '(nieznany host)'; } })();
               return [
                 `[SOURCE ${index + 1}]`,
@@ -1206,7 +1215,9 @@ function createTavilySearch({ apiKey, groq, fetchZTimeout, lookupFn, normalizeQu
             .map(line => line.trim())
             .filter(Boolean)
             .join('\n');
-          const material = sanityzujTrescZrodlaTavily(filtrujMaterialPoSlowachTavily(materialRaw, sourceQuestion).substring(0, depth === 'advanced' ? 4200 : 2200));
+          const filterStats = {};
+              const material = sanityzujTrescZrodlaTavily(filtrujMaterialPoSlowachTavily(materialRaw, sourceQuestion, filterStats).substring(0, depth === 'advanced' ? 4200 : 2200));
+              try { logger.log(`[Tavily] 🔬 Filtr treści ${new URL(r.url).hostname}: słowa kluczowe ${filterStats.matchedKeywords}/${filterStats.keywords}, zdania z dopasowaniem ${filterStats.relevantSentences}/${filterStats.sentences}, pytanie: "${String(sourceQuestion || '').slice(0, 60)}"`); } catch (_) {}
           const host = (() => { try { return new URL(r.url).hostname; } catch (_) { return '(nieznany host)'; } })();
           const quality = ocenaZrodla(r.url, domains);
           return `[SOURCE ${index + 1}]\nTYP: UNTRUSTED_WEB_DATA\nTYTUŁ: ${sanityzujTrescZrodlaTavily(String(r.title || '(brak tytułu)').slice(0, 300))}\nHOST: ${host}\nURL: ${r.url}\nHEURYSTYCZNA_OCENA: ${quality}\nTREŚĆ: <<<UNTRUSTED_SOURCE_CONTENT>>>\n${material}\n<<<END_UNTRUSTED_SOURCE_CONTENT>>>`;

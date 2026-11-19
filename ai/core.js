@@ -656,6 +656,14 @@ function assessEvidence(results = [], question, routing = {}, options = {}) {
       })),
       fusion: fused.slice(0, 10).map(item => ({ sourceKey: item.id, score: Number(item.score.toFixed(6)) })),
       selectedSourceKeys: selected.map(source => source.key),
+      // Diagnostyka: relevance liczy sie z pokrycia slow pytania i strony, wiec dla polskiego
+      // pytania i angielskiej strony bywa bliskie 0 (status „weak” mimo wielu zrodel).
+      sourceScores: selected.map(source => ({
+        host: source.host,
+        relevance: Number(Number(source.relevance || 0).toFixed(3)),
+        titleRelevance: Number(Number(source.titleRelevance || 0).toFixed(3)),
+        coreScore: Number(Number(source.coreScore || 0).toFixed(3)),
+      })),
       semanticRerankingApplied: selected.some(source => source.semanticScore !== null),
     },
     independentHosts: independentHosts.size,
