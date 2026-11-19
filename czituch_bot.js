@@ -3702,6 +3702,10 @@ Pytanie użytkownika: ${pytanie}`
     const opcjeUzupelnienia = {
       time_range: aiPlan.retrievalTimeRange || zakresTavilyDlaPytania(pytanie, null),
       _skipRewrite: true,
+      // Domyslne `basic` zwraca tylko snippety (bez raw_content), a te nie sa dowodem:
+      // wynik konczy sie statusem empty/snippet_only. Uzupelnienie po odrzuconej
+      // odpowiedzi musi pobrac pelna tresc stron, czyli `advanced`.
+      searchDepth: 'advanced',
       sourceStartIndex,
       requestState: aiState,
       returnMeta: true,
@@ -3730,7 +3734,7 @@ Pytanie użytkownika: ${pytanie}`
     const statusUzupelnienia = uzupelnienie?.status || (uzupelnienie ? 'ok' : 'error');
     const tekstUzupelnienia = uzupelnienie?.text || '';
     if (!tekstUzupelnienia) {
-      console.log(`[Tavily] 🔎 Uzupełniające wyszukanie nie zwróciło materiału źródłowego (status=${statusUzupelnienia})`);
+      console.log(`[Tavily] 🔎 Uzupełniające wyszukanie nie zwróciło materiału źródłowego (status=${statusUzupelnienia}, reason=${uzupelnienie?.reason || '-'})`);
       return false;
     }
 
