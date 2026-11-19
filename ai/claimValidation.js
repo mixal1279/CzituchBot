@@ -30,7 +30,7 @@ const CROSS_LANGUAGE_CONCEPTS = [
   ['zabojstwo', /kill\w*|murder\w*|death|dead|zabij\w*|zabil\w*|zabila\w*|zabici\w*|zabity\w*|zabicie\w*|zgin\w*|smier\w*/i],
   ['konflikt', /conflict\w*|feud\w*|fight\w*|\bwar\w*|hatred|hate\w*|konflikt\w*|walcz\w*|wojn\w*/i],
   ['zwiazek', /relationship\w*|girlfriend\w*|boyfriend\w*|partner\w*|romanc\w*|romantic\w*|involved|zwi[aa]zk\w*|zwiaz\w*|relacj\w*|dziewczyn\w*|chlopak\w*/i],
-  ['pomoc', /help\w*|assist\w*|save\w*|rescu\w*|pomog\w*|pomaga\w*|urat\w*|ocal\w*/i],
+  ['pomoc', /help\w*|assist\w*|save\w*|rescu\w*|pomoc\w*|pomog\w*|pomaga\w*|urat\w*|ocal\w*/i],
   // Dodane po przypadku benchmarkowym who-225 (Astarion): cytat 'freed him
   // from his bonds' nie byl rozpoznawany jako potwierdzenie claimu 'zostal
   // uwolniony', bo zadne pojecie nie lapalo pary freed/uwolniony.

@@ -32,7 +32,7 @@ jobs:
       AI_BENCHMARK_DELAY_MS: "5000"
       AI_REQUEST_TIMEOUT_MS: "85000"
       AI_XKIRO_GENERATOR_TIMEOUT_MS: "30000"
-      AI_XKIRO_GENERATOR_MAX_TOKENS: "700"
+      AI_XKIRO_GENERATOR_MAX_TOKENS: "1600"
       AI_XKIRO_VALIDATOR_TIMEOUT_MS: "22000"
       AI_OPENROUTER_VALIDATOR_TIMEOUT_MS: "6000"
       AI_GENERATOR_PROVIDER: "xkiro"
@@ -55,7 +55,7 @@ jobs:
       EXA_API_KEY: ${{ secrets.EXA_API_KEY }}
       XKIRO_API_KEY: ${{ secrets.XKIRO_API_KEY }}
       XKIRO_MODEL: cohere/command-a-reasoning
-      XKIRO_VALIDATOR_MODEL: cohere/command-a-reasoning
+      XKIRO_VALIDATOR_MODEL: mistralai/mistral-medium-3.5
       OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
 
     steps:

@@ -151,7 +151,7 @@ test('live benchmark preflights validator providers before starting the stratifi
   assert.match(workflow, /AI_BENCHMARK_LIMIT:\s*"10"/);
   assert.match(workflow, /AI_REQUEST_TIMEOUT_MS:\s*"85000"/);
   assert.match(workflow, /AI_XKIRO_GENERATOR_TIMEOUT_MS:\s*"30000"/);
-  assert.match(workflow, /AI_XKIRO_GENERATOR_MAX_TOKENS:\s*"700"/);
+  assert.match(workflow, /AI_XKIRO_GENERATOR_MAX_TOKENS:\s*"1600"/);
   assert.match(workflow, /AI_XKIRO_VALIDATOR_TIMEOUT_MS:\s*"22000"/);
   assert.match(workflow, /PREFLIGHT_TIMEOUT_MS:\s*"25000"/);
   assert.match(workflow, /PREFLIGHT_STRICT:\s*"1"/);
@@ -269,7 +269,7 @@ test('xKiro generation retries at most once for transient failures without leavi
   assert.match(generator, /error\.retryAfter = retryAfter \|\| null/);
   assert.match(generator, /parseError\.status = Number\(response\.status \|\| 0\)/);
   assert.match(generator, /!error\?\.retryAfter/);
-  assert.match(generator, /Math\.min\(1200, Math\.max\(maxTokens \+ 200/);
+  assert.match(generator, /Math\.min\(maxTokenCap, Math\.max\(maxTokens \+ 200/);
   assert.match(generator, /finishReason: parsed\.finishReason/);
   assert.match(source, /attempt\.usage && typeof attempt\.usage === 'object'/);
 });

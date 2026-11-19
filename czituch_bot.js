@@ -717,7 +717,7 @@ const KONFIGURACJA = {
   xkiroBaseUrl: String(process.env.XKIRO_BASE_URL || 'https://api.xkiro.com/v1').replace(/\/+$/, ''),
   // Model xKiro dla generowania pozostaje niezależny od walidatora.
   xkiroModel: process.env.XKIRO_MODEL || 'qwen/qwen3.5-397b-a17b:free',
-  xkiroValidatorModel: process.env.XKIRO_VALIDATOR_MODEL || 'cohere/command-a-reasoning',
+  xkiroValidatorModel: process.env.XKIRO_VALIDATOR_MODEL || 'mistralai/mistral-medium-3.5',
 
   // ---- ITAD ----
   itadKey: process.env.ITAD_API_KEY,
@@ -3905,9 +3905,12 @@ Pytanie użytkownika: ${pytanie}`;
     const configuredTimeoutMs = Number(process.env.AI_XKIRO_GENERATOR_TIMEOUT_MS);
     const xkiroMaxTimeoutMs = Number.isFinite(configuredTimeoutMs) && configuredTimeoutMs > 0
       ? Math.min(30000, Math.max(4000, configuredTimeoutMs)) : 12000;
+    const isReasoningModel = /(?:reasoning|thinking|r1|o1|o3)/i.test(model);
+    const maxTokenCap = isReasoningModel ? 3200 : 1200;
+    const defaultMaxTokens = isReasoningModel ? 1600 : 700;
     const configuredTokens = Number(process.env.AI_XKIRO_GENERATOR_MAX_TOKENS);
-    let maxTokens = Math.min(1200, Math.max(300, Number.isFinite(configuredTokens) && configuredTokens > 0
-      ? Math.max(Number(maxTok) || 300, configuredTokens) : (Number(maxTok) || 700)));
+    let maxTokens = Math.min(maxTokenCap, Math.max(300, Number.isFinite(configuredTokens) && configuredTokens > 0
+      ? Math.max(Number(maxTok) || 300, configuredTokens) : (Number(maxTok) || defaultMaxTokens)));
     if (!KONFIGURACJA.xkiroKey) return wynikPusty('xkiro', model, 'brak XKIRO_API_KEY');
     const messages = buildMessages(overrideSystemPrompt);
     const maxAttempts = aiState.generationPhase === 'repair' ? 1 : 2;
@@ -3963,11 +3966,17 @@ Pytanie użytkownika: ${pytanie}`;
         }
         const parsed = parseOpenAICompatibleCompletion(data);
         if (!parsed.text) {
+          if (parsed.reasoningPresent && parsed.truncated && attemptNumber < maxAttempts) {
+            maxTokens = Math.min(maxTokenCap, Math.max(maxTokens + 600, Math.ceil(maxTokens * 1.8)));
+            lastError = new Error(`empty_response: reasoning_only truncated; retrying with max_tokens=${maxTokens}`);
+            console.warn(`[xKiro] Samo rozumowanie ucięte (${powod}); ponawiam z max_tokens=${maxTokens}.`);
+            continue;
+          }
           const usage = parsed.usage ? `usage=${JSON.stringify(parsed.usage)}` : 'usage=unavailable';
           throw new Error(`empty_response: no answer text; finish_reason=${parsed.finishReason}; reasoning_only=${parsed.reasoningPresent}; ${usage}; response_id=${parsed.responseId || 'unavailable'}`);
         }
         if (parsed.truncated && attemptNumber < maxAttempts) {
-          maxTokens = Math.min(1200, Math.max(maxTokens + 200, Math.ceil(maxTokens * 1.5)));
+          maxTokens = Math.min(maxTokenCap, Math.max(maxTokens + 200, Math.ceil(maxTokens * 1.5)));
           lastError = new Error(`truncated_response: finish_reason=${parsed.finishReason}; retrying same model with max_tokens=${maxTokens}`);
           console.warn(`[xKiro] Odpowiedź ucięta (${powod}); jedna ponowna próba tego samego modelu z większym limitem tokenów.`);
           continue;

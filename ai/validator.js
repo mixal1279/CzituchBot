@@ -35,7 +35,7 @@ const GEMINI_VALIDATOR_JSON_SCHEMA = {
           source_ids: { type: 'array', items: { type: 'string' } },
           evidence_quote: { type: 'string' },
           // Angielskie tłumaczenie claimu; pusty string, gdy evidence_quote nie jest po angielsku.
-          claim_en: { type: 'string' },
+          claim_en: { type: 'string', description: 'Literal English translation of claim. Must be non-empty whenever claim is not in English and evidence_quote is in English.' },
           reason: { type: 'string' },
         },
         required: ['claim', 'supported', 'source_ids', 'evidence_quote', 'reason', 'claim_en'],
