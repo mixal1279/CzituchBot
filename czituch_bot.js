@@ -3706,35 +3706,26 @@ Pytanie użytkownika: ${pytanie}`
       requestState: aiState,
       returnMeta: true,
     };
-    let uzupelnienie = await searchTavilyFn(queryDoTavily, {
-      ...opcjeUzupelnienia,
-      domains: domenyUzupelniajace,
-      remainingMs: searchBudgetMs,
-    });
-
-    // GameFAQs potrafi zapełnić wszystkie wyniki wątkami Boards/Q&A, które lokalny filtr
-    // Tavily celowo odrzuca; UESP/Fandom nie dostają wtedy miejsca (benchmark: Skyrim,
-    // 5 z 5 wyników z gamefaqs odrzuconych). Gdy nic nie zostało, jedna ponowna próba
-    // bez GameFAQs. Dowody nadal przechodzą ten sam filtr, walidator i kontrakt cytatów.
+    // Pierwsze wyszukanie uzylo juz tej samej listy domen (razem z GameFAQs). GameFAQs potrafi
+    // zapelnic wszystkie wyniki watkami Boards/Q&A, ktore lokalny filtr Tavily odrzuca
+    // (benchmark: Skyrim, 6 z 6 wynikow z gamefaqs odpadlo, UESP/Fandom bez miejsca), wiec
+    // drugie wyszukanie dostaje liste bez GameFAQs, o ile zostaja inne domeny. Osobna
+    // ponowna proba nie miesci sie w limicie 3 wyszukan Tavily na request.
     const GAMEFAQS_HOST = 'gamefaqs.gamespot.com';
     const domenyBezGameFaqs = Array.isArray(domenyUzupelniajace)
       ? domenyUzupelniajace.filter(domena => domena !== GAMEFAQS_HOST)
       : [];
-    const budzetPonowieniaMs = pozostalyCzasMs() - validationReserveMs;
-    if (!uzupelnienie?.text
-      && (uzupelnienie?.status || 'empty') === 'empty'
-      && Array.isArray(domenyUzupelniajace)
-      && domenyBezGameFaqs.length > 0
-      && domenyBezGameFaqs.length < domenyUzupelniajace.length
-      && Number.isFinite(budzetPonowieniaMs) && budzetPonowieniaMs >= 8000
-      && aiState.reserveTavily('supplemental-retrieval-retry')) {
-      console.log(`[Tavily] 🔁 Wszystkie wyniki odpadły (GameFAQs) — ponawiam bez GameFAQs: ${JSON.stringify(domenyBezGameFaqs)}`);
-      uzupelnienie = await searchTavilyFn(queryDoTavily, {
-        ...opcjeUzupelnienia,
-        domains: domenyBezGameFaqs,
-        remainingMs: budzetPonowieniaMs,
-      });
+    const domenyDoUzupelnienia = domenyBezGameFaqs.length > 0 && domenyBezGameFaqs.length < domenyUzupelniajace.length
+      ? domenyBezGameFaqs
+      : domenyUzupelniajace;
+    if (domenyDoUzupelnienia !== domenyUzupelniajace) {
+      console.log(`[Tavily] 🔁 Uzupełniające wyszukanie bez GameFAQs: ${JSON.stringify(domenyDoUzupelnienia)}`);
     }
+    const uzupelnienie = await searchTavilyFn(queryDoTavily, {
+      ...opcjeUzupelnienia,
+      domains: domenyDoUzupelnienia,
+      remainingMs: searchBudgetMs,
+    });
 
     const statusUzupelnienia = uzupelnienie?.status || (uzupelnienie ? 'ok' : 'error');
     const tekstUzupelnienia = uzupelnienie?.text || '';
