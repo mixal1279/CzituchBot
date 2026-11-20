@@ -82,6 +82,7 @@ function buildRetrievalQueries(question, routing = {}, options = {}) {
   const isWhenQuestion = /(?:^|\s)(?:kiedy|when)(?:\s|$)|w jakim momencie|w którym momencie/iu.test(original);
   const isWhoQuestion = /(?:^|\s)(?:kim jest|kto jest|who is|who was)(?:\s|$)/iu.test(original);
   const isWhyQuestion = /(?:^|\s)(?:dlaczego|czemu|why)(?:\s|$)|z jakiego powodu/iu.test(original);
+  const isOutcomeQuestion = /co\s+sta[lł]o\s+si[eę]\s+z|jaki\s+(?:by[lł]|jest)\s+los|what\s+happened\s+to/iu.test(original);
 
   if (isWhereQuestion) {
     const whereKeywords = keywords.filter(k => !normalizedEntity.includes(k)).slice(0, 4);
@@ -115,6 +116,8 @@ function buildRetrievalQueries(question, routing = {}, options = {}) {
     if (routing?.is_lore && /(?:astarion|wheatley|glados|chell|arthur|geralt|ciri|johnny|shadowheart|karlach|gale|dragonborn)/iu.test([original, entity].join(' '))) {
       dodajUnikalneQuery(queries, [...entityTerms(entity, game), 'motivation backstory antagonist freedom why joins party'].join(' '));
     }
+  } else if (isOutcomeQuestion) {
+    dodajUnikalneQuery(queries, [...entityTerms(entity, game), 'fate death ending outcome story lore'].join(' '));
   } else if (routing?.is_lore) {
     dodajUnikalneQuery(queries, [...(entity ? entityTerms(entity, game) : [original, game].filter(Boolean)), 'character history story lore'].join(' '));
   } else if (routing?.is_gameplay) {
@@ -122,7 +125,8 @@ function buildRetrievalQueries(question, routing = {}, options = {}) {
     const gameplayHints = minecraftElytraContext
       ? 'gameplay strategy mechanics guide walkthrough Minecraft elytra obtain Survival mode End ship End city treasure room shulker how to get'
       : 'gameplay strategy mechanics guide walkthrough';
-    dodajUnikalneQuery(queries, [...(entity ? entityTerms(entity, game) : [original, game].filter(Boolean)), gameplayHints].join(' '));
+    const gameplayKeywords = keywords.filter(k => !normalizedEntity.includes(k)).slice(0, 4);
+    dodajUnikalneQuery(queries, [...(entity ? entityTerms(entity, game) : [original, game].filter(Boolean)), ...gameplayKeywords, gameplayHints].join(' '));
   } else if (routing?.freshness === 'live') {
     dodajUnikalneQuery(queries, [entity, ...keywords.slice(0, 8), 'latest today'].filter(Boolean).join(' '));
   } else if (routing?.freshness === 'recent') {

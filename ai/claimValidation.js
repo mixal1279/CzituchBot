@@ -1774,9 +1774,12 @@ function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
   // bo zwykle slowo „relic” poza kontekstem gry nie jest nazwa wlasna.
   const cyberpunkRelicContext = /\b(?:cyberpunk(?:\s+2077)?|johnny\s+silverhand|dexter\s+deshawn|night\s+city|engram|robert\s+john\s+linder)\b/iu.test(pl + ' ' + en);
   const missing = claimNames.filter(name => {
-    if (normalizujClaim(name) === 'relik'
+    const normName = normalizujClaim(name);
+    if (normName === 'relik'
       && cyberpunkRelicContext
       && /\brelic\b/u.test(enNormalized)) return false;
+    if (/^(?:wysok\w*|elf\w*)$/u.test(normName)
+      && /\bhigh\s+elf\b/u.test(enNormalized)) return false;
     return !czyNazwaWlasnaWystepuje(name, enNormalized);
   });
   if (missing.length) {
