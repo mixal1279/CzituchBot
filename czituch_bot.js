@@ -6760,10 +6760,7 @@ async function obslugaWiadomosci(nick, message, platforma, wyslijFn, kanal = nul
       return await wyslijFn('📋 Komendy Angie28: !ai [pytanie] | !cm | !iq | !lurk | !spierdalam | !discord | !socials | !setup | !ekonomia');
     }
     if (EDZZI_KANALY.includes(kanalNorm)) {
-      if (platforma === 'kick') {
-        return await wyslijFn('📋 Komendy: !ai [pytanie] | !ciastko | !iq | !8ball | !sus | !simp | !donate | !klip | !ekonomia | !poradnik [gra] [fraza]');
-      }
-      return await wyslijFn('📋 Komendy: !ai [pytanie] | !cm | !ciastko | !iq | !8ball | !sus | !simp | !mamdepresje | !californiarz | !donate | !klip');
+      return await wyslijFn('📋 Komendy: !ai [pytanie] | !cm | !ciastko | !iq | !8ball | !sus | !simp | !kogo | !mamdepresje | !californiarz | !donate | !klip');
     }
     if (ARBUZIK_KANALY.includes(kanalNorm)) {
       const kickExtra = platforma === 'kick' ? ' | !ekonomia | !poradnik [gra] [fraza]' : '';
