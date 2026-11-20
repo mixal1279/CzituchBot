@@ -543,7 +543,8 @@ function wyodrebnijNazwyWlasne(value, options = {}) {
       const knownOracleCandidate = options.nameOracle instanceof Set
         && [...new Set([normalizujTokenWyroczni(token), ...wariantyNazwyDoDopasowania(token).map(normalizujTokenWyroczni)])]
           .some(variant => options.nameOracle.has(variant));
-      if (GENERIC_CAPITALIZED_WORDS.has(normalizedCandidate)
+      const isGenericPolishTranslatable = /^(?:kosciol\w*|kosciel\w*|katedr\w*|swiatyn\w*|kaplic\w*|ruin\w*|twierdz\w*|fortec\w*|zamk\w*|zamek|wiez\w*|jaskini\w*|grobow\w*|katakumb\w*|krolestw\w*|cesarstw\w*|zakon\w*|gildi\w*|komuni\w*|tlac\w*|plonac\w*|wielk\w*|mroczn\w*|czarn\w*|bial\w*|czerwon\w*|zlot\w*|srebrn\w*|starozytn\w*|przeklet\w*|opuszczon\w*|polnocn\w*|poludniow\w*|wschodni\w*|zachodni\w*|wysok\w*|lesn\w*|elf\w*|krasnolud\w*|gnom\w*|ork\w*|wampir\w*|pomiot\w*|zlodziej\w*|lotr\w*|wojownik\w*|mag\w*|czarodziej\w*|paladyn\w*|kaplan\w*|lowc\w*|barbarzync\w*|nekromant\w*|klas\w*|ras\w*|smok\w*|smocz\w*|miecz\w*|broni\w*|zbro\w*|tarcz\w*|woz\w*|skarb\w*)$/u.test(normalizedCandidate);
+      if ((GENERIC_CAPITALIZED_WORDS.has(normalizedCandidate) || isGenericPolishTranslatable)
         && !knownAliasCandidate && !knownOracleCandidate) continue;
       if (atSentenceStart && options.nameOracle instanceof Set) {
         const normalizedToken = normalizujTokenWyroczni(token);
@@ -1778,8 +1779,6 @@ function spojnoscTlumaczeniaClaimu(claimPl, claimEn, options = {}) {
     if (normName === 'relik'
       && cyberpunkRelicContext
       && /\brelic\b/u.test(enNormalized)) return false;
-    if (/^(?:wysok\w*|elf\w*)$/u.test(normName)
-      && /\bhigh\s+elf\b/u.test(enNormalized)) return false;
     return !czyNazwaWlasnaWystepuje(name, enNormalized);
   });
   if (missing.length) {
