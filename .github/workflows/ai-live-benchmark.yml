@@ -21,7 +21,7 @@ concurrency:
 jobs:
   live-benchmark:
     if: github.event_name == 'workflow_dispatch'
-    name: Live benchmark (cohere/command-a-plus generator + Mistral Medium 3.5 validator)
+    name: Live benchmark (Mistral Large 3 generator + Mistral Medium 3.5 validator)
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -54,7 +54,7 @@ jobs:
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       EXA_API_KEY: ${{ secrets.EXA_API_KEY }}
       XKIRO_API_KEY: ${{ secrets.XKIRO_API_KEY }}
-      XKIRO_MODEL: cohere/command-a-plus
+      XKIRO_MODEL: mistralai/mistral-large-2512
       XKIRO_VALIDATOR_MODEL: mistralai/mistral-medium-3.5
       OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
 
