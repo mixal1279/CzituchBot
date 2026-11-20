@@ -84,7 +84,8 @@ function buildRetrievalQueries(question, routing = {}, options = {}) {
   const isWhyQuestion = /(?:^|\s)(?:dlaczego|czemu|why)(?:\s|$)|z jakiego powodu/iu.test(original);
 
   if (isWhereQuestion) {
-    dodajUnikalneQuery(queries, [...entityTerms(entity, game), 'exact location landmark nearby map'].join(' '));
+    const whereKeywords = keywords.filter(k => !normalizedEntity.includes(k)).slice(0, 4);
+    dodajUnikalneQuery(queries, [...entityTerms(entity, game), ...whereKeywords, 'exact location landmark nearby map'].join(' '));
   } else if (isWhenQuestion) {
     const gtaMeetingContext = /\b(?:gta\s*(?:v|5)|grand theft auto v|michael|trevor)\b/iu.test([original, entity, game].join(' '));
     const timelineHints = gtaMeetingContext
@@ -109,7 +110,7 @@ function buildRetrievalQueries(question, routing = {}, options = {}) {
       ? 'cause reason motivation event core transfer lore'
       : astarionContext
         ? 'cause reason motivation story conflict Astarion Cazador Szarr vampire spawn escaped master freedom why joins party backstory seeking favour with player character protection from Cazador'
-        : 'cause reason motivation story conflict lore backstory relationship antagonist escape joins party';
+        : 'cause reason motivation story conflict lore';
     dodajUnikalneQuery(queries, [...entityTerms(entity, game), causalHints].join(' '));
     if (routing?.is_lore && /(?:astarion|wheatley|glados|chell|arthur|geralt|ciri|johnny|shadowheart|karlach|gale|dragonborn)/iu.test([original, entity].join(' '))) {
       dodajUnikalneQuery(queries, [...entityTerms(entity, game), 'motivation backstory antagonist freedom why joins party'].join(' '));

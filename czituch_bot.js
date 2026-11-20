@@ -3298,7 +3298,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
     // Przy pustym, NONE albo podejrzanie krótkim rewrite używamy pełnego oryginału.
     const rewritePodejrzany = !rewrite
       || rewrite.toUpperCase() === 'NONE'
-      || rewrite.length < 30
+      || rewrite.length < 12
       || rewrite.length < Math.min(String(pytanie).length * 0.28, 80);
     // Przy pytaniu wieloczęściowym nie ryzykujemy utraty drugiego/trzeciego
     // członu przez model rewrite'u — Tavily dostaje pełne pytanie użytkownika.
