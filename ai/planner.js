@@ -207,7 +207,7 @@ function responseContract(profile) {
 // Rewrite zapytania modelem (Groq 20b) kosztuje wywołanie i tokeny z dziennego limitu, a pomaga
 // głównie wtedy, gdy pytanie zależy od poprzedniej wymiany („a on?”, „co z nią?”). Bez kontekstu
 // i z rozpoznaną grą/encją pytanie jest już samodzielne.
-function czyPotrzebujeRewrite(pytanie, { hasContext = false, hasEntity = false } = {}) {
+function czyPotrzebujeRewrite(pytanie, { hasContext = false, hasEntity = false, isGameQuery = false } = {}) {
   const q = String(pytanie || '').trim();
   if (q.length > 4000) return false;
   if (!q) return false;
@@ -215,6 +215,9 @@ function czyPotrzebujeRewrite(pytanie, { hasContext = false, hasEntity = false }
   if (hasContext) {
     const anaphora = /(?<![\p{L}])(?:on|ona|ono|oni|one|jego|jej|ich|tam|tego|tej|tych|tym|ten|ta|wtedy|wcześniej|a\s+co\s+z)(?![\p{L}])/iu.test(q);
     return anaphora || words <= 5;
+  }
+  if (isGameQuery && /[ąćęłńóśźż]|\b(?:jak|dlaczego|czemu|gdzie|kiedy|kim|co\s+sta[lł]o)\b/iu.test(q)) {
+    return true;
   }
   return !hasEntity && (q.length > 160 || words >= 25);
 }
