@@ -6756,7 +6756,24 @@ async function obslugaWiadomosci(nick, message, platforma, wyslijFn, kanal = nul
 
   if (msgLower === '!commands' || msgLower === '!komendy') {
     ostatnieUzycie[cooldownKey] = teraz;
-    return await wyslijFn(`📋 Komendy: !iq | !8ball | !sus | !simp | !mamdepresje | !californiarz | !nowyfilm | !ai [pytanie] | !lurk | !klip [opis] | !donate | !poradnik [gra] [fraza] | !horoskop | !bułka`);
+    if (kanalNorm === 'angie28') {
+      return await wyslijFn('📋 Komendy Angie28: !ai [pytanie] | !cm | !iq | !lurk | !spierdalam | !discord | !socials | !setup | !ekonomia');
+    }
+    if (EDZZI_KANALY.includes(kanalNorm)) {
+      if (platforma === 'kick') {
+        return await wyslijFn('📋 Komendy: !ai [pytanie] | !ciastko | !iq | !8ball | !sus | !simp | !donate | !klip | !ekonomia | !poradnik [gra] [fraza]');
+      }
+      return await wyslijFn('📋 Komendy: !ai [pytanie] | !cm | !ciastko | !iq | !8ball | !sus | !simp | !mamdepresje | !californiarz | !donate | !klip');
+    }
+    if (ARBUZIK_KANALY.includes(kanalNorm)) {
+      const kickExtra = platforma === 'kick' ? ' | !ekonomia | !poradnik [gra] [fraza]' : '';
+      return await wyslijFn(`📋 Komendy: !arbuz | !iq | !klip [opis]${kickExtra}`);
+    }
+    if (BILLYBULKA_KANALY.includes(kanalNorm)) {
+      return await wyslijFn('📋 Komendy: !ai [pytanie] | !lurk | !iq | !klip [opis]');
+    }
+    const kickExtra = platforma === 'kick' ? ' | !ekonomia | !poradnik [gra] [fraza]' : '';
+    return await wyslijFn(`📋 Komendy: !ai [pytanie] | !iq | !klip [opis]${kickExtra}`);
   }
 
 
