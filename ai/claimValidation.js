@@ -1278,8 +1278,9 @@ function sprawdzPokrycieClaimamiOdpowiedzi(answer, claims) {
         ? tokenCoverage >= 0.15
           && (sharedEntities.length > 0 || sharedConcepts.length > 0)
           && sentenceNumbers.every(number => row.numbers.includes(number))
-        : tokenCoverage >= 0.30
-          && (sharedConcepts.length > 0 || sharedEntities.length > 0 || tokenCoverage >= 0.65);
+        : (tokenCoverage >= 0.30
+          && (sharedConcepts.length > 0 || sharedEntities.length > 0 || tokenCoverage >= 0.65))
+          || (sharedEntities.length > 0 && matchedTokens.length >= 2 && (matchedTokens.length / Math.max(row.tokens.length, 1)) >= 0.60);
       return { row, matchedTokens, tokenCoverage, sharedConcepts, sharedEntities, coherent };
     }).filter(item => item.coherent);
 

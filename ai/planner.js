@@ -113,7 +113,7 @@ function buildRetrievalQueries(question, routing = {}, options = {}) {
       : astarionContext
         ? 'cause reason motivation story conflict Astarion Cazador Szarr vampire spawn escaped master freedom why joins party backstory seeking favour with player character protection from Cazador'
         : cyberpunkRelicContext
-          ? 'V Relic biochip overwriting brain Johnny Silverhand wiki'
+          ? 'Relic biochip overwriting V brain engram Cyberpunk 2077 plot'
           : 'cause reason motivation story conflict lore';
     dodajUnikalneQuery(queries, [...entityTerms(entity, game), causalHints].join(' '));
     if (routing?.is_lore && /(?:astarion|wheatley|glados|chell|arthur|geralt|ciri|johnny|shadowheart|karlach|gale|dragonborn)/iu.test([original, entity].join(' '))) {
