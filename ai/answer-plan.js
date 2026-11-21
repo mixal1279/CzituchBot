@@ -171,7 +171,9 @@ function extractAnswerSignals(answer) {
     quantity: /\b\d+(?:[.,]\d+)?\s*(?:godzin|godz|h|min|sekund|dni|lat|%|gb|mb|tb|zl|pln|usd|eur)?\b/.test(text),
     quantityVariable: /\b(?:nie ma (?:jednego|stalego|okreslonego)|nie da sie (?:tego )?okreslic|zalezy od|moze trwac roznie|czas jest rozny|to zalezy|depends on|varies|no fixed|not fixed)\b/.test(text),
     comparison: /\b(roznic\w*|rozni\w*|wiecej|mniej|leps\w*|gors\w*|natomiast|podobn\w*|vs|versus|z kolei|w przeciwienstwie|podczas gdy|tymczasem|zas|odmienn\w*|bardziej)\b/.test(text)
-      || /\b\w{3,}iejsz\w*\b|\b\w{3,}sz[aeyi]\b/.test(text),
+      || /\b\w{3,}iejsz\w*\b|\b\w{3,}sz[aeyi]\b/.test(text)
+      || /,?\s+a\s+\w+\s+(?:ma|jest|posiada|wask\w*|smukl\w*|szerok\w*)/.test(text)
+      || /\b(?:szerok\w*\b.*\b(?:wask|smukl)\w*|(?:wask|smukl)\w*\b.*\bszerok\w*)\b/.test(text),
     steps: Boolean(procedural) && hasMeaningfulTail(text, procedural),
     outcome: /\b(wynik\w*|skutek|skutk\w*|konsekwenc\w*|ostatecznie|pozniej|potem|nastepnie|umar\w*|zgin\w*|gin\w*|zabij\w*|smier\w*|zostal\w*|zostaj\w*)\b/.test(text)
       && text.split(/\s+/).length >= 4,

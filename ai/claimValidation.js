@@ -121,6 +121,7 @@ const KNOWN_ENTITY_ALIAS_PATTERNS = [
   { canonical: 'act', pattern: /\b(?:act\s+(?:\d+|[ivx]+)|akt(?:u|em|cie|ach|y|ow)?\s+(?:\d+|[ivx]+)|akcie\s+(?:\d+|[ivx]+))\b/iu },
   { canonical: 'relaxation center', pattern: /\b(?:relaxation\s+center|centrum\s+rozlu\p{L}*)\b/iu },
   { canonical: 'relaxation vault', pattern: /\b(?:relaxation\s+vault|komor\p{L}*\s+relaksacyjn\p{L}*)\b/iu },
+  { canonical: 'weeping peninsula', pattern: /\b(?:weeping\s+peninsula|p[oó][lł]wys\p{L}*\s+p[lł]aczu)\b/iu },
   { canonical: 'greatsword', pattern: /\b(?:greatsword|wielk(?:i|iego|iemu|im|imi)\s+miec(?:z|za|zem|zowi|zu))\b/iu },
   // Accept the benchmark source's one-letter misspelling `drgon bane` only for the known item.
   { canonical: 'dragonbane', pattern: /\bdr(?:a)?gon\s*bane\b/iu },
