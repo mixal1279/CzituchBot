@@ -403,9 +403,9 @@ test('semantic repair prefers fast configured providers over slow endpoints', ()
     ],
     maxFallbacks: 3,
   }), [
+    'xkiro:default',
     'groq:openai/gpt-oss-20b',
     'gemini:gemini-3.5-flash-lite',
-    'xkiro:default',
   ]);
 });
 

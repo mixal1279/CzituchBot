@@ -88,12 +88,12 @@ function classifyFailure(error = '') {
 }
 
 const GENERATION_FALLBACK_CHAIN = [
+  'xkiro:default',
   'groq:openai/gpt-oss-120b',
   'groq:openai/gpt-oss-20b',
   'gemini:gemini-3.8-flash',
   'gemini:gemini-3.5-flash-lite',
   'openrouter:default',
-  'xkiro:default',
 ];
 // Semantic repair is latency- and budget-sensitive. The normal generation
 // chain above stays unchanged; only the repair path uses this preference.
@@ -115,12 +115,12 @@ const GENERATION_FALLBACK_CHAIN = [
 // kandydat dostanie szansę w pierwszej próbie — po awarii providera breaker
 // przeskakuje go niezależnie od pozycji na liście.
 const REPAIR_FALLBACK_PREFERENCE = [
+  'xkiro:default',
   'groq:openai/gpt-oss-20b',
   'groq:openai/gpt-oss-120b',
   'gemini:gemini-3.5-flash-lite',
-  'xkiro:default',
-  'openrouter:default',
   'gemini:gemini-3.8-flash',
+  'openrouter:default',
 ];
 
 function configuredMaxFallbackSteps(value = process.env.AI_MAX_FALLBACK_STEPS) {

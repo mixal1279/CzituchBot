@@ -6,11 +6,11 @@ const assert = require('node:assert/strict');
 const { resolvePrimaryGenerator } = require('../ai/modelConfig');
 const { configuredRequestTimeoutMs } = require('../ai/limits');
 
-test('primary generator defaults to Groq and keeps its model-specific endpoint', () => {
+test('primary generator defaults to xKiro and keeps its default step', () => {
   const result = resolvePrimaryGenerator({});
-  assert.equal(result.provider, 'groq');
-  assert.match(result.model, /^openai\//);
-  assert.equal(result.step, `groq:${result.model}`);
+  assert.equal(result.provider, 'xkiro');
+  assert.ok(result.model.length > 0);
+  assert.equal(result.step, 'xkiro:default');
 });
 
 test('primary generator can explicitly route through xKiro using the configured model', () => {

@@ -202,7 +202,7 @@ assert.match(require('fs').readFileSync(require('path').join(__dirname, '..', 'c
   assert.equal(classifyFailure('timeout'), 'timeout_abort');
   assert.equal(classifyFailure('Gemini generation cooldown: gemini-3.5-flash-lite'), 'provider_cooldown');
   assert.equal(shouldRetryFailure('transient'), true);
-  assert.equal(nextFallbacks({failure:'grounded_reject',attempted:['groq:openai/gpt-oss-120b']})[0], 'groq:openai/gpt-oss-20b');
+  assert.equal(nextFallbacks({failure:'grounded_reject',attempted:['groq:openai/gpt-oss-120b']})[0], 'xkiro:default');
 }
 {
   const m = createAIMetrics();
@@ -313,10 +313,7 @@ assert.match(require('fs').readFileSync(require('path').join(__dirname, '..', 'c
   assert.deepEqual(nextFallbacks({
     attempted: ['groq:openai/gpt-oss-120b'],
     maxFallbacks: 2,
-  }), [
-    'groq:openai/gpt-oss-20b',
-    'gemini:gemini-3.8-flash',
-  ]);
+  }), ['xkiro:default', 'groq:openai/gpt-oss-20b']);
 }
 
 {
@@ -593,13 +590,13 @@ console.log('AI regression tests: OK');
 {
   const { GENERATION_FALLBACK_CHAIN } = require('../ai/fallback');
   assert.deepEqual(GENERATION_FALLBACK_CHAIN.slice(0, 5), [
+    'xkiro:default',
     'groq:openai/gpt-oss-120b',
     'groq:openai/gpt-oss-20b',
     'gemini:gemini-3.8-flash',
     'gemini:gemini-3.5-flash-lite',
-    'openrouter:default',
   ]);
-  assert.equal(GENERATION_FALLBACK_CHAIN.at(-1), 'xkiro:default');
+  assert.equal(GENERATION_FALLBACK_CHAIN.at(-1), 'openrouter:default');
   assert.equal(shouldRetryFailure('unknown'), true);
   assert.equal(shouldRetryFailure('provider_cooldown'), true);
   assert.equal(shouldRetryFailure('validator_inconclusive'), true);
@@ -614,12 +611,12 @@ console.log('AI regression tests: OK');
     ],
     maxFallbacks: GENERATION_FALLBACK_CHAIN.length,
   }), [
-    'gemini:gemini-3.5-flash-lite',
     'xkiro:default',
-    'openrouter:default',
+    'gemini:gemini-3.5-flash-lite',
     'gemini:gemini-3.8-flash',
+    'openrouter:default',
   ]);
-  assert.deepEqual(nextFallbacks({attempted:['groq:openai/gpt-oss-120b','groq:openai/gpt-oss-20b','gemini:gemini-3.8-flash','gemini:gemini-3.5-flash-lite'], maxFallbacks:1}), ['openrouter:default']);
+  assert.deepEqual(nextFallbacks({attempted:['groq:openai/gpt-oss-120b','groq:openai/gpt-oss-20b','gemini:gemini-3.8-flash','gemini:gemini-3.5-flash-lite'], maxFallbacks:1}), ['xkiro:default']);
   assert.deepEqual(nextFallbacks({
     failure: 'grounded_reject',
     failedProviders: [
@@ -629,7 +626,7 @@ console.log('AI regression tests: OK');
       'gemini:gemini-3.5-flash-lite',
     ],
     maxFallbacks: 1,
-  }), ['openrouter:default']);
+  }), ['xkiro:default']);
 }
 
 {

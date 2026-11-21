@@ -121,6 +121,9 @@ test('wspólny prompt zachowuje claim_en, metadane, pytanie, odpowiedź i źród
 });
 
 test('Gemini GenerateContent uses the documented systemInstruction and REST responseSchema fields', async () => {
+  const prevGroqFlag = process.env.AI_VALIDATOR_GROQ;
+  process.env.AI_VALIDATOR_GROQ = '0';
+  try {
   hooks.KONFIGURACJA.geminiKey = 'test-gemini-key';
   hooks.KONFIGURACJA.openrouterKey = '';
   hooks.KONFIGURACJA.xkiroKey = '';
@@ -142,6 +145,10 @@ test('Gemini GenerateContent uses the documented systemInstruction and REST resp
   assert.equal(call.body.generationConfig.responseSchema.type, 'OBJECT');
   assert.ok(call.body.generationConfig.responseSchema.properties.claims.items.properties.claim_en);
   assert.equal(Object.hasOwn(call.body.generationConfig, 'responseFormat'), false);
+  } finally {
+    if (prevGroqFlag === undefined) delete process.env.AI_VALIDATOR_GROQ;
+    else process.env.AI_VALIDATOR_GROQ = prevGroqFlag;
+  }
 });
 
 test('Gemini wall-clock timeout kończy transport i odczyt body nawet gdy fetch ignoruje AbortSignal', async () => {
@@ -476,22 +483,22 @@ test('Cohere przez xKiro jest pierwszym walidatorem, a Gemini i Groq pozostają 
     if (parsedUrl.hostname === 'generativelanguage.googleapis.com') {
       order.push('gemini');
       return jsonResponse({
-        candidates: [{ content: { parts: [{ text: 'not JSON' }] } }],
+        candidates: [{ content: { parts: [{ text: JSON.stringify(VALID_VERDICT) }] } }],
       });
     }
     throw new Error('Niezamockowane żądanie sieciowe: ' + url);
   });
-  const groqCalls = mockGroq((payload) => {
+  const groqCalls = mockGroq(() => {
     order.push('groq');
-    return openAIResponse(VALID_VERDICT);
+    return { choices: [{ finish_reason: 'stop', message: { content: 'not JSON' } }] };
   });
   const requestState = createAIRequestContext({ maxCzasMs: 40000, maxValidators: 4, maxModelCalls: 12 });
   const result = await hooks.walidujOdpowiedzAIBezCache('generic', QUESTION, ANSWER, EVIDENCE, [], 'test-order', requestState, { entity: 'Portal 2' });
 
-  assert.deepEqual(order, ['xkiro', 'gemini', 'groq']);
+  assert.deepEqual(order, ['xkiro', 'groq', 'gemini']);
   assert.equal(groqCalls.length, 1);
   assert.equal(result.status, 'accepted');
-  assert.deepEqual(requestState.validatorResults.map(row => row.provider), ['xkiro', 'gemini', 'groq']);
+  assert.deepEqual(requestState.validatorResults.map(row => row.provider), ['xkiro', 'groq', 'gemini']);
   assert.ok(requestState.timingTrace.some(row => row.stage === 'validator_provider_start' && row.provider === 'groq'));
   assert.ok(requestState.timingTrace.some(row => row.stage === 'validator_provider_end' && row.provider === 'groq'));
 });
@@ -521,16 +528,16 @@ test('niepoprawny cytat kończy walidację bez drugiej opinii, bo wymaga naprawy
   });
   const groqCalls = mockGroq(() => {
     order.push('groq');
-    return openAIResponse(VALID_VERDICT);
+    return openAIResponse(badQuoteVerdict);
   });
   const requestState = createAIRequestContext({ maxCzasMs: 40000, maxValidators: 4, maxModelCalls: 12 });
   const result = await hooks.walidujOdpowiedzAIBezCache(
     'generic', QUESTION, ANSWER, EVIDENCE, [], 'test-evidence-second-opinion', requestState, { entity: 'Portal 2' },
   );
-  assert.deepEqual(order, ['gemini']);
-  assert.equal(groqCalls.length, 0);
+  assert.deepEqual(order, ['groq']);
+  assert.equal(groqCalls.length, 1);
   assert.equal(result.status, 'rejected');
-  assert.deepEqual(requestState.validatorResults.map(row => row.provider), ['xkiro', 'gemini']);
+  assert.deepEqual(requestState.validatorResults.map(row => row.provider), ['xkiro', 'groq']);
   assert.ok(!requestState.timingTrace.some(row => row.stage === 'validator_second_opinion'));
 });
 
@@ -566,8 +573,8 @@ test('po deterministycznym odrzuceniu cytatu pipeline nie zużywa budżetu na ko
     'generic', QUESTION, ANSWER, EVIDENCE, [], 'test-stop-after-groq-rejection', requestState, { entity: 'Portal 2' },
   );
   assert.equal(result.status, 'rejected');
-  assert.deepEqual(order, ['xkiro', 'gemini']);
-  assert.deepEqual(requestState.validatorResults.map(row => row.provider), ['xkiro', 'gemini']);
+  assert.deepEqual(order, ['xkiro', 'groq']);
+  assert.deepEqual(requestState.validatorResults.map(row => row.provider), ['xkiro', 'groq']);
 });
 
 test('circuit breaker dla Groq, xKiro, OpenRouter i Gemini otwiera się po dwóch timeoutach i resetuje po sukcesie', () => {

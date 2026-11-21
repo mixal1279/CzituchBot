@@ -1006,12 +1006,12 @@ test('Tavily quota cooldown skips Tavily and continues with secondary providers'
   assert.equal(exaCalls, 2, 'Exa remains available after Gemini fails');
 });
 
-test('generation fallback tries OpenRouter before Xkiro', () => {
+test('generation fallback tries Xkiro before OpenRouter', () => {
   const openrouter = GENERATION_FALLBACK_CHAIN.indexOf('openrouter:default');
   const xkiro = GENERATION_FALLBACK_CHAIN.indexOf('xkiro:default');
   assert.ok(openrouter >= 0);
   assert.ok(xkiro >= 0);
-  assert.ok(openrouter < xkiro);
+  assert.ok(xkiro < openrouter);
 });
 
 

@@ -10,7 +10,7 @@ const AI_MODELS = Object.freeze({
 });
 
 function resolvePrimaryGenerator(env = process.env) {
-  const configuredProvider = String(env.AI_GENERATOR_PROVIDER || 'groq').trim().toLowerCase();
+  const configuredProvider = String(env.AI_GENERATOR_PROVIDER || 'xkiro').trim().toLowerCase();
   if (!['groq', 'xkiro'].includes(configuredProvider)) {
     throw new TypeError('AI_GENERATOR_PROVIDER must be either "groq" or "xkiro"');
   }

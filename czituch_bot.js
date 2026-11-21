@@ -2465,7 +2465,7 @@ const AI_GEMINI_VALIDATOR_MODEL = process.env.AI_GEMINI_VALIDATOR_MODEL || 'gemi
 
 async function walidujOdpowiedzAI(persona, pytanie, odpowiedz, dane, historiaRozmowy = [], requestId = '-', requestState = null, requestMeta = null) {
   odpowiedz = usunEtykietyEvidenceCandidate(odpowiedz);
-  const cacheKey = dane ? verdictCache.key({ question: pytanie, answer: odpowiedz, evidence: dane, model: [KONFIGURACJA.xkiroValidatorModel, AI_GEMINI_VALIDATOR_MODEL, AI_MODELS.validator, KONFIGURACJA.openrouterValidatorModel].join('|') }) : null;
+  const cacheKey = dane ? verdictCache.key({ question: pytanie, answer: odpowiedz, evidence: dane, model: [KONFIGURACJA.xkiroValidatorModel, AI_MODELS.validator, AI_GEMINI_VALIDATOR_MODEL, KONFIGURACJA.openrouterValidatorModel].join('|') }) : null;
   const cached = cacheKey ? verdictCache.get(cacheKey) : null;
   if (cached) {
     console.log(`[AI][${requestId}] validator: werdykt z cache (${cached.status}) — bez wywołania modelu`);
@@ -2615,6 +2615,82 @@ async function walidujOdpowiedzAIBezCache(persona, pytanie, odpowiedz, dane, his
     }
   }
 
+  // Groq jest drugim transportem po Gemini. Brak klucza, wyłączenie flagą
+  // lub cooldown limitu pomija go bez zużywania slotu walidatora.
+  const groqValidatorProviderKey = `groq:${AI_MODELS.validator}`;
+  if (process.env.AI_VALIDATOR_GROQ !== '0' && (groqValidatorClientOverride || groq)) {
+    if (validatorBreakerIsOpen('groq')) {
+      const reason = 'Groq validator pominięty: circuit breaker aktywny';
+      recordSkippedValidator('groq', AI_MODELS.validator, reason);
+      console.warn(`[AI][${requestId}] ${reason}`);
+    } else if (isProviderQuotaBlocked(groqValidatorProviderKey)) {
+      const reason = `Groq validator pominięty: aktywny cooldown ${groqValidatorProviderKey}`;
+      recordSkippedValidator('groq', AI_MODELS.validator, reason);
+      console.warn(`[AI][${requestId}] ${reason}`);
+    } else {
+      const groqRemainingMs = requestState
+        ? (typeof requestState.remainingMs === 'function' ? requestState.remainingMs() : requestState.maxCzasMs - (Date.now() - requestState.startedAt))
+        : 9000;
+      const groqTimeoutMs = requestState
+        ? computeValidatorTimeout(groqRemainingMs, {
+            maxTimeoutMs: 3000,
+            reserveMs: computeValidatorReserveMs(groqRemainingMs, requestState.validatory + 1, requestState.maxValidatorow, requestState.validationPass === 1 ? INITIAL_VALIDATOR_REPAIR_RESERVE_MS : 0),
+            minTimeoutMs: 2000,
+          })
+        : 3000;
+      if (groqTimeoutMs === null) {
+        const reason = 'Groq validator pominięty: zbyt mały pozostały budżet czasu';
+        recordSkippedValidator('groq', AI_MODELS.validator, reason);
+        console.warn(`[AI][${requestId}] ${reason}; remaining=${groqRemainingMs}ms`);
+      } else if (!zarezerwujSlotWalidatora(requestState, 'validator:groq')) {
+        const reason = 'budżet validatora/modeli wyczerpany przed Groq';
+        recordSkippedValidator('groq', AI_MODELS.validator, reason);
+        return lastRejected || { ...(last || {}), status: 'unavailable', ok: false, technicalError: true, provider: 'groq', model: AI_MODELS.validator, unsupported_claims: [], reason };
+      } else {
+        const validatorStartedAt = Date.now();
+        const remainingBefore = requestState?.remainingMs?.() ?? null;
+        requestState?.recordTiming?.('validator_provider_start', { provider: 'groq', model: AI_MODELS.validator, remainingBefore });
+        const groqResult = await walidujOdpowiedzGroq(persona, pytanie, odpowiedz, dane, requestId, requestState, requestMeta, requestState ? groqTimeoutMs : null);
+        recordValidatorTransportResult('groq', groqResult, requestId);
+        recordValidatorMetric('groq', groqResult.model || AI_MODELS.validator, remainingBefore, groqTimeoutMs, validatorStartedAt, groqResult);
+        const validatorElapsedMs = Date.now() - validatorStartedAt;
+        const remainingAfter = requestState?.remainingMs?.() ?? null;
+        requestState?.recordTiming?.('validator_provider_end', { provider: 'groq', model: groqResult.model || AI_MODELS.validator, status: groqResult.status, validatorElapsedMs, remainingBefore, remainingAfter, reason: String(groqResult.reason || '').slice(0, 180) });
+        if (requestState) requestState.validatorResults.push({
+          model: groqResult.model || AI_MODELS.validator,
+          provider: 'groq',
+          status: groqResult.status,
+          elapsedMs: validatorElapsedMs,
+          remainingMsBefore: remainingBefore,
+          remainingMsAfter: remainingAfter,
+          complete: groqResult.complete === true,
+          confidence: Number.isFinite(groqResult.confidence) ? groqResult.confidence : null,
+          claimCoverage: Array.isArray(groqResult.claims) && groqResult.claims.length
+            ? groqResult.claims.filter(c => c.supported === true).length / groqResult.claims.length
+            : null,
+          reason: typeof groqResult.reason === 'string' ? groqResult.reason.slice(0, 300) : null,
+          technicalError: groqResult.technicalError === true, timeoutAbort: groqResult.timeoutAbort === true,
+          quota: groqResult.quota === true, skipped: groqResult.skipped === true,
+          statusCode: Number.isFinite(Number(groqResult.statusCode)) && groqResult.statusCode != null ? Number(groqResult.statusCode) : null,
+          validationDiagnostics: groqResult.diagnostics || null,
+        });
+        if (groqResult.status === 'accepted' || groqResult.status === 'soft_accepted') return groqResult;
+        if (groqResult.status === 'rejected') {
+          if (!czyWartoDrugaOpinieWalidatora(groqResult)) return groqResult;
+          lastRejected = groqResult;
+          requestState?.recordTiming?.('validator_second_opinion', { rejectedProvider: groqResult.provider || 'groq', reason: String(groqResult.reason || '').slice(0, 180) });
+          // Groq returned a real rejection that already passed local evidence
+          // checks. Avoid spending the repair budget on slow third opinions.
+          return groqResult;
+        }
+        last = groqResult;
+      }
+    }
+  } else {
+    recordSkippedValidator('groq', AI_MODELS.validator, process.env.AI_VALIDATOR_GROQ === '0' ? 'Groq validator pominięty: wyłączony konfiguracją' : 'Groq validator pominięty: brak klienta lub klucza API');
+  }
+
+
   // Jeden stabilny model wystarcza do prostego JSON fact-checkera i nie
   // zużywa potrójnie darmowego limitu Gemini przy każdym pytaniu.
   const geminiValidatorEnabled = process.env.AI_VALIDATOR_GEMINI !== '0';
@@ -2698,81 +2774,6 @@ async function walidujOdpowiedzAIBezCache(persona, pytanie, odpowiedz, dane, his
     return lastRejected || { ...(last || {}), status: 'unavailable', ok: false, technicalError: true, unsupported_claims: [], reason: 'budżet czasu validatora wyczerpany' };
   }
 
-
-  // Groq jest drugim transportem po Gemini. Brak klucza, wyłączenie flagą
-  // lub cooldown limitu pomija go bez zużywania slotu walidatora.
-  const groqValidatorProviderKey = `groq:${AI_MODELS.validator}`;
-  if (process.env.AI_VALIDATOR_GROQ !== '0' && (groqValidatorClientOverride || groq)) {
-    if (validatorBreakerIsOpen('groq')) {
-      const reason = 'Groq validator pominięty: circuit breaker aktywny';
-      recordSkippedValidator('groq', AI_MODELS.validator, reason);
-      console.warn(`[AI][${requestId}] ${reason}`);
-    } else if (isProviderQuotaBlocked(groqValidatorProviderKey)) {
-      const reason = `Groq validator pominięty: aktywny cooldown ${groqValidatorProviderKey}`;
-      recordSkippedValidator('groq', AI_MODELS.validator, reason);
-      console.warn(`[AI][${requestId}] ${reason}`);
-    } else {
-      const groqRemainingMs = requestState
-        ? (typeof requestState.remainingMs === 'function' ? requestState.remainingMs() : requestState.maxCzasMs - (Date.now() - requestState.startedAt))
-        : 9000;
-      const groqTimeoutMs = requestState
-        ? computeValidatorTimeout(groqRemainingMs, {
-            maxTimeoutMs: 3000,
-            reserveMs: computeValidatorReserveMs(groqRemainingMs, requestState.validatory + 1, requestState.maxValidatorow, requestState.validationPass === 1 ? INITIAL_VALIDATOR_REPAIR_RESERVE_MS : 0),
-            minTimeoutMs: 2000,
-          })
-        : 3000;
-      if (groqTimeoutMs === null) {
-        const reason = 'Groq validator pominięty: zbyt mały pozostały budżet czasu';
-        recordSkippedValidator('groq', AI_MODELS.validator, reason);
-        console.warn(`[AI][${requestId}] ${reason}; remaining=${groqRemainingMs}ms`);
-      } else if (!zarezerwujSlotWalidatora(requestState, 'validator:groq')) {
-        const reason = 'budżet validatora/modeli wyczerpany przed Groq';
-        recordSkippedValidator('groq', AI_MODELS.validator, reason);
-        return lastRejected || { ...(last || {}), status: 'unavailable', ok: false, technicalError: true, provider: 'groq', model: AI_MODELS.validator, unsupported_claims: [], reason };
-      } else {
-        const validatorStartedAt = Date.now();
-        const remainingBefore = requestState?.remainingMs?.() ?? null;
-        requestState?.recordTiming?.('validator_provider_start', { provider: 'groq', model: AI_MODELS.validator, remainingBefore });
-        const groqResult = await walidujOdpowiedzGroq(persona, pytanie, odpowiedz, dane, requestId, requestState, requestMeta, requestState ? groqTimeoutMs : null);
-        recordValidatorTransportResult('groq', groqResult, requestId);
-        recordValidatorMetric('groq', groqResult.model || AI_MODELS.validator, remainingBefore, groqTimeoutMs, validatorStartedAt, groqResult);
-        const validatorElapsedMs = Date.now() - validatorStartedAt;
-        const remainingAfter = requestState?.remainingMs?.() ?? null;
-        requestState?.recordTiming?.('validator_provider_end', { provider: 'groq', model: groqResult.model || AI_MODELS.validator, status: groqResult.status, validatorElapsedMs, remainingBefore, remainingAfter, reason: String(groqResult.reason || '').slice(0, 180) });
-        if (requestState) requestState.validatorResults.push({
-          model: groqResult.model || AI_MODELS.validator,
-          provider: 'groq',
-          status: groqResult.status,
-          elapsedMs: validatorElapsedMs,
-          remainingMsBefore: remainingBefore,
-          remainingMsAfter: remainingAfter,
-          complete: groqResult.complete === true,
-          confidence: Number.isFinite(groqResult.confidence) ? groqResult.confidence : null,
-          claimCoverage: Array.isArray(groqResult.claims) && groqResult.claims.length
-            ? groqResult.claims.filter(c => c.supported === true).length / groqResult.claims.length
-            : null,
-          reason: typeof groqResult.reason === 'string' ? groqResult.reason.slice(0, 300) : null,
-          technicalError: groqResult.technicalError === true, timeoutAbort: groqResult.timeoutAbort === true,
-          quota: groqResult.quota === true, skipped: groqResult.skipped === true,
-          statusCode: Number.isFinite(Number(groqResult.statusCode)) && groqResult.statusCode != null ? Number(groqResult.statusCode) : null,
-          validationDiagnostics: groqResult.diagnostics || null,
-        });
-        if (groqResult.status === 'accepted' || groqResult.status === 'soft_accepted') return groqResult;
-        if (groqResult.status === 'rejected') {
-          if (!czyWartoDrugaOpinieWalidatora(groqResult)) return groqResult;
-          lastRejected = groqResult;
-          requestState?.recordTiming?.('validator_second_opinion', { rejectedProvider: groqResult.provider || 'groq', reason: String(groqResult.reason || '').slice(0, 180) });
-          // Groq returned a real rejection that already passed local evidence
-          // checks. Avoid spending the repair budget on slow third opinions.
-          return groqResult;
-        }
-        last = groqResult;
-      }
-    }
-  } else {
-    recordSkippedValidator('groq', AI_MODELS.validator, process.env.AI_VALIDATOR_GROQ === '0' ? 'Groq validator pominięty: wyłączony konfiguracją' : 'Groq validator pominięty: brak klienta lub klucza API');
-  }
 
   if (validatorBreakerIsOpen('openrouter')) {
     const reason = 'OpenRouter validator pominięty: circuit breaker aktywny';
