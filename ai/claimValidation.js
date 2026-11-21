@@ -953,14 +953,19 @@ function dopasowanieSemantyczne(evidence, claim, options = {}) {
   const nameOptions = { ...options, _ignoredSentenceInitialNames: ignoredSentenceInitialNames, skipGameTitles: true };
   const entities = wyodrebnijNazwyWlasne(claim, nameOptions);
   const normalizedEvidence = normalizujClaim(evidence);
-  const missingEntities = entities.filter(entity => !czyNazwaWlasnaWystepuje(entity, normalizedEvidence));
+  const normalizedFullEvidence = options.fullEvidenceText ? normalizujClaim(options.fullEvidenceText) : '';
+  const hasAnyEntityInQuote = entities.some(entity => czyNazwaWlasnaWystepuje(entity, normalizedEvidence));
+  const missingEntities = entities.filter(entity =>
+    !czyNazwaWlasnaWystepuje(entity, normalizedEvidence)
+    && !(hasAnyEntityInQuote && normalizedFullEvidence && czyNazwaWlasnaWystepuje(entity, normalizedFullEvidence))
+  );
   if (missingEntities.length) {
     // Nazwa wlasna z polskiego claimu nie wystepuje w angielskim dowodzie. Jesli
     // model nie zwrocil tlumaczenia claim_en, nie da sie rozstrzygnac, czy nazwa
     // ma zweryfikowany odpowiednik w drugim jezyku, czy zostala wymyslona.
     // Powod musi to mowic wprost — nazwa braku nazwy wlasnej
     // sugerowala problem z trescia odpowiedzi, a problem lezy w kontrakcie.
-    if (!options.claimEn && wygladaNaAngielski(evidence)) {
+    if (!options.claimEn && !wygladaNaAngielski(claim) && wygladaNaAngielski(evidence)) {
       return { ok: false, reason: 'brak tłumaczenia claimu (claim_en) dla angielskiego dowodu — nazw własnych nie da się rozstrzygnąć', ignoredSentenceInitialNames };
     }
     return { ok: false, reason: 'dowód nie zawiera wszystkich istotnych nazw własnych claimu', ignoredSentenceInitialNames };
