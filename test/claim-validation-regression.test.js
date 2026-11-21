@@ -12,7 +12,46 @@ const {
   spojnoscTlumaczeniaClaimu,
   pojeciaCrossLanguage,
   wyodrebnijLiczbyIDaty,
+  czyNazwySasiaduja,
 } = require('../ai/claimValidation');
+
+
+test('dynamic proper-name adjacency uses escaped fragments and Unicode-aware boundaries', () => {
+  assert.equal(czyNazwySasiaduja('Waga Żółć pojawia się w opisie.', 'Waga', 'Żółć'), true);
+  assert.equal(czyNazwySasiaduja('Uwaga Żółć pojawia się w opisie.', 'Waga', 'Żółć'), false);
+  assert.equal(czyNazwySasiaduja('Wagami Żółć pojawia się w opisie.', 'Waga', 'Żółć'), false);
+  assert.equal(czyNazwySasiaduja('A.*B C+D występują obok siebie.', 'A.*B', 'C+D'), true);
+  assert.equal(czyNazwySasiaduja('AxxxB C+D występują obok siebie.', 'A.*B', 'C+D'), false);
+  assert.equal(czyNazwySasiaduja('x'.repeat(121) + ' Y', 'x'.repeat(121), 'Y'), false);
+});
+
+test('sentence-initial inflection of „głos” is not treated as a proper name', () => {
+  const names = wyodrebnijNazwyWlasne("Głosu Wheatley'owi użyczył brytyjski aktor i komik Stephen Merchant.");
+  assert.equal(names.includes('glosu'), false);
+  assert.ok(names.some(name => /wheatley/i.test(name)));
+});
+
+test('claim_en ignores competing referents from earlier sentences', () => {
+  const quote = 'He was hostile at first, but agreed to join the party.';
+  const context = 'An enderman was seen near the portal. Astarion was wary of the group. ' + quote;
+  const result = spojnoscTlumaczeniaClaimu(
+    'Astarion był początkowo wrogi, ale zgodził się dołączyć do drużyny.',
+    'He was hostile at first, but agreed to join the party.',
+    { evidenceQuote: quote, evidenceContext: context },
+  );
+  assert.equal(result.ok, true, result.reason);
+});
+
+test('claim_en restores an explicit subject only from adjacent evidence context', () => {
+  const quote = 'He was hostile at first, but agreed to join the party.';
+  const context = 'Astarion was wary of the group. ' + quote;
+  const result = spojnoscTlumaczeniaClaimu(
+    'Astarion był początkowo wrogi, ale zgodził się dołączyć do drużyny.',
+    'He was hostile at first, but agreed to join the party.',
+    { evidenceQuote: quote, evidenceContext: context },
+  );
+  assert.equal(result.ok, true, result.reason);
+});
 
 test('dragon landing concept does not match generic land or lands wording', () => {
   assert.equal(pojeciaCrossLanguage('The lands around the castle are fertile.').has('smok_na_ziemi'), false);

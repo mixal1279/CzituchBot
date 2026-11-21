@@ -327,3 +327,27 @@ test('preflight Groq czyta czas oczekiwania z komunikatu', () => {
   assert.match(describeRetry('Please try again in 24m55s.'), /24m55s/);
   assert.equal(describeRetry('brak'), '');
 });
+
+
+test('dopasowanie twardych tokenów zachowuje granice Unicode bez dynamicznego regexu', () => {
+  const poprawne = response.sprawdzTwardeFaktyOdpowiedzi(
+    'Walka trwa 5 godzin.',
+    'Według graczy walka trwa około 5 godzinami.',
+    ''
+  );
+  assert.equal(poprawne.diagnostics.hardTokenCheck.ok, true);
+
+  const falszywyPrefiks = response.sprawdzTwardeFaktyOdpowiedzi(
+    'Walka trwa 5 godzin.',
+    'Walka trwa 15 godzin.',
+    ''
+  );
+  assert.equal(falszywyPrefiks.diagnostics.hardTokenCheck.ok, false);
+
+  const liczbaDziesietna = response.sprawdzTwardeFaktyOdpowiedzi(
+    'Gra kosztuje 2.5 kg.',
+    'Gra kosztuje 12.5 kg.',
+    ''
+  );
+  assert.equal(liczbaDziesietna.diagnostics.hardTokenCheck.ok, false);
+});

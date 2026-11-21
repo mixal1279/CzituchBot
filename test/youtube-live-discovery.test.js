@@ -183,6 +183,31 @@ test('rzuca błąd dla nieprawidłowego Channel ID', async () => {
   await assert.rejects(() => discoverLiveVideoId('not-a-channel'), TypeError);
 });
 
+test('waliduje Channel ID bez regexu i odrzuca niedozwolone znaki', async () => {
+  const nieprawidlowe = [
+    'UCANPTDOw4sbMwVhITet1Qb!',
+    'UAANPTDOw4sbMwVhITet1Qbw',
+    'UCANPTDOw4sbMwVhITet1Qb',
+  ];
+  let fetchCalls = 0;
+  for (const channelId of nieprawidlowe) {
+    await assert.rejects(() => discoverLiveVideoId(channelId, {
+      fetchImpl: async () => { fetchCalls += 1; throw new Error('fetch nie powinien wystartować'); },
+      verifyVideo: async () => false,
+    }), TypeError);
+  }
+  assert.equal(fetchCalls, 0);
+});
+
+test('odrzuca nadmiernie długi Channel ID przed wykonaniem fetch', async () => {
+  let fetchCalls = 0;
+  await assert.rejects(() => discoverLiveVideoId('UC' + 'A'.repeat(100000), {
+    fetchImpl: async () => { fetchCalls++; throw new Error('fetch nie powinien wystartować'); },
+    verifyVideo: async () => false,
+  }), TypeError);
+  assert.equal(fetchCalls, 0);
+});
+
 test('wymaga zgodnego właściciela i aktywnego Live Chat ID', () => {
   assert.equal(isVerifiedLiveVideo({
     snippet: { channelId: CHANNEL_ID, liveBroadcastContent: 'live' },
@@ -332,3 +357,30 @@ test('nie oznacza kanału jako offline, gdy fallback jest pominięty przez coold
   );
 });
 
+
+
+test('odrzuca HTML /live większy niż limit przed parsowaniem i weryfikacją kandydatów', async () => {
+  const { extractLiveVideoIds, discoverLiveVideoId } = require('../youtube-live-discovery');
+  const oversized = 'x'.repeat(512 * 1024 + 1);
+  assert.deepEqual(extractLiveVideoIds(oversized), []);
+  let verified = 0;
+  const result = await discoverLiveVideoId('UCANPTDOw4sbMwVhITet1Qbw', {
+    fetchImpl: async () => ({ ok: true, url: 'https://www.youtube.com/channel/UCANPTDOw4sbMwVhITet1Qbw/live', text: async () => oversized }),
+    verifyVideo: async () => { verified++; return true; },
+  });
+  assert.equal(result, null);
+  assert.equal(verified, 0);
+});
+
+
+test('pomija niepoprawne przypisanie i znajduje późniejsze poprawne ytInitialData', () => {
+  const html = 'var ytInitialData = null; window.ytInitialData = ' + JSON.stringify({
+    contents: { videoRenderer: liveRenderer(VIDEO_ID) },
+  }) + ';';
+  assert.equal(extractLiveVideoId(html), VIDEO_ID);
+});
+
+test('parser ignoruje nazwę podobną do ytInitialData bez operatora przypisania', () => {
+  const html = 'const ytInitialDataBackup = {"videoId":"' + VIDEO_ID + '"};';
+  assert.deepEqual(extractLiveVideoIds(html), []);
+});

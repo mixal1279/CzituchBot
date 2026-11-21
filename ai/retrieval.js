@@ -81,7 +81,11 @@ function decomposeQuestion(question,routing={}) {
     for(const part of parts.slice(0,3)) push(part);
   } else {
     const commaParts=q.split(/,\s*(?=(?:jak|dlaczego|czemu|kiedy|gdzie|ile|czy|kto|kim|co|czym|jaki|jaka|jakie)\b)/iu);
-    if(commaParts.length>1) for(const part of commaParts.slice(0,3)) push(part);
+    if(commaParts.length>1) {
+      for(const part of commaParts.slice(0,3)) {
+        if(part.trim().length>=25) push(part);
+      }
+    }
   }
   if(clauses.length<2){
     const questionMarks=q.split(/\?+/).map(x=>x.trim()).filter(Boolean);
@@ -162,6 +166,25 @@ function buildSupplementalRetrievalQuery(question, routing = {}, causalQuestion 
   return [anchor, q, intent].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim().slice(0, 300);
 }
 
+// Modelowe tlumaczenie pytania na angielskie zapytanie wyszukiwarkowe. To tylko query do
+// Tavily (dowody i tak przechodza przez validator), ale odpowiedz modelu jest nieufna:
+// bierzemy pierwsza linie, odrzucamy puste/NONE, zbyt krotkie/dlugie i nieprzetlumaczone
+// (polskie znaki diakrytyczne) wyniki. Nazwe gry doklejamy, jesli jej brakuje.
+function normalizeTranslatedSearchQuery(raw, game = '') {
+  const line = String(raw || '').split(/\r?\n/).map(x => x.trim()).find(Boolean) || '';
+  const text = line
+    .replace(/^(?:query|zapytanie|search\s*query)\s*:\s*/iu, '')
+    .replace(/^[\s"'`„”«»]+|[\s"'`„”«»]+$/gu, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (text.length < 8 || text.length > 200) return null;
+  if (/^none$/i.test(text)) return null;
+  if (/[ąćęłńóśźż]/iu.test(text)) return null;
+  const gameName = String(game || '').replace(/\s+/g, ' ').trim();
+  const hasGame = gameName && normalizujToken(text).includes(normalizujToken(gameName));
+  return [gameName && !hasGame ? gameName : '', text].filter(Boolean).join(' ').slice(0, 300);
+}
+
 function sourceHost(url){try{return new URL(url).hostname.toLowerCase().replace(/^www\./,'');}catch(_){return '';}}
 function sourceQualityScore(source = {}) {
   const score = Number(source.score);
@@ -193,11 +216,11 @@ function selectGameSpecificRetrievalDomains(game, question = '', baseDomains = n
   const base = Array.isArray(baseDomains)
     ? baseDomains
     : (typeof baseDomains === 'string' && baseDomains.trim() ? [baseDomains.trim()] : []);
-  const context = [game, question].filter(Boolean).join(' ');
+  const context = [String(game || '').slice(0, 200), String(question || '').slice(0, 4000)].filter(Boolean).join(' ');
   const additions = GAME_SPECIFIC_RETRIEVAL_DOMAINS
     .filter(entry => entry.pattern.test(context))
     .flatMap(entry => entry.domains);
   return [...new Set([...base, ...additions])];
 }
 
-module.exports={decomposeQuestion,isMultiPartQuestion,extractCarryoverEntities,buildAdvancedRetrievalPlan,buildSupplementalRetrievalQuery,selectRetrievalQueries,selectRetrievalDomains,selectGameSpecificRetrievalDomains,initialRetrievalQueryLimit,shouldRunAdditionalRetrieval,rankRetrievalNeed,sourceDiversity,sourceQualityScore,normalizujToken};
+module.exports={decomposeQuestion,isMultiPartQuestion,extractCarryoverEntities,buildAdvancedRetrievalPlan,buildSupplementalRetrievalQuery,normalizeTranslatedSearchQuery,selectRetrievalQueries,selectRetrievalDomains,selectGameSpecificRetrievalDomains,initialRetrievalQueryLimit,shouldRunAdditionalRetrieval,rankRetrievalNeed,sourceDiversity,sourceQualityScore,normalizujToken};

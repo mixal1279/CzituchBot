@@ -142,10 +142,14 @@ test('a source-scoped missing-date caveat is a valid temporal fallback without b
 
 test('pipeline finalText replaces terminal failure output and sanitizes accepted output', () => {
   assert.equal(finalText('anything', STATUS.REJECTED), 'Nie mam wystarczających danych, żeby odpowiedzieć na to pewnie.');
+  let sanitizeCalled = false;
   assert.equal(
-    finalText('odpowiedź robocza', STATUS.UNVERIFIED),
-    '⚠️ Odpowiedź niezweryfikowana — walidator jest niedostępny. odpowiedź robocza',
+    finalText('odpowiedź robocza', STATUS.UNVERIFIED, {
+      sanitizeResponse: () => { sanitizeCalled = true; return 'odpowiedź oczyszczona'; },
+    }),
+    '⚠️ Odpowiedź niezweryfikowana — walidator niedostępny. odpowiedź oczyszczona',
   );
+  assert.equal(sanitizeCalled, true, 'unverified output must pass through response sanitization');
   assert.equal(finalText('', STATUS.UNVERIFIED), 'Chwilowo nie mogę potwierdzić tej informacji, więc nie będę zgadywać.');
   assert.equal(finalText('  poprawna odpowiedź  ', STATUS.ACCEPTED, {
     sanitizeResponse: value => value.replace(/\s+/g, ' '),

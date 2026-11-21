@@ -49,6 +49,7 @@ function mockTavilyResponse() {
         title: `Portal 2 result ${i + 1}`,
         url: `https://same-domain.example/page-${i + 1}`,
         content: `Portal 2 result ${i + 1} contains enough lore information to be useful for retrieval.`,
+        raw_content: `Portal 2 result ${i + 1} contains enough lore information to be useful for retrieval. `.repeat(5),
         score: 0.95,
       })),
     }),
@@ -135,12 +136,39 @@ function mockDistinctTavilyResponse(count = 6) {
         title: `Distinct source ${i + 1}`,
         url: `https://source${i + 1}.example/article`,
         content: `Distinct source ${i + 1} contains grounded retrieval details about Portal 2 and its characters.`,
+        raw_content: `Distinct source ${i + 1} contains grounded retrieval details about Portal 2 and its characters. `.repeat(5),
         score: 0.95,
       })),
     }),
     text: async () => '',
   };
 }
+
+test('P0-B query rewrite hard timeout releases a provider that ignores AbortSignal', async () => {
+  let observedSignal;
+  let tavilyCalls = 0;
+  const search = createTavilySearch({
+    apiKey: 'test-key',
+    groq: { chat: { completions: { create: async (_payload, requestOptions) => {
+      observedSignal = requestOptions.signal;
+      return new Promise(() => {});
+    } } } },
+    fetchZTimeout: async () => { tavilyCalls++; throw new Error('Tavily should not run after the deadline'); },
+    normalizeQuery: value => String(value || '').trim(),
+    logger: { log() {}, warn() {}, error() {} },
+    cacheFile: '/tmp/czituchbot-p0b-rewrite-timeout.json',
+  });
+  let timer;
+  const startedAt = Date.now();
+  const result = await Promise.race([
+    search('Portal 2 rewrite timeout regression test', { remainingMs: 30, returnMeta: true }),
+    new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('query rewrite exceeded hard deadline')), 500); }),
+  ]).finally(() => clearTimeout(timer));
+  assert.ok(result);
+  assert.equal(observedSignal.aborted, true, 'hard timeout must abort the Groq transport');
+  assert.equal(tavilyCalls, 0, 'expired retrieval budget must not start Tavily Search');
+  assert.ok(Date.now() - startedAt < 400);
+});
 
 test('P0-B query rewrite uses createGroqCompletion transport options and reasoning headroom', async () => {
   let capturedPayload;
@@ -215,6 +243,7 @@ test('P0-B secondary retrieval keeps a one-to-one mapping between source blocks 
     apiKey: 'test-key',
     exaKey: 'exa-test-key',
     groq: { chat: { completions: { create: async () => { throw new Error('rewrite should be skipped'); } } } },
+    lookupFn: async () => [{ address: '93.184.216.34', family: 4 }],
     fetchZTimeout: async (url) => {
       let host = '';
       try {
@@ -229,8 +258,8 @@ test('P0-B secondary retrieval keeps a one-to-one mapping between source blocks 
           status: 200,
           json: async () => ({
             results: [
-              { title: 'Secondary source A', url: 'https://secondary-a.example/portal', highlights: ['Independent Portal 2 evidence from secondary provider A.'], score: 0.9 },
-              { title: 'Secondary source B', url: 'https://secondary-b.example/portal', highlights: ['Independent Portal 2 evidence from secondary provider B.'], score: 0.88 },
+              { title: 'Secondary source A', url: 'https://secondary-a.example/portal', text: 'Independent Portal 2 evidence from secondary provider A. '.repeat(5), highlights: ['Independent Portal 2 evidence from secondary provider A.'], score: 0.9 },
+              { title: 'Secondary source B', url: 'https://secondary-b.example/portal', text: 'Independent Portal 2 evidence from secondary provider B. '.repeat(5), highlights: ['Independent Portal 2 evidence from secondary provider B.'], score: 0.88 },
             ],
           }),
           text: async () => '',

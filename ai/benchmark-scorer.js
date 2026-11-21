@@ -35,28 +35,32 @@ function phraseMatches(text, phrase) {
 }
 
 function scoreGoldenFacts(answer, factual) {
-  if (!factual?.independentGold) return { applicable: false, score: null, passed: null, missing: [], forbidden: [] };
+  if (!factual?.independentGold) {
+    return { applicable: false, score: null, passed: null, missing: [], forbidden: [], requiredFacts: 0, passedFacts: 0, factAccuracy: null };
+  }
   const text = normalizeFactText(answer);
   const missing = [];
   for (const group of factual.mustInclude || []) {
-    const ok = group.every(phrase => phraseMatches(text, phrase));
-    if (!ok) missing.push(group);
+    if (!group.every(phrase => phraseMatches(text, phrase))) missing.push(group);
   }
-  // Some facts have several equally valid source-grounded descriptions (e.g.
-  // two nearby landmarks or inflected forms of the same item). Each group in
-  // mustIncludeAny is one requirement; any phrase in that group satisfies it.
+  // Każda grupa mustIncludeAny to osobny fakt z równoważnymi, ręcznie dobranymi wariantami.
   for (const group of factual.mustIncludeAny || []) {
-    const ok = group.some(phrase => phraseMatches(text, phrase));
-    if (!ok) missing.push(group);
+    if (!group.some(phrase => phraseMatches(text, phrase))) missing.push(group);
   }
   const forbidden = (factual.mustNot || []).filter(phrase => phraseMatches(text, phrase));
   const includedTotal = (factual.mustInclude || []).length + (factual.mustIncludeAny || []).length;
   const forbiddenTotal = (factual.mustNot || []).length;
-  const total = includedTotal + forbiddenTotal;
-  const score = total
-    ? ((includedTotal - missing.length) + (forbiddenTotal - forbidden.length)) / total
-    : 1;
-  return { applicable: true, score, passed: missing.length === 0 && forbidden.length === 0, missing, forbidden };
+  const requiredFacts = includedTotal + forbiddenTotal;
+  if (!requiredFacts) {
+    return { applicable: true, score: 0, passed: false, missing: [], forbidden: [], requiredFacts: 0, passedFacts: 0, factAccuracy: 0, invalidContract: true };
+  }
+  const passedFacts = (includedTotal - missing.length) + (forbiddenTotal - forbidden.length);
+  const factAccuracy = passedFacts / requiredFacts;
+  return {
+    applicable: true, score: factAccuracy,
+    passed: missing.length === 0 && forbidden.length === 0,
+    missing, forbidden, requiredFacts, passedFacts, factAccuracy,
+  };
 }
 
 module.exports = { normalizeFactText, scoreGoldenFacts };

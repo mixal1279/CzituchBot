@@ -5,6 +5,7 @@ const path = require('node:path');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { buildAnswerPlan, assessAnswerCompleteness } = require('../ai/answer-plan');
+const { normalizeFactText } = require('../ai/benchmark-scorer');
 const { judgeAnswer } = require('../ai/answer-judge');
 
 const BENCHMARK_PATH = path.join(__dirname, 'ai-benchmark.json');
@@ -85,15 +86,19 @@ function runBenchmark() {
   };
 }
 
-test('AI Core v26 benchmark has exactly 500 cases', () => {
-  assert.equal(benchmark.cases.length, 500);
+test('AI Core v27 benchmark has 54 unique curated cases', () => {
+  assert.equal(benchmark.version, 2);
+  assert.equal(benchmark.cases.length, 54);
+  assert.equal(new Set(benchmark.cases.map(item => item.id)).size, 54);
+  assert.equal(new Set(benchmark.cases.map(item => normalizeFactText(item.question))).size, 54);
+  assert.deepEqual([...new Set(benchmark.cases.map(item => item.category))].sort(), ['comparison', 'how', 'outcome', 'quantity', 'relationship', 'when', 'where', 'who', 'why']);
 });
 
 test('independent factual gold is source-linked and spans multiple question categories', () => {
   const gold = benchmark.cases.filter(item => item.expected?.factual?.independentGold === true);
   const categories = new Set(gold.map(item => item.category));
-  assert.ok(gold.length >= 10, `Expected at least 10 independent gold cases, got ${gold.length}`);
-  for (const category of ['why', 'how', 'where', 'who', 'comparison', 'outcome']) {
+  assert.ok(gold.length >= 15, `Expected at least 15 independent gold cases, got ${gold.length}`);
+  for (const category of ['why', 'how', 'where', 'who', 'comparison', 'outcome', 'relationship']) {
     assert.ok(categories.has(category), `Missing independent gold category: ${category}`);
   }
   for (const item of gold) {
@@ -102,7 +107,7 @@ test('independent factual gold is source-linked and spans multiple question cate
   }
 });
 
-test('AI Core v26 500-case benchmark meets 95% target', () => {
+test('AI Core v27 curated benchmark meets 95% planning and completeness target', () => {
   const report = runBenchmark();
   assert.ok(
     report.passed,

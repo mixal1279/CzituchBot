@@ -6,7 +6,91 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { normalizeFactText, scoreGoldenFacts } = require('../ai/benchmark-scorer');
-const { buildQuestionForBot, evaluateBenchmarkAnswer, classifyBenchmarkOutcome, isBenchmarkRunValid, buildBenchmarkDiagnostics, formatBenchmarkFailureDiagnostics, stratifiedCases, isFailureText, writeBenchmarkReport, writeStdoutAndWait, wybierzOdrzuconaOdpowiedz, isFalseReject } = require('../scripts/ai-live-benchmark');
+const { validateBenchmarkDataset, normalizeBenchmarkQuestion, buildQuestionForBot, evaluateBenchmarkAnswer, classifyBenchmarkOutcome, isBenchmarkRunValid, buildBenchmarkDiagnostics, formatBenchmarkFailureDiagnostics, stratifiedCases, isFailureText, summarizeFalseRejectMetrics, writeBenchmarkReport, writeStdoutAndWait, wybierzOdrzuconaOdpowiedz, isFalseReject } = require('../scripts/ai-live-benchmark');
+
+
+test('curated benchmark contains unique questions and balanced categories with independent gold coverage', () => {
+  const benchmark = JSON.parse(fs.readFileSync(path.join(__dirname, 'ai-benchmark.json'), 'utf8'));
+  const validation = validateBenchmarkDataset(benchmark);
+  assert.equal(validation.valid, true, validation.errors.join('; '));
+  assert.equal(validation.total, 54);
+  assert.equal(validation.uniqueQuestions, 54);
+  assert.ok(validation.independentGoldCases >= 15);
+  assert.equal(validation.goldCategories.length, 9);
+  assert.equal(Object.keys(validation.goldByCategory).length, 9);
+  assert.ok(Object.values(validation.categories).every(count => count >= 4));
+});
+
+test('17-case live sample includes every independently curated gold case', () => {
+  const benchmark = JSON.parse(fs.readFileSync(path.join(__dirname, 'ai-benchmark.json'), 'utf8'));
+  const allGold = benchmark.cases.filter(item => item.expected?.factual?.independentGold === true);
+  const selected = stratifiedCases(benchmark.cases, 17, 0);
+  assert.equal(allGold.length, 17);
+  assert.equal(selected.length, 17);
+  assert.deepEqual(new Set(selected.map(item => item.id)), new Set(allGold.map(item => item.id)));
+});
+test('benchmark validation rejects duplicate prompts, missing categories and unsupported gold facts', () => {
+  const source = JSON.parse(fs.readFileSync(path.join(__dirname, 'ai-benchmark.json'), 'utf8'));
+  const duplicate = JSON.parse(JSON.stringify(source));
+  duplicate.cases[1].question = duplicate.cases[0].question;
+  const duplicateValidation = validateBenchmarkDataset(duplicate);
+  assert.equal(duplicateValidation.valid, false);
+  assert.ok(duplicateValidation.errors.some(error => error.includes('powtórzone pytanie')));
+
+  const missingCategory = JSON.parse(JSON.stringify(source));
+  missingCategory.cases = missingCategory.cases.filter(item => item.category !== 'relationship');
+  const categoryValidation = validateBenchmarkDataset(missingCategory);
+  assert.ok(categoryValidation.errors.some(error => error.includes('brak wymaganej kategorii')));
+
+  const missingGoldSource = JSON.parse(JSON.stringify(source));
+  const gold = missingGoldSource.cases.find(item => item.expected?.factual?.independentGold === true);
+  delete gold.expected.factual.independentGoldSources;
+  const sourceValidation = validateBenchmarkDataset(missingGoldSource);
+  assert.ok(sourceValidation.errors.some(error => error.includes('gold bez poprawnych źródeł HTTPS')));
+});
+
+test('dataset cannot silently fall below ten fact-checkable cases for the live sample', () => {
+  const benchmark = JSON.parse(fs.readFileSync(path.join(__dirname, 'ai-benchmark.json'), 'utf8'));
+  const seenGoldCategories = new Set();
+  benchmark.cases = benchmark.cases.filter(item => {
+    if (item.expected?.factual?.independentGold !== true) return true;
+    if (seenGoldCategories.has(item.category)) return false;
+    seenGoldCategories.add(item.category);
+    return true;
+  });
+  const validation = validateBenchmarkDataset(benchmark);
+  assert.equal(seenGoldCategories.size, 9);
+  assert.equal(validation.independentGoldCases, 9);
+  assert.ok(validation.errors.some(error => error.includes('co najmniej 10 gold cases')));
+});
+
+test('10-case live sample covers all nine categories and rotates independent gold categories', () => {
+  const benchmark = JSON.parse(fs.readFileSync(path.join(__dirname, 'ai-benchmark.json'), 'utf8'));
+  const first = stratifiedCases(benchmark.cases, 10, 0);
+  const second = stratifiedCases(benchmark.cases, 10, 1);
+  assert.equal(first.length, 10);
+  assert.equal(new Set(first.map(item => item.category)).size, 9);
+  assert.equal(first.filter(item => item.expected?.factual?.independentGold === true).length, 10);
+  assert.equal(second.length, 10);
+  assert.equal(new Set(second.map(item => item.category)).size, 9);
+  assert.equal(second.filter(item => item.expected?.factual?.independentGold === true).length, 10);
+  const firstGoldIds = first.filter(item => item.expected?.factual?.independentGold).map(item => item.id).sort();
+  const secondGoldIds = second.filter(item => item.expected?.factual?.independentGold).map(item => item.id).sort();
+  assert.notDeepEqual(firstGoldIds, secondGoldIds);
+});
+
+test('gold dataset validation requires factual references in every benchmark category', () => {
+  const benchmark = JSON.parse(fs.readFileSync(path.join(__dirname, 'ai-benchmark.json'), 'utf8'));
+  for (const item of benchmark.cases.filter(row => row.category === 'when')) delete item.expected.factual;
+  const validation = validateBenchmarkDataset(benchmark);
+  assert.equal(validation.valid, false);
+  assert.ok(validation.errors.some(error => error.includes('gold cases muszą pokrywać wszystkie wymagane kategorie')));
+});
+
+test('benchmark question normalization handles Polish diacritics and punctuation', () => {
+  assert.equal(normalizeBenchmarkQuestion('  CZY   WARTO kupić?  '), normalizeBenchmarkQuestion('czy warto kupic'));
+  assert.equal(normalizeBenchmarkQuestion('Łódź — Święty Mikołaj!'), 'lodz swiety mikolaj');
+});
 
 test('live benchmark delay can be explicitly disabled with zero', () => {
   const { resolveDelayMs } = require('../scripts/ai-live-benchmark');
@@ -28,9 +112,33 @@ test('live benchmark does not duplicate a game already named in the question', (
   assert.equal(buildQuestionForBot({ game: 'Skyrim', question: 'Jak pokonać smoka w Skyrim?' }), 'Jak pokonać smoka w Skyrim?');
 });
 
+test('new independent gold facts accept grounded Polish alternatives', () => {
+  const benchmark = JSON.parse(fs.readFileSync(path.join(__dirname, 'ai-benchmark.json'), 'utf8'));
+  const samples = [
+    ['why-001', 'Wheatley przejął kontrolę po transferze rdzeni; władza go skorumpowała i uznał, że teraz to on jest szefem.'],
+    ['why-003', 'V przyjął pomoc Johnny’ego, ponieważ Relic nadpisuje świadomość V i zagraża jego życiu.'],
+    ['who-226', 'Wheatley to rdzeń osobowości Aperture Science.'],
+    ['who-228', 'Johnny Silverhand to rockerboy, a jego engram zapisano w Relic.'],
+    ['outcome-394', 'Jackie Welles ginie po nieudanym napadzie na Konpeki Plaza.'],
+    ['relationship-451', 'Geralt i Ciri mają relację ojciec i córka.'],
+    ['relationship-452', 'V i Johnny dzielą jedno ciało przez działanie Relic.'],
+    ['when-115', 'Chell budzi się w Aperture Science po nieokreślonym czasie, w przedziale od 50 do 50 000 lat po wydarzeniach z Portal.'],
+    ['quantity-285', 'Portal 2: główna historia trwa około 9 godzin.'],
+  ];
+  for (const [id, answer] of samples) {
+    const item = benchmark.cases.find(entry => entry.id === id);
+    assert.ok(item, 'missing gold case ' + id);
+    assert.equal(scoreGoldenFacts(answer, item.expected.factual).passed, true, id);
+  }
+});
+
 test('gold facts require normalized whole phrases, not accidental substrings', () => {
   const facts = { independentGold: true, mustInclude: [['Wheatley', 'przejął kontrolę']], mustNot: ['GLaDOS nie została wyłączona'] };
-  assert.equal(scoreGoldenFacts('Wheatley przejął kontrolę nad GLaDOS.', facts).passed, true);
+  const exact = scoreGoldenFacts('Wheatley przejął kontrolę nad GLaDOS.', facts);
+  assert.equal(exact.passed, true);
+  assert.equal(exact.requiredFacts, 2);
+  assert.equal(exact.passedFacts, 2);
+  assert.equal(exact.factAccuracy, 1);
   const falsePositive = scoreGoldenFacts('Wheatley przejął kontrolowanie; ślad kontrolowania pozostał.', facts);
   assert.equal(falsePositive.passed, false);
   assert.deepEqual(falsePositive.missing, [['Wheatley', 'przejął kontrolę']]);
@@ -155,21 +263,31 @@ test('live diagnostics distinguish validator failures from generation failures a
   const diagnostics = buildBenchmarkDiagnostics([{
     finalStatus: 'rejected',
     modelCalls: 3,
-    generationAttempts: [{ provider: 'gemini', model: 'gemini-3.8-flash', status: 'error', failure: 'timeout' }],
+    generationAttempts: [
+      { provider: 'gemini', model: 'gemini-3.8-flash', status: 'error', failure: 'timeout' },
+      { provider: 'xkiro', model: 'cohere/command-a-reasoning', status: 'error', error: 'empty_response: no answer text; reasoning_only=true' },
+      { provider: 'xkiro', model: 'cohere/command-a-reasoning', status: 'error', error: 'xKiro invalid JSON response (HTTP 200)' },
+    ],
     validatorResults: [
+      { provider: 'xkiro', model: 'cohere/command-a-reasoning', status: 'accepted' },
       { provider: 'gemini', model: 'gemini-3.8-flash', status: 'rejected' },
       { provider: 'groq', model: 'openai/gpt-oss-20b', status: 'unavailable', technicalError: true, reason: 'timeout' },
     ],
     timingTrace: [{ stage: 'validator_second_opinion' }, { stage: 'tavily_http_end', durationMs: 1200, ok: true }, { stage: 'generation_cycle_start', elapsedMs: 24200 }],
   }], benchmark.cases, selected);
 
-  assert.equal(diagnostics.validatorCalls, 2);
-  assert.deepEqual(diagnostics.validatorProviderCalls, { gemini: 1, groq: 1 });
+  assert.equal(diagnostics.validatorCalls, 3);
+  assert.deepEqual(diagnostics.validatorProviderCalls, { xkiro: 1, gemini: 1, groq: 1 });
+  assert.equal(diagnostics.xkiroValidatorVerdictCalls, 1);
   assert.equal(diagnostics.validatorStatusCounts.rejected, 1);
   assert.equal(diagnostics.validatorStatusCounts.unavailable, 1);
   assert.equal(diagnostics.validatorTransportFailures.length, 1);
   assert.equal(diagnostics.validatorTransportFailures[0].reason, 'timeout');
-  assert.deepEqual(diagnostics.generationProviderFailures, ['gemini:gemini-3.8-flash:timeout']);
+  assert.deepEqual(diagnostics.generationProviderFailures, [
+    'gemini:gemini-3.8-flash:timeout',
+    'xkiro:cohere/command-a-reasoning:empty_response',
+    'xkiro:cohere/command-a-reasoning:invalid_json',
+  ]);
   assert.equal(diagnostics.validatorSecondOpinions, 1);
   assert.equal(diagnostics.tavilyHttpCalls, 1);
   assert.equal(diagnostics.avgTavilyHttpMs, 1200);
@@ -183,14 +301,14 @@ test('live diagnostics distinguish validator failures from generation failures a
 test('live diagnostics report validator unavailability per call and detect outages of any provider', () => {
   const benchmark = JSON.parse(fs.readFileSync(path.join(__dirname, 'ai-benchmark.json'), 'utf8'));
   const selected = stratifiedCases(benchmark.cases, 5, 113);
-  // Gemini niedostępne w każdym wywołaniu: to awaria providera, a nie wynik kodu.
+  // Cohere/xKiro niedostępne w każdym wywołaniu: to awaria głównego walidatora.
   const diagnostics = buildBenchmarkDiagnostics([{
     finalStatus: 'rejected',
     modelCalls: 3,
     generationAttempts: [{ provider: 'groq', model: 'openai/gpt-oss-120b', status: 'success' }],
     validatorResults: [
-      { provider: 'gemini', model: 'gemini-3.5-flash-lite', status: 'unavailable', technicalError: true, reason: 'timeout' },
-      { provider: 'gemini', model: 'gemini-3.5-flash-lite', status: 'unavailable', technicalError: true, reason: 'timeout' },
+      { provider: 'xkiro', model: 'cohere/command-a-reasoning', status: 'unavailable', technicalError: true, reason: 'timeout' },
+      { provider: 'xkiro', model: 'cohere/command-a-reasoning', status: 'unavailable', technicalError: true, reason: 'timeout' },
       { provider: 'groq', model: 'openai/gpt-oss-20b', status: 'rejected' },
     ],
     timingTrace: [],
@@ -199,10 +317,9 @@ test('live diagnostics report validator unavailability per call and detect outag
   // Licznik dotyczy WYWOŁAŃ walidatora, nie końca requestu.
   assert.equal(diagnostics.validatorUnavailable, 2);
   assert.equal(diagnostics.requestsUnavailable, 0);
-  // Awaria Gemini w każdym wywołaniu musi być widoczna, inaczej benchmark
-  // raportuje providerOutage=false i uznaje pomiar za ważny.
+  // Awaria Cohere w każdym wywołaniu musi unieważnić porównanie jakości.
   assert.equal(diagnostics.providerOutage, true);
-  assert.deepEqual(diagnostics.outageProviders, ['gemini']);
+  assert.deepEqual(diagnostics.outageProviders, ['xkiro']);
   // Provider, który odpowiedział, nie jest awarią.
   assert.equal(diagnostics.outageProviders.includes('groq'), false);
 });
@@ -249,7 +366,7 @@ test('quality comparability is true when primary and fallback calls are healthy'
   const diagnostics = buildBenchmarkDiagnostics([{
     finalStatus: 'accepted',
     generationAttempts: [{ provider: 'groq', model: 'openai/gpt-oss-120b', status: 'success' }],
-    validatorResults: [{ provider: 'gemini', model: 'gemini-3.5-flash-lite', status: 'accepted' }],
+    validatorResults: [{ provider: 'xkiro', model: 'cohere/command-a-reasoning', status: 'accepted' }],
     timingTrace: [],
   }], benchmark.cases, selected);
 
@@ -266,6 +383,16 @@ test('quality comparability is true when primary and fallback calls are healthy'
   }], benchmark.cases, selected);
   assert.equal(noValidatorCalls.qualityComparable, false);
   assert.ok(noValidatorCalls.qualityDegradationReasons.includes('no_validator_calls'));
+
+  const fallbackOnly = buildBenchmarkDiagnostics([{
+    finalStatus: 'accepted',
+    generationAttempts: [{ provider: 'groq', model: 'openai/gpt-oss-120b', status: 'success' }],
+    validatorResults: [{ provider: 'gemini', model: 'gemini-3.5-flash-lite', status: 'accepted' }],
+    timingTrace: [],
+  }], benchmark.cases, selected);
+  assert.equal(fallbackOnly.qualityComparable, false);
+  assert.ok(fallbackOnly.qualityDegradationReasons.includes('no_primary_validator_calls'));
+  assert.ok(fallbackOnly.qualityDegradationReasons.includes('primary_validator_verdicts_below_case_count'));
 });
 
 test('secondary validator outage is reported as degradation, not a benchmark outage', () => {
@@ -275,15 +402,15 @@ test('secondary validator outage is reported as degradation, not a benchmark out
     finalStatus: 'rejected',
     generationAttempts: [{ provider: 'groq', model: 'openai/gpt-oss-120b', status: 'success' }],
     validatorResults: [
-      { provider: 'gemini', model: 'gemini-3.5-flash-lite', status: 'rejected' },
-      { provider: 'xkiro', model: 'qwen/qwen3.5-397b-a17b:free', status: 'unavailable', technicalError: true, reason: 'timeout' },
+      { provider: 'xkiro', model: 'cohere/command-a-reasoning', status: 'rejected' },
+      { provider: 'gemini', model: 'gemini-3.5-flash-lite', status: 'unavailable', technicalError: true, reason: 'timeout' },
     ],
     timingTrace: [],
   }], benchmark.cases, selected);
 
   assert.equal(diagnostics.providerOutage, false);
   assert.deepEqual(diagnostics.outageProviders, []);
-  assert.deepEqual(diagnostics.degradedProviders, ['xkiro:validator']);
+  assert.deepEqual(diagnostics.degradedProviders, ['gemini:validator']);
   assert.equal(diagnostics.qualityComparable, false);
   assert.equal(diagnostics.validatorUnavailableRate, 0.5);
   assert.ok(diagnostics.qualityDegradationReasons.includes('validator_unavailable_rate_above_25_percent'));
@@ -439,6 +566,18 @@ test('odrzucona odpowiedź pochodzi z ostatniego werdyktu walidatora, nie z pier
 
 
 
+test('false-reject metrics expose semantic candidates separately from strict gold-confirmed cases', () => {
+  const metrics = summarizeFalseRejectMetrics([
+    { id: 'semantic-only', answered: false, discardedAnswer: 'answer', discardedJudgeStatus: 'accepted', falseReject: false },
+    { id: 'strict', answered: false, discardedAnswer: 'answer', discardedJudgeStatus: 'accepted', falseReject: true },
+    { id: 'not-accepted', answered: false, discardedAnswer: 'answer', discardedJudgeStatus: 'rejected', falseReject: false },
+  ]);
+  assert.equal(metrics.semanticFalseRejects, 2);
+  assert.deepEqual(metrics.semanticFalseRejectCaseIds, ['semantic-only', 'strict']);
+  assert.equal(metrics.strictFactFalseRejects, 1);
+  assert.deepEqual(metrics.strictFactFalseRejectCaseIds, ['strict']);
+});
+
 test('Tavily HTTP failures expose status and mark benchmark quality non-comparable', () => {
   const benchmark = JSON.parse(fs.readFileSync(path.join(__dirname, 'ai-benchmark.json'), 'utf8'));
   const selected = stratifiedCases(benchmark.cases, 5, 113);
@@ -505,6 +644,7 @@ test('Gemini safety blocks are not classified as provider transport outages', ()
     finalStatus: 'accepted',
     generationAttempts: [{ provider: 'groq', model: 'openai/gpt-oss-120b', status: 'success' }],
     validatorResults: [
+      { provider: 'xkiro', model: 'cohere/command-a-reasoning', status: 'accepted' },
       { provider: 'gemini', model: 'gemini-3.5-flash-lite', status: 'unavailable', safetyBlocked: true, technicalError: false, reason: 'finishReason=PROHIBITED_CONTENT' },
       { provider: 'groq', model: 'openai/gpt-oss-20b', status: 'accepted' },
     ],

@@ -3,44 +3,108 @@
 const LIVE_BADGE_STYLES = new Set(['BADGE_STYLE_TYPE_LIVE_NOW']);
 const VIDEO_ID_RE = /^[a-zA-Z0-9_-]{11}$/;
 const MAX_VIDEO_CANDIDATES = 30;
+const MAX_LIVE_PAGE_BYTES = 512 * 1024;
+
+async function readLimitedPageText(response, maxBytes = MAX_LIVE_PAGE_BYTES) {
+  const declaredLength = Number(response?.headers?.get?.('content-length'));
+  if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
+    throw new Error('Strona YouTube /live przekracza limit rozmiaru.');
+  }
+
+  const body = response?.body;
+  if (body && typeof body.getReader === 'function') {
+    const reader = body.getReader();
+    const chunks = [];
+    let totalBytes = 0;
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        totalBytes += value?.byteLength || 0;
+        if (totalBytes > maxBytes) {
+          await reader.cancel();
+          throw new Error('Strona YouTube /live przekracza limit rozmiaru.');
+        }
+        chunks.push(Buffer.from(value));
+      }
+      return Buffer.concat(chunks, totalBytes).toString('utf8');
+    } catch (error) {
+      try { await reader.cancel(); } catch (_) {}
+      throw error;
+    }
+  }
+
+  const text = await response.text();
+  if (Buffer.byteLength(text, 'utf8') > maxBytes) {
+    throw new Error('Strona YouTube /live przekracza limit rozmiaru.');
+  }
+  return text;
+}
+
+function czyBialyZnak(znak) {
+  return znak === ' ' || znak === '\t' || znak === '\n' || znak === '\r' || znak === '\f' || znak === '\v';
+}
+
+function czyPoprawnyChannelId(channelId) {
+  if (typeof channelId !== 'string' || channelId.length !== 24 || !channelId.startsWith('UC')) {
+    return false;
+  }
+  for (let i = 2; i < channelId.length; i += 1) {
+    const kod = channelId.charCodeAt(i);
+    const litera = (kod >= 65 && kod <= 90) || (kod >= 97 && kod <= 122);
+    const cyfra = kod >= 48 && kod <= 57;
+    if (!litera && !cyfra && kod !== 95 && kod !== 45) return false;
+  }
+  return true;
+}
 
 function parseAssignedJson(html, variableName) {
   const source = String(html || '');
-  const escapedName = variableName === 'ytInitialData' ? 'ytInitialData' : 'ytInitialPlayerResponse';
-  const patterns = [
-    new RegExp('(?:\\b(?:var|let|const)\\s+)?(?:window\\s*\\.\\s*)?' + escapedName + '\\s*=\\s*', 'g'),
-    new RegExp("window\\s*\\[\\s*['\\\"]" + escapedName + "['\\\"]\\s*\\]\\s*=\\s*", 'g'),
-    new RegExp("['\\\"]" + escapedName + "['\\\"]\\s*:\\s*", 'g'),
-  ];
+  if (Buffer.byteLength(source, 'utf8') > MAX_LIVE_PAGE_BYTES) return null;
+  const nazwa = variableName === 'ytInitialData' ? 'ytInitialData' : 'ytInitialPlayerResponse';
+  let pozycja = 0;
 
-  for (const pattern of patterns) {
-    let match;
-    while ((match = pattern.exec(source))) {
-      let start = match.index + match[0].length;
-      const limit = Math.min(source.length, start + 256);
-      while (start < source.length && /\\s/.test(source[start])) start += 1;
-      if (start >= source.length || (source[start] !== '{' && source[start] !== '[')) continue;
+  // Szukamy wyłącznie dwóch dozwolonych nazw przez indexOf. Nie budujemy regexu
+  // z tekstu strony, która pochodzi z zewnętrznego źródła.
+  while ((pozycja = source.indexOf(nazwa, pozycja)) !== -1) {
+    let start = pozycja + nazwa.length;
+    pozycja = start;
+    while (start < source.length && czyBialyZnak(source[start])) start += 1;
 
-      const otwarte = [];
-      let inString = false;
-      let escaped = false;
-      for (let i = start; i < source.length; i += 1) {
-        const char = source[i];
-        if (inString) {
-          if (escaped) escaped = false;
-          else if (char === '\\') escaped = true;
-          else if (char === '"') inString = false;
-          continue;
-        }
-        if (char === '"') inString = true;
-        else if (char === '{' || char === '[') otwarte.push(char);
-        else if (char === '}' || char === ']') {
-          const poprzedni = otwarte.pop();
-          if ((char === '}' && poprzedni !== '{') || (char === ']' && poprzedni !== '[')) break;
-          if (otwarte.length === 0) {
-            try { return JSON.parse(source.slice(start, i + 1)); }
-            catch { break; }
-          }
+    // Obsługa window["nazwa"] oraz klucza "nazwa": w obiekcie.
+    if (source[start] === '"' || source[start] === "'") {
+      start += 1;
+      while (start < source.length && czyBialyZnak(source[start])) start += 1;
+      if (source[start] === ']') {
+        start += 1;
+        while (start < source.length && czyBialyZnak(source[start])) start += 1;
+      }
+    }
+
+    if (source[start] !== '=' && source[start] !== ':') continue;
+    start += 1;
+    while (start < source.length && czyBialyZnak(source[start])) start += 1;
+    if (start >= source.length || (source[start] !== '{' && source[start] !== '[')) continue;
+
+    const otwarte = [];
+    let inString = false;
+    let escaped = false;
+    for (let i = start; i < source.length; i += 1) {
+      const char = source[i];
+      if (inString) {
+        if (escaped) escaped = false;
+        else if (char === '\\') escaped = true;
+        else if (char === '"') inString = false;
+        continue;
+      }
+      if (char === '"') inString = true;
+      else if (char === '{' || char === '[') otwarte.push(char);
+      else if (char === '}' || char === ']') {
+        const poprzedni = otwarte.pop();
+        if ((char === '}' && poprzedni !== '{') || (char === ']' && poprzedni !== '[')) break;
+        if (otwarte.length === 0) {
+          try { return JSON.parse(source.slice(start, i + 1)); }
+          catch { break; }
         }
       }
     }
@@ -165,6 +229,9 @@ function videoIdFromUrl(value) {
 
 function analizujStroneLive(html, finalUrl) {
   const source = String(html || '');
+  if (Buffer.byteLength(source, 'utf8') > MAX_LIVE_PAGE_BYTES) {
+    return { ids: [], diagnostyka: { znalezionoInitialData: false, znalezionoPlayerResponse: false, liczbaObiektow: 0, rendereryVideo: 0, sygnalyLive: 0, limitPrzeszukiwania: false, limitRozmiaruHtml: true, redirectVideoId: false } };
+  }
   const ids = new Set();
   const redirectedId = videoIdFromUrl(finalUrl);
   if (redirectedId) ids.add(redirectedId);
@@ -200,6 +267,7 @@ function extractLiveVideoId(html, finalUrl) {
   const redirected = videoIdFromUrl(finalUrl);
   if (redirected) return redirected;
   const source = String(html || '');
+  if (Buffer.byteLength(source, 'utf8') > MAX_LIVE_PAGE_BYTES) return null;
   const playerResponse = parseAssignedJson(source, 'ytInitialPlayerResponse');
   const playerVideoId = playerResponse?.videoDetails?.videoId;
   if (
@@ -212,7 +280,7 @@ function extractLiveVideoId(html, finalUrl) {
 
 async function discoverLiveVideoId(channelId, options) {
   const opts = options || {};
-  if (typeof channelId !== 'string' || !/^UC[a-zA-Z0-9_-]{20,}$/.test(channelId)) {
+  if (!czyPoprawnyChannelId(channelId)) {
     throw new TypeError('Nieprawidłowy YouTube Channel ID.');
   }
   const fetchImpl = opts.fetchImpl || globalThis.fetch;
@@ -239,7 +307,7 @@ async function discoverLiveVideoId(channelId, options) {
       },
     });
     if (!response.ok) throw new Error('Strona YouTube /live zwróciła HTTP ' + response.status + '.');
-    const html = await response.text();
+    const html = await readLimitedPageText(response);
     const analizaStrony = analizujStroneLive(html, response.url || url);
     pageCandidates = analizaStrony.ids;
     if (!pageCandidates.length) {

@@ -86,3 +86,35 @@ test('OpenRouter provider overload is classified as transient from its HTTP stat
 
   assert.equal(classifyFailure(message), 'transient');
 });
+
+test('quota circuit recognizes structured HTTP 402 without message wording', () => {
+  assert.equal(shouldOpenQuotaCircuit({ status: 402, message: 'request failed' }), true);
+  assert.equal(shouldOpenQuotaCircuit({ response: { status: 402 }, message: 'request failed' }), true);
+  assert.equal(shouldOpenQuotaCircuit({ status: 429, message: 'rate limited' }), false);
+});
+
+test('structured OpenRouter in-flight budget 402 remains retryable with Retry-After', () => {
+  assert.equal(shouldOpenQuotaCircuit({
+    status: 402,
+    code: 'openrouter_in_flight_budget',
+    headers: new Headers({ 'retry-after': '5' }),
+  }), false);
+});
+
+test('Gemini cooldown reads Retry-After headers and structured daily quota metadata', () => {
+  assert.equal(geminiGenerationCooldownMsFromError({
+    status: 429,
+    message: 'rate limited',
+    response: { headers: new Headers({ 'retry-after': '7' }) },
+  }), 7000);
+  assert.equal(geminiGenerationCooldownMsFromError({
+    status: 429,
+    message: 'rate limited',
+    metadata: { error_type: 'daily_quota_exceeded' },
+  }), 24 * 60 * 60 * 1000);
+  assert.equal(quotaCooldownMsFromError({
+    status: 429,
+    message: 'rate limited',
+    metadata: { error_type: 'daily_quota_exceeded' },
+  }), 24 * 60 * 60 * 1000);
+});

@@ -1,0 +1,164 @@
+{
+  "version": 1,
+  "scope": "offline-routing-only",
+  "note": "Ten zestaw sprawdza klasyfikację intencji i wybór ścieżki źródeł. Nie ocenia prawdziwości odpowiedzi LLM ani dostępności artykułów GameLore.",
+  "cases": [
+    {
+      "id": "lore-character-hollow-knight",
+      "skill": "character_identity",
+      "game": "Hollow Knight",
+      "question": "Kim jest Hornet w Hollow Knight?",
+      "expected": {
+        "isLore": true,
+        "sourceType": "game_lore"
+      }
+    },
+    {
+      "id": "lore-chronology-hades",
+      "skill": "chronology",
+      "game": "Hades",
+      "question": "Jaka jest chronologia wydarzeń w Hades?",
+      "expected": {
+        "isLore": true,
+        "sourceType": "game_lore"
+      }
+    },
+    {
+      "id": "lore-faction-half-life",
+      "skill": "factions",
+      "game": "Half-Life",
+      "question": "Czym jest Black Mesa w Half-Life?",
+      "expected": {
+        "isLore": true,
+        "sourceType": "game_lore"
+      }
+    },
+    {
+      "id": "lore-relationship-tlou",
+      "skill": "character_relationships",
+      "game": "The Last of Us",
+      "question": "Jaka jest relacja między Joelem a Ellie w The Last of Us?",
+      "expected": {
+        "isLore": true,
+        "sourceType": "game_lore"
+      }
+    },
+    {
+      "id": "lore-ending-outer-wilds",
+      "skill": "ending_interpretation",
+      "game": "Outer Wilds",
+      "question": "Co oznacza zakończenie Outer Wilds?",
+      "expected": {
+        "isLore": true,
+        "sourceType": "game_lore"
+      }
+    },
+    {
+      "id": "lore-fan-theory-half-life",
+      "skill": "fan_theory",
+      "game": "Half-Life",
+      "question": "Czy teoria o G-Manie manipulującym wydarzeniami w Half-Life jest kanoniczna?",
+      "expected": {
+        "isLore": true,
+        "sourceType": "game_lore"
+      }
+    },
+    {
+      "id": "lore-cross-game-control",
+      "skill": "cross_game_connections",
+      "game": "Control / Alan Wake",
+      "question": "Czy Control i Alan Wake dzielą to samo uniwersum?",
+      "expected": {
+        "isLore": true,
+        "sourceType": "game_lore"
+      }
+    },
+    {
+      "id": "lore-multifact-rdr2",
+      "skill": "multi_fact_causal_chain",
+      "game": "Red Dead Redemption 2",
+      "question": "Dlaczego Arthur Morgan opuszcza gang i jakie wydarzenia prowadzą do jego finału w Red Dead Redemption 2?",
+      "expected": {
+        "isLore": true,
+        "sourceType": "game_lore"
+      }
+    },
+    {
+      "id": "lore-easter-egg-control",
+      "skill": "easter_eggs",
+      "game": "Control / Alan Wake",
+      "question": "Jaki easter egg w Control sugeruje powiązanie z Alan Wake?",
+      "expected": {
+        "isLore": true,
+        "sourceType": "game_lore"
+      }
+    },
+    {
+      "id": "lore-unknown-title",
+      "skill": "unknown_game_title",
+      "game": "Aetherfall (test title)",
+      "question": "Kim jest Neryth w grze Aetherfall?",
+      "expected": {
+        "isLore": true,
+        "sourceType": "game_lore"
+      }
+    },
+    {
+      "id": "lore-false-premise",
+      "skill": "false_premise",
+      "game": "Hollow Knight",
+      "question": "Czy założenie, że Hornet jest królową Hallownest, jest prawdziwe w Hollow Knight?",
+      "expected": {
+        "isLore": true,
+        "sourceType": "game_lore"
+      }
+    },
+    {
+      "id": "lore-ambiguous-character",
+      "skill": "ambiguous_entity",
+      "game": null,
+      "question": "Kim jest Alex?",
+      "expected": {
+        "isLore": false,
+        "maxConfidence": 0.62,
+        "requiresClarification": true
+      }
+    },
+    {
+      "id": "not-lore-hardware",
+      "skill": "intent_separation",
+      "game": "Cyberpunk 2077",
+      "question": "Dlaczego Cyberpunk 2077 ma wysokie wymagania sprzętowe?",
+      "expected": {
+        "isLore": false
+      }
+    },
+    {
+      "id": "not-lore-gameplay",
+      "skill": "intent_separation",
+      "game": "Elden Ring",
+      "question": "Jak pokonać Malenię w Elden Ring?",
+      "expected": {
+        "isLore": false
+      }
+    },
+    {
+      "id": "not-lore-purchase",
+      "skill": "intent_separation",
+      "game": "Elden Ring",
+      "question": "Czy warto kupić Elden Ring?",
+      "expected": {
+        "isLore": false
+      }
+    },
+    {
+      "id": "not-lore-troubleshooting",
+      "skill": "intent_separation",
+      "game": "Minecraft",
+      "question": "Jak naprawić crash Minecraft po aktualizacji?",
+      "expected": {
+        "isLore": false
+      }
+    }
+  ]
+}

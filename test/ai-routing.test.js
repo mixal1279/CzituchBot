@@ -82,7 +82,7 @@ for (const [question, expectedIntent, expectedEntity, expectedType] of cases) {
 }
 
 const selectedDomains = dodajGameFAQsDomenę(['youtube.com', 'example.com']);
-assert.deepEqual(selectedDomains, ['youtube.com', 'example.com']);
+assert.deepEqual(selectedDomains, ['youtube.com', 'example.com', 'gamefaqs.gamespot.com']);
 assert.deepEqual(dodajGameFAQsDomenę(['gamefaqs.gamespot.com']), ['gamefaqs.gamespot.com']);
 assert.equal(czyPytanieOGameplay('Jak odblokować ten sekret?', ['unrelated.fandom.com']), false);
 assert.equal(czyPytanieOGameplay('Jak odblokować ten sekret?', ['gamelore.fandom.com']), true);
@@ -228,4 +228,13 @@ for (const question of [
   'Czy kupić, albo zostać?',
 ]) {
   assert.equal(okreslKategorieAI(question), 'conversation', question);
+}
+
+
+for (const question of ['Ile to 12 * 4?', 'Oblicz 1,5 + 2,5.', 'Policz 100 / 4']) {
+  const routing = classifyAIRequest(question, okreslKategorieAI);
+  assert.equal(routing.intent, 'calculation', question);
+  assert.equal(routing.question_type, 'calculation', question);
+  assert.equal(routing.source_type, 'calculation', question);
+  assert.equal(routing.needs_web, false, question);
 }

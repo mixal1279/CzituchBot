@@ -2,7 +2,7 @@
 
 const assert = require('node:assert/strict');
 const { classifyAIRequest } = require('../ai/router');
-const { resolveGameEntity } = require('../ai/entities');
+const { resolveGameEntity, scoreExternalGameCandidate, externalGameCandidateMatchesQuery } = require('../ai/entities');
 const { planAIRequest, buildRetrievalQueries } = require('../ai/planner');
 const { czyPytanieOLore } = require('../ai/lore');
 const { przygotujHistorieDoModelu } = require('../ai/policy');
@@ -202,7 +202,7 @@ assert.match(require('fs').readFileSync(require('path').join(__dirname, '..', 'c
   assert.equal(classifyFailure('timeout'), 'timeout_abort');
   assert.equal(classifyFailure('Gemini generation cooldown: gemini-3.5-flash-lite'), 'provider_cooldown');
   assert.equal(shouldRetryFailure('transient'), true);
-  assert.equal(nextFallbacks({failure:'grounded_reject',attempted:['groq:openai/gpt-oss-120b']})[0], 'groq:openai/gpt-oss-20b');
+  assert.equal(nextFallbacks({failure:'grounded_reject',attempted:['groq:openai/gpt-oss-120b']})[0], 'xkiro:default');
 }
 {
   const m = createAIMetrics();
@@ -313,10 +313,7 @@ assert.match(require('fs').readFileSync(require('path').join(__dirname, '..', 'c
   assert.deepEqual(nextFallbacks({
     attempted: ['groq:openai/gpt-oss-120b'],
     maxFallbacks: 2,
-  }), [
-    'groq:openai/gpt-oss-20b',
-    'gemini:gemini-3.8-flash',
-  ]);
+  }), ['xkiro:default', 'groq:openai/gpt-oss-20b']);
 }
 
 {
@@ -341,11 +338,24 @@ assert.match(require('fs').readFileSync(require('path').join(__dirname, '..', 'c
   assert.match(botSource, /OpenRouter validator SCHEMA_REJECT/);
   assert.match(botSource, /failed_generation/);
   assert.match(botSource, /abortLike/);
-  assert.match(botSource, /Object\.getOwnPropertyNames\(value\)/);
+  const diagnosticsSource = require('fs').readFileSync(require('path').join(__dirname, '..', 'ai', 'diagnostics.js'), 'utf8');
+  assert.ok(diagnosticsSource.includes('Object.getOwnPropertyNames(value)'));
+  assert.match(diagnosticsSource, /SAFE_ERROR_FIELDS/);
   assert.match(botSource, /requestContract: \{/);
   assert.match(botSource, /async function walidujOdpowiedzXKiro\(/);
   assert.match(botSource, /response_format:\s*buildOpenRouterValidatorResponseFormat\(\)/);
   assert.match(botSource, /validator:xkiro/);
+}
+
+
+{
+  // Nazwa franczyzy nie może automatycznie wskazywać pierwszego dopasowanego sequela.
+  assert.ok(scoreExternalGameCandidate('Portal', 'Portal 2') < 0.72);
+  assert.ok(scoreExternalGameCandidate('The Last of Us', 'The Last of Us Part II') < 0.72);
+  assert.ok(scoreExternalGameCandidate('Cyberpunk 2077', 'Cyberpunk 2077 Ultimate Edition') >= 0.82);
+  assert.ok(scoreExternalGameCandidate('Portal 2', 'Portal') < 0.72);
+  assert.equal(scoreExternalGameCandidate('Portal II', 'Portal 2'), 1);
+  assert.equal(externalGameCandidateMatchesQuery('Portal: kim jest GLaDOS?', 'Portal 2').ok, false);
 }
 
 console.log('AI regression tests: OK');
@@ -580,13 +590,13 @@ console.log('AI regression tests: OK');
 {
   const { GENERATION_FALLBACK_CHAIN } = require('../ai/fallback');
   assert.deepEqual(GENERATION_FALLBACK_CHAIN.slice(0, 5), [
+    'xkiro:default',
     'groq:openai/gpt-oss-120b',
     'groq:openai/gpt-oss-20b',
     'gemini:gemini-3.8-flash',
     'gemini:gemini-3.5-flash-lite',
-    'openrouter:default',
   ]);
-  assert.equal(GENERATION_FALLBACK_CHAIN.at(-1), 'xkiro:default');
+  assert.equal(GENERATION_FALLBACK_CHAIN.at(-1), 'openrouter:default');
   assert.equal(shouldRetryFailure('unknown'), true);
   assert.equal(shouldRetryFailure('provider_cooldown'), true);
   assert.equal(shouldRetryFailure('validator_inconclusive'), true);
@@ -601,12 +611,12 @@ console.log('AI regression tests: OK');
     ],
     maxFallbacks: GENERATION_FALLBACK_CHAIN.length,
   }), [
-    'gemini:gemini-3.5-flash-lite',
     'xkiro:default',
-    'openrouter:default',
+    'gemini:gemini-3.5-flash-lite',
     'gemini:gemini-3.8-flash',
+    'openrouter:default',
   ]);
-  assert.deepEqual(nextFallbacks({attempted:['groq:openai/gpt-oss-120b','groq:openai/gpt-oss-20b','gemini:gemini-3.8-flash','gemini:gemini-3.5-flash-lite'], maxFallbacks:1}), ['openrouter:default']);
+  assert.deepEqual(nextFallbacks({attempted:['groq:openai/gpt-oss-120b','groq:openai/gpt-oss-20b','gemini:gemini-3.8-flash','gemini:gemini-3.5-flash-lite'], maxFallbacks:1}), ['xkiro:default']);
   assert.deepEqual(nextFallbacks({
     failure: 'grounded_reject',
     failedProviders: [
@@ -616,7 +626,7 @@ console.log('AI regression tests: OK');
       'gemini:gemini-3.5-flash-lite',
     ],
     maxFallbacks: 1,
-  }), ['openrouter:default']);
+  }), ['xkiro:default']);
 }
 
 {
@@ -935,4 +945,79 @@ console.log('AI regression tests: OK');
 
 {
   assert.equal(classifyFailure({ status: 'error', message: 'model returned pustą odpowiedź' }), 'empty_response');
+}
+
+{
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const source = fs.readFileSync(path.join(__dirname, '..', 'czituch_bot.js'), 'utf8');
+  const start = source.indexOf('async function zapytajAI(');
+  const validation = source.indexOf('const questionInput = sanitizeQuestion(', start);
+  const rejection = source.indexOf('if (!questionInput.ok)', validation);
+  const memoryRead = source.indexOf('const verifiedMemoryPromise = verifiedMemoryUserId ? loadMemory(', validation);
+  assert.ok(validation >= 0, 'pytanie musi przejść sanitizeQuestion');
+  assert.ok(rejection > validation, 'odrzucenie wejścia musi następować przed odczytem pamięci');
+  assert.ok(memoryRead > rejection, 'Firestore memory read musi być uruchamiany dopiero po walidacji');
+}
+
+
+{
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const source = fs.readFileSync(path.join(__dirname, '..', 'czituch_bot.js'), 'utf8');
+  const start = source.indexOf('async function zapytajAI(');
+  assert.ok(start >= 0, 'zapytajAI musi istnieć');
+  const body = source.slice(start, start + 30000);
+  assert.doesNotMatch(
+    body,
+    /console\.(?:error|warn)\((?![^\n]*sanitizujKomunikatBledu)[^\n]*err\.message/,
+    'komunikaty błędów w pipeline AI muszą przechodzić przez redakcję sekretów',
+  );
+}
+
+{
+  const { wyodrebnijJawnyTytulGry } = require('../ai/entities');
+  assert.equal(wyodrebnijJawnyTytulGry('W grze Hades: kim jest Zagreus?'), 'Hades');
+  assert.equal(wyodrebnijJawnyTytulGry('Hades: kim jest Zagreus?'), 'Hades');
+  assert.equal(wyodrebnijJawnyTytulGry('hades: kim jest Zagreus?'), 'hades');
+  assert.equal(wyodrebnijJawnyTytulGry('Red Dead Redemption 2: dlaczego Arthur...?'), 'Red Dead Redemption 2');
+  assert.equal(wyodrebnijJawnyTytulGry('w grze hades: kim jest Zagreus?'), 'hades');
+  assert.equal(wyodrebnijJawnyTytulGry('Opowiedz o postaci w grze "unknown title".'), 'unknown title');
+  assert.equal(wyodrebnijJawnyTytulGry('W grze Red Dead Redemption 2 kto jest Arthurem?'), 'Red Dead Redemption 2');
+  assert.equal(wyodrebnijJawnyTytulGry('W filmie Hades: kto jest bohaterem?'), null);
+  assert.equal(wyodrebnijJawnyTytulGry('W grze: kto jest bohaterem?'), null);
+}
+
+{
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const source = fs.readFileSync(path.join(__dirname, '..', 'czituch_bot.js'), 'utf8');
+  const start = source.indexOf('async function znajdzGreIGDB(');
+  const end = source.indexOf('async function znajdzYoutuberaWPytaniu(', start);
+  assert.ok(start >= 0 && end > start, 'funkcja IGDB musi istnieć');
+  const body = source.slice(start, end);
+  assert.ok(body.indexOf('wyodrebnijJawnyTytulGry(pytanie)') < body.indexOf('createGroqCompletion('),
+    'jawny tytuł musi być sprawdzony przed wywołaniem Groq');
+  assert.ok(body.includes('sanitizujKomunikatBledu(err?.message)'),
+    'błąd IGDB musi przejść przez redakcję sekretów');
+
+  const domainsStart = source.indexOf('async function wybierzDomenyDlaPytania(');
+    const domainsEnd = source.indexOf('RAWG – rozpoznawanie gier', domainsStart);
+  assert.ok(domainsStart >= 0 && domainsEnd > domainsStart, 'wybór domen gry musi istnieć');
+  const domainsBody = source.slice(domainsStart, domainsEnd);
+  assert.ok(domainsBody.includes('sanitizujKomunikatBledu(err?.message)'),
+    'błąd dynamicznego rozpoznawania gry musi przejść przez redakcję sekretów');
+}
+
+{
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const source = fs.readFileSync(path.join(__dirname, '..', 'czituch_bot.js'), 'utf8');
+  const logiAI = source.split('\n').filter(line =>
+    /\[(?:AI Memory|Tavily|Groq(?:\/Angie|\/Billy)?)\]/.test(line)
+    && /err\??\.message|error\??\.message/.test(line)
+  );
+  assert.ok(logiAI.length >= 7, 'test obejmuje logi pamięci, Tavily i providerów');
+  assert.ok(logiAI.every(line => line.includes('sanitizujKomunikatBledu')),
+    'błędy pamięci i routingu AI muszą przechodzić przez redakcję sekretów');
 }

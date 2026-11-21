@@ -41,11 +41,41 @@ function maskSentenceAbbreviations(text) {
     .replace(/(?<![\p{L}\p{N}])(?:r|ok|tys|mln|mld|godz|tzw|ang|pol|zob|wg|ur|zm|nr|str|ul|im|dr|prof|inż|mgr|św)\.(?=\s+[\p{Ll}\d(„"“])/giu, m => m.slice(0, -1) + '\u2024');
 }
 
+function czyZnakSlowa(tekst, indeks, kropka = false) {
+  if (indeks < 0 || indeks >= tekst.length) return false;
+  const kod = tekst.codePointAt(indeks);
+  const znak = String.fromCodePoint(kod);
+  return kropka ? /[\p{L}\p{N}_.]/u.test(znak) : /[\p{L}\p{N}_]/u.test(znak);
+}
+
+function czyPoprzedniZnakSlowa(tekst, indeks, kropka = false) {
+  if (indeks <= 0) return false;
+  let poczatek = indeks - 1;
+  const kod = tekst.charCodeAt(poczatek);
+  if (kod >= 0xDC00 && kod <= 0xDFFF && poczatek > 0) {
+    const poprzedni = tekst.charCodeAt(poczatek - 1);
+    if (poprzedni >= 0xD800 && poprzedni <= 0xDBFF) poczatek -= 1;
+  }
+  return czyZnakSlowa(tekst, poczatek, kropka);
+}
+
 function zawieraTokenTwardy(refs, token) {
-  const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  // Token kończący się literą (jednostka) może się odmieniać; kończący się cyfrą/% wymaga granicy.
-  const tail = /\p{L}$/u.test(token) ? '' : '(?![\\p{L}\\p{N}_])';
-  return new RegExp('(?<![\\p{L}\\p{N}_.])' + escaped + tail, 'u').test(refs);
+  const referenceText = String(refs || '');
+  const safeToken = String(token || '').slice(0, 120);
+  if (!safeToken || referenceText.length > 12000) return false;
+
+  // Odpowiednik granic Unicode bez dynamicznego RegExp. indexOf nie interpretuje
+  // metaznaków tokenu i nie uruchamia backtrackingu na treści źródła.
+  const wymagaGranicyKoncowej = !/\p{L}$/u.test(safeToken);
+  let pozycja = referenceText.indexOf(safeToken);
+  while (pozycja !== -1) {
+    const koniec = pozycja + safeToken.length;
+    const poczatekPoprawny = !czyPoprzedniZnakSlowa(referenceText, pozycja, true);
+    const koniecPoprawny = !wymagaGranicyKoncowej || !czyZnakSlowa(referenceText, koniec);
+    if (poczatekPoprawny && koniecPoprawny) return true;
+    pozycja = referenceText.indexOf(safeToken, pozycja + 1);
+  }
+  return false;
 }
 
 const KONTEKSTY_GIER_AI = [
@@ -60,7 +90,8 @@ const KONTEKSTY_GIER_AI = [
 ];
 
 function wykryjKontekstyGierAI(tekst) {
-  return KONTEKSTY_GIER_AI.filter(kontekst => kontekst.patterns.some(re => re.test(String(tekst || '')))).map(kontekst => kontekst.name);
+  const boundedText = String(tekst || '').slice(0, 12000);
+  return KONTEKSTY_GIER_AI.filter(kontekst => kontekst.patterns.some(re => re.test(boundedText))).map(kontekst => kontekst.name);
 }
 
 function sprawdzZgodnoscKontekstuGry(odpowiedz, pytanie) {
@@ -72,8 +103,13 @@ function sprawdzZgodnoscKontekstuGry(odpowiedz, pytanie) {
 }
 
 function sprawdzSpojnoscLorePortal2(odpowiedz, pytanie) {
-  const q = String(pytanie || '').toLocaleLowerCase('pl-PL');
-  const a = String(odpowiedz || '').toLocaleLowerCase('pl-PL');
+  const rawQuestion = String(pytanie || '');
+  const rawAnswer = String(odpowiedz || '');
+  if (rawQuestion.length > 4000 || rawAnswer.length > 12000) {
+    return { ok: false, unsupported: ['przekroczono limit długości wejścia kontroli spójności lore'] };
+  }
+  const q = rawQuestion.toLocaleLowerCase('pl-PL');
+  const a = rawAnswer.toLocaleLowerCase('pl-PL');
   const portal = /\bportal\s*2\b|\bwheatley\b|\bglados\b|\bchell\b|\baperture\s+science\b/i.test(q);
   if (!portal) return { ok: true, unsupported: [] };
 

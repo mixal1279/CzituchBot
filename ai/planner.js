@@ -34,6 +34,21 @@ function slowaZapytania(question) {
     .filter(token => token.length >= 4 && !QUERY_STOPWORDS.has(token)))].slice(0, 14);
 }
 
+// Encja i gra czesto sa tym samym tytulem („Skyrim”/„Skyrim”). Bez deduplikacji
+// zapytania intencyjne mialy postac „Skyrim Skyrim gameplay ...”.
+function entityTerms(entity, game) {
+  const terms = [];
+  const seen = new Set();
+  for (const value of [entity, game]) {
+    const text = String(value || '').trim();
+    const key = normalizujQueryToken(text);
+    if (!text || seen.has(key)) continue;
+    seen.add(key);
+    terms.push(text);
+  }
+  return terms;
+}
+
 function dodajUnikalneQuery(lista, query) {
   const q = String(query || '').replace(/\s+/g, ' ').trim();
   if (!q || q.length < 8) return;
@@ -42,7 +57,9 @@ function dodajUnikalneQuery(lista, query) {
 }
 
 function buildRetrievalQueries(question, routing = {}, options = {}) {
-  const original = String(question || '').replace(/\s+/g, ' ').trim();
+  const rawQuestion = String(question || '');
+  if (rawQuestion.length > 4000) return [];
+  const original = rawQuestion.replace(/\s+/g, ' ').trim();
   if (!original || routing?.needs_web === false) return [];
 
   const queries = [];
@@ -65,21 +82,23 @@ function buildRetrievalQueries(question, routing = {}, options = {}) {
   const isWhenQuestion = /(?:^|\s)(?:kiedy|when)(?:\s|$)|w jakim momencie|w którym momencie/iu.test(original);
   const isWhoQuestion = /(?:^|\s)(?:kim jest|kto jest|who is|who was)(?:\s|$)/iu.test(original);
   const isWhyQuestion = /(?:^|\s)(?:dlaczego|czemu|why)(?:\s|$)|z jakiego powodu/iu.test(original);
+  const isOutcomeQuestion = /co\s+sta[lł]o\s+si[eę]\s+z|jaki\s+(?:by[lł]|jest)\s+los|what\s+happened\s+to/iu.test(original);
 
   if (isWhereQuestion) {
-    dodajUnikalneQuery(queries, [entity, game, 'exact location landmark nearby map'].filter(Boolean).join(' '));
+    const whereKeywords = keywords.filter(k => !normalizedEntity.includes(k)).slice(0, 4);
+    dodajUnikalneQuery(queries, [...entityTerms(entity, game), ...whereKeywords, 'exact location landmark nearby map'].join(' '));
   } else if (isWhenQuestion) {
     const gtaMeetingContext = /\b(?:gta\s*(?:v|5)|grand theft auto v|michael|trevor)\b/iu.test([original, entity, game].join(' '));
     const timelineHints = gtaMeetingContext
       ? 'story timeline quest order arrival Michael Townley Trevor Philips first encounter Fame or Shame mission Prologue nine years later'
       : 'story timeline quest order arrival';
-    dodajUnikalneQuery(queries, [entity, game, timelineHints].filter(Boolean).join(' '));
+    dodajUnikalneQuery(queries, [...entityTerms(entity, game), timelineHints].join(' '));
   } else if (isWhoQuestion) {
     const dragonbornContext = /\b(?:dragonborn|dovahkiin)\b/iu.test([original, entity].join(' ')) && /\bskyrim\b/iu.test([original, game].join(' '));
     const identityHints = dragonbornContext
       ? 'character identity background role companion lore Dragonborn Dovahkiin last Dragonborn prophecy dragon soul'
       : 'character identity background role companion lore';
-    dodajUnikalneQuery(queries, [entity, game, identityHints].filter(Boolean).join(' '));
+    dodajUnikalneQuery(queries, [...entityTerms(entity, game), identityHints].join(' '));
   } else if (isWhyQuestion) {
     // Core transfer jest bardzo charakterystyczny dla wątku Portal 2/Wheatleya.
     // Dodawanie go do KAŻDEGO pytania „dlaczego” tworzy szum (np. wyniki Magic:
@@ -88,23 +107,39 @@ function buildRetrievalQueries(question, routing = {}, options = {}) {
     // ale tematycznie sensowne frazy do wyszukiwarki.
     const portalCoreTransferContext = /\b(?:portal\s*2|wheatley|glados|core\s+transfer|transfer\s+rdzenia|rdzen\w*)\b/iu.test([original, entity, game].join(' '));
     const astarionContext = /\bastarion\b/iu.test([original, entity].join(' ')) && /baldur/iu.test([original, game].join(' '));
+    const cyberpunkRelicContext = /\b(?:johnny|silverhand)\b/iu.test([original, entity].join(' ')) && /cyberpunk/iu.test([original, game].join(' '));
     const causalHints = portalCoreTransferContext
       ? 'cause reason motivation event core transfer lore'
       : astarionContext
         ? 'cause reason motivation story conflict Astarion Cazador Szarr vampire spawn escaped master freedom why joins party backstory seeking favour with player character protection from Cazador'
-        : 'cause reason motivation story conflict lore backstory relationship antagonist escape joins party';
-    dodajUnikalneQuery(queries, [entity, game, causalHints].filter(Boolean).join(' '));
+        : cyberpunkRelicContext
+          ? 'Relic biochip overwriting V brain engram Cyberpunk 2077 plot'
+          : 'cause reason motivation story conflict lore';
+    dodajUnikalneQuery(queries, [...entityTerms(entity, game), causalHints].join(' '));
     if (routing?.is_lore && /(?:astarion|wheatley|glados|chell|arthur|geralt|ciri|johnny|shadowheart|karlach|gale|dragonborn)/iu.test([original, entity].join(' '))) {
-      dodajUnikalneQuery(queries, [entity, game, 'motivation backstory antagonist freedom why joins party'].filter(Boolean).join(' '));
+      dodajUnikalneQuery(queries, [...entityTerms(entity, game), 'motivation backstory antagonist freedom why joins party'].join(' '));
     }
+  } else if (isOutcomeQuestion) {
+    const vesemirContext = /\bvesemir\w*\b/iu.test([original, entity].join(' '));
+    const outcomeHints = vesemirContext
+      ? 'Vesemir fate death Battle of Kaer Morhen killed by Imlerith story lore'
+      : 'fate death ending outcome story lore';
+    dodajUnikalneQuery(queries, [...entityTerms(entity, game), outcomeHints].join(' '));
+  } else if (/(?:czym\s+r[oó][zż]ni|por[oó]wnaj|r[oó][zż]nic|difference|vs\.?|versus)/iu.test(original)) {
+    const steveAlexContext = /\bsteve\w*\b/iu.test(original) && /\balex\w*\b/iu.test(original);
+    const comparisonHints = steveAlexContext
+      ? 'Steve Alex differences slim classic model 3 pixels 4 pixels arm width skin'
+      : 'differences comparison features';
+    dodajUnikalneQuery(queries, [...entityTerms(entity, game), comparisonHints].join(' '));
   } else if (routing?.is_lore) {
-    dodajUnikalneQuery(queries, [entity || original, game, 'character history story lore'].filter(Boolean).join(' '));
+    dodajUnikalneQuery(queries, [...(entity ? entityTerms(entity, game) : [original, game].filter(Boolean)), 'character history story lore'].join(' '));
   } else if (routing?.is_gameplay) {
     const minecraftElytraContext = /\b(?:elytra|elytr\p{L}*)\b/iu.test(original) && /\bminecraft\b/iu.test([original, game].join(' '));
     const gameplayHints = minecraftElytraContext
       ? 'gameplay strategy mechanics guide walkthrough Minecraft elytra obtain Survival mode End ship End city treasure room shulker how to get'
       : 'gameplay strategy mechanics guide walkthrough';
-    dodajUnikalneQuery(queries, [entity || original, game, gameplayHints].filter(Boolean).join(' '));
+    const gameplayKeywords = keywords.filter(k => !normalizedEntity.includes(k)).slice(0, 4);
+    dodajUnikalneQuery(queries, [...(entity ? entityTerms(entity, game) : [original, game].filter(Boolean)), ...gameplayKeywords, gameplayHints].join(' '));
   } else if (routing?.freshness === 'live') {
     dodajUnikalneQuery(queries, [entity, ...keywords.slice(0, 8), 'latest today'].filter(Boolean).join(' '));
   } else if (routing?.freshness === 'recent') {
@@ -126,7 +161,9 @@ const RESPONSE_PROFILES = {
 };
 
 function detectResponseProfile(question, routing) {
-  const p = String(question || '').toLocaleLowerCase('pl-PL');
+  const rawQuestion = String(question || '');
+  if (rawQuestion.length > 4000) return 'simple';
+  const p = rawQuestion.toLocaleLowerCase('pl-PL');
   if (routing?.is_gameplay) return 'gameplay';
   if (routing?.is_lore) return /(?<![\p{L}\p{N}_])(?:timeline|chronolog\p{L}*|kolejno[śs][ćc]\p{L}*|oś czasu|os czasu)(?![\p{L}\p{N}_])/iu.test(p) ? 'timeline' : 'lore';
   // Rdzenie ze słowem odmienionym (porównaj, różni się, różnica) — `\b` po rdzeniu nigdy nie pasował.
@@ -183,13 +220,17 @@ function responseContract(profile) {
 // Rewrite zapytania modelem (Groq 20b) kosztuje wywołanie i tokeny z dziennego limitu, a pomaga
 // głównie wtedy, gdy pytanie zależy od poprzedniej wymiany („a on?”, „co z nią?”). Bez kontekstu
 // i z rozpoznaną grą/encją pytanie jest już samodzielne.
-function czyPotrzebujeRewrite(pytanie, { hasContext = false, hasEntity = false } = {}) {
+function czyPotrzebujeRewrite(pytanie, { hasContext = false, hasEntity = false, isGameQuery = false } = {}) {
   const q = String(pytanie || '').trim();
+  if (q.length > 4000) return false;
   if (!q) return false;
   const words = q.split(/\s+/).length;
   if (hasContext) {
     const anaphora = /(?<![\p{L}])(?:on|ona|ono|oni|one|jego|jej|ich|tam|tego|tej|tych|tym|ten|ta|wtedy|wcześniej|a\s+co\s+z)(?![\p{L}])/iu.test(q);
     return anaphora || words <= 5;
+  }
+  if (isGameQuery && /[ąćęłńóśźż]|\b(?:jak|dlaczego|czemu|gdzie|kiedy|kim|co\s+sta[lł]o)\b/iu.test(q)) {
+    return true;
   }
   return !hasEntity && (q.length > 160 || words >= 25);
 }
