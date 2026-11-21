@@ -133,6 +133,11 @@ const KNOWN_ENTITY_ALIAS_PATTERNS = [
   { canonical: 'spellbreaker', pattern: /\b(?:spellbreaker|zaklinacz\s+spellbreaker|lamacz(?:a|owi|em|u)?\s+zakl(?:e|e)c)\b/iu },
   { canonical: 'extended relaxation center', pattern: /\b(?:extended\s+relaxation\s+center|centrum\s+(?:przedluzonego|rozszerzonego)\s+relaksu)\b/iu },
   { canonical: 'aperture laboratories', pattern: /\b(?:aperture\s+laboratories|laboratori(?:a|ach|ami|ow|ow)\s+aperture)\b/iu },
+  { canonical: 'wild hunt', pattern: /\b(?:wild\s+hunt|dziki\p{L}*\s+(?:gon\p{L}*|[lł]ow\p{L}*))\b/iu },
+  { canonical: 'elder blood', pattern: /\b(?:elder\s+blood|starsz\p{L}*\s+kr(?:ew|wi\p{L}*)|kr(?:ew|wi\p{L}*)\s+starsz\p{L}*)\b/iu },
+  { canonical: 'lara', pattern: /\blar(?:a|y|ze|e|ę|ą)\b/iu },
+  { canonical: 'dragon rising', pattern: /\b(?:dragon\s+rising|budzeni\p{L}*\s+smok\p{L}*)\b/iu },
+  { canonical: 'cathedral of dragon communion', pattern: /\b(?:cathedral\s+of\s+dragon\s+communion|dragon\s+communion\s+cathedral|katedr\p{L}*\s+komunii\s+smok\p{L}*)\b/iu },
   // „facility of Aperture” to PARAFRAZA z jednego zrodla benchmarku, nie nazwa —
   // zalozenie do potwierdzenia na szerszej probie. „Aperture Labs” celowo usuniete:
   // zlewaloby sie z osobnym wpisem „aperture laboratories” powyzej.
@@ -734,7 +739,7 @@ function czyNazwaWlasnaWystepuje(entity, evidenceNormalized) {
   // Preserve spaces for canonical multi-word aliases. The inflection helper is
   // optimized for single-token names and intentionally removes whitespace.
   const entityNormalized = normalizujClaim(entity);
-  const knownAlias = KNOWN_ENTITY_ALIAS_PATTERNS.find(alias => normalizujClaim(alias.canonical) === entityNormalized);
+  const knownAlias = KNOWN_ENTITY_ALIAS_PATTERNS.find(alias => normalizujClaim(alias.canonical) === entityNormalized || alias.pattern.test(String(entity || '')));
   const evidenceText = String(evidenceNormalized || '');
   if (knownAlias && knownAlias.pattern.test(evidenceText)) return true;
   // "the Baron" is used as shorthand for the Bloody Baron in Witcher 3 sources;

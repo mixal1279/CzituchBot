@@ -398,7 +398,11 @@ function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '', opt
       reasons.push('source_id nie istnieje w danych referencyjnych: ' + id);
       continue;
     }
-    if (!quoteExists(block.content, quote)) {
+    const stripInlineNoise = txt => String(txt || '')
+      .replace(/\\?\[\d+\]/g, '')
+      .replace(/\((?:powyższy|poniższy|powyzszy|ponizszy)\s+(?:screen|obrazek|rysunek|zrzut)\)/giu, '')
+      .replace(/\s+/g, ' ');
+    if (!quoteExists(block.content, quote) && !quoteExists(stripInlineNoise(block.content), stripInlineNoise(quote))) {
       // The live benchmark exposed a common, actionable failure: generated
       // citations included "[...]" to join non-adjacent fragments. These are
       // not verbatim evidence and must never be relaxed into fuzzy matching.
@@ -429,7 +433,7 @@ function czyDowodPotwierdzaClaim(dane, sourceIds, evidenceQuote, claim = '', opt
     // Negation must be checked against the sentence containing the exact quote.
     // A neighbouring sentence may discuss an unrelated negative fact; using it
     // for the polarity check caused valid positive claims to be rejected.
-    const quoteNegation = sprawdzTwardeKonflikty(quoteSentenceContext, claim, { checkNegationOnly: true });
+    const quoteNegation = sprawdzTwardeKonflikty(quoteSentenceContext, claim, { checkNegationOnly: true, evidenceQuote: quote });
     if (!quoteNegation.ok) {
       reasons.push(quoteNegation.reason || 'claim i dowód mają inną negację');
       continue;

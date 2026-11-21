@@ -3414,9 +3414,14 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
           : aiPlan.responseProfile === 'gameplay' ? item?.reason === 'gameplay' : false)
         .map(item => item.query),
     ].filter(Boolean);
+    const effectiveCausalQuery = causalRetrievalQuery
+      ? (Array.isArray(pytaniaAtomoweTavily) && pytaniaAtomoweTavily[0] && pytaniaAtomoweTavily[0] !== pytanie
+        ? pytaniaAtomoweTavily[0]
+        : causalRetrievalQuery)
+      : null;
     const planowaneQueryRetrieval = selectRetrievalQueries({
       atomicQueries: pytaniaAtomoweTavily,
-      causalQuery: causalRetrievalQuery,
+      causalQuery: effectiveCausalQuery,
       specializedQueries: specializedRetrievalQueries,
       fallbackQueries: advancedRetrievalPlan.map(item => item?.query).filter(Boolean),
       // Proste pytania nie potrzebują trzech kosztownych wyszukiwań. Trzecie
