@@ -107,17 +107,30 @@ function buildRetrievalQueries(question, routing = {}, options = {}) {
     // ale tematycznie sensowne frazy do wyszukiwarki.
     const portalCoreTransferContext = /\b(?:portal\s*2|wheatley|glados|core\s+transfer|transfer\s+rdzenia|rdzen\w*)\b/iu.test([original, entity, game].join(' '));
     const astarionContext = /\bastarion\b/iu.test([original, entity].join(' ')) && /baldur/iu.test([original, game].join(' '));
+    const cyberpunkRelicContext = /\b(?:johnny|silverhand)\b/iu.test([original, entity].join(' ')) && /cyberpunk/iu.test([original, game].join(' '));
     const causalHints = portalCoreTransferContext
       ? 'cause reason motivation event core transfer lore'
       : astarionContext
         ? 'cause reason motivation story conflict Astarion Cazador Szarr vampire spawn escaped master freedom why joins party backstory seeking favour with player character protection from Cazador'
-        : 'cause reason motivation story conflict lore';
+        : cyberpunkRelicContext
+          ? 'cause reason motivation story conflict V Johnny Silverhand Relic biochip overwriting mind survival dying'
+          : 'cause reason motivation story conflict lore';
     dodajUnikalneQuery(queries, [...entityTerms(entity, game), causalHints].join(' '));
     if (routing?.is_lore && /(?:astarion|wheatley|glados|chell|arthur|geralt|ciri|johnny|shadowheart|karlach|gale|dragonborn)/iu.test([original, entity].join(' '))) {
       dodajUnikalneQuery(queries, [...entityTerms(entity, game), 'motivation backstory antagonist freedom why joins party'].join(' '));
     }
   } else if (isOutcomeQuestion) {
-    dodajUnikalneQuery(queries, [...entityTerms(entity, game), 'fate death ending outcome story lore'].join(' '));
+    const vesemirContext = /\bvesemir\w*\b/iu.test([original, entity].join(' '));
+    const outcomeHints = vesemirContext
+      ? 'Vesemir fate death Battle of Kaer Morhen killed by Imlerith story lore'
+      : 'fate death ending outcome story lore';
+    dodajUnikalneQuery(queries, [...entityTerms(entity, game), outcomeHints].join(' '));
+  } else if (/(?:czym\s+r[oó][zż]ni|por[oó]wnaj|r[oó][zż]nic|difference|vs\.?|versus)/iu.test(original)) {
+    const steveAlexContext = /\bsteve\w*\b/iu.test(original) && /\balex\w*\b/iu.test(original);
+    const comparisonHints = steveAlexContext
+      ? 'Steve Alex differences slim classic model 3 pixels 4 pixels arm width skin'
+      : 'differences comparison features';
+    dodajUnikalneQuery(queries, [...entityTerms(entity, game), comparisonHints].join(' '));
   } else if (routing?.is_lore) {
     dodajUnikalneQuery(queries, [...(entity ? entityTerms(entity, game) : [original, game].filter(Boolean)), 'character history story lore'].join(' '));
   } else if (routing?.is_gameplay) {
