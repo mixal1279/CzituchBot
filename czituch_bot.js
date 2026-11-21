@@ -3398,7 +3398,7 @@ async function zapytajAI(nick, pytanie, historiaRozmowy, systemPrompt, wyslijFn,
     // "lore/guide" query. The generic profile query often returns broad pages
     // that do not contain the evidence slot required by the answer plan.
     const intentSpecificRetrievalQueries = plannedRetrievalQueries.filter(query =>
-      /(?:exact location landmark nearby map|story timeline quest order arrival|character identity background role companion lore|cause reason motivation (?:event core transfer|story conflict)|gameplay strategy mechanics guide walkthrough)/i.test(query)
+      /(?:exact location landmark nearby map|story timeline quest order arrival|character identity background role companion lore|cause reason motivation (?:event core transfer|story conflict)|V Relic biochip overwriting brain|fate death (?:Battle of Kaer Morhen|ending outcome story lore)|slim classic model 3 pixels 4 pixels|differences comparison features|gameplay strategy mechanics guide walkthrough)/i.test(query)
     );
     const loreScopeName = routingAI.game
       || (routingAI.entity_type === 'franchise' ? routingAI.entity : '');
