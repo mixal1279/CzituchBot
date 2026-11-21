@@ -945,7 +945,11 @@ function normalizujWynikWalidatora(wynik, model, provider = 'gemini', allowedSou
     && answerCoverage.uncovered.length === 1
     && czyOgraniczenieDowodowe(answerCoverage.uncovered[0]);
   const answerCoverageOk = answerCoverage.ok || uncoveredLimitationsOnly;
-  const claimGranularityOk = !answer || !sentenceCount || sentenceCount <= 1
+  const physicalSentenceCount = String(answer || '')
+    .split(/[.!?]+(?:\s+|$)/u)
+    .map(part => part.trim())
+    .filter(Boolean).length;
+  const claimGranularityOk = !answer || !sentenceCount || sentenceCount <= 1 || (physicalSentenceCount <= 1 && answerCoverageOk)
     ? true
     : answerCoverageOk && claims.length >= Math.min(12, factualSentenceCount);
   const claimGranularityDiag = !claimGranularityOk ? {

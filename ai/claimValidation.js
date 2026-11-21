@@ -137,7 +137,6 @@ const KNOWN_ENTITY_ALIAS_PATTERNS = [
   { canonical: 'elder blood', pattern: /\b(?:elder\s+blood|starsz\p{L}*\s+kr(?:ew|wi\p{L}*)|kr(?:ew|wi\p{L}*)\s+starsz\p{L}*)\b/iu },
   { canonical: 'lara', pattern: /\blar(?:a|y|ze|e|ę|ą)\b/iu },
   { canonical: 'dragon rising', pattern: /\b(?:dragon\s+rising|budzeni\p{L}*\s+smok\p{L}*)\b/iu },
-  { canonical: 'cathedral of dragon communion', pattern: /\b(?:cathedral\s+of\s+dragon\s+communion|dragon\s+communion\s+cathedral|katedr\p{L}*\s+komunii\s+smok\p{L}*)\b/iu },
   // „facility of Aperture” to PARAFRAZA z jednego zrodla benchmarku, nie nazwa —
   // zalozenie do potwierdzenia na szerszej probie. „Aperture Labs” celowo usuniete:
   // zlewaloby sie z osobnym wpisem „aperture laboratories” powyzej.
@@ -151,7 +150,7 @@ const KNOWN_ENTITY_ALIAS_PATTERNS = [
   { canonical: 'last dragonborn', pattern: /\b(?:last\s+dragonborn|ostatni(?:m|ego|emu|ym)?\s+dragonborn(?:em|a|owi|ie)?)\b/iu },
   { canonical: 'prophecy of the dragonborn', pattern: /\b(?:prophecy\s+of\s+the\s+dragonborn|proroctw(?:o|a|u|ie|em)\s+dragonborn(?:a|u|em|ie)?)\b/iu },
   { canonical: 'wild hunt', pattern: /\b(?:wild\s+hunt|dziki\s+gon|dzikiego\s+gonu|dzikim\s+gonem)\b/iu },
-  { canonical: 'cathedral of dragon communion', pattern: /\b(?:cathedral\s+of\s+dragon\s+communion|katedr(?:a|y|e|e|ze)\s+komunii\s+smoka)\b/iu },
+  { canonical: 'cathedral of dragon communion', pattern: /\b(?:cathedral\s+of\s+dragon\s+communion|dragon\s+communion\s+cathedral|katedr\p{L}*\s+(?:komunii\s+smok\p{L}*|smocz\p{L}*\s+komunii))\b/iu },
 ];
 // Aliasy z tabeli danych (ai/entityAliases.js) laczymy z legacy regexami.
 // Nie pomijamy grupy tylko dlatego, ze jej kanoniczna nazwa juz istnieje:
@@ -546,7 +545,7 @@ function wyodrebnijNazwyWlasne(value, options = {}) {
       const normalizedCandidate = normalizujClaim(token);
       const knownAliasCandidate = KNOWN_ENTITY_ALIAS_PATTERNS.some(alias => alias.pattern.test(token));
       const knownOracleCandidate = options.nameOracle instanceof Set
-        && [...new Set([normalizujTokenWyroczni(token), ...wariantyNazwyDoDopasowania(token).map(normalizujTokenWyroczni)])]
+        && [...new Set([token.toLocaleLowerCase('pl-PL'), normalizujTokenWyroczni(token), ...wariantyNazwyDoDopasowania(token).map(normalizujTokenWyroczni)])]
           .some(variant => options.nameOracle.has(variant));
       const isGenericPolishTranslatable = /^(?:kosciol\w*|kosciel\w*|katedr\w*|swiatyn\w*|kaplic\w*|ruin\w*|twierdz\w*|fortec\w*|zamk\w*|zamek|wiez\w*|jaskini\w*|grobow\w*|katakumb\w*|krolestw\w*|cesarstw\w*|zakon\w*|gildi\w*|komuni\w*|tlac\w*|plonac\w*|wielk\w*|mroczn\w*|czarn\w*|bial\w*|czerwon\w*|zlot\w*|srebrn\w*|starozytn\w*|przeklet\w*|opuszczon\w*|polnocn\w*|poludniow\w*|wschodni\w*|zachodni\w*|wysok\w*|lesn\w*|elf\w*|krasnolud\w*|gnom\w*|ork\w*|wampir\w*|pomiot\w*|zlodziej\w*|lotr\w*|wojownik\w*|mag\w*|czarodziej\w*|paladyn\w*|kaplan\w*|lowc\w*|barbarzync\w*|nekromant\w*|klas\w*|ras\w*|smok\w*|smocz\w*|miecz\w*|broni\w*|zbro\w*|tarcz\w*|woz\w*|skarb\w*)$/u.test(normalizedCandidate);
       if ((GENERIC_CAPITALIZED_WORDS.has(normalizedCandidate) || isGenericPolishTranslatable)
